@@ -109,6 +109,10 @@ class Listing(Base):
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cover_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    format: Mapped[str | None] = mapped_column(String, nullable=True)
+    duration: Mapped[str | None] = mapped_column(String, nullable=True)
+    narrator: Mapped[str | None] = mapped_column(String, nullable=True)
+    translator: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     match_status: Mapped[str] = mapped_column(

@@ -76,6 +76,10 @@ def parse_product_page(html: str) -> dict[str, object]:
         "pages": None,
         "author": None,
         "cover_type": None,
+        "format": None,
+        "duration": None,
+        "narrator": None,
+        "translator": None,
     }
 
     # Parse author from HTML: <div class="brand"><span>Autorius </span><a href="...">Name</a></div>
@@ -152,5 +156,25 @@ def parse_product_page(html: str) -> dict[str, object]:
         data["cover_type"] = prop_map["Viršelis"]
     if "Leidykla" in prop_map:
         data["publisher"] = data["publisher"] or prop_map["Leidykla"]
+    if "Trukmė" in prop_map:
+        data["duration"] = prop_map["Trukmė"]
+    if "Įgarsino" in prop_map:
+        data["narrator"] = prop_map["Įgarsino"]
+    if "Vertėjas" in prop_map:
+        data["translator"] = prop_map["Vertėjas"]
+
+    # Auto-detect format from available properties
+    if "Trukmė" in prop_map:
+        data["format"] = "audiobook"
+    elif "Viršelis" in prop_map:
+        cover = prop_map["Viršelis"].lower()
+        if "kiet" in cover:
+            data["format"] = "hardcover"
+        elif "minkšt" in cover:
+            data["format"] = "paperback"
+        else:
+            data["format"] = cover
+    elif "Puslapiai" in prop_map:
+        data["format"] = "book"
 
     return data

@@ -102,6 +102,10 @@ class PostgresPipeline:
                 year=year,
                 pages=pages,
                 cover_type=adapter.get("cover_type"),
+                format=adapter.get("format"),
+                duration=adapter.get("duration"),
+                narrator=adapter.get("narrator"),
+                translator=adapter.get("translator"),
                 description=adapter.get("description"),
                 categories=adapter.get("categories"),
             )

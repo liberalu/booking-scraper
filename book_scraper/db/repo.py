@@ -30,6 +30,10 @@ def upsert_listing(
     year: int | None = None,
     pages: int | None = None,
     cover_type: str | None = None,
+    format: str | None = None,
+    duration: str | None = None,
+    narrator: str | None = None,
+    translator: str | None = None,
     description: str | None = None,
     categories: list[str] | None = None,
 ) -> Listing:
@@ -49,6 +53,10 @@ def upsert_listing(
             year=year,
             pages=pages,
             cover_type=cover_type,
+            format=format,
+            duration=duration,
+            narrator=narrator,
+            translator=translator,
             description=description,
             categories=categories,
             first_seen_at=now,
@@ -72,6 +80,14 @@ def upsert_listing(
             listing.pages = pages
         if cover_type is not None:
             listing.cover_type = cover_type
+        if format is not None:
+            listing.format = format
+        if duration is not None:
+            listing.duration = duration
+        if narrator is not None:
+            listing.narrator = narrator
+        if translator is not None:
+            listing.translator = translator
         if description is not None:
             listing.description = description
         if categories is not None:
