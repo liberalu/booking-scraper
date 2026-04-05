@@ -34,7 +34,7 @@ class VagaPricesSpider(scrapy.Spider):
                 yield PriceItem(
                     url=product["url"],
                     shop_name="vaga",
-                    shop_title=product["title"],
+                    title=product["title"],
                     price=product["price"],
                     price_original=product["price_original"],
                     in_stock=True,

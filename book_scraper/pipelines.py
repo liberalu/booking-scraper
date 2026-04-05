@@ -29,8 +29,8 @@ class ValidationPipeline:
                 except (InvalidOperation, ValueError):
                     adapter["price_original"] = None
 
-        if isinstance(item, ListingItem) and not adapter.get("shop_title"):
-            raise DropItem("Missing shop_title")
+        if isinstance(item, ListingItem) and not adapter.get("title"):
+            raise DropItem("Missing title")
 
         return item
 
@@ -93,8 +93,8 @@ class PostgresPipeline:
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
-                shop_title=adapter["shop_title"],
-                shop_author=adapter.get("shop_author"),
+                title=adapter["title"],
+                author=adapter.get("author"),
                 sku=adapter.get("sku"),
                 isbn_from_shop=adapter.get("isbn"),
                 image_url=adapter.get("image_url"),
@@ -124,7 +124,7 @@ class PostgresPipeline:
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
-                shop_title=adapter.get("shop_title") or adapter["url"],
+                title=adapter.get("title") or adapter["url"],
             )
             insert_price(
                 self.session,

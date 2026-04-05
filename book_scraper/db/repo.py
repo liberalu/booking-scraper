@@ -21,8 +21,8 @@ def upsert_listing(
     session: Session,
     shop_id: int,
     url: str,
-    shop_title: str,
-    shop_author: str | None = None,
+    title: str,
+    author: str | None = None,
     sku: str | None = None,
     isbn_from_shop: str | None = None,
     image_url: str | None = None,
@@ -40,8 +40,8 @@ def upsert_listing(
         listing = Listing(
             shop_id=shop_id,
             url=url,
-            shop_title=shop_title,
-            shop_author=shop_author,
+            title=title,
+            author=author,
             sku=sku,
             isbn_from_shop=isbn_from_shop,
             image_url=image_url,
@@ -57,8 +57,8 @@ def upsert_listing(
         session.add(listing)
         session.flush()
     else:
-        listing.shop_title = shop_title
-        listing.shop_author = shop_author
+        listing.title = title
+        listing.author = author
         if sku is not None:
             listing.sku = sku
         listing.isbn_from_shop = isbn_from_shop

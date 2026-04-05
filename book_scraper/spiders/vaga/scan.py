@@ -53,8 +53,8 @@ class VagaScanSpider(scrapy.Spider):
         yield ListingItem(
             url=response.url.split("?")[0],
             shop_name="vaga",
-            shop_title=data["title"],
-            shop_author=data.get("author"),
+            title=data["title"],
+            author=data.get("author"),
             sku=data.get("sku"),
             isbn=data.get("isbn"),
             publisher=data.get("publisher"),

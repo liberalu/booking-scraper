@@ -22,12 +22,12 @@ def test_upsert_listing_creates_new(db_session):
         db_session,
         shop_id=shop.id,
         url="https://vaga.lt/test-book",
-        shop_title="Test Book",
-        shop_author="Author",
+        title="Test Book",
+        author="Author",
         isbn_from_shop="9781234567890",
     )
     assert listing.id is not None
-    assert listing.shop_title == "Test Book"
+    assert listing.title == "Test Book"
     assert listing.match_status == "unmatched"
     assert listing.is_active is True
 
@@ -35,19 +35,19 @@ def test_upsert_listing_creates_new(db_session):
 def test_upsert_listing_updates_existing(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
     listing1 = upsert_listing(
-        db_session, shop_id=shop.id, url="https://vaga.lt/book", shop_title="Old"
+        db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Old"
     )
     listing2 = upsert_listing(
-        db_session, shop_id=shop.id, url="https://vaga.lt/book", shop_title="New"
+        db_session, shop_id=shop.id, url="https://vaga.lt/book", title="New"
     )
     assert listing1.id == listing2.id
-    assert listing2.shop_title == "New"
+    assert listing2.title == "New"
 
 
 def test_insert_price(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
     listing = upsert_listing(
-        db_session, shop_id=shop.id, url="https://vaga.lt/book", shop_title="Book"
+        db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Book"
     )
     price = insert_price(
         db_session,

@@ -15,7 +15,7 @@ def test_valid_listing_item_passes(pipeline):
     item = ListingItem(
         url="https://vaga.lt/book",
         shop_name="vaga",
-        shop_title="Test Book",
+        title="Test Book",
         price="9.99",
     )
     result = pipeline.process_item(item, spider=None)
@@ -24,7 +24,7 @@ def test_valid_listing_item_passes(pipeline):
 
 def test_listing_item_without_title_dropped(pipeline):
     item = ListingItem(url="https://vaga.lt/book", shop_name="vaga")
-    with pytest.raises(DropItem, match="Missing shop_title"):
+    with pytest.raises(DropItem, match="Missing title"):
         pipeline.process_item(item, spider=None)
 
 

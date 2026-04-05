@@ -6,8 +6,8 @@ class ListingItem(scrapy.Item):
 
     url = scrapy.Field()
     shop_name = scrapy.Field()
-    shop_title = scrapy.Field()
-    shop_author = scrapy.Field()
+    title = scrapy.Field()
+    author = scrapy.Field()
     sku = scrapy.Field()
     isbn = scrapy.Field()
     publisher = scrapy.Field()
@@ -27,7 +27,7 @@ class PriceItem(scrapy.Item):
 
     url = scrapy.Field()
     shop_name = scrapy.Field()
-    shop_title = scrapy.Field()
+    title = scrapy.Field()
     price = scrapy.Field()
     price_original = scrapy.Field()
     in_stock = scrapy.Field()
