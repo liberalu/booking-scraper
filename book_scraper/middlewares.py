@@ -1,22 +1,28 @@
+from collections.abc import Generator
+from typing import Any
+
 from scrapy import signals
 
 
 class BookScraperSpiderMiddleware:
     @classmethod
-    def from_crawler(cls, crawler):
+    def from_crawler(cls, crawler: Any) -> "BookScraperSpiderMiddleware":
         s = cls()
         crawler.signals.connect(s.spider_opened, signal=signals.spider_opened)
         return s
 
-    def process_spider_input(self, response, spider):
+    def process_spider_input(self, response: Any, spider: Any) -> None:
         return None
 
-    def process_spider_output(self, response, result, spider):
-        for i in result:
-            yield i
+    def process_spider_output(
+        self, response: Any, result: Any, spider: Any
+    ) -> Generator[Any, None, None]:
+        yield from result
 
-    def process_spider_exception(self, response, exception, spider):
+    def process_spider_exception(
+        self, response: Any, exception: Any, spider: Any
+    ) -> None:
         pass
 
-    def spider_opened(self, spider):
-        spider.logger.info("Spider opened: %s" % spider.name)
+    def spider_opened(self, spider: Any) -> None:
+        spider.logger.info(f"Spider opened: {spider.name}")

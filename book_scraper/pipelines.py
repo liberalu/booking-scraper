@@ -1,16 +1,17 @@
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from book_scraper.db.repo import insert_price, upsert_listing, upsert_shop
 from book_scraper.db.session import get_session_factory
-from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
+from book_scraper.items import ListingItem, PriceItem
 
 
 class ValidationPipeline:
-    def process_item(self, item, spider):
+    def process_item(self, item: Any, spider: Any) -> Any:
         adapter = ItemAdapter(item)
 
         if isinstance(item, (ListingItem, PriceItem)):
@@ -18,8 +19,8 @@ class ValidationPipeline:
             if price is not None:
                 try:
                     adapter["price"] = str(Decimal(str(price)))
-                except (InvalidOperation, ValueError):
-                    raise DropItem(f"Invalid price: {price}")
+                except (InvalidOperation, ValueError) as err:
+                    raise DropItem(f"Invalid price: {price}") from err
 
             price_original = adapter.get("price_original")
             if price_original is not None:
@@ -28,9 +29,8 @@ class ValidationPipeline:
                 except (InvalidOperation, ValueError):
                     adapter["price_original"] = None
 
-        if isinstance(item, ListingItem):
-            if not adapter.get("shop_title"):
-                raise DropItem("Missing shop_title")
+        if isinstance(item, ListingItem) and not adapter.get("shop_title"):
+            raise DropItem("Missing shop_title")
 
         return item
 
@@ -38,25 +38,26 @@ class ValidationPipeline:
 class PostgresPipeline:
     def __init__(self, database_url: str):
         self.database_url = database_url
-        self.session_factory = None
+        self.session_factory: sessionmaker[Session] | None = None
         self.session: Session | None = None
         self.shop_cache: dict[str, int] = {}
 
     @classmethod
-    def from_crawler(cls, crawler):
+    def from_crawler(cls, crawler: Any) -> "PostgresPipeline":
         return cls(database_url=crawler.settings.get("DATABASE_URL"))
 
-    def open_spider(self, spider):
+    def open_spider(self, spider: Any) -> None:
         self.session_factory = get_session_factory(self.database_url)
         self.session = self.session_factory()
 
-    def close_spider(self, spider):
+    def close_spider(self, spider: Any) -> None:
         if self.session:
             self.session.commit()
             self.session.close()
 
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
+            assert self.session is not None
             shop = upsert_shop(
                 self.session,
                 name=shop_name,
@@ -65,12 +66,12 @@ class PostgresPipeline:
             self.shop_cache[shop_name] = shop.id
         return self.shop_cache[shop_name]
 
-    def process_item(self, item, spider):
+    def process_item(self, item: Any, spider: Any) -> Any:
         if self.session is None:
             return item
 
         adapter = ItemAdapter(item)
-        shop_name = adapter.get("shop_name")
+        shop_name: str = adapter.get("shop_name") or ""
 
         if isinstance(item, ListingItem):
             shop_id = self._get_shop_id(shop_name)

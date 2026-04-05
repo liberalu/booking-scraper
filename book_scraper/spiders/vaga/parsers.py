@@ -1,3 +1,4 @@
+import contextlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -7,14 +8,10 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
     """Extract all URLs from a vaga.lt sitemap XML string."""
     root = ET.fromstring(xml_content)
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    return [
-        loc.text
-        for loc in root.findall(".//s:loc", ns)
-        if loc.text is not None
-    ]
+    return [loc.text for loc in root.findall(".//s:loc", ns) if loc.text is not None]
 
 
-def parse_category_page(html: str) -> list[dict]:
+def parse_category_page(html: str) -> list[dict[str, str | None]]:
     """Parse product cards from a vaga.lt category listing page.
 
     Returns list of dicts with keys: url, title, price, price_original, image_url.
@@ -45,24 +42,26 @@ def parse_category_page(html: str) -> list[dict]:
         if img_match:
             image_url = img_match.group(1)
 
-        products.append({
-            "url": url,
-            "title": title,
-            "price": price,
-            "price_original": price_original,
-            "image_url": image_url,
-        })
+        products.append(
+            {
+                "url": url,
+                "title": title,
+                "price": price,
+                "price_original": price_original,
+                "image_url": image_url,
+            }
+        )
     return products
 
 
-def parse_product_page(html: str) -> dict:
+def parse_product_page(html: str) -> dict[str, object]:
     """Parse a vaga.lt product page using JSON-LD and HTML property spans.
 
     Returns dict with keys: title, description, price, price_original,
     in_stock, isbn, sku, publisher, image_url, categories,
     year, pages, cover_type.
     """
-    data: dict = {
+    data: dict[str, object] = {
         "title": None,
         "description": None,
         "price": None,
@@ -117,29 +116,24 @@ def parse_product_page(html: str) -> dict:
         if ld.get("@type") == "BreadcrumbList":
             items = ld.get("itemListElement", [])
             data["categories"] = [
-                item.get("name", "")
-                for item in items
-                if item.get("name")
+                item.get("name", "") for item in items if item.get("name")
             ]
 
     # Parse HTML property spans (note: class has typo "propery")
     props = re.findall(
-        r'<span class="propery-title">(.*?)</span>\s*<span class="propery-des">(.*?)</span>',
+        r'<span class="propery-title">(.*?)</span>'
+        r'\s*<span class="propery-des">(.*?)</span>',
         html,
     )
     prop_map = {k.strip(): v.strip() for k, v in props}
     if "ISBN" in prop_map:
         data["isbn"] = data["isbn"] or prop_map["ISBN"]
     if "Metai" in prop_map:
-        try:
+        with contextlib.suppress(ValueError):
             data["year"] = int(prop_map["Metai"])
-        except ValueError:
-            pass
     if "Puslapiai" in prop_map:
-        try:
+        with contextlib.suppress(ValueError):
             data["pages"] = int(prop_map["Puslapiai"])
-        except ValueError:
-            pass
     if "Viršelis" in prop_map:
         data["cover_type"] = prop_map["Viršelis"]
     if "Leidykla" in prop_map:

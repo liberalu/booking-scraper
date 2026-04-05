@@ -1,3 +1,6 @@
+from collections.abc import Generator
+from typing import Any
+
 import scrapy
 
 from book_scraper.items import ListingItem
@@ -8,11 +11,11 @@ class VagaScanSpider(scrapy.Spider):
     name = "vaga_scan"
     allowed_domains = ["vaga.lt"]
 
-    def __init__(self, urls_file=None, *args, **kwargs):
+    def __init__(self, urls_file: str | None = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.urls_file = urls_file
 
-    def start_requests(self):
+    def start_requests(self) -> Generator[scrapy.Request, None, None]:
         if self.urls_file:
             with open(self.urls_file) as f:
                 for line in f:
@@ -26,8 +29,8 @@ class VagaScanSpider(scrapy.Spider):
                 meta={"page": 1},
             )
 
-    def parse_category(self, response):
-        links = response.css('div.name a::attr(href)').getall()
+    def parse_category(self, response: Any) -> Generator[scrapy.Request, None, None]:
+        links = response.css("div.name a::attr(href)").getall()
         if not links:
             return
         for link in links:
@@ -40,7 +43,7 @@ class VagaScanSpider(scrapy.Spider):
             meta={"page": page},
         )
 
-    def parse_product(self, response):
+    def parse_product(self, response: Any) -> Generator[ListingItem, None, None]:
         data = parse_product_page(response.text)
         if data["title"] is None:
             return

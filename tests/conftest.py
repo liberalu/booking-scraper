@@ -4,7 +4,9 @@ from sqlalchemy.orm import sessionmaker
 
 from book_scraper.db.models import Base
 
-TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
+TEST_DATABASE_URL = (
+    "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
+)
 
 
 @pytest.fixture(scope="session")

@@ -1,8 +1,8 @@
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 
-def get_engine(database_url: str):
+def get_engine(database_url: str) -> Engine:
     # Use sync engine for Scrapy pipelines (Scrapy runs in Twisted reactor)
     sync_url = database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
     return create_engine(sync_url)

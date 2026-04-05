@@ -69,9 +69,7 @@ class Category(Base):
 class BookCategory(Base):
     __tablename__ = "book_categories"
 
-    book_id: Mapped[int] = mapped_column(
-        ForeignKey("books.id"), primary_key=True
-    )
+    book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), primary_key=True)
     category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id"), primary_key=True
     )
@@ -99,9 +97,7 @@ class Listing(Base):
     __tablename__ = "listings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    book_id: Mapped[int | None] = mapped_column(
-        ForeignKey("books.id"), nullable=True
-    )
+    book_id: Mapped[int | None] = mapped_column(ForeignKey("books.id"), nullable=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     shop_title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -111,9 +107,7 @@ class Listing(Base):
     match_status: Mapped[str] = mapped_column(
         match_status_enum, nullable=False, default="unmatched"
     )
-    match_method: Mapped[str | None] = mapped_column(
-        match_method_enum, nullable=True
-    )
+    match_method: Mapped[str | None] = mapped_column(match_method_enum, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
@@ -133,9 +127,7 @@ class Price(Base):
     __tablename__ = "prices"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    listing_id: Mapped[int] = mapped_column(
-        ForeignKey("listings.id"), nullable=False
-    )
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     price_original: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True

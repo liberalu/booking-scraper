@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from book_scraper.db.models import Book, Category, Listing, Price, Shop
+from book_scraper.db.models import Category, Listing, Price, Shop
 
 
 def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
@@ -28,7 +28,7 @@ def upsert_listing(
 ) -> Listing:
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if listing is None:
         listing = Listing(
             shop_id=shop_id,
@@ -65,14 +65,16 @@ def insert_price(
         price=price,
         price_original=price_original,
         in_stock=in_stock,
-        scraped_at=datetime.now(timezone.utc),
+        scraped_at=datetime.now(UTC),
     )
     session.add(record)
     session.flush()
     return record
 
 
-def upsert_category(session: Session, name: str, slug: str, parent_id: int | None = None) -> Category:
+def upsert_category(
+    session: Session, name: str, slug: str, parent_id: int | None = None
+) -> Category:
     stmt = select(Category).where(Category.slug == slug)
     cat = session.execute(stmt).scalar_one_or_none()
     if cat is None:
@@ -82,9 +84,13 @@ def upsert_category(session: Session, name: str, slug: str, parent_id: int | Non
     return cat
 
 
-def mark_listings_inactive(session: Session, shop_id: int, active_urls: set[str]) -> int:
+def mark_listings_inactive(
+    session: Session, shop_id: int, active_urls: set[str]
+) -> int:
     """Mark listings not in active_urls as inactive. Returns count of deactivated."""
-    stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.is_active.is_(True))
+    stmt = select(Listing).where(
+        Listing.shop_id == shop_id, Listing.is_active.is_(True)
+    )
     listings = session.execute(stmt).scalars().all()
     count = 0
     for listing in listings:
