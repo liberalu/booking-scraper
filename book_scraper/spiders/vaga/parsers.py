@@ -74,8 +74,17 @@ def parse_product_page(html: str) -> dict[str, object]:
         "categories": [],
         "year": None,
         "pages": None,
+        "author": None,
         "cover_type": None,
     }
+
+    # Parse author from HTML: <div class="brand"><span>Autorius </span><a href="...">Name</a></div>
+    author_match = re.search(
+        r'class="brand">\s*<span>Autorius\s*</span>\s*<a[^>]*>([^<]+)</a>',
+        html,
+    )
+    if author_match:
+        data["author"] = author_match.group(1).strip()
 
     # Parse JSON-LD blocks
     blocks = re.findall(

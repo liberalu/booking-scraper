@@ -32,6 +32,7 @@ def test_parse_product_page():
     data = parse_product_page(html)
     assert data["title"] is not None
     assert data["price"] is not None
+    assert data["author"] is not None
     assert "isbn" in data
     assert "in_stock" in data
     assert "categories" in data
