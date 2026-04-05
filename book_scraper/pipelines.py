@@ -75,6 +75,20 @@ class PostgresPipeline:
 
         if isinstance(item, ListingItem):
             shop_id = self._get_shop_id(shop_name)
+            # Convert year/pages to int if present
+            year = adapter.get("year")
+            if year is not None:
+                try:
+                    year = int(year)
+                except (ValueError, TypeError):
+                    year = None
+            pages = adapter.get("pages")
+            if pages is not None:
+                try:
+                    pages = int(pages)
+                except (ValueError, TypeError):
+                    pages = None
+
             listing = upsert_listing(
                 self.session,
                 shop_id=shop_id,
@@ -83,6 +97,12 @@ class PostgresPipeline:
                 shop_author=adapter.get("shop_author"),
                 isbn_from_shop=adapter.get("isbn"),
                 image_url=adapter.get("image_url"),
+                publisher=adapter.get("publisher"),
+                year=year,
+                pages=pages,
+                cover_type=adapter.get("cover_type"),
+                description=adapter.get("description"),
+                categories=adapter.get("categories"),
             )
             if adapter.get("price") is not None:
                 insert_price(

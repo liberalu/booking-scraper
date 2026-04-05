@@ -104,6 +104,12 @@ class Listing(Base):
     shop_author: Mapped[str | None] = mapped_column(Text, nullable=True)
     isbn_from_shop: Mapped[str | None] = mapped_column(String, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publisher: Mapped[str | None] = mapped_column(String, nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cover_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     match_status: Mapped[str] = mapped_column(
         match_status_enum, nullable=False, default="unmatched"
     )

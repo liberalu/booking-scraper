@@ -25,6 +25,12 @@ def upsert_listing(
     shop_author: str | None = None,
     isbn_from_shop: str | None = None,
     image_url: str | None = None,
+    publisher: str | None = None,
+    year: int | None = None,
+    pages: int | None = None,
+    cover_type: str | None = None,
+    description: str | None = None,
+    categories: list[str] | None = None,
 ) -> Listing:
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
@@ -37,6 +43,12 @@ def upsert_listing(
             shop_author=shop_author,
             isbn_from_shop=isbn_from_shop,
             image_url=image_url,
+            publisher=publisher,
+            year=year,
+            pages=pages,
+            cover_type=cover_type,
+            description=description,
+            categories=categories,
             first_seen_at=now,
             last_seen_at=now,
         )
@@ -47,6 +59,19 @@ def upsert_listing(
         listing.shop_author = shop_author
         listing.isbn_from_shop = isbn_from_shop
         listing.image_url = image_url
+        # Only update metadata fields if provided (don't overwrite with None from price spider)
+        if publisher is not None:
+            listing.publisher = publisher
+        if year is not None:
+            listing.year = year
+        if pages is not None:
+            listing.pages = pages
+        if cover_type is not None:
+            listing.cover_type = cover_type
+        if description is not None:
+            listing.description = description
+        if categories is not None:
+            listing.categories = categories
         listing.last_seen_at = now
         listing.is_active = True
         session.flush()

@@ -30,7 +30,7 @@ class VagaScanSpider(scrapy.Spider):
             )
 
     def parse_category(self, response: Any) -> Generator[scrapy.Request, None, None]:
-        links = response.css("div.name a::attr(href)").getall()
+        links = response.css(".name a::attr(href)").getall()
         if not links:
             return
         for link in links:
