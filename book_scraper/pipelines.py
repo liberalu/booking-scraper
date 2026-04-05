@@ -75,19 +75,22 @@ class PostgresPipeline:
 
         if isinstance(item, ListingItem):
             shop_id = self._get_shop_id(shop_name)
-            # Convert year/pages to int if present
+
             year = adapter.get("year")
             if year is not None:
                 try:
                     year = int(year)
                 except (ValueError, TypeError):
                     year = None
-            pages = adapter.get("pages")
-            if pages is not None:
-                try:
-                    pages = int(pages)
-                except (ValueError, TypeError):
-                    pages = None
+
+            price = (
+                Decimal(adapter["price"]) if adapter.get("price") is not None else None
+            )
+            price_original = (
+                Decimal(adapter["price_original"])
+                if adapter.get("price_original")
+                else None
+            )
 
             listing = upsert_listing(
                 self.session,
@@ -96,49 +99,49 @@ class PostgresPipeline:
                 title=adapter["title"],
                 author=adapter.get("author"),
                 sku=adapter.get("sku"),
-                isbn_from_shop=adapter.get("isbn"),
-                image_url=adapter.get("image_url"),
+                isbn=adapter.get("isbn"),
                 publisher=adapter.get("publisher"),
                 year=year,
-                pages=pages,
-                cover_type=adapter.get("cover_type"),
                 format=adapter.get("format"),
-                duration=adapter.get("duration"),
-                narrator=adapter.get("narrator"),
-                translator=adapter.get("translator"),
                 description=adapter.get("description"),
+                image_url=adapter.get("image_url"),
                 categories=adapter.get("categories"),
+                properties=adapter.get("properties"),
+                price=price,
+                price_original=price_original,
+                in_stock=adapter.get("in_stock", True),
             )
-            if adapter.get("price") is not None:
+            if price is not None:
                 insert_price(
                     self.session,
                     listing_id=listing.id,
-                    price=Decimal(adapter["price"]),
-                    price_original=(
-                        Decimal(adapter["price_original"])
-                        if adapter.get("price_original")
-                        else None
-                    ),
+                    price=price,
+                    price_original=price_original,
                     in_stock=adapter.get("in_stock", True),
                 )
 
         elif isinstance(item, PriceItem):
             shop_id = self._get_shop_id(shop_name)
+            price = Decimal(adapter["price"])
+            price_original = (
+                Decimal(adapter["price_original"])
+                if adapter.get("price_original")
+                else None
+            )
             listing = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
                 title=adapter.get("title") or adapter["url"],
+                price=price,
+                price_original=price_original,
+                in_stock=adapter.get("in_stock", True),
             )
             insert_price(
                 self.session,
                 listing_id=listing.id,
-                price=Decimal(adapter["price"]),
-                price_original=(
-                    Decimal(adapter["price_original"])
-                    if adapter.get("price_original")
-                    else None
-                ),
+                price=price,
+                price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
             )
 

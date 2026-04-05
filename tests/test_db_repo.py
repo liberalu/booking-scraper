@@ -24,7 +24,7 @@ def test_upsert_listing_creates_new(db_session):
         url="https://vaga.lt/test-book",
         title="Test Book",
         author="Author",
-        isbn_from_shop="9781234567890",
+        isbn="9781234567890",
     )
     assert listing.id is not None
     assert listing.title == "Test Book"

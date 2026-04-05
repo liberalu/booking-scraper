@@ -25,7 +25,9 @@ class VagaPricesSpider(scrapy.Spider):
     }
 
     def start_requests(self) -> Generator[scrapy.Request, None, None]:
-        url = _prices.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
+        url = _prices.get(
+            "category_url", "https://vaga.lt/knygos?limit=100&page={page}"
+        )
         yield scrapy.Request(
             url.format(page=1),
             meta={"page": 1},
@@ -51,7 +53,9 @@ class VagaPricesSpider(scrapy.Spider):
                 )
 
         page = response.meta["page"] + 1
-        url = _prices.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
+        url = _prices.get(
+            "category_url", "https://vaga.lt/knygos?limit=100&page={page}"
+        )
         yield scrapy.Request(
             url.format(page=page),
             callback=self.parse,

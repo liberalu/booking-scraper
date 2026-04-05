@@ -12,18 +12,16 @@ class ListingItem(scrapy.Item):
     isbn = scrapy.Field()
     publisher = scrapy.Field()
     year = scrapy.Field()
-    pages = scrapy.Field()
-    cover_type = scrapy.Field()
     format = scrapy.Field()
-    duration = scrapy.Field()
-    narrator = scrapy.Field()
-    translator = scrapy.Field()
     description = scrapy.Field()
     image_url = scrapy.Field()
+    categories = scrapy.Field()
+    properties = (
+        scrapy.Field()
+    )  # JSONB: format-specific fields (pages, cover_type, duration, narrator, etc.)
     price = scrapy.Field()
     price_original = scrapy.Field()
     in_stock = scrapy.Field()
-    categories = scrapy.Field()
 
 
 class PriceItem(scrapy.Item):

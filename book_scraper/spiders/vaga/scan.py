@@ -17,7 +17,9 @@ class VagaScanSpider(scrapy.Spider):
     allowed_domains = ["vaga.lt"]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS_PER_DOMAIN": _scraping.get("concurrent_requests_per_domain", 3),
+        "CONCURRENT_REQUESTS_PER_DOMAIN": _scraping.get(
+            "concurrent_requests_per_domain", 3
+        ),
         "DOWNLOAD_DELAY": _scraping.get("download_delay", 0.5),
     }
 
@@ -33,7 +35,9 @@ class VagaScanSpider(scrapy.Spider):
                     if url:
                         yield scrapy.Request(url, callback=self.parse_product)
         else:
-            url = _scan.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
+            url = _scan.get(
+                "category_url", "https://vaga.lt/knygos?limit=100&page={page}"
+            )
             yield scrapy.Request(
                 url.format(page=1),
                 callback=self.parse_category,
@@ -61,6 +65,12 @@ class VagaScanSpider(scrapy.Spider):
         if data["title"] is None:
             return
 
+        # Build properties dict from format-specific fields
+        props: dict[str, object] = {}
+        for key in ("pages", "cover_type", "duration", "narrator", "translator"):
+            if data.get(key) is not None:
+                props[key] = data[key]
+
         yield ListingItem(
             url=response.url.split("?")[0],
             shop_name=_conf.get("shop", {}).get("name", "vaga"),
@@ -70,16 +80,12 @@ class VagaScanSpider(scrapy.Spider):
             isbn=data.get("isbn"),
             publisher=data.get("publisher"),
             year=data.get("year"),
-            pages=data.get("pages"),
-            cover_type=data.get("cover_type"),
             format=data.get("format"),
-            duration=data.get("duration"),
-            narrator=data.get("narrator"),
-            translator=data.get("translator"),
             description=data.get("description"),
             image_url=data.get("image_url"),
+            categories=data.get("categories", []),
+            properties=props or None,
             price=data.get("price"),
             price_original=data.get("price_original"),
             in_stock=data.get("in_stock"),
-            categories=data.get("categories", []),
         )

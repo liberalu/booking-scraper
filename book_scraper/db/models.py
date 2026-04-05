@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -14,40 +15,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
-
-
-class Book(Base):
-    __tablename__ = "books"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    isbn: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    author: Mapped[str | None] = mapped_column(Text, nullable=True)
-    publisher: Mapped[str | None] = mapped_column(String, nullable=True)
-    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    language: Mapped[str] = mapped_column(String, nullable=False, default="lt")
-    format: Mapped[str | None] = mapped_column(String, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    labels: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
-    listings: Mapped[list["Listing"]] = relationship(back_populates="book")
-    categories: Mapped[list["Category"]] = relationship(
-        secondary="book_categories", back_populates="books"
-    )
 
 
 class Category(Base):
@@ -61,18 +34,6 @@ class Category(Base):
     )
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
-    books: Mapped[list["Book"]] = relationship(
-        secondary="book_categories", back_populates="categories"
-    )
-
-
-class BookCategory(Base):
-    __tablename__ = "book_categories"
-
-    book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), primary_key=True)
-    category_id: Mapped[int] = mapped_column(
-        ForeignKey("categories.id"), primary_key=True
-    )
 
 
 class Shop(Base):
@@ -97,28 +58,40 @@ class Listing(Base):
     __tablename__ = "listings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    book_id: Mapped[int | None] = mapped_column(ForeignKey("books.id"), nullable=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Core product data (always present)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     author: Mapped[str | None] = mapped_column(Text, nullable=True)
     sku: Mapped[str | None] = mapped_column(String, nullable=True)
-    isbn_from_shop: Mapped[str | None] = mapped_column(String, nullable=True)
-    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    isbn: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Common metadata
     publisher: Mapped[str | None] = mapped_column(String, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cover_type: Mapped[str | None] = mapped_column(String, nullable=True)
     format: Mapped[str | None] = mapped_column(String, nullable=True)
-    duration: Mapped[str | None] = mapped_column(String, nullable=True)
-    narrator: Mapped[str | None] = mapped_column(String, nullable=True)
-    translator: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+
+    # Format-specific properties (pages, cover_type, duration, narrator, translator, etc.)
+    properties: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    # Pricing (latest snapshot, also stored in prices table)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    price_original: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Matching
     match_status: Mapped[str] = mapped_column(
         match_status_enum, nullable=False, default="unmatched"
     )
     match_method: Mapped[str | None] = mapped_column(match_method_enum, nullable=True)
+
+    # Lifecycle
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
@@ -129,7 +102,6 @@ class Listing(Base):
 
     __table_args__ = (UniqueConstraint("shop_id", "url", name="uq_listing_shop_url"),)
 
-    book: Mapped["Book | None"] = relationship(back_populates="listings")
     shop: Mapped["Shop"] = relationship(back_populates="listings")
     prices: Mapped[list["Price"]] = relationship(back_populates="listing")
 

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,18 +25,17 @@ def upsert_listing(
     title: str,
     author: str | None = None,
     sku: str | None = None,
-    isbn_from_shop: str | None = None,
-    image_url: str | None = None,
+    isbn: str | None = None,
     publisher: str | None = None,
     year: int | None = None,
-    pages: int | None = None,
-    cover_type: str | None = None,
     format: str | None = None,
-    duration: str | None = None,
-    narrator: str | None = None,
-    translator: str | None = None,
     description: str | None = None,
+    image_url: str | None = None,
     categories: list[str] | None = None,
+    properties: dict[str, Any] | None = None,
+    price: Decimal | None = None,
+    price_original: Decimal | None = None,
+    in_stock: bool = True,
 ) -> Listing:
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
@@ -47,18 +47,17 @@ def upsert_listing(
             title=title,
             author=author,
             sku=sku,
-            isbn_from_shop=isbn_from_shop,
-            image_url=image_url,
+            isbn=isbn,
             publisher=publisher,
             year=year,
-            pages=pages,
-            cover_type=cover_type,
             format=format,
-            duration=duration,
-            narrator=narrator,
-            translator=translator,
             description=description,
+            image_url=image_url,
             categories=categories,
+            properties=properties,
+            price=price,
+            price_original=price_original,
+            in_stock=in_stock,
             first_seen_at=now,
             last_seen_at=now,
         )
@@ -67,31 +66,33 @@ def upsert_listing(
     else:
         listing.title = title
         listing.author = author
+        # Only update fields if provided (don't overwrite with None from price spider)
         if sku is not None:
             listing.sku = sku
-        listing.isbn_from_shop = isbn_from_shop
-        listing.image_url = image_url
-        # Only update metadata fields if provided (don't overwrite with None from price spider)
+        if isbn is not None:
+            listing.isbn = isbn
         if publisher is not None:
             listing.publisher = publisher
         if year is not None:
             listing.year = year
-        if pages is not None:
-            listing.pages = pages
-        if cover_type is not None:
-            listing.cover_type = cover_type
         if format is not None:
             listing.format = format
-        if duration is not None:
-            listing.duration = duration
-        if narrator is not None:
-            listing.narrator = narrator
-        if translator is not None:
-            listing.translator = translator
         if description is not None:
             listing.description = description
+        if image_url is not None:
+            listing.image_url = image_url
         if categories is not None:
             listing.categories = categories
+        if properties is not None:
+            # Merge with existing properties
+            existing = listing.properties or {}
+            existing.update(properties)
+            listing.properties = existing
+        if price is not None:
+            listing.price = price
+        if price_original is not None:
+            listing.price_original = price_original
+        listing.in_stock = in_stock
         listing.last_seen_at = now
         listing.is_active = True
         session.flush()

@@ -25,4 +25,6 @@ ITEM_PIPELINES = {
 }
 
 # Database connection
-DATABASE_URL = _db.get("url", "postgresql+asyncpg://postgres:postgres@localhost:5432/book_scraper")
+DATABASE_URL = _db.get(
+    "url", "postgresql+asyncpg://postgres:postgres@localhost:5432/book_scraper"
+)
