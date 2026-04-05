@@ -8,6 +8,7 @@ class ListingItem(scrapy.Item):
     shop_name = scrapy.Field()
     shop_title = scrapy.Field()
     shop_author = scrapy.Field()
+    sku = scrapy.Field()
     isbn = scrapy.Field()
     publisher = scrapy.Field()
     year = scrapy.Field()

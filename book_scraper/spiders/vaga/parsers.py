@@ -128,6 +128,11 @@ def parse_product_page(html: str) -> dict[str, object]:
                 item.get("name", "") for item in items if item.get("name")
             ]
 
+    # Extract original/bookstore price from HTML (not in JSON-LD)
+    original_match = re.search(r'class="price-knygyne">([0-9,]+)€', html)
+    if original_match:
+        data["price_original"] = original_match.group(1).replace(",", ".")
+
     # Parse HTML property spans (note: class has typo "propery")
     props = re.findall(
         r'<span class="propery-title">(.*?)</span>'

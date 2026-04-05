@@ -23,6 +23,7 @@ def upsert_listing(
     url: str,
     shop_title: str,
     shop_author: str | None = None,
+    sku: str | None = None,
     isbn_from_shop: str | None = None,
     image_url: str | None = None,
     publisher: str | None = None,
@@ -41,6 +42,7 @@ def upsert_listing(
             url=url,
             shop_title=shop_title,
             shop_author=shop_author,
+            sku=sku,
             isbn_from_shop=isbn_from_shop,
             image_url=image_url,
             publisher=publisher,
@@ -57,6 +59,8 @@ def upsert_listing(
     else:
         listing.shop_title = shop_title
         listing.shop_author = shop_author
+        if sku is not None:
+            listing.sku = sku
         listing.isbn_from_shop = isbn_from_shop
         listing.image_url = image_url
         # Only update metadata fields if provided (don't overwrite with None from price spider)

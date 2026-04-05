@@ -95,6 +95,7 @@ class PostgresPipeline:
                 url=adapter["url"],
                 shop_title=adapter["shop_title"],
                 shop_author=adapter.get("shop_author"),
+                sku=adapter.get("sku"),
                 isbn_from_shop=adapter.get("isbn"),
                 image_url=adapter.get("image_url"),
                 publisher=adapter.get("publisher"),

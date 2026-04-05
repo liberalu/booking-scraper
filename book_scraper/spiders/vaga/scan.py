@@ -34,7 +34,9 @@ class VagaScanSpider(scrapy.Spider):
         if not links:
             return
         for link in links:
-            yield response.follow(link, callback=self.parse_product)
+            # Strip query params (e.g. ?limit=100) to get clean product URLs
+            clean_url = link.split("?")[0]
+            yield scrapy.Request(clean_url, callback=self.parse_product)
 
         page = response.meta["page"] + 1
         yield scrapy.Request(
@@ -49,10 +51,11 @@ class VagaScanSpider(scrapy.Spider):
             return
 
         yield ListingItem(
-            url=response.url,
+            url=response.url.split("?")[0],
             shop_name="vaga",
             shop_title=data["title"],
             shop_author=data.get("author"),
+            sku=data.get("sku"),
             isbn=data.get("isbn"),
             publisher=data.get("publisher"),
             year=data.get("year"),

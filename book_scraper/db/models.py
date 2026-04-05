@@ -102,6 +102,7 @@ class Listing(Base):
     url: Mapped[str] = mapped_column(Text, nullable=False)
     shop_title: Mapped[str] = mapped_column(Text, nullable=False)
     shop_author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sku: Mapped[str | None] = mapped_column(String, nullable=True)
     isbn_from_shop: Mapped[str | None] = mapped_column(String, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     publisher: Mapped[str | None] = mapped_column(String, nullable=True)
