@@ -20,4 +20,4 @@ FEED_EXPORT_ENCODING = "utf-8"
 # }
 
 # Database connection
-DATABASE_URL = "postgresql+asyncpg://localhost:5432/book_scraper"
+DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/book_scraper"

@@ -91,12 +91,12 @@ def upgrade() -> None:
         sa.Column("image_url", sa.Text(), nullable=True),
         sa.Column(
             "match_status",
-            sa.Enum("unmatched", "matched", "uncertain", name="match_status"),
+            postgresql.ENUM("unmatched", "matched", "uncertain", name="match_status", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "match_method",
-            sa.Enum("isbn", "fuzzy", "manual", name="match_method"),
+            postgresql.ENUM("isbn", "fuzzy", "manual", name="match_method", create_type=False),
             nullable=True,
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False),
