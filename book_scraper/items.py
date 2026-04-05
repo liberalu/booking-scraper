@@ -26,6 +26,7 @@ class PriceItem(scrapy.Item):
 
     url = scrapy.Field()
     shop_name = scrapy.Field()
+    shop_title = scrapy.Field()
     price = scrapy.Field()
     price_original = scrapy.Field()
     in_stock = scrapy.Field()

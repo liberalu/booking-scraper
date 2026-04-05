@@ -103,7 +103,7 @@ class PostgresPipeline:
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
-                shop_title=adapter.get("url", ""),
+                shop_title=adapter.get("shop_title") or adapter["url"],
             )
             insert_price(
                 self.session,
