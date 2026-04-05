@@ -3,8 +3,13 @@ from typing import Any
 
 import scrapy
 
+from book_scraper.config import load_shop_config
 from book_scraper.items import PriceItem
 from book_scraper.spiders.vaga.parsers import parse_category_page
+
+_conf = load_shop_config("vaga")
+_scraping = _conf.get("scraping", {})
+_prices = _conf.get("prices", {})
 
 
 class VagaPricesSpider(scrapy.Spider):
@@ -12,13 +17,17 @@ class VagaPricesSpider(scrapy.Spider):
     allowed_domains = ["vaga.lt"]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
-        "DOWNLOAD_DELAY": 0.5,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": _prices.get(
+            "concurrent_requests_per_domain",
+            _scraping.get("concurrent_requests_per_domain", 2),
+        ),
+        "DOWNLOAD_DELAY": _scraping.get("download_delay", 0.5),
     }
 
     def start_requests(self) -> Generator[scrapy.Request, None, None]:
+        url = _prices.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
         yield scrapy.Request(
-            "https://vaga.lt/knygos?limit=100&page=1",
+            url.format(page=1),
             meta={"page": 1},
         )
 
@@ -29,11 +38,12 @@ class VagaPricesSpider(scrapy.Spider):
         if not products:
             return
 
+        shop_name = _conf.get("shop", {}).get("name", "vaga")
         for product in products:
             if product["price"] is not None:
                 yield PriceItem(
                     url=product["url"],
-                    shop_name="vaga",
+                    shop_name=shop_name,
                     title=product["title"],
                     price=product["price"],
                     price_original=product["price_original"],
@@ -41,8 +51,9 @@ class VagaPricesSpider(scrapy.Spider):
                 )
 
         page = response.meta["page"] + 1
+        url = _prices.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
         yield scrapy.Request(
-            f"https://vaga.lt/knygos?limit=100&page={page}",
+            url.format(page=page),
             callback=self.parse,
             meta={"page": page},
         )

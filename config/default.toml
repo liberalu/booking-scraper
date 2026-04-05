@@ -1,0 +1,7 @@
+[scrapy]
+download_delay = 1.0
+concurrent_requests_per_domain = 1
+robotstxt_obey = true
+
+[database]
+url = "postgresql+asyncpg://postgres:postgres@localhost:5432/book_scraper"

@@ -3,8 +3,13 @@ from typing import Any
 
 import scrapy
 
+from book_scraper.config import load_shop_config
 from book_scraper.items import ListingItem
 from book_scraper.spiders.vaga.parsers import parse_product_page
+
+_conf = load_shop_config("vaga")
+_scraping = _conf.get("scraping", {})
+_scan = _conf.get("scan", {})
 
 
 class VagaScanSpider(scrapy.Spider):
@@ -12,8 +17,8 @@ class VagaScanSpider(scrapy.Spider):
     allowed_domains = ["vaga.lt"]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 3,
-        "DOWNLOAD_DELAY": 0.5,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": _scraping.get("concurrent_requests_per_domain", 3),
+        "DOWNLOAD_DELAY": _scraping.get("download_delay", 0.5),
     }
 
     def __init__(self, urls_file: str | None = None, *args: Any, **kwargs: Any) -> None:
@@ -28,8 +33,9 @@ class VagaScanSpider(scrapy.Spider):
                     if url:
                         yield scrapy.Request(url, callback=self.parse_product)
         else:
+            url = _scan.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
             yield scrapy.Request(
-                "https://vaga.lt/knygos?limit=100&page=1",
+                url.format(page=1),
                 callback=self.parse_category,
                 meta={"page": 1},
             )
@@ -39,13 +45,13 @@ class VagaScanSpider(scrapy.Spider):
         if not links:
             return
         for link in links:
-            # Strip query params (e.g. ?limit=100) to get clean product URLs
             clean_url = link.split("?")[0]
             yield scrapy.Request(clean_url, callback=self.parse_product)
 
         page = response.meta["page"] + 1
+        url = _scan.get("category_url", "https://vaga.lt/knygos?limit=100&page={page}")
         yield scrapy.Request(
-            f"https://vaga.lt/knygos?limit=100&page={page}",
+            url.format(page=page),
             callback=self.parse_category,
             meta={"page": page},
         )
@@ -57,7 +63,7 @@ class VagaScanSpider(scrapy.Spider):
 
         yield ListingItem(
             url=response.url.split("?")[0],
-            shop_name="vaga",
+            shop_name=_conf.get("shop", {}).get("name", "vaga"),
             title=data["title"],
             author=data.get("author"),
             sku=data.get("sku"),
