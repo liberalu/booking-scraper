@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<urlset xmlns:ns0="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:ns1="http://www.google.com/schemas/sitemap-image/1.1" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <ns0:url>
+    <ns0:loc>https://vaga.lt/dos-kortos-atnaujintos</ns0:loc>
+    <ns0:changefreq>weekly</ns0:changefreq>
+    <ns0:lastmod>2026-04-05T00:16:02+03:00</ns0:lastmod>
+    <ns0:priority>1.0</ns0:priority>
+    <ns1:image>
+      <ns1:loc>https://vaga.lt/image/catalog/data/coveriai/73514559.jpg</ns1:loc>
+      <ns1:caption>DOS kortos (atnaujintos)</ns1:caption>
+      <ns1:title>DOS kortos (atnaujintos)</ns1:title>
+    </ns1:image>
+  </ns0:url>
+  <ns0:url>
+    <ns0:loc>https://vaga.lt/phase-10-sutampanciu-kortu-zaidimas</ns0:loc>
+    <ns0:changefreq>weekly</ns0:changefreq>
+    <ns0:lastmod>2026-04-05T00:16:02+03:00</ns0:lastmod>
+    <ns0:priority>1.0</ns0:priority>
+    <ns1:image>
+      <ns1:loc>https://vaga.lt/image/catalog/data/coveriai/61497397_2.jpg</ns1:loc>
+      <ns1:caption>PHASE 10 - sutampančių kortų žaidimas</ns1:caption>
+      <ns1:title>PHASE 10 - sutampančių kortų žaidimas</ns1:title>
+    </ns1:image>
+  </ns0:url>
+  <ns0:url>
+    <ns0:loc>https://vaga.lt/uno-express-kortos-175255</ns0:loc>
+    <ns0:changefreq>weekly</ns0:changefreq>
+    <ns0:lastmod>2026-04-05T00:16:02+03:00</ns0:lastmod>
+    <ns0:priority>1.0</ns0:priority>
+    <ns1:image>
+      <ns1:loc>https://vaga.lt/image/catalog/data/coveriai/1000384_2.jpg</ns1:loc>
+      <ns1:caption>UNO Express kortos</ns1:caption>
+      <ns1:title>UNO Express kortos</ns1:title>
+    </ns1:image>
+  </ns0:url>
+  <ns0:url>
+    <ns0:loc>https://vaga.lt/uno-kortos-deluxe</ns0:loc>
+    <ns0:changefreq>weekly</ns0:changefreq>
+    <ns0:lastmod>2026-04-05T00:16:02+03:00</ns0:lastmod>
+    <ns0:priority>1.0</ns0:priority>
+    <ns1:image>
+      <ns1:loc>https://vaga.lt/image/catalog/data/coveriai/24580097_2.jpg</ns1:loc>
+      <ns1:caption>UNO kortos Deluxe</ns1:caption>
+      <ns1:title>UNO kortos Deluxe</ns1:title>
+    </ns1:image>
+  </ns0:url>
+  <ns0:url>
+    <ns0:loc>https://vaga.lt/uno-kortos-harry-potter</ns0:loc>
+    <ns0:changefreq>weekly</ns0:changefreq>
+    <ns0:lastmod>2026-04-05T00:16:02+03:00</ns0:lastmod>
+    <ns0:priority>1.0</ns0:priority>
+    <ns1:image>
+      <ns1:loc>https://vaga.lt/image/catalog/data/coveriai/61587579_2.jpg</ns1:loc>
+      <ns1:caption>UNO kortos Harry Potter</ns1:caption>
+      <ns1:title>UNO kortos Harry Potter</ns1:title>
+    </ns1:image>
+  </ns0:url>
+</urlset>
