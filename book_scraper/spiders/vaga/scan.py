@@ -11,6 +11,11 @@ class VagaScanSpider(scrapy.Spider):
     name = "vaga_scan"
     allowed_domains = ["vaga.lt"]
 
+    custom_settings = {
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 3,
+        "DOWNLOAD_DELAY": 0.5,
+    }
+
     def __init__(self, urls_file: str | None = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.urls_file = urls_file
