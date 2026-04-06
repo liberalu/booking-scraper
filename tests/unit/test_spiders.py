@@ -88,12 +88,12 @@ class TestDiscoverSpiderCategories:
 
 
 class TestDiscoverSpiderUrlFilter:
-    def test_url_filter_applied(self):
+    def test_no_filter_passes_all(self):
         spider = DiscoverSpider(shop="vaga", strategy="sitemap")
-        # vaga config has url_include_pattern that requires URLs to match
-        assert spider.url_pattern is not None
+        # vaga config has no url_include_pattern — all URLs pass
+        assert spider.url_pattern is None
         assert spider._url_passes_filter("https://vaga.lt/some-book-12345")
-        assert not spider._url_passes_filter("https://vaga.lt/about")
+        assert spider._url_passes_filter("https://vaga.lt/about")
 
 
 class TestDiscoverSpiderFullCrawl:

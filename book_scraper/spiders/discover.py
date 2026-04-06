@@ -46,6 +46,7 @@ class DiscoverSpider(scrapy.Spider):
                 "concurrent_requests_per_domain", 1
             ),
             "DOWNLOAD_DELAY": scraping.get("download_delay", 1.0),
+            "DOWNLOAD_TIMEOUT": scraping.get("download_timeout", 30),
         }
 
     def _url_passes_filter(self, url: str) -> bool:

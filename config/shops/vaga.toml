@@ -5,6 +5,7 @@ base_url = "https://vaga.lt"
 [scraping]
 download_delay = 0.5
 concurrent_requests_per_domain = 3
+download_timeout = 15
 
 [discover]
 
