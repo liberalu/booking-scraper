@@ -18,14 +18,14 @@ def test_valid_listing_item_passes(pipeline):
         title="Test Book",
         price="9.99",
     )
-    result = pipeline.process_item(item, spider=None)
+    result = pipeline.process_item(item)
     assert ItemAdapter(result)["price"] == "9.99"
 
 
 def test_listing_item_without_title_dropped(pipeline):
     item = ListingItem(url="https://vaga.lt/book", shop_name="vaga")
     with pytest.raises(DropItem, match="Missing title"):
-        pipeline.process_item(item, spider=None)
+        pipeline.process_item(item)
 
 
 def test_invalid_price_dropped(pipeline):
@@ -35,7 +35,7 @@ def test_invalid_price_dropped(pipeline):
         price="not_a_number",
     )
     with pytest.raises(DropItem, match="Invalid price"):
-        pipeline.process_item(item, spider=None)
+        pipeline.process_item(item)
 
 
 def test_lithuanian_price_format(pipeline):
@@ -45,7 +45,7 @@ def test_lithuanian_price_format(pipeline):
         price="16.32",
         price_original="24.39",
     )
-    result = pipeline.process_item(item, spider=None)
+    result = pipeline.process_item(item)
     adapter = ItemAdapter(result)
     assert adapter["price"] == "16.32"
     assert adapter["price_original"] == "24.39"

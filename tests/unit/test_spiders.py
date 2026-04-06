@@ -1,5 +1,6 @@
 """Test generic spiders using fake Scrapy responses (no network, no DB)."""
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,11 @@ def _fake_response(url: str, body: str, cls=HtmlResponse, meta=None):
     """Build a fake Scrapy response with optional request meta."""
     request = Request(url=url, meta=meta or {})
     return cls(url=url, body=body, encoding="utf-8", request=request)
+
+
+async def _collect_async(async_gen):
+    """Collect all items from an async generator."""
+    return [item async for item in async_gen]
 
 
 class TestDiscoverSpiderInit:
@@ -35,9 +41,9 @@ class TestDiscoverSpiderInit:
 
 
 class TestDiscoverSpiderSitemap:
-    def test_start_requests_yields_sitemap_url(self):
+    def test_start_yields_sitemap_url(self):
         spider = DiscoverSpider(shop="vaga", strategy="sitemap")
-        requests = list(spider.start_requests())
+        requests = asyncio.run(_collect_async(spider.start()))
         assert len(requests) == 1
         assert "sitemap" in requests[0].url
 
@@ -53,9 +59,9 @@ class TestDiscoverSpiderSitemap:
 
 
 class TestDiscoverSpiderCategories:
-    def test_start_requests_yields_page_1(self):
+    def test_start_yields_page_1(self):
         spider = DiscoverSpider(shop="vaga", strategy="categories")
-        requests = list(spider.start_requests())
+        requests = asyncio.run(_collect_async(spider.start()))
         assert len(requests) == 1
         assert "page=1" in requests[0].url
 
@@ -97,9 +103,9 @@ class TestDiscoverSpiderUrlFilter:
 
 
 class TestDiscoverSpiderFullCrawl:
-    def test_start_requests_yields_start_url(self):
+    def test_start_yields_start_url(self):
         spider = DiscoverSpider(shop="vaga", strategy="full_crawl")
-        requests = list(spider.start_requests())
+        requests = asyncio.run(_collect_async(spider.start()))
         assert len(requests) == 1
         assert requests[0].url == "https://vaga.lt"
 

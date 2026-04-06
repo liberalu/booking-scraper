@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from itemadapter import ItemAdapter
+from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -17,7 +18,7 @@ from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
 
 
 class ValidationPipeline:
-    def process_item(self, item: Any, spider: Any) -> Any:
+    def process_item(self, item: Any) -> Any:
         adapter = ItemAdapter(item)
 
         if isinstance(item, (ListingItem, PriceItem)):
@@ -47,19 +48,27 @@ class PostgresPipeline:
         self.session_factory: sessionmaker[Session] | None = None
         self.session: Session | None = None
         self.shop_cache: dict[str, int] = {}
+        self.crawler: Crawler | None = None
+        self._item_count: int = 0
 
     @classmethod
-    def from_crawler(cls, crawler: Any) -> "PostgresPipeline":  # pragma: no cover
-        return cls(database_url=crawler.settings.get("DATABASE_URL"))
+    def from_crawler(cls, crawler: Crawler) -> "PostgresPipeline":  # pragma: no cover
+        pipeline = cls(database_url=crawler.settings.get("DATABASE_URL"))
+        pipeline.crawler = crawler
+        return pipeline
 
-    def open_spider(self, spider: Any) -> None:  # pragma: no cover
+    def open_spider(self) -> None:  # pragma: no cover
         self.session_factory = get_session_factory(self.database_url)
         self.session = self.session_factory()
 
-    def close_spider(self, spider: Any) -> None:  # pragma: no cover
+    def close_spider(self) -> None:  # pragma: no cover
         if self.session:
             self.session.commit()
             self.session.close()
+
+    @property
+    def spider(self) -> Any:
+        return self.crawler.spider if self.crawler else None
 
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
@@ -72,7 +81,7 @@ class PostgresPipeline:
             self.shop_cache[shop_name] = shop.id
         return self.shop_cache[shop_name]
 
-    def process_item(self, item: Any, spider: Any) -> Any:
+    def process_item(self, item: Any) -> Any:
         if self.session is None:  # pragma: no cover
             return item
 
@@ -90,7 +99,9 @@ class PostgresPipeline:
                     year = None
 
             price = (
-                Decimal(adapter["price"]) if adapter.get("price") is not None else None
+                Decimal(adapter["price"])
+                if adapter.get("price") is not None
+                else None
             )
             price_original = (
                 Decimal(adapter["price_original"])
@@ -161,16 +172,16 @@ class PostgresPipeline:
             )
 
         # Commit every 100 items
-        if hasattr(spider, "_item_count"):
-            spider._item_count += 1
-        else:
-            spider._item_count = 1
-        if spider._item_count % 100 == 0:
+        self._item_count += 1
+        if self._item_count % 100 == 0:
             self.session.commit()
             # Update scrape_run progress if spider tracks it
-            if hasattr(spider, "_run_id") and spider._run_id:
+            spider = self.spider
+            if spider and hasattr(spider, "_run_id") and spider._run_id:
                 update_scrape_run_progress(
-                    self.session, spider._run_id, spider._urls_processed
+                    self.session,
+                    spider._run_id,
+                    spider._urls_processed,
                 )
 
         return item

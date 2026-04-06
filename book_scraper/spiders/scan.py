@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import scrapy
@@ -43,7 +43,7 @@ class ScanSpider(scrapy.Spider):
 
         self._flush_every: int = 50
 
-    def start_requests(self) -> Generator[scrapy.Request, None, None]:
+    async def start(self) -> AsyncGenerator[scrapy.Request, None]:
         database_url = self.settings.get("DATABASE_URL")
         session_factory = get_session_factory(database_url)
         session: Session = session_factory()
