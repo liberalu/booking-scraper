@@ -49,14 +49,14 @@ class PostgresPipeline:
         self.shop_cache: dict[str, int] = {}
 
     @classmethod
-    def from_crawler(cls, crawler: Any) -> "PostgresPipeline":
+    def from_crawler(cls, crawler: Any) -> "PostgresPipeline":  # pragma: no cover
         return cls(database_url=crawler.settings.get("DATABASE_URL"))
 
-    def open_spider(self, spider: Any) -> None:
+    def open_spider(self, spider: Any) -> None:  # pragma: no cover
         self.session_factory = get_session_factory(self.database_url)
         self.session = self.session_factory()
 
-    def close_spider(self, spider: Any) -> None:
+    def close_spider(self, spider: Any) -> None:  # pragma: no cover
         if self.session:
             self.session.commit()
             self.session.close()
@@ -73,7 +73,7 @@ class PostgresPipeline:
         return self.shop_cache[shop_name]
 
     def process_item(self, item: Any, spider: Any) -> Any:
-        if self.session is None:
+        if self.session is None:  # pragma: no cover
             return item
 
         adapter = ItemAdapter(item)

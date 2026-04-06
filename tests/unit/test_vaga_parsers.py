@@ -6,7 +6,7 @@ from book_scraper.spiders.vaga.parsers import (
     parse_sitemap_urls,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 def test_parse_sitemap_urls():

@@ -1,10 +1,10 @@
-from collections.abc import Generator
-from typing import Any
+from collections.abc import Generator  # pragma: no cover
+from typing import Any  # pragma: no cover
 
-from scrapy import signals
+from scrapy import signals  # pragma: no cover
 
 
-class BookScraperSpiderMiddleware:
+class BookScraperSpiderMiddleware:  # pragma: no cover
     @classmethod
     def from_crawler(cls, crawler: Any) -> "BookScraperSpiderMiddleware":
         s = cls()

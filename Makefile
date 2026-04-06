@@ -1,4 +1,4 @@
-.PHONY: lint format test build ci crawl
+.PHONY: lint format test build ci crawl coverage coverage-html
 
 IMAGE_NAME ?= book-scraper
 IMAGE_TAG  ?= latest
@@ -22,3 +22,10 @@ ci: lint test
 
 crawl:
 	uv run scrapy crawl $(ARGS)
+
+coverage:
+	uv run pytest --cov=book_scraper --cov-report=term-missing -v
+
+coverage-html:
+	uv run pytest --cov=book_scraper --cov-report=html
+	@echo "Open htmlcov/index.html in your browser"

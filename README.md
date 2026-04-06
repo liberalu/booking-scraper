@@ -8,13 +8,15 @@ Scrapy-based project with per-shop spider directories, shared item pipelines for
 
 ### Pipeline Phases
 
-| Phase | Spider | What it does |
-|-------|--------|-------------|
-| 1. Discover | `vaga_discover` | Find all product URLs from sitemap |
-| 2. Detect changes | (not yet implemented) | Compare discovered URLs vs known listings |
-| 3. Full scan | `vaga_scan` | Scrape full product data (title, author, ISBN, price, metadata) |
-| 4. Price scan | `vaga_prices` | Lightweight price-only re-scrape via category pages |
+| Phase | Command | What it does |
+|-------|---------|-------------|
+| Discover (sitemap) | `discover -a shop=vaga -a strategy=sitemap` | Find product URLs from sitemap |
+| Discover (categories) | `discover -a shop=vaga -a strategy=categories` | Find URLs + extract current prices |
+| Discover (full crawl) | `discover -a shop=vaga -a strategy=full_crawl` | Crawl all internal links (manual) |
+| Scan | `scan -a shop=vaga` | Scrape full product data (resumable after crashes) |
 | Match | (not yet implemented) | Link listings to canonical books |
+
+Spiders are generic — shop and strategy passed as arguments. No per-shop spider classes needed.
 
 ### Supported Shops
 
@@ -47,17 +49,17 @@ PYTHONPATH=. uv run alembic upgrade head
 ### Run Spiders
 
 ```bash
-# Discover all URLs from sitemap
-uv run scrapy crawl vaga_discover
+# Discover URLs from sitemap (weekly)
+uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap
 
-# Full product scan (~3 hours for all 20K pages)
-uv run scrapy crawl vaga_scan
+# Discover URLs + extract prices from category pages (monthly)
+uv run scrapy crawl discover -a shop=vaga -a strategy=categories
 
-# Price-only scan (~3 minutes for all prices)
-uv run scrapy crawl vaga_prices
+# Full product scan (resumable — just re-run after crash)
+uv run scrapy crawl scan -a shop=vaga
 
 # Limit items for testing
-uv run scrapy crawl vaga_scan -s CLOSESPIDER_ITEMCOUNT=10
+uv run scrapy crawl scan -a shop=vaga -s CLOSESPIDER_ITEMCOUNT=10
 ```
 
 ### Run Tests
@@ -68,7 +70,36 @@ docker compose up -d postgres-test
 
 # Run all tests
 uv run pytest -v
+
+# Unit tests only (no DB required)
+uv run pytest tests/unit/ -v
+
+# Integration tests only (requires postgres-test)
+uv run pytest tests/integration/ -v
+
+# With coverage report
+make coverage
+
+# HTML coverage report (opens in browser)
+make coverage-html
 ```
+
+## Testing Strategy
+
+Tests are split into two directories by what they need to run:
+
+```
+tests/
+    unit/           # Fast, no external dependencies
+    integration/    # Requires PostgreSQL (Docker on port 5433)
+    fixtures/       # Saved HTML/XML pages for parser + spider tests
+```
+
+**Unit tests** cover pure logic — parsers, config loading, item validation, session factory, spider registry, and spiders. Spider tests use fake Scrapy responses built from the same HTML fixtures, so they verify the full spider→parser→item chain without network or DB.
+
+**Integration tests** hit a real PostgreSQL instance (not mocks). They cover the DB repository layer (listings, prices, discovered URLs, scrape runs) and the `PostgresPipeline` end-to-end.
+
+Scrapy boilerplate (`settings.py`, `middlewares.py`) and framework lifecycle methods (`from_crawler`, `open_spider`, `close_spider`) are marked `# pragma: no cover` — they have no branching logic and are exercised by real spider runs rather than unit tests.
 
 ## Project Structure
 
@@ -84,28 +115,27 @@ book_scraper/
     pipelines.py                # ValidationPipeline, PostgresPipeline
     config.py                   # TOML config loader
     db/
-        models.py               # SQLAlchemy ORM: Book, Shop, Listing, Price, Category
-        repo.py                 # CRUD operations
+        models.py               # SQLAlchemy ORM models + enums
+        repo.py                 # CRUD operations (listings, prices, discovered URLs, scrape runs)
         session.py              # DB engine + session factory
     spiders/
+        discover.py             # Generic discover spider (sitemap/categories/full_crawl)
+        scan.py                 # Generic scan spider (resumable)
+        registry.py             # Dynamic parser loader
         vaga/
-            discover.py         # Phase 1: sitemap spider
-            scan.py             # Phase 3: full product data
-            prices.py           # Phase 4: price-only re-scrape
-            parsers.py          # HTML/JSON parsing (testable without Scrapy)
+            parsers.py          # vaga.lt HTML/JSON parsing (testable without Scrapy)
 
 tests/
-    fixtures/                   # Saved HTML/XML for parser tests
-    test_vaga_parsers.py        # Parser tests
-    test_db_repo.py             # DB repository tests
-    test_items.py               # Item validation tests
+    unit/                       # Pure logic tests (no DB)
+    integration/                # Tests that hit PostgreSQL
+    fixtures/                   # Saved HTML/XML for parser + spider tests
 
 _prototypes/                    # Old prototype scripts (reference only)
 ```
 
 ## Database
 
-PostgreSQL with 6 tables:
+PostgreSQL with 8 tables:
 
 - **books** - Canonical book records (shop-independent)
 - **shops** - Registered shops (vaga, knygos, etc.)
@@ -113,6 +143,8 @@ PostgreSQL with 6 tables:
 - **prices** - Append-only price history
 - **categories** - Hierarchical category tree
 - **book_categories** - Many-to-many book-category link
+- **discovered_urls** - Accumulate-only URL inventory per shop (tracks url_type, fail_count, source)
+- **scrape_runs** - Phase/status log for crash detection and resume
 
 ### Listings Fields
 
@@ -131,6 +163,14 @@ base_url = "https://vaga.lt"
 [scraping]
 download_delay = 0.5
 concurrent_requests_per_domain = 3
+
+[discover.sitemap]
+url = "https://vaga.lt/sitemap.xml"
+max_age_hours = 168
+
+[discover.categories]
+url = "https://vaga.lt/knygos?limit=100&page={page}"
+max_age_hours = 672
 ```
 
 Override at runtime with Scrapy CLI:
