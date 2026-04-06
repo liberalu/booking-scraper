@@ -34,6 +34,7 @@ class ScanService:
         shop_name: str,
         base_url: str,
         shop_config: dict[str, Any],
+        rescrape: bool = False,
     ) -> ScanPlan:
         """Prepare a scan run: upsert shop, mark stale, check freshness,
         load pending URLs, filter already done, create run."""
@@ -48,9 +49,13 @@ class ScanService:
 
         pending_urls = get_pending_scan_urls(self.session, shop.id)
 
-        already_done = get_urls_already_scraped(self.session, shop.id)
-        urls_to_scrape = [u for u in pending_urls if u.url not in already_done]
-        urls_skipped = len(pending_urls) - len(urls_to_scrape)
+        if rescrape:
+            urls_to_scrape = pending_urls
+            urls_skipped = 0
+        else:
+            already_done = get_urls_already_scraped(self.session, shop.id)
+            urls_to_scrape = [u for u in pending_urls if u.url not in already_done]
+            urls_skipped = len(pending_urls) - len(urls_to_scrape)
 
         run = create_scrape_run(
             self.session, shop.id, "scan", urls_total=len(urls_to_scrape)

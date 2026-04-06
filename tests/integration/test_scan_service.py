@@ -70,6 +70,25 @@ class TestScanServicePrepareScan:
         with pytest.raises(RuntimeError, match="No discovered URLs"):
             service.prepare_scan("no_urls", "https://nu.lt", {})
 
+    def test_rescrape_includes_already_done_urls(self, db_session):
+        shop = upsert_shop(db_session, name="rescrape_shop", base_url="https://rs.lt")
+        url1 = upsert_discovered_url(db_session, shop.id, "https://rs.lt/book-1", "sitemap")
+        upsert_discovered_url(db_session, shop.id, "https://rs.lt/book-2", "sitemap")
+
+        # Mark book-1 as already scraped
+        update_discovered_url_status(
+            db_session, url_id=url1.id, http_status=200, url_type="product"
+        )
+        db_session.flush()
+
+        service = ScanService(db_session)
+        plan = service.prepare_scan("rescrape_shop", "https://rs.lt", {}, rescrape=True)
+
+        urls = [u.url for u in plan.urls_to_scrape]
+        assert "https://rs.lt/book-1" in urls
+        assert "https://rs.lt/book-2" in urls
+        assert plan.urls_skipped == 0
+
     def test_includes_freshness_warnings(self, db_session):
         shop = upsert_shop(db_session, name="warn_shop", base_url="https://w.lt")
         upsert_discovered_url(db_session, shop.id, "https://w.lt/book", "sitemap")
