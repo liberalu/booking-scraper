@@ -27,8 +27,12 @@ DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
     "Connection": "close",  # pragma: no cover
 }  # pragma: no cover
 
-# Auto-close spider if no new items for 60 seconds  # pragma: no cover
-CLOSESPIDER_TIMEOUT_NO_ITEM = 60  # pragma: no cover
+# Auto-close spider if stalled (no responses for N seconds)  # pragma: no cover
+STALL_TIMEOUT = 60  # pragma: no cover
+
+EXTENSIONS = {  # pragma: no cover
+    "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
+}  # pragma: no cover
 
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
