@@ -21,29 +21,6 @@ services:
     volumes:
       - pgdata_test:/var/lib/postgresql/data
 
-  # === Scraper services ===
-
-  scan:
-    build: .
-    command: uv run python book_scraper/scripts/run_scan.py vaga
-    restart: on-failure:50
-    depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
-    # Docker restarts container when health check fails 3x in a row
-    # This handles: stuck processes, network issues, OOM, etc.
-
-  discover:
-    build: .
-    command: uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap -s LOG_LEVEL=INFO
-    depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
-    profiles:
-      - discover  # Only run manually: docker compose --profile discover up discover
-
 volumes:
   pgdata:
   pgdata_test:
