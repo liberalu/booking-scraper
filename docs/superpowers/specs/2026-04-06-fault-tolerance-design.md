@@ -164,7 +164,7 @@ Discovered URLs are never deleted. Re-discovering an existing URL is a no-op (up
 
 1. **Create `scrape_runs` entry** — status=running, started_at=now
 2. **Detect crashed runs** — any previous run for this shop+scan with status=running and finished_at=null → mark as `failed`
-3. **Auto-discover if needed** — query `scrape_runs` for the most recent completed discover run for this shop. If none exists or the last one is older than `max_age_hours`, trigger discover inline. Strategy priority: sitemap first (cheapest), then categories if sitemap is not configured
+3. **Auto-discover check** — query `discovered_urls` for this shop. If no URLs exist at all, error out with instructions to run discover first. If URLs exist but the last discover run is older than `max_age_hours`, log a warning but proceed with existing URLs
 4. **Load work queue** — query `discovered_urls` for this shop where:
    - `url_type != 'non_product'`
    - `fail_count < 3` OR `last_checked_at` is older than 7 days (retry stale failures)
