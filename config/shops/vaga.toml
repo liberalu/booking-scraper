@@ -7,11 +7,18 @@ download_delay = 0.5
 concurrent_requests_per_domain = 3
 
 [discover]
-sitemap_url = "https://vaga.lt/sitemap.xml"
+url_include_pattern = '^https://vaga\.lt/[a-z0-9-]+-\d+$'
+
+[discover.sitemap]
+url = "https://vaga.lt/sitemap.xml"
+max_age_hours = 168
+
+[discover.categories]
+url = "https://vaga.lt/knygos?limit=100&page={page}"
+max_age_hours = 672
+
+[discover.full_crawl]
+start_url = "https://vaga.lt"
 
 [scan]
-category_url = "https://vaga.lt/knygos?limit=100&page={page}"
-
-[prices]
-category_url = "https://vaga.lt/knygos?limit=100&page={page}"
-concurrent_requests_per_domain = 2
+# Reads from discovered_urls table, no URL needed
