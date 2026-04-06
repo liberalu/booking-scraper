@@ -16,11 +16,12 @@ from book_scraper.spiders.registry import load_parsers
 class ScanSpider(scrapy.Spider):
     name = "scan"
 
-    def __init__(self, shop: str | None = None, **kwargs: Any):
+    def __init__(self, shop: str | None = None, rescrape: str = "false", **kwargs: Any):
         super().__init__(**kwargs)
         if not shop:
             raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
+        self._rescrape = rescrape.lower() in ("true", "1", "yes")
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -54,6 +55,7 @@ class ScanSpider(scrapy.Spider):
                 self.shop_name,
                 self.conf["shop"]["base_url"],
                 self.conf,
+                rescrape=self._rescrape,
             )
             self._run_id = plan.run_id
 
