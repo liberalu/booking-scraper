@@ -24,9 +24,14 @@ DOWNLOAD_DELAY = _scrapy.get("download_delay", 1)  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover
 
-# Log warnings and errors to file  # pragma: no cover
-LOG_FILE = "scrapy_errors.log"  # pragma: no cover
-LOG_FILE_LEVEL = "WARNING"  # pragma: no cover
+# Log warnings/errors to file (console output unaffected)  # pragma: no cover
+import logging  # pragma: no cover  # noqa: E402
+
+_file_handler = logging.FileHandler("scrapy_errors.log")  # pragma: no cover
+_file_handler.setLevel(logging.WARNING)  # pragma: no cover
+_fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"  # pragma: no cover
+_file_handler.setFormatter(logging.Formatter(_fmt))  # pragma: no cover
+logging.getLogger().addHandler(_file_handler)  # pragma: no cover
 
 ITEM_PIPELINES = {  # pragma: no cover
     "book_scraper.pipelines.ValidationPipeline": 100,  # pragma: no cover
