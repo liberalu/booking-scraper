@@ -52,10 +52,8 @@ _file_handler.setFormatter(logging.Formatter(_fmt))  # pragma: no cover
 logging.getLogger().addHandler(_file_handler)  # pragma: no cover
 
 DOWNLOADER_MIDDLEWARES = {  # pragma: no cover
-    "book_scraper.middlewares.HardTimeoutMiddleware": 50,  # pragma: no cover
+    "book_scraper.download_handler.HttpxMiddleware": 1,  # pragma: no cover
 }  # pragma: no cover
-
-HARD_TIMEOUT = 30  # pragma: no cover
 
 ITEM_PIPELINES = {  # pragma: no cover
     "book_scraper.pipelines.ValidationPipeline": 100,  # pragma: no cover
