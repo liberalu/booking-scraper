@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -25,6 +26,10 @@ class ScanSpider(scrapy.Spider):
             self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
         ]
 
+        scraping = self.conf.get("scraping", {})
+        self._batch_size: int = scraping.get("batch_size", 100)
+        self._batch_pause: float = scraping.get("batch_pause", 10.0)
+
         self._run_id: int | None = None
         self._urls_processed: int = 0
         self._urls_responded: int = 0
@@ -51,19 +56,47 @@ class ScanSpider(scrapy.Spider):
             for warning in plan.freshness_warnings:
                 self.logger.warning(warning)
 
+            total = len(plan.urls_to_scrape)
+            num_batches = (total + self._batch_size - 1) // self._batch_size
+
             self.logger.info(
-                "Scan starting: %d URLs to scrape (%d skipped as already done)",
-                len(plan.urls_to_scrape),
+                "Scan starting: %d URLs in %d batches of %d "
+                "(%.0fs pause between batches, %d skipped)",
+                total,
+                num_batches,
+                self._batch_size,
+                self._batch_pause,
                 plan.urls_skipped,
             )
 
-            for url_record in plan.urls_to_scrape:
-                yield scrapy.Request(
-                    url_record.url,
-                    callback=self.parse_product,
-                    errback=self.handle_error,
-                    meta={"discovered_url_id": url_record.id},
+            for batch_num in range(num_batches):
+                start = batch_num * self._batch_size
+                end = min(start + self._batch_size, total)
+                batch = plan.urls_to_scrape[start:end]
+
+                if batch_num > 0:
+                    self.logger.info(
+                        "Batch %d/%d: pausing %.0fs",
+                        batch_num + 1,
+                        num_batches,
+                        self._batch_pause,
+                    )
+                    await asyncio.sleep(self._batch_pause)
+
+                self.logger.info(
+                    "Batch %d/%d: yielding %d URLs",
+                    batch_num + 1,
+                    num_batches,
+                    len(batch),
                 )
+
+                for url_record in batch:
+                    yield scrapy.Request(
+                        url_record.url,
+                        callback=self.parse_product,
+                        errback=self.handle_error,
+                        meta={"discovered_url_id": url_record.id},
+                    )
         finally:
             session.close()
 

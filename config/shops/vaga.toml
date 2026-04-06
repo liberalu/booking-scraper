@@ -6,6 +6,8 @@ base_url = "https://vaga.lt"
 download_delay = 0.2
 concurrent_requests_per_domain = 8
 download_timeout = 15
+batch_size = 100
+batch_pause = 15
 
 [discover]
 

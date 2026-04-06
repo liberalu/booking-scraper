@@ -50,7 +50,7 @@ class StallDetector:  # pragma: no cover
         self._last_activity = time.monotonic()
         from twisted.internet import reactor
 
-        self._task = reactor.callLater(
+        self._task = reactor.callLater(  # type: ignore[attr-defined]
             self._check_interval, self._check_stall
         )
 
@@ -71,13 +71,13 @@ class StallDetector:  # pragma: no cover
                 "Spider stalled for %.0fs — forcing shutdown",
                 elapsed,
             )
-            self.crawler.engine.close_spider(
-                self.crawler.spider, "stall_timeout"
+            self.crawler.engine.close_spider(  # type: ignore[union-attr]
+                self.crawler.spider, "stall_timeout"  # type: ignore[arg-type]
             )
             return
 
         from twisted.internet import reactor
 
-        self._task = reactor.callLater(
+        self._task = reactor.callLater(  # type: ignore[attr-defined]
             self._check_interval, self._check_stall
         )

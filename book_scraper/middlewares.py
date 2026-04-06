@@ -32,7 +32,7 @@ class HardTimeoutMiddleware:  # pragma: no cover
 
     def process_request(self, request: Any) -> None:
         request.meta["_hard_timeout_start"] = time.monotonic()
-        delayed_call = reactor.callLater(
+        delayed_call = reactor.callLater(  # type: ignore[attr-defined]
             self.hard_timeout,
             self._mark_timed_out,
             request,
@@ -71,12 +71,14 @@ class HardTimeoutMiddleware:  # pragma: no cover
         )
         self._timed_out_urls.add(request.url)
         # Force-close the slot's active transfer
-        slot = self.crawler.engine.downloader._get_slot_key(
-            request, None
-        )
-        if slot in self.crawler.engine.downloader.slots:
-            s = self.crawler.engine.downloader.slots[slot]
-            for req, deferred in list(s.transferring.items()):
-                if req is request:
-                    deferred.cancel()
-                    break
+        try:
+            engine: Any = self.crawler.engine
+            slot_key = engine.downloader._get_slot_key(request, None)
+            if slot_key in engine.downloader.slots:
+                s = engine.downloader.slots[slot_key]
+                for req, deferred in list(s.transferring.items()):
+                    if req is request:
+                        deferred.cancel()
+                        break
+        except Exception:
+            pass
