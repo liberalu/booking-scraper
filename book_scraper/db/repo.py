@@ -309,9 +309,7 @@ def check_discover_freshness(
     """Check if discovery is fresh enough. Raises RuntimeError if no URLs exist.
     Returns list of warning messages for stale discoveries."""
     has_any_urls = (
-        session.query(DiscoveredUrl)
-        .filter(DiscoveredUrl.shop_id == shop_id)
-        .first()
+        session.query(DiscoveredUrl).filter(DiscoveredUrl.shop_id == shop_id).first()
         is not None
     )
 

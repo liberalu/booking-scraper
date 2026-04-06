@@ -44,9 +44,7 @@ class TestDiscoverSpiderSitemap:
     def test_parse_sitemap_yields_discovered_urls(self):
         spider = DiscoverSpider(shop="vaga", strategy="sitemap")
         xml = (FIXTURES / "vaga_sitemap.xml").read_text()
-        response = _fake_response(
-            "https://vaga.lt/sitemap.xml", xml, cls=TextResponse
-        )
+        response = _fake_response("https://vaga.lt/sitemap.xml", xml, cls=TextResponse)
         items = list(spider.parse_sitemap(response))
         assert len(items) > 0
         assert all(isinstance(item, DiscoveredUrlItem) for item in items)

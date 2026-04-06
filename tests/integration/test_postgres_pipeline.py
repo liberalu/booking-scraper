@@ -46,9 +46,7 @@ class TestPostgresPipelineListings:
         assert result is item
 
         listing = (
-            db_session.query(Listing)
-            .filter_by(url="https://vaga.lt/test-book")
-            .first()
+            db_session.query(Listing).filter_by(url="https://vaga.lt/test-book").first()
         )
         assert listing is not None
         assert listing.title == "Test Book"
@@ -87,9 +85,7 @@ class TestPostgresPipelineListings:
         pipeline.process_item(item, spider)
 
         listing = (
-            db_session.query(Listing)
-            .filter_by(url="https://vaga.lt/year-book")
-            .first()
+            db_session.query(Listing).filter_by(url="https://vaga.lt/year-book").first()
         )
         assert listing.year == 2024
 
