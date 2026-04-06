@@ -33,14 +33,10 @@ class HttpxMiddleware:  # pragma: no cover
         timeout = crawler.settings.getfloat("DOWNLOAD_TIMEOUT", 15)
         ua = crawler.settings.get("USER_AGENT", "Scrapy")
         mw = cls(timeout=timeout, user_agent=ua)
-        crawler.signals.connect(
-            mw._close, signal=signals.spider_closed
-        )
+        crawler.signals.connect(mw._close, signal=signals.spider_closed)
         return mw
 
-    async def process_request(
-        self, request: Request
-    ) -> HtmlResponse:
+    async def process_request(self, request: Request) -> HtmlResponse:
         """Intercept request and handle with httpx.
 
         Returning a Response skips Twisted's downloader entirely.

@@ -24,9 +24,7 @@ class HardTimeoutMiddleware:  # pragma: no cover
         self._timed_out_urls: set[str] = set()
 
     @classmethod
-    def from_crawler(
-        cls, crawler: Crawler
-    ) -> "HardTimeoutMiddleware":
+    def from_crawler(cls, crawler: Crawler) -> "HardTimeoutMiddleware":
         timeout = crawler.settings.getfloat("HARD_TIMEOUT", 30.0)
         return cls(hard_timeout=timeout, crawler=crawler)
 
@@ -39,9 +37,7 @@ class HardTimeoutMiddleware:  # pragma: no cover
         )
         request.meta["_hard_timeout_call"] = delayed_call
 
-    def process_response(
-        self, request: Any, response: Any
-    ) -> Any:
+    def process_response(self, request: Any, response: Any) -> Any:
         self._cancel_timer(request)
         if request.url in self._timed_out_urls:
             self._timed_out_urls.discard(request.url)
@@ -50,9 +46,7 @@ class HardTimeoutMiddleware:  # pragma: no cover
             )
         return response
 
-    def process_exception(
-        self, request: Any, exception: Any
-    ) -> None:
+    def process_exception(self, request: Any, exception: Any) -> None:
         self._cancel_timer(request)
 
     def _cancel_timer(self, request: Any) -> None:
@@ -61,9 +55,7 @@ class HardTimeoutMiddleware:  # pragma: no cover
             delayed_call.cancel()
 
     def _mark_timed_out(self, request: Any) -> None:
-        elapsed = time.monotonic() - request.meta.get(
-            "_hard_timeout_start", 0
-        )
+        elapsed = time.monotonic() - request.meta.get("_hard_timeout_start", 0)
         logger.warning(
             "Hard timeout (%.0fs) for %s — will be retried",
             elapsed,

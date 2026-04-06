@@ -16,9 +16,7 @@ class StallDetector:  # pragma: no cover
     STALL_TIMEOUT seconds ago, forces a graceful shutdown.
     """
 
-    def __init__(
-        self, crawler: Crawler, stall_timeout: float
-    ):
+    def __init__(self, crawler: Crawler, stall_timeout: float):
         self.crawler = crawler
         self.stall_timeout = stall_timeout
         self._last_activity = time.monotonic()
@@ -31,19 +29,13 @@ class StallDetector:  # pragma: no cover
         if not timeout:
             raise NotConfigured
         ext = cls(crawler, timeout)
-        crawler.signals.connect(
-            ext.spider_opened, signal=signals.spider_opened
-        )
+        crawler.signals.connect(ext.spider_opened, signal=signals.spider_opened)
         crawler.signals.connect(
             ext.response_received,
             signal=signals.response_received,
         )
-        crawler.signals.connect(
-            ext.item_scraped, signal=signals.item_scraped
-        )
-        crawler.signals.connect(
-            ext.spider_closed, signal=signals.spider_closed
-        )
+        crawler.signals.connect(ext.item_scraped, signal=signals.item_scraped)
+        crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
         return ext
 
     def spider_opened(self) -> None:
@@ -71,9 +63,15 @@ class StallDetector:  # pragma: no cover
                 "Spider stalled for %.0fs — forcing shutdown",
                 elapsed,
             )
-            self.crawler.engine.close_spider(  # type: ignore[union-attr]
-                self.crawler.spider, "stall_timeout"  # type: ignore[arg-type]
-            )
+            spider = self.crawler.spider
+            if spider is None:
+                logger.warning("Skipping stall shutdown because no spider is active")
+                return
+            engine = self.crawler.engine
+            if engine is None:
+                logger.warning("Skipping stall shutdown because no engine is active")
+                return
+            engine.close_spider(spider, "stall_timeout")
             return
 
         from twisted.internet import reactor

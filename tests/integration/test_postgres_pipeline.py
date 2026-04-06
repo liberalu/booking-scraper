@@ -21,9 +21,7 @@ def pipeline(engine, db_session):
 
 @pytest.mark.integration
 class TestPostgresPipelineListings:
-    def test_process_listing_item_creates_listing_and_price(
-        self, pipeline, db_session
-    ):
+    def test_process_listing_item_creates_listing_and_price(self, pipeline, db_session):
         item = ListingItem(
             url="https://vaga.lt/test-book",
             shop_name="vaga",

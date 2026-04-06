@@ -89,9 +89,7 @@ async def fetch_url(
     """Fetch URL with retries, backoff, and hard asyncio timeout."""
     for attempt in range(max_retries + 1):
         try:
-            return await asyncio.wait_for(
-                client.get(url), timeout=hard_timeout
-            )
+            return await asyncio.wait_for(client.get(url), timeout=hard_timeout)
         except TimeoutError:
             logger.warning(
                 "Hard timeout (%.0fs) for %s (attempt %d/%d)",
@@ -175,9 +173,7 @@ def process_response(
 
     price = Decimal(str(data["price"])) if data.get("price") else None
     price_original = (
-        Decimal(str(data["price_original"]))
-        if data.get("price_original")
-        else None
+        Decimal(str(data["price_original"])) if data.get("price_original") else None
     )
 
     year = data.get("year")
@@ -187,7 +183,7 @@ def process_response(
         except (ValueError, TypeError):
             year = None
 
-    listing = upsert_listing(
+    listing, _created = upsert_listing(
         session,
         shop_id=shop_id,
         url=url_record.url.split("?")[0],
@@ -245,7 +241,9 @@ async def scrape_batch(
     ) -> tuple[DiscoveredUrl, httpx.Response | None]:
         async with semaphore:
             resp = await fetch_url(
-                client, url_record.url, max_retries,
+                client,
+                url_record.url,
+                max_retries,
                 hard_timeout=hard_timeout,
             )
             if resp is None:
@@ -291,9 +289,7 @@ async def run_scan(shop_name: str = "vaga") -> None:
     batch_timeout: float = scraping.get("batch_timeout", 300)
     concurrency: int = scraping.get("concurrent_requests_per_domain", 4)
     max_retries: int = scraping.get("max_retries", 2)
-    db_url = (
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
-    )
+    db_url = "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
 
     session_factory = get_session_factory(db_url)
     session: Session = session_factory()
@@ -379,9 +375,7 @@ async def run_scan(shop_name: str = "vaga") -> None:
                     batch_timeout=batch_timeout,
                 )
 
-                update_scrape_run_progress(
-                    session, run_id, stats.processed
-                )
+                update_scrape_run_progress(session, run_id, stats.processed)
                 session.commit()
 
         status = "completed"
@@ -397,9 +391,7 @@ async def run_scan(shop_name: str = "vaga") -> None:
         session.commit()
         session.close()
 
-    logger.info(
-        "Scan run #%d %s | %s", run_id, status, stats.summary()
-    )
+    logger.info("Scan run #%d %s | %s", run_id, status, stats.summary())
 
 
 if __name__ == "__main__":
