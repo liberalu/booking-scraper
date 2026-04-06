@@ -1,10 +1,13 @@
 """Standalone scan script using httpx instead of Scrapy.
 
-Usage: PYTHONPATH=. uv run python book_scraper/scripts/run_scan.py
+Usage: PYTHONPATH=. uv run python book_scraper/scripts/run_scan.py [shop]
 """
 
+import asyncio
 import logging
+import sys
 import time
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
@@ -12,6 +15,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
+from book_scraper.db.models import DiscoveredUrl
 from book_scraper.db.repo import (
     get_pending_scan_urls,
     get_urls_already_scraped,
@@ -27,18 +31,223 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger("scan_script")
+logger = logging.getLogger("scan")
 
-# Also log warnings to file
-file_handler = logging.FileHandler("scrapy_errors.log")
+file_handler = logging.FileHandler("scan_errors.log")
 file_handler.setLevel(logging.WARNING)
 file_handler.setFormatter(
     logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 )
 logging.getLogger().addHandler(file_handler)
 
+# Suppress noisy httpx request logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
-def run_scan(shop_name: str = "vaga") -> None:
+
+@dataclass
+class Stats:
+    processed: int = 0
+    failed: int = 0
+    non_product: int = 0
+    retried: int = 0
+    http_errors: int = 0
+    start_time: float = field(default_factory=time.monotonic)
+
+    @property
+    def total_handled(self) -> int:
+        return self.processed + self.failed + self.non_product
+
+    @property
+    def elapsed(self) -> float:
+        return time.monotonic() - self.start_time
+
+    @property
+    def rate(self) -> float:
+        elapsed = self.elapsed
+        return (self.total_handled / elapsed * 60) if elapsed > 0 else 0
+
+    def summary(self) -> str:
+        mins = self.elapsed / 60
+        return (
+            f"{self.processed} products, {self.non_product} non-product, "
+            f"{self.failed} failed, {self.retried} retries | "
+            f"{self.rate:.0f} pages/min | {mins:.1f} min elapsed"
+        )
+
+
+async def fetch_url(
+    client: httpx.AsyncClient,
+    url: str,
+    max_retries: int = 2,
+    retry_delay: float = 3.0,
+) -> httpx.Response | None:
+    """Fetch URL with retries and exponential backoff."""
+    for attempt in range(max_retries + 1):
+        try:
+            return await client.get(url)
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            if attempt < max_retries:
+                wait = retry_delay * (2**attempt)
+                logger.debug(
+                    "Retry %d/%d for %s (%.0fs): %s",
+                    attempt + 1,
+                    max_retries,
+                    url,
+                    wait,
+                    e,
+                )
+                await asyncio.sleep(wait)
+            else:
+                logger.warning(
+                    "Failed after %d retries: %s: %s",
+                    max_retries,
+                    url,
+                    e,
+                )
+                return None
+    return None
+
+
+def process_response(
+    resp: httpx.Response | None,
+    url_record: DiscoveredUrl,
+    shop_id: int,
+    session: Session,
+    parsers: Any,
+    stats: Stats,
+) -> None:
+    """Process a single response and save to DB."""
+    if resp is None:
+        update_discovered_url_status(
+            session,
+            url_id=url_record.id,
+            http_status=None,
+            increment_fail=True,
+        )
+        stats.failed += 1
+        return
+
+    if resp.status_code in (404, 410):
+        update_discovered_url_status(
+            session,
+            url_id=url_record.id,
+            http_status=resp.status_code,
+            increment_fail=True,
+        )
+        stats.http_errors += 1
+        stats.failed += 1
+        return
+
+    if resp.status_code != 200:
+        update_discovered_url_status(
+            session,
+            url_id=url_record.id,
+            http_status=resp.status_code,
+            increment_fail=True,
+        )
+        stats.http_errors += 1
+        stats.failed += 1
+        return
+
+    data = parsers.parse_product_page(resp.text)
+
+    if not data.get("title"):
+        update_discovered_url_status(
+            session,
+            url_id=url_record.id,
+            http_status=200,
+            url_type="non_product",
+        )
+        stats.non_product += 1
+        return
+
+    props: dict[str, Any] = {}
+    for key in ("pages", "cover_type", "duration", "narrator", "translator"):
+        if data.get(key) is not None:
+            props[key] = data[key]
+
+    price = Decimal(str(data["price"])) if data.get("price") else None
+    price_original = (
+        Decimal(str(data["price_original"]))
+        if data.get("price_original")
+        else None
+    )
+
+    year = data.get("year")
+    if year is not None:
+        try:
+            year = int(year)
+        except (ValueError, TypeError):
+            year = None
+
+    listing = upsert_listing(
+        session,
+        shop_id=shop_id,
+        url=url_record.url.split("?")[0],
+        title=data["title"],
+        author=data.get("author"),
+        sku=data.get("sku"),
+        isbn=data.get("isbn"),
+        publisher=data.get("publisher"),
+        year=year,
+        format=data.get("format"),
+        description=data.get("description"),
+        image_url=data.get("image_url"),
+        categories=data.get("categories", []),
+        properties=props or None,
+        price=price,
+        price_original=price_original,
+        in_stock=data.get("in_stock", True),
+    )
+
+    if price is not None:
+        insert_price(
+            session,
+            listing_id=listing.id,
+            price=price,
+            price_original=price_original,
+            in_stock=data.get("in_stock", True),
+        )
+
+    update_discovered_url_status(
+        session,
+        url_id=url_record.id,
+        http_status=200,
+        url_type="product",
+    )
+    stats.processed += 1
+
+
+async def scrape_batch(
+    client: httpx.AsyncClient,
+    batch: list[DiscoveredUrl],
+    shop_id: int,
+    session: Session,
+    parsers: Any,
+    stats: Stats,
+    concurrency: int = 4,
+    max_retries: int = 2,
+) -> None:
+    """Scrape a batch with bounded concurrency."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def fetch_one(
+        url_record: DiscoveredUrl,
+    ) -> tuple[DiscoveredUrl, httpx.Response | None]:
+        async with semaphore:
+            resp = await fetch_url(client, url_record.url, max_retries)
+            if resp is None:
+                stats.retried += 1
+            return url_record, resp
+
+    tasks = [fetch_one(rec) for rec in batch]
+    results = await asyncio.gather(*tasks)
+
+    for url_record, resp in results:
+        process_response(resp, url_record, shop_id, session, parsers, stats)
+
+
+async def run_scan(shop_name: str = "vaga") -> None:
     conf = load_shop_config(shop_name)
     parsers = load_parsers(shop_name)
     base_url = conf["shop"]["base_url"]
@@ -46,9 +255,12 @@ def run_scan(shop_name: str = "vaga") -> None:
 
     batch_size: int = scraping.get("batch_size", 100)
     batch_pause: float = scraping.get("batch_pause", 15.0)
-    delay: float = scraping.get("download_delay", 0.5)
     timeout: float = scraping.get("download_timeout", 15)
-    db_url = "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
+    concurrency: int = scraping.get("concurrent_requests_per_domain", 4)
+    max_retries: int = scraping.get("max_retries", 2)
+    db_url = (
+        "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
+    )
 
     session_factory = get_session_factory(db_url)
     session: Session = session_factory()
@@ -58,181 +270,70 @@ def run_scan(shop_name: str = "vaga") -> None:
     pending = get_pending_scan_urls(session, shop.id)
     already_done = get_urls_already_scraped(session, shop.id)
     urls = [u for u in pending if u.url not in already_done]
+    total = len(urls)
+    num_batches = (total + batch_size - 1) // batch_size
 
     logger.info(
-        "Scan: %d URLs to scrape (%d skipped), batch_size=%d, pause=%ds",
-        len(urls),
-        len(pending) - len(urls),
+        "Scan: %d URLs in %d batches of %d "
+        "(concurrency=%d, pause=%ds, %d skipped)",
+        total,
+        num_batches,
         batch_size,
+        concurrency,
         batch_pause,
+        len(pending) - total,
     )
 
-    client = httpx.Client(
+    stats = Stats()
+
+    async with httpx.AsyncClient(
         timeout=timeout,
         follow_redirects=True,
-        headers={"Connection": "close"},
-    )
+        limits=httpx.Limits(
+            max_connections=concurrency + 2,
+            max_keepalive_connections=0,
+        ),
+    ) as client:
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            batch = urls[start_idx : start_idx + batch_size]
 
-    processed = 0
-    failed = 0
-    non_product = 0
-    total = len(urls)
+            if batch_idx > 0:
+                logger.info(
+                    "Pausing %ds before batch %d/%d",
+                    batch_pause,
+                    batch_idx + 1,
+                    num_batches,
+                )
+                await asyncio.sleep(batch_pause)
 
-    for batch_num in range(0, total, batch_size):
-        batch = urls[batch_num : batch_num + batch_size]
-        batch_idx = batch_num // batch_size + 1
-        num_batches = (total + batch_size - 1) // batch_size
-
-        if batch_num > 0:
             logger.info(
-                "Batch %d/%d: pausing %ds",
-                batch_idx,
+                "Batch %d/%d: %d URLs | %s",
+                batch_idx + 1,
                 num_batches,
-                batch_pause,
-            )
-            time.sleep(batch_pause)
-
-        logger.info(
-            "Batch %d/%d: scraping %d URLs "
-            "(%d processed, %d failed, %d non-product)",
-            batch_idx,
-            num_batches,
-            len(batch),
-            processed,
-            failed,
-            non_product,
-        )
-
-        for url_record in batch:
-            try:
-                resp = client.get(url_record.url)
-            except Exception as e:
-                logger.warning("Failed %s: %s", url_record.url, e)
-                update_discovered_url_status(
-                    session,
-                    url_id=url_record.id,
-                    http_status=None,
-                    increment_fail=True,
-                )
-                failed += 1
-                time.sleep(delay)
-                continue
-
-            if resp.status_code in (404, 410):
-                update_discovered_url_status(
-                    session,
-                    url_id=url_record.id,
-                    http_status=resp.status_code,
-                    increment_fail=True,
-                )
-                failed += 1
-                time.sleep(delay)
-                continue
-
-            data = parsers.parse_product_page(resp.text)
-
-            if not data.get("title"):
-                update_discovered_url_status(
-                    session,
-                    url_id=url_record.id,
-                    http_status=200,
-                    url_type="non_product",
-                )
-                non_product += 1
-                time.sleep(delay)
-                continue
-
-            # Build properties
-            props: dict[str, Any] = {}
-            for key in (
-                "pages",
-                "cover_type",
-                "duration",
-                "narrator",
-                "translator",
-            ):
-                if data.get(key) is not None:
-                    props[key] = data[key]
-
-            price = (
-                Decimal(str(data["price"]))
-                if data.get("price")
-                else None
-            )
-            price_original = (
-                Decimal(str(data["price_original"]))
-                if data.get("price_original")
-                else None
+                len(batch),
+                stats.summary(),
             )
 
-            year = data.get("year")
-            if year is not None:
-                try:
-                    year = int(year)
-                except (ValueError, TypeError):
-                    year = None
-
-            listing = upsert_listing(
+            await scrape_batch(
+                client,
+                batch,
+                shop.id,
                 session,
-                shop_id=shop.id,
-                url=url_record.url.split("?")[0],
-                title=data["title"],
-                author=data.get("author"),
-                sku=data.get("sku"),
-                isbn=data.get("isbn"),
-                publisher=data.get("publisher"),
-                year=year,
-                format=data.get("format"),
-                description=data.get("description"),
-                image_url=data.get("image_url"),
-                categories=data.get("categories", []),
-                properties=props or None,
-                price=price,
-                price_original=price_original,
-                in_stock=data.get("in_stock", True),
+                parsers,
+                stats,
+                concurrency=concurrency,
+                max_retries=max_retries,
             )
 
-            if price is not None:
-                insert_price(
-                    session,
-                    listing_id=listing.id,
-                    price=price,
-                    price_original=price_original,
-                    in_stock=data.get("in_stock", True),
-                )
-
-            update_discovered_url_status(
-                session,
-                url_id=url_record.id,
-                http_status=200,
-                url_type="product",
-            )
-
-            processed += 1
-            time.sleep(delay)
-
-        # Commit after each batch
-        session.commit()
-        logger.info(
-            "Batch %d/%d done. Total: %d processed, %d failed, "
-            "%d non-product",
-            batch_idx,
-            num_batches,
-            processed,
-            failed,
-            non_product,
-        )
+            session.commit()
 
     session.commit()
-    client.close()
     session.close()
-    logger.info(
-        "Scan complete: %d processed, %d failed, %d non-product",
-        processed,
-        failed,
-        non_product,
-    )
+
+    logger.info("Scan complete | %s", stats.summary())
 
 
 if __name__ == "__main__":
-    run_scan()
+    shop = sys.argv[1] if len(sys.argv) > 1 else "vaga"
+    asyncio.run(run_scan(shop))
