@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -128,3 +129,74 @@ class Price(Base):
     )
 
     listing: Mapped["Listing"] = relationship(back_populates="prices")
+
+
+discovery_source_enum = Enum(
+    "sitemap", "category", "full_crawl",
+    name="discovery_source",
+    create_type=False,
+)
+
+url_type_enum = Enum(
+    "unknown", "product", "non_product",
+    name="url_type",
+    create_type=False,
+)
+
+scrape_phase_enum = Enum(
+    "discover_sitemap", "discover_categories", "discover_full_crawl", "scan",
+    name="scrape_phase",
+    create_type=False,
+)
+
+scrape_status_enum = Enum(
+    "running", "completed", "failed",
+    name="scrape_status",
+    create_type=False,
+)
+
+
+class DiscoveredUrl(Base):
+    __tablename__ = "discovered_urls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(discovery_source_enum, nullable=False)
+    url_type: Mapped[str] = mapped_column(
+        url_type_enum, nullable=False, server_default="unknown"
+    )
+    fail_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    discovered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    shop: Mapped["Shop"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "url", name="uq_discovered_urls_shop_url"),
+        Index("ix_discovered_urls_shop_type_fail", "shop_id", "url_type", "fail_count"),
+    )
+
+
+class ScrapeRun(Base):
+    __tablename__ = "scrape_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
+    phase: Mapped[str] = mapped_column(scrape_phase_enum, nullable=False)
+    status: Mapped[str] = mapped_column(scrape_status_enum, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    urls_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    urls_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    shop: Mapped["Shop"] = relationship()
