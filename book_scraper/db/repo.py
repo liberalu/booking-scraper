@@ -353,28 +353,13 @@ def check_discover_freshness(
 
 
 def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:
-    """Return URLs already scraped since the last completed/failed scan run."""
-    recent_run = (
-        session.query(ScrapeRun)
-        .filter(
-            ScrapeRun.shop_id == shop_id,
-            ScrapeRun.phase == "scan",
-            ScrapeRun.status.in_(["completed", "failed"]),
-        )
-        .order_by(ScrapeRun.started_at.desc())
-        .first()
-    )
-
-    if recent_run is None:
-        return set()
-
-    cutoff = recent_run.started_at
+    """Return URLs already scraped (marked as 'product' in discovered_urls)."""
     return set(
         row[0]
-        for row in session.query(Listing.url)
+        for row in session.query(DiscoveredUrl.url)
         .filter(
-            Listing.shop_id == shop_id,
-            Listing.last_seen_at >= cutoff,
+            DiscoveredUrl.shop_id == shop_id,
+            DiscoveredUrl.url_type == "product",
         )
         .all()
     )

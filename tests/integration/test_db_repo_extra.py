@@ -11,6 +11,7 @@ from book_scraper.db.repo import (
     finish_scrape_run,
     get_urls_already_scraped,
     mark_listings_inactive,
+    update_discovered_url_status,
     upsert_category,
     upsert_discovered_url,
     upsert_listing,
@@ -152,18 +153,29 @@ class TestCheckDiscoverFreshness:
 
 @pytest.mark.integration
 class TestGetUrlsAlreadyScraped:
-    def test_returns_scraped_urls(self, db_session):
+    def test_returns_urls_marked_as_product(self, db_session):
+        from book_scraper.db.models import DiscoveredUrl
+
         shop = upsert_shop(db_session, name="scraped_shop", base_url="https://sc.lt")
-        run = create_scrape_run(db_session, shop.id, "scan")
-        finish_scrape_run(db_session, run.id, "completed")
-        upsert_listing(
-            db_session, shop_id=shop.id, url="https://sc.lt/book-1", title="Book 1"
+        upsert_discovered_url(db_session, shop.id, "https://sc.lt/book-1", "sitemap")
+        db_session.flush()
+        # Look up the actual ID
+        url_record = (
+            db_session.query(DiscoveredUrl)
+            .filter_by(url="https://sc.lt/book-1")
+            .first()
         )
+        update_discovered_url_status(
+            db_session, url_id=url_record.id, http_status=200, url_type="product"
+        )
+        db_session.flush()
 
         result = get_urls_already_scraped(db_session, shop.id)
         assert "https://sc.lt/book-1" in result
 
-    def test_returns_empty_when_no_runs(self, db_session):
+    def test_returns_empty_when_no_products(self, db_session):
         shop = upsert_shop(db_session, name="empty_shop", base_url="https://e.lt")
+        upsert_discovered_url(db_session, shop.id, "https://e.lt/page", "sitemap")
+
         result = get_urls_already_scraped(db_session, shop.id)
         assert result == set()

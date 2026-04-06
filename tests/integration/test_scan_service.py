@@ -4,8 +4,8 @@ import pytest
 
 from book_scraper.db.repo import (
     create_scrape_run,
+    update_discovered_url_status,
     upsert_discovered_url,
-    upsert_listing,
     upsert_shop,
 )
 from book_scraper.services.scan import ScanService
@@ -30,13 +30,18 @@ class TestScanServicePrepareScan:
         upsert_discovered_url(db_session, shop.id, "https://sk.lt/book-1", "sitemap")
         upsert_discovered_url(db_session, shop.id, "https://sk.lt/book-2", "sitemap")
 
-        # Create a completed scan run + listing for book-1
-        run = create_scrape_run(db_session, shop.id, "scan")
-        run.status = "completed"
-        db_session.flush()
-        upsert_listing(
-            db_session, shop_id=shop.id, url="https://sk.lt/book-1", title="Book 1"
+        # Mark book-1 as already scraped (url_type='product')
+        from book_scraper.db.models import DiscoveredUrl
+
+        url_record = (
+            db_session.query(DiscoveredUrl)
+            .filter_by(url="https://sk.lt/book-1")
+            .first()
         )
+        update_discovered_url_status(
+            db_session, url_id=url_record.id, http_status=200, url_type="product"
+        )
+        db_session.flush()
 
         service = ScanService(db_session)
         plan = service.prepare_scan("skip_shop", "https://sk.lt", {})
