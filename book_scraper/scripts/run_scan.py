@@ -234,6 +234,7 @@ async def scrape_batch(
     stats: Stats,
     concurrency: int = 4,
     max_retries: int = 2,
+    hard_timeout: float = 30.0,
     batch_timeout: float = 300.0,
 ) -> None:
     """Scrape a batch with bounded concurrency and batch timeout."""
@@ -243,7 +244,10 @@ async def scrape_batch(
         url_record: DiscoveredUrl,
     ) -> tuple[DiscoveredUrl, httpx.Response | None]:
         async with semaphore:
-            resp = await fetch_url(client, url_record.url, max_retries)
+            resp = await fetch_url(
+                client, url_record.url, max_retries,
+                hard_timeout=hard_timeout,
+            )
             if resp is None:
                 stats.retried += 1
             return url_record, resp
@@ -281,7 +285,10 @@ async def run_scan(shop_name: str = "vaga") -> None:
 
     batch_size: int = scraping.get("batch_size", 100)
     batch_pause: float = scraping.get("batch_pause", 15.0)
-    timeout: float = scraping.get("download_timeout", 15)
+    connect_timeout: float = scraping.get("connect_timeout", 5)
+    read_timeout: float = scraping.get("read_timeout", 10)
+    hard_timeout: float = scraping.get("hard_timeout", 30)
+    batch_timeout: float = scraping.get("batch_timeout", 300)
     concurrency: int = scraping.get("concurrent_requests_per_domain", 4)
     max_retries: int = scraping.get("max_retries", 2)
     db_url = (
@@ -326,7 +333,12 @@ async def run_scan(shop_name: str = "vaga") -> None:
 
     try:
         async with httpx.AsyncClient(
-            timeout=timeout,
+            timeout=httpx.Timeout(
+                connect=connect_timeout,
+                read=read_timeout,
+                write=5.0,
+                pool=5.0,
+            ),
             follow_redirects=True,
             limits=httpx.Limits(
                 max_connections=concurrency + 2,
@@ -363,6 +375,8 @@ async def run_scan(shop_name: str = "vaga") -> None:
                     stats,
                     concurrency=concurrency,
                     max_retries=max_retries,
+                    hard_timeout=hard_timeout,
+                    batch_timeout=batch_timeout,
                 )
 
                 update_scrape_run_progress(

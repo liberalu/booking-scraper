@@ -5,9 +5,15 @@ base_url = "https://vaga.lt"
 [scraping]
 download_delay = 0.2
 concurrent_requests_per_domain = 8
-download_timeout = 15
 batch_size = 100
 batch_pause = 15
+max_retries = 2
+
+# Timeouts (seconds)
+connect_timeout = 5       # TCP connection establishment
+read_timeout = 10         # time between received bytes
+hard_timeout = 30         # absolute max per request (asyncio)
+batch_timeout = 300       # max time for entire batch
 
 [discover]
 
