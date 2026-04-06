@@ -82,7 +82,7 @@ def parse_product_page(html: str) -> dict[str, object]:
         "translator": None,
     }
 
-    # Parse author from HTML: <div class="brand"><span>Autorius </span><a href="...">Name</a></div>
+    # Parse author: <div class="brand"><span>Autorius </span><a>Name</a></div>
     author_match = re.search(
         r'class="brand">\s*<span>Autorius\s*</span>\s*<a[^>]*>([^<]+)</a>',
         html,

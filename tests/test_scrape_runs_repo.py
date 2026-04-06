@@ -47,9 +47,7 @@ def test_get_latest_completed_run(db_session):
     shop = Shop(name="test_shop", base_url="https://test.lt")
     db_session.add(shop)
     db_session.flush()
-    run = create_scrape_run(
-        db_session, shop_id=shop.id, phase="discover_sitemap"
-    )
+    run = create_scrape_run(db_session, shop_id=shop.id, phase="discover_sitemap")
     finish_scrape_run(db_session, run_id=run.id, status="completed")
     latest = get_latest_completed_run(
         db_session, shop_id=shop.id, phase="discover_sitemap"
@@ -72,9 +70,7 @@ def test_update_scrape_run_progress(db_session):
     shop = Shop(name="test_shop", base_url="https://test.lt")
     db_session.add(shop)
     db_session.flush()
-    run = create_scrape_run(
-        db_session, shop_id=shop.id, phase="scan", urls_total=100
-    )
+    run = create_scrape_run(db_session, shop_id=shop.id, phase="scan", urls_total=100)
     update_scrape_run_progress(db_session, run_id=run.id, urls_processed=50)
     db_session.refresh(run)
     assert run.urls_processed == 50

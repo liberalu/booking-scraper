@@ -28,16 +28,12 @@ class ScanSpider(scrapy.Spider):
     def __init__(self, shop: str | None = None, **kwargs: Any):
         super().__init__(**kwargs)
         if not shop:
-            raise ValueError(
-                "Missing required argument: shop (e.g., -a shop=vaga)"
-            )
+            raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
-            self.conf["shop"]["base_url"]
-            .replace("https://", "")
-            .replace("http://", "")
+            self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
         ]
 
         scraping = self.conf.get("scraping", {})
@@ -58,16 +54,12 @@ class ScanSpider(scrapy.Spider):
         session: Session = session_factory()
 
         try:
-            shop = upsert_shop(
-                session, self.shop_name, self.conf["shop"]["base_url"]
-            )
+            shop = upsert_shop(session, self.shop_name, self.conf["shop"]["base_url"])
 
             # Mark stale/crashed runs as failed
             stale_count = mark_stale_runs_failed(session, shop.id, "scan")
             if stale_count:
-                self.logger.info(
-                    "Marked %d stale scan run(s) as failed", stale_count
-                )
+                self.logger.info("Marked %d stale scan run(s) as failed", stale_count)
 
             # Auto-discover check
             self._check_discover_freshness(session, shop.id)
@@ -76,9 +68,7 @@ class ScanSpider(scrapy.Spider):
             pending_urls = get_pending_scan_urls(session, shop.id)
 
             # Filter out already-scraped URLs (resume logic)
-            urls_to_scrape = self._filter_already_done(
-                session, shop.id, pending_urls
-            )
+            urls_to_scrape = self._filter_already_done(session, shop.id, pending_urls)
 
             # Create new run
             run = create_scrape_run(
@@ -88,8 +78,7 @@ class ScanSpider(scrapy.Spider):
             session.commit()
 
             self.logger.info(
-                "Scan starting: %d URLs to scrape "
-                "(%d skipped as already done)",
+                "Scan starting: %d URLs to scrape (%d skipped as already done)",
                 len(urls_to_scrape),
                 len(pending_urls) - len(urls_to_scrape),
             )
@@ -104,9 +93,7 @@ class ScanSpider(scrapy.Spider):
         finally:
             session.close()
 
-    def _check_discover_freshness(
-        self, session: Session, shop_id: int
-    ) -> None:
+    def _check_discover_freshness(self, session: Session, shop_id: int) -> None:
         """Check if discovery is fresh enough. Error if no URLs exist,
         warn if stale but proceed."""
         has_any_urls = (
@@ -149,9 +136,7 @@ class ScanSpider(scrapy.Spider):
             if latest.finished_at is None:
                 continue
 
-            age_hours = (
-                datetime.now(UTC) - latest.finished_at
-            ).total_seconds() / 3600
+            age_hours = (datetime.now(UTC) - latest.finished_at).total_seconds() / 3600
             if age_hours > max_age:
                 self.logger.warning(
                     "Last %s is %.0fh old (max: %sh). "
@@ -299,9 +284,7 @@ class ScanSpider(scrapy.Spider):
                 update_discovered_url_status(session, **update)
 
             status = "completed" if reason == "finished" else "failed"
-            update_scrape_run_progress(
-                session, self._run_id, self._urls_processed
-            )
+            update_scrape_run_progress(session, self._run_id, self._urls_processed)
             finish_scrape_run(session, self._run_id, status)
             session.commit()
         finally:

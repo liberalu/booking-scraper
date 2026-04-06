@@ -76,7 +76,7 @@ class Listing(Base):
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
 
-    # Format-specific properties (pages, cover_type, duration, narrator, translator, etc.)
+    # Format-specific properties (pages, cover_type, duration, etc.)
     properties: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Pricing (latest snapshot, also stored in prices table)
@@ -132,25 +132,34 @@ class Price(Base):
 
 
 discovery_source_enum = Enum(
-    "sitemap", "category", "full_crawl",
+    "sitemap",
+    "category",
+    "full_crawl",
     name="discovery_source",
     create_type=False,
 )
 
 url_type_enum = Enum(
-    "unknown", "product", "non_product",
+    "unknown",
+    "product",
+    "non_product",
     name="url_type",
     create_type=False,
 )
 
 scrape_phase_enum = Enum(
-    "discover_sitemap", "discover_categories", "discover_full_crawl", "scan",
+    "discover_sitemap",
+    "discover_categories",
+    "discover_full_crawl",
+    "scan",
     name="scrape_phase",
     create_type=False,
 )
 
 scrape_status_enum = Enum(
-    "running", "completed", "failed",
+    "running",
+    "completed",
+    "failed",
     name="scrape_status",
     create_type=False,
 )

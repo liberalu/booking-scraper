@@ -17,17 +17,13 @@ class DiscoverSpider(scrapy.Spider):
     ):
         super().__init__(**kwargs)
         if not shop:
-            raise ValueError(
-                "Missing required argument: shop (e.g., -a shop=vaga)"
-            )
+            raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
         self.strategy = strategy
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
-            self.conf["shop"]["base_url"]
-            .replace("https://", "")
-            .replace("http://", "")
+            self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
         ]
 
         # Load URL filter pattern
@@ -40,9 +36,7 @@ class DiscoverSpider(scrapy.Spider):
         # Load strategy-specific config
         strategy_conf = discover_conf.get(strategy)
         if strategy_conf is None:
-            raise ValueError(
-                f"Strategy '{strategy}' not configured for shop '{shop}'"
-            )
+            raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
         self.strategy_conf: dict[str, Any] = strategy_conf
 
         # Apply scraping settings
@@ -61,14 +55,10 @@ class DiscoverSpider(scrapy.Spider):
 
     def start_requests(self) -> Generator[scrapy.Request, None, None]:
         if self.strategy == "sitemap":
-            yield scrapy.Request(
-                self.strategy_conf["url"], callback=self.parse_sitemap
-            )
+            yield scrapy.Request(self.strategy_conf["url"], callback=self.parse_sitemap)
         elif self.strategy == "categories":
             url = self.strategy_conf["url"].format(page=1)
-            yield scrapy.Request(
-                url, callback=self.parse_categories, meta={"page": 1}
-            )
+            yield scrapy.Request(url, callback=self.parse_categories, meta={"page": 1})
         elif self.strategy == "full_crawl":
             yield scrapy.Request(
                 self.strategy_conf["start_url"],
@@ -89,8 +79,8 @@ class DiscoverSpider(scrapy.Spider):
     def parse_categories(
         self, response: scrapy.http.Response
     ) -> Generator[DiscoveredUrlItem | PriceItem | scrapy.Request, None, None]:
-        products: list[dict[str, str | None]] = (
-            self.parsers.parse_category_page(response.text)
+        products: list[dict[str, str | None]] = self.parsers.parse_category_page(
+            response.text
         )
         if not products:
             return  # No more pages
