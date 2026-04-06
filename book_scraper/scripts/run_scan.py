@@ -84,24 +84,24 @@ async def fetch_url(
     url: str,
     max_retries: int = 2,
     retry_delay: float = 3.0,
+    hard_timeout: float = 30.0,
 ) -> httpx.Response | None:
-    """Fetch URL with retries and exponential backoff."""
+    """Fetch URL with retries, backoff, and hard asyncio timeout."""
     for attempt in range(max_retries + 1):
         try:
-            return await client.get(url)
+            return await asyncio.wait_for(
+                client.get(url), timeout=hard_timeout
+            )
+        except TimeoutError:
+            logger.warning(
+                "Hard timeout (%.0fs) for %s (attempt %d/%d)",
+                hard_timeout,
+                url,
+                attempt + 1,
+                max_retries + 1,
+            )
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            if attempt < max_retries:
-                wait = retry_delay * (2**attempt)
-                logger.debug(
-                    "Retry %d/%d for %s (%.0fs): %s",
-                    attempt + 1,
-                    max_retries,
-                    url,
-                    wait,
-                    e,
-                )
-                await asyncio.sleep(wait)
-            else:
+            if attempt == max_retries:
                 logger.warning(
                     "Failed after %d retries: %s: %s",
                     max_retries,
@@ -109,6 +109,9 @@ async def fetch_url(
                     e,
                 )
                 return None
+        if attempt < max_retries:
+            wait = retry_delay * (2**attempt)
+            await asyncio.sleep(wait)
     return None
 
 
@@ -231,8 +234,9 @@ async def scrape_batch(
     stats: Stats,
     concurrency: int = 4,
     max_retries: int = 2,
+    batch_timeout: float = 300.0,
 ) -> None:
-    """Scrape a batch with bounded concurrency."""
+    """Scrape a batch with bounded concurrency and batch timeout."""
     semaphore = asyncio.Semaphore(concurrency)
 
     async def fetch_one(
@@ -245,9 +249,27 @@ async def scrape_batch(
             return url_record, resp
 
     tasks = [fetch_one(rec) for rec in batch]
-    results = await asyncio.gather(*tasks)
+    before = stats.total_handled
 
-    for url_record, resp in results:
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=batch_timeout,
+        )
+    except TimeoutError:
+        logger.warning(
+            "Batch timeout (%.0fs) — %d/%d URLs completed",
+            batch_timeout,
+            stats.total_handled - before,
+            len(batch),
+        )
+        return
+
+    for result in results:
+        if isinstance(result, BaseException):
+            stats.failed += 1
+            continue
+        url_record, resp = result
         process_response(resp, url_record, shop_id, session, parsers, stats)
 
 
