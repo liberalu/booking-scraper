@@ -14,6 +14,7 @@ uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap      # Discover UR
 uv run scrapy crawl discover -a shop=vaga -a strategy=categories   # Discover URLs + extract prices
 uv run scrapy crawl discover -a shop=vaga -a strategy=full_crawl   # Discover all internal links
 uv run scrapy crawl scan -a shop=vaga                              # Full product scan (resumable)
+uv run scrapy crawl scan -a shop=vaga -a rescrape=true             # Re-scrape all known product URLs
 uv run pytest -v                              # Run tests
 uv run pytest tests/unit/ -v                  # Unit tests only (no DB)
 uv run pytest tests/integration/ -v           # Integration tests only
@@ -21,6 +22,9 @@ make coverage                                 # Tests with coverage report
 uv run ruff check book_scraper/ tests/        # Lint
 uv run ruff format book_scraper/ tests/       # Format
 uv run mypy book_scraper/                     # Type check
+make audit                                    # Check for vulnerable dependencies
+make deps                                     # Check for unused/missing dependencies
+uv run pre-commit run --all-files             # Run pre-commit hooks
 ```
 
 ## Architecture
