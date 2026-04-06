@@ -1,11 +1,18 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from book_scraper.db.models import Category, Listing, Price, Shop
+from book_scraper.db.models import (
+    Category,
+    DiscoveredUrl,
+    Listing,
+    Price,
+    ScrapeRun,
+    Shop,
+)
 
 
 def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
@@ -145,3 +152,146 @@ def mark_listings_inactive(
             count += 1
     session.flush()
     return count
+
+
+# --- Discovered URLs ---
+
+
+def upsert_discovered_url(
+    session: Session,
+    shop_id: int,
+    url: str,
+    source: str,
+) -> DiscoveredUrl:
+    stmt = select(DiscoveredUrl).where(
+        DiscoveredUrl.shop_id == shop_id, DiscoveredUrl.url == url
+    )
+    existing = session.execute(stmt).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    record = DiscoveredUrl(shop_id=shop_id, url=url, source=source)
+    session.add(record)
+    session.flush()
+    return record
+
+
+def update_discovered_url_status(
+    session: Session,
+    url_id: int,
+    http_status: int | None = None,
+    url_type: str | None = None,
+    increment_fail: bool = False,
+) -> None:
+    record = session.get(DiscoveredUrl, url_id)
+    if record is None:
+        return
+    record.last_checked_at = datetime.now(UTC)
+    if http_status is not None:
+        record.last_http_status = http_status
+    if url_type is not None:
+        record.url_type = url_type
+    if increment_fail:
+        record.fail_count += 1
+    else:
+        record.fail_count = 0
+    session.flush()
+
+
+def get_pending_scan_urls(
+    session: Session,
+    shop_id: int,
+    max_fail_count: int = 3,
+    retry_after_days: int = 7,
+) -> list[DiscoveredUrl]:
+    cutoff = datetime.now(UTC) - timedelta(days=retry_after_days)
+    stmt = select(DiscoveredUrl).where(
+        DiscoveredUrl.shop_id == shop_id,
+        DiscoveredUrl.url_type != "non_product",
+        or_(
+            DiscoveredUrl.fail_count < max_fail_count,
+            DiscoveredUrl.last_checked_at < cutoff,
+            DiscoveredUrl.last_checked_at.is_(None),
+        ),
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+# --- Scrape Runs ---
+
+
+def create_scrape_run(
+    session: Session,
+    shop_id: int,
+    phase: str,
+    urls_total: int | None = None,
+) -> ScrapeRun:
+    run = ScrapeRun(
+        shop_id=shop_id,
+        phase=phase,
+        status="running",
+        urls_total=urls_total,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def finish_scrape_run(
+    session: Session,
+    run_id: int,
+    status: str,
+) -> None:
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        return
+    run.status = status
+    run.finished_at = datetime.now(UTC)
+    session.flush()
+
+
+def mark_stale_runs_failed(
+    session: Session,
+    shop_id: int,
+    phase: str,
+) -> int:
+    now = datetime.now(UTC)
+    stmt = select(ScrapeRun).where(
+        ScrapeRun.shop_id == shop_id,
+        ScrapeRun.phase == phase,
+        ScrapeRun.status == "running",
+    )
+    stale = list(session.execute(stmt).scalars().all())
+    for run in stale:
+        run.status = "failed"
+        run.finished_at = now
+    session.flush()
+    return len(stale)
+
+
+def get_latest_completed_run(
+    session: Session,
+    shop_id: int,
+    phase: str,
+) -> ScrapeRun | None:
+    stmt = (
+        select(ScrapeRun)
+        .where(
+            ScrapeRun.shop_id == shop_id,
+            ScrapeRun.phase == phase,
+            ScrapeRun.status == "completed",
+        )
+        .order_by(ScrapeRun.finished_at.desc())
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def update_scrape_run_progress(
+    session: Session,
+    run_id: int,
+    urls_processed: int,
+) -> None:
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        return
+    run.urls_processed = urls_processed
+    session.flush()
