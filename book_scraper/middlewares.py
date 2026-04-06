@@ -1,9 +1,11 @@
+import logging  # pragma: no cover
 import time  # pragma: no cover
-from collections.abc import Generator  # pragma: no cover
 from typing import Any  # pragma: no cover
 
-from scrapy import signals  # pragma: no cover
+from scrapy.crawler import Crawler  # pragma: no cover
 from twisted.internet import reactor  # pragma: no cover
+
+logger = logging.getLogger(__name__)  # pragma: no cover
 
 
 class HardTimeoutMiddleware:  # pragma: no cover
@@ -18,32 +20,29 @@ class HardTimeoutMiddleware:  # pragma: no cover
         self.hard_timeout = hard_timeout
 
     @classmethod
-    def from_crawler(cls, crawler: Any) -> "HardTimeoutMiddleware":
-        timeout = crawler.settings.getfloat(
-            "HARD_TIMEOUT", 30.0
-        )
+    def from_crawler(
+        cls, crawler: Crawler
+    ) -> "HardTimeoutMiddleware":
+        timeout = crawler.settings.getfloat("HARD_TIMEOUT", 30.0)
         return cls(hard_timeout=timeout)
 
-    def process_request(
-        self, request: Any, spider: Any
-    ) -> None:
+    def process_request(self, request: Any) -> None:
         request.meta["_hard_timeout_start"] = time.monotonic()
         delayed_call = reactor.callLater(
             self.hard_timeout,
             self._cancel_request,
             request,
-            spider,
         )
         request.meta["_hard_timeout_call"] = delayed_call
 
     def process_response(
-        self, request: Any, response: Any, spider: Any
+        self, request: Any, response: Any
     ) -> Any:
         self._cancel_timer(request)
         return response
 
     def process_exception(
-        self, request: Any, exception: Any, spider: Any
+        self, request: Any, exception: Any
     ) -> None:
         self._cancel_timer(request)
 
@@ -52,45 +51,12 @@ class HardTimeoutMiddleware:  # pragma: no cover
         if delayed_call and delayed_call.active():
             delayed_call.cancel()
 
-    def _cancel_request(
-        self, request: Any, spider: Any
-    ) -> None:
+    def _cancel_request(self, request: Any) -> None:
         elapsed = time.monotonic() - request.meta.get(
             "_hard_timeout_start", 0
         )
-        spider.logger.warning(
+        logger.warning(
             "Hard timeout (%.0fs) for %s", elapsed, request.url
         )
-        # Cancel via the Twisted transport if accessible
         if hasattr(request, "_txresponse") and request._txresponse:
             request._txresponse._transport.loseConnection()
-
-
-class BookScraperSpiderMiddleware:  # pragma: no cover
-    @classmethod
-    def from_crawler(
-        cls, crawler: Any
-    ) -> "BookScraperSpiderMiddleware":
-        s = cls()
-        crawler.signals.connect(
-            s.spider_opened, signal=signals.spider_opened
-        )
-        return s
-
-    def process_spider_input(
-        self, response: Any, spider: Any
-    ) -> None:
-        return None
-
-    def process_spider_output(
-        self, response: Any, result: Any, spider: Any
-    ) -> Generator[Any, None, None]:
-        yield from result
-
-    def process_spider_exception(
-        self, response: Any, exception: Any, spider: Any
-    ) -> None:
-        pass
-
-    def spider_opened(self, spider: Any) -> None:
-        spider.logger.info(f"Spider opened: {spider.name}")
