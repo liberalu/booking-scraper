@@ -207,5 +207,10 @@ class ScrapeRun(Base):
     )
     urls_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     urls_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    items_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    items_updated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    errors_4xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    errors_5xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     shop: Mapped["Shop"] = relationship()

@@ -43,10 +43,10 @@ class TestUpsertCategory:
 class TestMarkListingsInactive:
     def test_marks_missing_urls_inactive(self, db_session):
         shop = upsert_shop(db_session, name="test_shop", base_url="https://test.lt")
-        listing1 = upsert_listing(
+        listing1, _ = upsert_listing(
             db_session, shop_id=shop.id, url="https://test.lt/book-1", title="Book 1"
         )
-        listing2 = upsert_listing(
+        listing2, _ = upsert_listing(
             db_session, shop_id=shop.id, url="https://test.lt/book-2", title="Book 2"
         )
 
@@ -66,7 +66,7 @@ class TestUpsertListingUpdateFields:
     def test_conditional_field_updates(self, db_session):
         """Fields like isbn, publisher, etc. should not be overwritten with None."""
         shop = upsert_shop(db_session, name="update_shop", base_url="https://u.lt")
-        listing = upsert_listing(
+        listing, _ = upsert_listing(
             db_session,
             shop_id=shop.id,
             url="https://u.lt/book",
@@ -76,7 +76,7 @@ class TestUpsertListingUpdateFields:
             year=2020,
         )
 
-        updated = upsert_listing(
+        updated, _ = upsert_listing(
             db_session,
             shop_id=shop.id,
             url="https://u.lt/book",
@@ -99,7 +99,7 @@ class TestUpsertListingUpdateFields:
             title="Book",
             properties={"pages": 200},
         )
-        updated = upsert_listing(
+        updated, _ = upsert_listing(
             db_session,
             shop_id=shop.id,
             url="https://m.lt/book",

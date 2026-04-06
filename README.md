@@ -13,6 +13,7 @@ Scrapy-based project with per-shop spider directories, shared item pipelines for
 | Discover (sitemap) | `discover -a shop=vaga -a strategy=sitemap` | Find product URLs from sitemap |
 | Discover (categories) | `discover -a shop=vaga -a strategy=categories` | Find URLs + extract current prices |
 | Discover (full crawl) | `discover -a shop=vaga -a strategy=full_crawl` | Crawl all internal links (manual) |
+| Prices | `prices -a shop=vaga` | Quick price scan from category pages (alias for discover categories) |
 | Scan | `scan -a shop=vaga` | Scrape full product data (resumable after crashes) |
 | Match | (not yet implemented) | Link listings to canonical books |
 
@@ -55,8 +56,14 @@ uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap
 # Discover URLs + extract prices from category pages (monthly)
 uv run scrapy crawl discover -a shop=vaga -a strategy=categories
 
+# Quick price scan from category pages
+uv run scrapy crawl prices -a shop=vaga
+
 # Full product scan (resumable — just re-run after crash)
 uv run scrapy crawl scan -a shop=vaga
+
+# Quick price scan via category pages
+make prices
 
 # Limit items for testing
 uv run scrapy crawl scan -a shop=vaga -s CLOSESPIDER_ITEMCOUNT=10

@@ -7,6 +7,7 @@ from scrapy.exceptions import DropItem
 from sqlalchemy.orm import Session, sessionmaker
 
 from book_scraper.db.repo import (
+    increment_scrape_run_stats,
     insert_price,
     update_scrape_run_progress,
     upsert_discovered_url,
@@ -50,6 +51,8 @@ class PostgresPipeline:
         self.shop_cache: dict[str, int] = {}
         self.crawler: Crawler | None = None
         self._item_count: int = 0
+        self._stats_added: int = 0
+        self._stats_updated: int = 0
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "PostgresPipeline":  # pragma: no cover
@@ -63,12 +66,27 @@ class PostgresPipeline:
 
     def close_spider(self) -> None:  # pragma: no cover
         if self.session:
+            spider = self.spider
+            if spider and hasattr(spider, "_run_id") and spider._run_id:
+                self._flush_stats(spider._run_id)
             self.session.commit()
             self.session.close()
 
     @property
     def spider(self) -> Any:
         return self.crawler.spider if self.crawler else None
+
+    def _flush_stats(self, run_id: int) -> None:
+        if self._stats_added or self._stats_updated:
+            assert self.session is not None
+            increment_scrape_run_stats(
+                self.session,
+                run_id,
+                items_added=self._stats_added,
+                items_updated=self._stats_updated,
+            )
+            self._stats_added = 0
+            self._stats_updated = 0
 
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
@@ -99,9 +117,7 @@ class PostgresPipeline:
                     year = None
 
             price = (
-                Decimal(adapter["price"])
-                if adapter.get("price") is not None
-                else None
+                Decimal(adapter["price"]) if adapter.get("price") is not None else None
             )
             price_original = (
                 Decimal(adapter["price_original"])
@@ -109,7 +125,7 @@ class PostgresPipeline:
                 else None
             )
 
-            listing = upsert_listing(
+            listing, created = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -128,6 +144,10 @@ class PostgresPipeline:
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
             )
+            if created:
+                self._stats_added += 1
+            else:
+                self._stats_updated += 1
             if price is not None:
                 insert_price(
                     self.session,
@@ -145,7 +165,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing = upsert_listing(
+            listing, created = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -154,6 +174,10 @@ class PostgresPipeline:
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
             )
+            if created:
+                self._stats_added += 1
+            else:
+                self._stats_updated += 1
             insert_price(
                 self.session,
                 listing_id=listing.id,
@@ -183,5 +207,6 @@ class PostgresPipeline:
                     spider._run_id,
                     spider._urls_processed,
                 )
+                self._flush_stats(spider._run_id)
 
         return item

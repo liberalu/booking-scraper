@@ -43,7 +43,7 @@ def upsert_listing(
     price: Decimal | None = None,
     price_original: Decimal | None = None,
     in_stock: bool = True,
-) -> Listing:
+) -> tuple[Listing, bool]:
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
     now = datetime.now(UTC)
@@ -70,6 +70,7 @@ def upsert_listing(
         )
         session.add(listing)
         session.flush()
+        return listing, True
     else:
         listing.title = title
         listing.author = author
@@ -103,7 +104,7 @@ def upsert_listing(
         listing.last_seen_at = now
         listing.is_active = True
         session.flush()
-    return listing
+        return listing, False
 
 
 def insert_price(
@@ -294,6 +295,26 @@ def update_scrape_run_progress(
     if run is None:
         return
     run.urls_processed = urls_processed
+    session.flush()
+
+
+def increment_scrape_run_stats(
+    session: Session,
+    run_id: int,
+    items_added: int = 0,
+    items_updated: int = 0,
+    errors_4xx: int = 0,
+    errors_5xx: int = 0,
+    error_count: int = 0,
+) -> None:
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        return
+    run.items_added += items_added
+    run.items_updated += items_updated
+    run.errors_4xx += errors_4xx
+    run.errors_5xx += errors_5xx
+    run.error_count += error_count
     session.flush()
 
 

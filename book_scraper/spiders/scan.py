@@ -6,6 +6,7 @@ import scrapy
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
+from book_scraper.db.repo import increment_scrape_run_stats
 from book_scraper.db.session import get_session_factory
 from book_scraper.items import ListingItem
 from book_scraper.services.scan import ScanService
@@ -38,6 +39,9 @@ class ScanSpider(scrapy.Spider):
         self._progress_service: ScanService | None = None
 
         self._flush_every: int = 50
+        self._errors_4xx: int = 0
+        self._errors_5xx: int = 0
+        self._error_count: int = 0
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
         database_url = self.settings.get("DATABASE_URL")
@@ -109,7 +113,18 @@ class ScanSpider(scrapy.Spider):
     ) -> Generator[ListingItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
 
-        if response.status in (404, 410):
+        if 400 <= response.status < 500:
+            self._errors_4xx += 1
+            self._error_count += 1
+            self._queue_url_status_update(
+                discovered_url_id,
+                http_status=response.status,
+                increment_fail=True,
+            )
+            return
+        if 500 <= response.status < 600:
+            self._errors_5xx += 1
+            self._error_count += 1
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=response.status,
@@ -165,6 +180,12 @@ class ScanSpider(scrapy.Spider):
 
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None
+
+        if http_status and 400 <= http_status < 500:
+            self._errors_4xx += 1
+        elif http_status and 500 <= http_status < 600:
+            self._errors_5xx += 1
+        self._error_count += 1
 
         self._queue_url_status_update(
             discovered_url_id,
@@ -237,6 +258,15 @@ class ScanSpider(scrapy.Spider):
                 self._url_status_updates,
                 reason,
             )
+            if self._errors_4xx or self._errors_5xx or self._error_count:
+                increment_scrape_run_stats(
+                    self._progress_session,
+                    self._run_id,
+                    errors_4xx=self._errors_4xx,
+                    errors_5xx=self._errors_5xx,
+                    error_count=self._error_count,
+                )
+                self._progress_session.commit()
         finally:
             self._progress_session.close()
             self._progress_session = None
