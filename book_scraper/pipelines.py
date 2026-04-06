@@ -5,9 +5,15 @@ from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
 from sqlalchemy.orm import Session, sessionmaker
 
-from book_scraper.db.repo import insert_price, upsert_listing, upsert_shop
+from book_scraper.db.repo import (
+    insert_price,
+    update_scrape_run_progress,
+    upsert_discovered_url,
+    upsert_listing,
+    upsert_shop,
+)
 from book_scraper.db.session import get_session_factory
-from book_scraper.items import ListingItem, PriceItem
+from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
 
 
 class ValidationPipeline:
@@ -145,6 +151,15 @@ class PostgresPipeline:
                 in_stock=adapter.get("in_stock", True),
             )
 
+        elif isinstance(item, DiscoveredUrlItem):
+            shop_id = self._get_shop_id(shop_name)
+            upsert_discovered_url(
+                self.session,
+                shop_id=shop_id,
+                url=item["url"],
+                source=item["source"],
+            )
+
         # Commit every 100 items
         if hasattr(spider, "_item_count"):
             spider._item_count += 1
@@ -152,5 +167,10 @@ class PostgresPipeline:
             spider._item_count = 1
         if spider._item_count % 100 == 0:
             self.session.commit()
+            # Update scrape_run progress if spider tracks it
+            if hasattr(spider, "_run_id") and spider._run_id:
+                update_scrape_run_progress(
+                    self.session, spider._run_id, spider._urls_processed
+                )
 
         return item
