@@ -35,7 +35,12 @@ class ScanSpider(scrapy.Spider):
 
         self._run_id: int | None = None
         self._urls_processed: int = 0
+        self._urls_responded: int = 0
         self._url_status_updates: list[dict[str, Any]] = []
+        self._progress_session: Session | None = None
+        self._progress_service: ScanService | None = None
+
+        self._flush_every: int = 50
 
     def start_requests(self) -> Generator[scrapy.Request, None, None]:
         database_url = self.settings.get("DATABASE_URL")
@@ -145,7 +150,7 @@ class ScanSpider(scrapy.Spider):
         url_type: str | None = None,
         increment_fail: bool = False,
     ) -> None:
-        """Queue a URL status update for batch processing at spider close."""
+        """Queue a URL status update and flush periodically."""
         if url_id is None:
             return
         self._url_status_updates.append(
@@ -156,23 +161,53 @@ class ScanSpider(scrapy.Spider):
                 "increment_fail": increment_fail,
             }
         )
+        self._urls_responded += 1
+        if self._urls_responded % self._flush_every == 0:
+            self._flush_progress()
+
+    def _flush_progress(self) -> None:
+        """Flush queued URL status updates and progress to DB."""
+        if self._run_id is None or not self._url_status_updates:
+            return
+
+        if self._progress_session is None:
+            database_url = self.settings.get("DATABASE_URL")
+            session_factory = get_session_factory(database_url)
+            self._progress_session = session_factory()
+            self._progress_service = ScanService(self._progress_session)
+
+        assert self._progress_service is not None
+        self._progress_service.flush_progress(
+            self._run_id,
+            self._urls_processed,
+            self._url_status_updates,
+        )
+        self._url_status_updates = []
+        self.logger.info(
+            "Flushed progress: %d URLs processed, %d total responded",
+            self._urls_processed,
+            self._urls_responded,
+        )
 
     def closed(self, reason: str) -> None:
         """Update scrape_run and process URL status updates on close."""
         if self._run_id is None:
             return
 
-        database_url = self.settings.get("DATABASE_URL")
-        session_factory = get_session_factory(database_url)
-        session = session_factory()
+        if self._progress_session is None:
+            database_url = self.settings.get("DATABASE_URL")
+            session_factory = get_session_factory(database_url)
+            self._progress_session = session_factory()
+            self._progress_service = ScanService(self._progress_session)
 
         try:
-            service = ScanService(session)
-            service.finish_scan(
+            assert self._progress_service is not None
+            self._progress_service.finish_scan(
                 self._run_id,
                 self._urls_processed,
                 self._url_status_updates,
                 reason,
             )
         finally:
-            session.close()
+            self._progress_session.close()
+            self._progress_session = None

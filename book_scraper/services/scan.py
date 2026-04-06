@@ -64,6 +64,18 @@ class ScanService:
             freshness_warnings=warnings,
         )
 
+    def flush_progress(
+        self,
+        run_id: int,
+        urls_processed: int,
+        url_status_updates: list[dict[str, Any]],
+    ) -> None:
+        """Flush queued URL status updates and progress to DB mid-run."""
+        for update in url_status_updates:
+            update_discovered_url_status(self.session, **update)
+        update_scrape_run_progress(self.session, run_id, urls_processed)
+        self.session.commit()
+
     def finish_scan(
         self,
         run_id: int,

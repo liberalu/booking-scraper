@@ -7,7 +7,6 @@ download_delay = 0.5
 concurrent_requests_per_domain = 3
 
 [discover]
-url_include_pattern = '^https://vaga\.lt/[a-z0-9-]+-\d+$'
 
 [discover.sitemap]
 url = "https://vaga.lt/sitemap.xml"
