@@ -22,7 +22,7 @@ for i in $(seq 1 $MAX_RESTARTS); do
     echo "=== Run $i/$MAX_RESTARTS — $(date) ==="
 
     # Start scan in background
-    PYTHONPATH=. uv run python book_scraper/scripts/run_scan.py "$SHOP" &
+    uv run scrapy crawl scan -a shop="$SHOP" &
     PID=$!
 
     LAST_PROGRESS=$(get_progress)
