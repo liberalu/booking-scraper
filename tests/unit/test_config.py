@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from book_scraper.config import CONFIG_DIR, load_default_config, load_shop_config
 from book_scraper.config_models import DefaultConfig, ShopConfig

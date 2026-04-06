@@ -72,7 +72,9 @@ class TestScanServicePrepareScan:
 
     def test_rescrape_includes_already_done_urls(self, db_session):
         shop = upsert_shop(db_session, name="rescrape_shop", base_url="https://rs.lt")
-        url1 = upsert_discovered_url(db_session, shop.id, "https://rs.lt/book-1", "sitemap")
+        url1 = upsert_discovered_url(
+            db_session, shop.id, "https://rs.lt/book-1", "sitemap"
+        )
         upsert_discovered_url(db_session, shop.id, "https://rs.lt/book-2", "sitemap")
 
         # Mark book-1 as already scraped

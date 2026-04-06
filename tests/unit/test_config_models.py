@@ -56,7 +56,7 @@ class TestShopConfig:
         assert config.discover.full_crawl.start_url == "https://vaga.lt"
 
     def test_invalid_config_missing_shop(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             ShopConfig.model_validate({"scraping": {}})
 
     def test_url_include_pattern(self):
