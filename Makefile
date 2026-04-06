@@ -1,4 +1,4 @@
-.PHONY: lint format test build ci crawl coverage coverage-html
+.PHONY: lint format test build ci crawl coverage coverage-html audit deps
 
 IMAGE_NAME ?= book-scraper
 IMAGE_TAG  ?= latest
@@ -18,7 +18,7 @@ test:
 build:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-ci: lint test
+ci: lint test deps
 
 crawl:
 	uv run scrapy crawl $(ARGS)
@@ -29,3 +29,9 @@ coverage:
 coverage-html:
 	uv run pytest --cov=book_scraper --cov-report=html
 	@echo "Open htmlcov/index.html in your browser"
+
+audit:
+	uv run pip-audit
+
+deps:
+	uv run deptry book_scraper/
