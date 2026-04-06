@@ -70,11 +70,15 @@ class ScanSpider(scrapy.Spider):
             )
 
             for batch_num in range(num_batches):
-                start = batch_num * self._batch_size
-                end = min(start + self._batch_size, total)
-                batch = plan.urls_to_scrape[start:end]
+                start_idx = batch_num * self._batch_size
+                end_idx = min(start_idx + self._batch_size, total)
+                batch = plan.urls_to_scrape[start_idx:end_idx]
 
                 if batch_num > 0:
+                    # Wait for previous batch to finish processing
+                    while self._urls_responded < start_idx:
+                        await asyncio.sleep(1)
+
                     self.logger.info(
                         "Batch %d/%d: pausing %.0fs",
                         batch_num + 1,
