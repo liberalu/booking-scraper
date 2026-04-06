@@ -27,6 +27,9 @@ DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
     "Connection": "close",  # pragma: no cover
 }  # pragma: no cover
 
+# Auto-close spider if no new items for 60 seconds  # pragma: no cover
+CLOSESPIDER_TIMEOUT_NO_ITEM = 60  # pragma: no cover
+
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
 AUTOTHROTTLE_START_DELAY = 0.5  # pragma: no cover
