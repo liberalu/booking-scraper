@@ -5,6 +5,7 @@ Usage: PYTHONPATH=. uv run python book_scraper/scripts/run_scan.py [shop]
 
 import asyncio
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -291,8 +292,9 @@ async def run_scan(shop_name: str = "vaga") -> None:
     batch_timeout: float = scraping.get("batch_timeout", 300)
     concurrency: int = scraping.get("concurrent_requests_per_domain", 4)
     max_retries: int = scraping.get("max_retries", 2)
-    db_url = (
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
+    db_url = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper",
     )
 
     session_factory = get_session_factory(db_url)
