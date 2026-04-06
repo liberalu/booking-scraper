@@ -8,7 +8,6 @@ from scrapy.http import HtmlResponse, TextResponse
 
 from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
 from book_scraper.spiders.discover import DiscoverSpider
-from book_scraper.spiders.registry import load_parsers
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 

@@ -5,7 +5,6 @@ from decimal import Decimal
 
 import pytest
 
-from book_scraper.db.models import Shop
 from book_scraper.db.repo import (
     check_discover_freshness,
     create_scrape_run,

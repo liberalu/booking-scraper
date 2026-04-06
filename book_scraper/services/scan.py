@@ -39,7 +39,7 @@ class ScanService:
         load pending URLs, filter already done, create run."""
         shop = upsert_shop(self.session, shop_name, base_url)
 
-        stale_count = mark_stale_runs_failed(self.session, shop.id, "scan")
+        mark_stale_runs_failed(self.session, shop.id, "scan")
 
         discover_config = shop_config.get("discover", {})
         warnings = check_discover_freshness(

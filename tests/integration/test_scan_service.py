@@ -2,7 +2,6 @@
 
 import pytest
 
-from book_scraper.db.models import ScrapeRun
 from book_scraper.db.repo import (
     create_scrape_run,
     upsert_discovered_url,
@@ -91,7 +90,9 @@ class TestScanServiceFinishScan:
         db_session.flush()
 
         service = ScanService(db_session)
-        service.finish_scan(run.id, urls_processed=8, url_status_updates=[], reason="finished")
+        service.finish_scan(
+            run.id, urls_processed=8, url_status_updates=[], reason="finished"
+        )
 
         db_session.refresh(run)
         assert run.status == "completed"
@@ -104,7 +105,9 @@ class TestScanServiceFinishScan:
         db_session.flush()
 
         service = ScanService(db_session)
-        service.finish_scan(run.id, urls_processed=3, url_status_updates=[], reason="shutdown")
+        service.finish_scan(
+            run.id, urls_processed=3, url_status_updates=[], reason="shutdown"
+        )
 
         db_session.refresh(run)
         assert run.status == "failed"
@@ -118,11 +121,21 @@ class TestScanServiceFinishScan:
         db_session.flush()
 
         updates = [
-            {"url_id": url_record.id, "http_status": 200, "url_type": "product", "increment_fail": False},
+            {
+                "url_id": url_record.id,
+                "http_status": 200,
+                "url_type": "product",
+                "increment_fail": False,
+            },
         ]
 
         service = ScanService(db_session)
-        service.finish_scan(run.id, urls_processed=1, url_status_updates=updates, reason="finished")
+        service.finish_scan(
+            run.id,
+            urls_processed=1,
+            url_status_updates=updates,
+            reason="finished",
+        )
 
         db_session.refresh(url_record)
         assert url_record.last_http_status == 200

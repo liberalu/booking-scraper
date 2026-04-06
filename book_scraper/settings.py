@@ -10,11 +10,15 @@ SPIDER_MODULES = ["book_scraper.spiders"]  # pragma: no cover
 NEWSPIDER_MODULE = "book_scraper.spiders"  # pragma: no cover
 
 # Required for scrapy-impersonate and scrapy-playwright
-TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"  # pragma: no cover
+TWISTED_REACTOR = (  # pragma: no cover
+    "twisted.internet.asyncioreactor.AsyncioSelectorReactor"  # pragma: no cover
+)  # pragma: no cover
 
 ROBOTSTXT_OBEY = _scrapy.get("robotstxt_obey", True)  # pragma: no cover
 
-CONCURRENT_REQUESTS_PER_DOMAIN = _scrapy.get("concurrent_requests_per_domain", 1)  # pragma: no cover
+CONCURRENT_REQUESTS_PER_DOMAIN = _scrapy.get(  # pragma: no cover
+    "concurrent_requests_per_domain", 1  # pragma: no cover
+)  # pragma: no cover
 DOWNLOAD_DELAY = _scrapy.get("download_delay", 1)  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover
@@ -25,6 +29,8 @@ ITEM_PIPELINES = {  # pragma: no cover
 }  # pragma: no cover
 
 # Database connection
-DATABASE_URL = _db.get(  # pragma: no cover
-    "url", "postgresql+asyncpg://postgres:postgres@localhost:5432/book_scraper"  # pragma: no cover
+_default_db_url = (  # pragma: no cover
+    "postgresql+asyncpg://postgres:postgres"  # pragma: no cover
+    "@localhost:5432/book_scraper"  # pragma: no cover
 )  # pragma: no cover
+DATABASE_URL = _db.get("url", _default_db_url)  # pragma: no cover
