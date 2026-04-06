@@ -15,6 +15,7 @@ env/
 
 # Scrapy
 .scrapy/
+scrapy_errors.log
 
 # IDEs
 .idea/
