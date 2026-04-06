@@ -40,3 +40,4 @@ class DiscoveredUrlItem(scrapy.Item):
 
     url = scrapy.Field()
     shop_name = scrapy.Field()
+    source = scrapy.Field()  # "sitemap", "category", or "full_crawl"
