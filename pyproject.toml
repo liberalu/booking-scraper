@@ -57,6 +57,25 @@ exclude_lines = [
     "pragma: no cover",
 ]
 
+[tool.deptry]
+ignore = ["DEP003"]  # self-imports (book_scraper.*) and Scrapy transitive deps (twisted, itemadapter)
+
+[tool.deptry.per_rule_ignores]
+DEP002 = [
+    "scrapy-impersonate",  # used as Scrapy download handler, not imported directly
+    "asyncpg",             # SQLAlchemy async driver, loaded by connection string
+    "alembic",             # CLI tool for DB migrations
+    "psycopg2-binary",     # SQLAlchemy sync driver, loaded by connection string
+    "ruff",                # CLI linter/formatter
+    "mypy",                # CLI type checker
+    "pytest",              # CLI test runner
+    "pytest-asyncio",      # pytest plugin, auto-loaded
+    "pytest-cov",          # pytest plugin, auto-loaded
+    "pre-commit",          # CLI tool
+    "deptry",              # CLI tool
+    "pip-audit",           # CLI tool
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
