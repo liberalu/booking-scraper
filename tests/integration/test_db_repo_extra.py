@@ -1,12 +1,19 @@
 """Tests for repo functions not covered by the original test_db_repo.py."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
+from book_scraper.db.models import Shop
 from book_scraper.db.repo import (
+    check_discover_freshness,
+    create_scrape_run,
+    finish_scrape_run,
+    get_urls_already_scraped,
     mark_listings_inactive,
     upsert_category,
+    upsert_discovered_url,
     upsert_listing,
     upsert_shop,
 )
@@ -100,3 +107,64 @@ class TestUpsertListingUpdateFields:
             properties={"narrator": "John"},
         )
         assert updated.properties == {"pages": 200, "narrator": "John"}
+
+
+@pytest.mark.integration
+class TestCheckDiscoverFreshness:
+    def test_raises_when_no_discovered_urls(self, db_session):
+        shop = upsert_shop(db_session, name="fresh_shop", base_url="https://f.lt")
+        with pytest.raises(RuntimeError, match="No discovered URLs"):
+            check_discover_freshness(db_session, shop.id, "fresh_shop", {})
+
+    def test_returns_warnings_when_stale(self, db_session):
+        shop = upsert_shop(db_session, name="stale_shop", base_url="https://s.lt")
+        upsert_discovered_url(db_session, shop.id, "https://s.lt/book", "sitemap")
+        run = create_scrape_run(db_session, shop.id, "discover_sitemap")
+        finish_scrape_run(db_session, run.id, "completed")
+        # Make the run appear old
+        db_session.refresh(run)
+        run.finished_at = datetime.now(UTC) - timedelta(hours=200)
+        db_session.flush()
+
+        config = {"sitemap": {"url": "https://s.lt/sitemap.xml", "max_age_hours": 168}}
+        warnings = check_discover_freshness(db_session, shop.id, "stale_shop", config)
+        assert len(warnings) == 1
+        assert "200h old" in warnings[0]
+
+    def test_returns_empty_when_fresh(self, db_session):
+        shop = upsert_shop(db_session, name="ok_shop", base_url="https://ok.lt")
+        upsert_discovered_url(db_session, shop.id, "https://ok.lt/book", "sitemap")
+        run = create_scrape_run(db_session, shop.id, "discover_sitemap")
+        finish_scrape_run(db_session, run.id, "completed")
+
+        config = {"sitemap": {"url": "https://ok.lt/sitemap.xml", "max_age_hours": 168}}
+        warnings = check_discover_freshness(db_session, shop.id, "ok_shop", config)
+        assert warnings == []
+
+    def test_warns_when_no_completed_run(self, db_session):
+        shop = upsert_shop(db_session, name="norun_shop", base_url="https://nr.lt")
+        upsert_discovered_url(db_session, shop.id, "https://nr.lt/book", "sitemap")
+
+        config = {"sitemap": {"url": "https://nr.lt/sitemap.xml", "max_age_hours": 168}}
+        warnings = check_discover_freshness(db_session, shop.id, "norun_shop", config)
+        assert len(warnings) == 1
+        assert "No completed" in warnings[0]
+
+
+@pytest.mark.integration
+class TestGetUrlsAlreadyScraped:
+    def test_returns_scraped_urls(self, db_session):
+        shop = upsert_shop(db_session, name="scraped_shop", base_url="https://sc.lt")
+        run = create_scrape_run(db_session, shop.id, "scan")
+        finish_scrape_run(db_session, run.id, "completed")
+        upsert_listing(
+            db_session, shop_id=shop.id, url="https://sc.lt/book-1", title="Book 1"
+        )
+
+        result = get_urls_already_scraped(db_session, shop.id)
+        assert "https://sc.lt/book-1" in result
+
+    def test_returns_empty_when_no_runs(self, db_session):
+        shop = upsert_shop(db_session, name="empty_shop", base_url="https://e.lt")
+        result = get_urls_already_scraped(db_session, shop.id)
+        assert result == set()

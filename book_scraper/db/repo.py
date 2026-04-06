@@ -295,3 +295,88 @@ def update_scrape_run_progress(
         return
     run.urls_processed = urls_processed
     session.flush()
+
+
+# --- Scan orchestration helpers ---
+
+
+def check_discover_freshness(
+    session: Session,
+    shop_id: int,
+    shop_name: str,
+    discover_config: dict[str, Any],
+) -> list[str]:
+    """Check if discovery is fresh enough. Raises RuntimeError if no URLs exist.
+    Returns list of warning messages for stale discoveries."""
+    has_any_urls = (
+        session.query(DiscoveredUrl)
+        .filter(DiscoveredUrl.shop_id == shop_id)
+        .first()
+        is not None
+    )
+
+    if not has_any_urls:
+        raise RuntimeError(
+            f"No discovered URLs for shop '{shop_name}'. "
+            f"Run discover first: scrapy crawl discover "
+            f"-a shop={shop_name} -a strategy=sitemap"
+        )
+
+    warnings: list[str] = []
+    for strategy in ("sitemap", "categories"):
+        strategy_conf = discover_config.get(strategy)
+        if strategy_conf is None:
+            continue
+        max_age = strategy_conf.get("max_age_hours")
+        if max_age is None:
+            continue
+
+        phase = f"discover_{strategy}"
+        latest = get_latest_completed_run(session, shop_id, phase)
+
+        if latest is None:
+            warnings.append(
+                f"No completed {phase} run found. "
+                f"Run: scrapy crawl discover -a shop={shop_name} -a strategy={strategy}"
+            )
+            continue
+
+        if latest.finished_at is None:
+            continue
+
+        age_hours = (datetime.now(UTC) - latest.finished_at).total_seconds() / 3600
+        if age_hours > max_age:
+            warnings.append(
+                f"Last {phase} is {age_hours:.0f}h old (max: {max_age}h). "
+                f"Run: scrapy crawl discover -a shop={shop_name} -a strategy={strategy}"
+            )
+
+    return warnings
+
+
+def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:
+    """Return URLs already scraped since the last completed/failed scan run."""
+    recent_run = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == shop_id,
+            ScrapeRun.phase == "scan",
+            ScrapeRun.status.in_(["completed", "failed"]),
+        )
+        .order_by(ScrapeRun.started_at.desc())
+        .first()
+    )
+
+    if recent_run is None:
+        return set()
+
+    cutoff = recent_run.started_at
+    return set(
+        row[0]
+        for row in session.query(Listing.url)
+        .filter(
+            Listing.shop_id == shop_id,
+            Listing.last_seen_at >= cutoff,
+        )
+        .all()
+    )
