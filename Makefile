@@ -1,0 +1,24 @@
+.PHONY: lint format test build ci crawl
+
+IMAGE_NAME ?= book-scraper
+IMAGE_TAG  ?= latest
+
+lint:
+	uv run ruff check book_scraper/ tests/
+	uv run ruff format --check book_scraper/ tests/
+	uv run mypy book_scraper/
+
+format:
+	uv run ruff format book_scraper/ tests/
+	uv run ruff check --fix book_scraper/ tests/
+
+test:
+	uv run pytest -v
+
+build:
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+ci: lint test
+
+crawl:
+	uv run scrapy crawl $(ARGS)
