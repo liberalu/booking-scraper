@@ -17,10 +17,14 @@ from sqlalchemy.orm import Session
 from book_scraper.config import load_shop_config
 from book_scraper.db.models import DiscoveredUrl
 from book_scraper.db.repo import (
+    create_scrape_run,
+    finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
     insert_price,
+    mark_stale_runs_failed,
     update_discovered_url_status,
+    update_scrape_run_progress,
     upsert_listing,
     upsert_shop,
 )
@@ -266,6 +270,7 @@ async def run_scan(shop_name: str = "vaga") -> None:
     session: Session = session_factory()
 
     shop = upsert_shop(session, shop_name, base_url)
+    mark_stale_runs_failed(session, shop.id, "scan")
 
     pending = get_pending_scan_urls(session, shop.id)
     already_done = get_urls_already_scraped(session, shop.id)
@@ -273,9 +278,19 @@ async def run_scan(shop_name: str = "vaga") -> None:
     total = len(urls)
     num_batches = (total + batch_size - 1) // batch_size
 
+    if total == 0:
+        logger.info("Nothing to scan — all URLs already done")
+        session.close()
+        return
+
+    run = create_scrape_run(session, shop.id, "scan", urls_total=total)
+    session.commit()
+    run_id = run.id
+
     logger.info(
-        "Scan: %d URLs in %d batches of %d "
+        "Scan run #%d: %d URLs in %d batches of %d "
         "(concurrency=%d, pause=%ds, %d skipped)",
+        run_id,
         total,
         num_batches,
         batch_size,
@@ -285,53 +300,70 @@ async def run_scan(shop_name: str = "vaga") -> None:
     )
 
     stats = Stats()
+    status = "failed"
 
-    async with httpx.AsyncClient(
-        timeout=timeout,
-        follow_redirects=True,
-        limits=httpx.Limits(
-            max_connections=concurrency + 2,
-            max_keepalive_connections=0,
-        ),
-    ) as client:
-        for batch_idx in range(num_batches):
-            start_idx = batch_idx * batch_size
-            batch = urls[start_idx : start_idx + batch_size]
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=concurrency + 2,
+                max_keepalive_connections=0,
+            ),
+        ) as client:
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * batch_size
+                batch = urls[start_idx : start_idx + batch_size]
 
-            if batch_idx > 0:
+                if batch_idx > 0:
+                    logger.info(
+                        "Pausing %ds before batch %d/%d",
+                        batch_pause,
+                        batch_idx + 1,
+                        num_batches,
+                    )
+                    await asyncio.sleep(batch_pause)
+
                 logger.info(
-                    "Pausing %ds before batch %d/%d",
-                    batch_pause,
+                    "Batch %d/%d: %d URLs | %s",
                     batch_idx + 1,
                     num_batches,
+                    len(batch),
+                    stats.summary(),
                 )
-                await asyncio.sleep(batch_pause)
 
-            logger.info(
-                "Batch %d/%d: %d URLs | %s",
-                batch_idx + 1,
-                num_batches,
-                len(batch),
-                stats.summary(),
-            )
+                await scrape_batch(
+                    client,
+                    batch,
+                    shop.id,
+                    session,
+                    parsers,
+                    stats,
+                    concurrency=concurrency,
+                    max_retries=max_retries,
+                )
 
-            await scrape_batch(
-                client,
-                batch,
-                shop.id,
-                session,
-                parsers,
-                stats,
-                concurrency=concurrency,
-                max_retries=max_retries,
-            )
+                update_scrape_run_progress(
+                    session, run_id, stats.processed
+                )
+                session.commit()
 
-            session.commit()
+        status = "completed"
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        status = "failed"
+    except Exception:
+        logger.exception("Scan failed with error")
+        status = "failed"
+    finally:
+        update_scrape_run_progress(session, run_id, stats.processed)
+        finish_scrape_run(session, run_id, status)
+        session.commit()
+        session.close()
 
-    session.commit()
-    session.close()
-
-    logger.info("Scan complete | %s", stats.summary())
+    logger.info(
+        "Scan run #%d %s | %s", run_id, status, stats.summary()
+    )
 
 
 if __name__ == "__main__":
