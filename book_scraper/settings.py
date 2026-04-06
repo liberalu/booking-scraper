@@ -21,6 +21,12 @@ CONCURRENT_REQUESTS_PER_DOMAIN = 4  # pragma: no cover
 DOWNLOAD_DELAY = 0.5  # pragma: no cover
 DOWNLOAD_TIMEOUT = 15  # pragma: no cover
 
+# Force fresh TCP connections — vaga.lt silently blocks  # pragma: no cover
+# reused connections after ~150 requests  # pragma: no cover
+DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
+    "Connection": "close",  # pragma: no cover
+}  # pragma: no cover
+
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
 AUTOTHROTTLE_START_DELAY = 0.5  # pragma: no cover
