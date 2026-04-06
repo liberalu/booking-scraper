@@ -278,17 +278,17 @@ async def scrape_batch(
 async def run_scan(shop_name: str = "vaga") -> None:
     conf = load_shop_config(shop_name)
     parsers = load_parsers(shop_name)
-    base_url = conf["shop"]["base_url"]
-    scraping = conf.get("scraping", {})
+    base_url = conf.shop.base_url
+    scraping = conf.scraping
 
-    batch_size: int = scraping.get("batch_size", 100)
-    batch_pause: float = scraping.get("batch_pause", 15.0)
-    connect_timeout: float = scraping.get("connect_timeout", 5)
-    read_timeout: float = scraping.get("read_timeout", 10)
-    hard_timeout: float = scraping.get("hard_timeout", 30)
-    batch_timeout: float = scraping.get("batch_timeout", 300)
-    concurrency: int = scraping.get("concurrent_requests_per_domain", 4)
-    max_retries: int = scraping.get("max_retries", 2)
+    batch_size: int = scraping.batch_size
+    batch_pause: float = scraping.batch_pause
+    connect_timeout: float = scraping.connect_timeout
+    read_timeout: float = scraping.read_timeout
+    hard_timeout: float = scraping.hard_timeout
+    batch_timeout: float = scraping.batch_timeout
+    concurrency: int = scraping.concurrent_requests_per_domain
+    max_retries: int = scraping.max_retries
     db_url = "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
 
     session_factory = get_session_factory(db_url)

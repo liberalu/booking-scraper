@@ -325,10 +325,18 @@ def check_discover_freshness(
     session: Session,
     shop_id: int,
     shop_name: str,
-    discover_config: dict[str, Any],
+    discover_config: Any,
 ) -> list[str]:
     """Check if discovery is fresh enough. Raises RuntimeError if no URLs exist.
     Returns list of warning messages for stale discoveries."""
+    # Normalize to dict for iteration
+    if hasattr(discover_config, "model_dump"):
+        config_dict = discover_config.model_dump(exclude_none=True)
+    elif isinstance(discover_config, dict):
+        config_dict = discover_config
+    else:
+        config_dict = {}
+
     has_any_urls = (
         session.query(DiscoveredUrl).filter(DiscoveredUrl.shop_id == shop_id).first()
         is not None
@@ -343,10 +351,14 @@ def check_discover_freshness(
 
     warnings: list[str] = []
     for strategy in ("sitemap", "categories"):
-        strategy_conf = discover_config.get(strategy)
+        strategy_conf = config_dict.get(strategy)
         if strategy_conf is None:
             continue
-        max_age = strategy_conf.get("max_age_hours")
+        max_age = (
+            strategy_conf.get("max_age_hours")
+            if isinstance(strategy_conf, dict)
+            else getattr(strategy_conf, "max_age_hours", None)
+        )
         if max_age is None:
             continue
 

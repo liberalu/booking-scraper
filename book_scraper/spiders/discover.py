@@ -31,21 +31,21 @@ class DiscoverSpider(scrapy.Spider):
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
-            self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
+            self.conf.shop.base_url.replace("https://", "").replace("http://", "")
         ]
 
         # Load URL filter pattern
-        discover_conf = self.conf.get("discover", {})
-        pattern = discover_conf.get("url_include_pattern")
+        discover_conf = self.conf.discover
+        pattern = discover_conf.url_include_pattern
         self.url_pattern: re.Pattern[str] | None = (
             re.compile(pattern) if pattern else None
         )
 
         # Load strategy-specific config
-        strategy_conf = discover_conf.get(strategy)
+        strategy_conf = getattr(discover_conf, strategy, None)
         if strategy_conf is None:
             raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
-        self.strategy_conf: dict[str, Any] = strategy_conf
+        self.strategy_conf: Any = strategy_conf
 
         self._run_id: int | None = None
         self._urls_processed: int = 0
@@ -66,7 +66,7 @@ class DiscoverSpider(scrapy.Spider):
             shop = upsert_shop(
                 self._run_session,
                 self.shop_name,
-                self.conf["shop"]["base_url"],
+                self.conf.shop.base_url,
             )
             phase = f"discover_{self.strategy}"
             mark_stale_runs_failed(self._run_session, shop.id, phase)
@@ -75,13 +75,13 @@ class DiscoverSpider(scrapy.Spider):
             self._run_id = run.id
 
         if self.strategy == "sitemap":
-            yield scrapy.Request(self.strategy_conf["url"], callback=self.parse_sitemap)
+            yield scrapy.Request(self.strategy_conf.url, callback=self.parse_sitemap)
         elif self.strategy == "categories":
-            url = self.strategy_conf["url"].format(page=1)
+            url = self.strategy_conf.url.format(page=1)
             yield scrapy.Request(url, callback=self.parse_categories, meta={"page": 1})
         elif self.strategy == "full_crawl":
             yield scrapy.Request(
-                self.strategy_conf["start_url"],
+                self.strategy_conf.start_url,
                 callback=self.parse_full_crawl,
             )
 
@@ -106,7 +106,7 @@ class DiscoverSpider(scrapy.Spider):
         if not products:
             return  # No more pages
 
-        base_url: str = self.conf["shop"]["base_url"]
+        base_url: str = self.conf.shop.base_url
         for product in products:
             url = product["url"]
             if url and not url.startswith("http"):
@@ -131,7 +131,7 @@ class DiscoverSpider(scrapy.Spider):
 
         # Paginate
         page = response.meta["page"] + 1
-        next_url = self.strategy_conf["url"].format(page=page)
+        next_url = self.strategy_conf.url.format(page=page)
         yield scrapy.Request(
             next_url, callback=self.parse_categories, meta={"page": page}
         )
@@ -140,7 +140,7 @@ class DiscoverSpider(scrapy.Spider):
         self, response: scrapy.http.Response
     ) -> Generator[DiscoveredUrlItem | scrapy.Request, None, None]:
         """Follow all internal links, yield product URLs."""
-        base_url: str = self.conf["shop"]["base_url"]
+        base_url: str = self.conf.shop.base_url
         seen: set[str] = getattr(self, "_seen_urls", set())
         self._seen_urls = seen
 

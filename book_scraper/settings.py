@@ -1,8 +1,6 @@
 from book_scraper.config import load_default_config  # pragma: no cover
 
 _config = load_default_config()  # pragma: no cover
-_scrapy = _config.get("scrapy", {})  # pragma: no cover
-_db = _config.get("database", {})  # pragma: no cover
 
 BOT_NAME = "book_scraper"  # pragma: no cover
 
@@ -14,7 +12,7 @@ TWISTED_REACTOR = (  # pragma: no cover
     "twisted.internet.asyncioreactor.AsyncioSelectorReactor"  # pragma: no cover
 )  # pragma: no cover
 
-ROBOTSTXT_OBEY = _scrapy.get("robotstxt_obey", True)  # pragma: no cover
+ROBOTSTXT_OBEY = _config.scrapy.robotstxt_obey  # pragma: no cover
 
 # Sensible defaults — override per-spider via -s flag  # pragma: no cover
 CONCURRENT_REQUESTS_PER_DOMAIN = 4  # pragma: no cover
@@ -61,8 +59,4 @@ ITEM_PIPELINES = {  # pragma: no cover
 }  # pragma: no cover
 
 # Database connection
-_default_db_url = (  # pragma: no cover
-    "postgresql+asyncpg://postgres:postgres"  # pragma: no cover
-    "@localhost:5432/book_scraper"  # pragma: no cover
-)  # pragma: no cover
-DATABASE_URL = _db.get("url", _default_db_url)  # pragma: no cover
+DATABASE_URL = _config.database.url  # pragma: no cover

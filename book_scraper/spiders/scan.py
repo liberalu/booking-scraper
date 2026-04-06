@@ -25,12 +25,12 @@ class ScanSpider(scrapy.Spider):
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
-            self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
+            self.conf.shop.base_url.replace("https://", "").replace("http://", "")
         ]
 
-        scraping = self.conf.get("scraping", {})
-        self._batch_size: int = scraping.get("batch_size", 100)
-        self._batch_pause: float = scraping.get("batch_pause", 10.0)
+        scraping = self.conf.scraping
+        self._batch_size: int = scraping.batch_size
+        self._batch_pause: float = scraping.batch_pause
 
         self._run_id: int | None = None
         self._urls_processed: int = 0
@@ -53,7 +53,7 @@ class ScanSpider(scrapy.Spider):
             service = ScanService(session)
             plan = service.prepare_scan(
                 self.shop_name,
-                self.conf["shop"]["base_url"],
+                self.conf.shop.base_url,
                 self.conf,
                 rescrape=self._rescrape,
             )

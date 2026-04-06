@@ -33,7 +33,7 @@ class ScanService:
         self,
         shop_name: str,
         base_url: str,
-        shop_config: dict[str, Any],
+        shop_config: Any,
         rescrape: bool = False,
     ) -> ScanPlan:
         """Prepare a scan run: upsert shop, mark stale, check freshness,
@@ -42,7 +42,11 @@ class ScanService:
 
         mark_stale_runs_failed(self.session, shop.id, "scan")
 
-        discover_config = shop_config.get("discover", {})
+        # Support both typed ShopConfig and dict for backward compat in tests
+        if isinstance(shop_config, dict):
+            discover_config = shop_config.get("discover", {})
+        else:
+            discover_config = shop_config.discover
         warnings = check_discover_freshness(
             self.session, shop.id, shop_name, discover_config
         )
