@@ -16,7 +16,10 @@ TWISTED_REACTOR = (  # pragma: no cover
 
 ROBOTSTXT_OBEY = _scrapy.get("robotstxt_obey", True)  # pragma: no cover
 
-# Scraping speed settings are per-spider, loaded from shop config.  # pragma: no cover
+# Sensible defaults — override per-spider via -s flag  # pragma: no cover
+CONCURRENT_REQUESTS_PER_DOMAIN = 4  # pragma: no cover
+DOWNLOAD_DELAY = 0.3  # pragma: no cover
+DOWNLOAD_TIMEOUT = 15  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover
 

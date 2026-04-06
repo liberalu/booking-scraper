@@ -25,15 +25,6 @@ class ScanSpider(scrapy.Spider):
             self.conf["shop"]["base_url"].replace("https://", "").replace("http://", "")
         ]
 
-        scraping = self.conf.get("scraping", {})
-        self.custom_settings = {
-            "CONCURRENT_REQUESTS_PER_DOMAIN": scraping.get(
-                "concurrent_requests_per_domain", 1
-            ),
-            "DOWNLOAD_DELAY": scraping.get("download_delay", 1.0),
-            "DOWNLOAD_TIMEOUT": scraping.get("download_timeout", 30),
-        }
-
         self._run_id: int | None = None
         self._urls_processed: int = 0
         self._urls_responded: int = 0

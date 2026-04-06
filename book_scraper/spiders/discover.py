@@ -41,15 +41,6 @@ class DiscoverSpider(scrapy.Spider):
             )
         self.strategy_conf: dict[str, Any] = strategy_conf
 
-        # Apply scraping settings
-        scraping = self.conf.get("scraping", {})
-        self.custom_settings = {
-            "CONCURRENT_REQUESTS_PER_DOMAIN": scraping.get(
-                "concurrent_requests_per_domain", 1
-            ),
-            "DOWNLOAD_DELAY": scraping.get("download_delay", 1.0),
-            "DOWNLOAD_TIMEOUT": scraping.get("download_timeout", 30),
-        }
 
     def _url_passes_filter(self, url: str) -> bool:
         if self.url_pattern is None:
