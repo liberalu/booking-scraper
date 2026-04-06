@@ -18,8 +18,14 @@ ROBOTSTXT_OBEY = _scrapy.get("robotstxt_obey", True)  # pragma: no cover
 
 # Sensible defaults — override per-spider via -s flag  # pragma: no cover
 CONCURRENT_REQUESTS_PER_DOMAIN = 4  # pragma: no cover
-DOWNLOAD_DELAY = 0.3  # pragma: no cover
+DOWNLOAD_DELAY = 0.5  # pragma: no cover
 DOWNLOAD_TIMEOUT = 15  # pragma: no cover
+
+# AutoThrottle — adapts speed based on server response  # pragma: no cover
+AUTOTHROTTLE_ENABLED = True  # pragma: no cover
+AUTOTHROTTLE_START_DELAY = 0.5  # pragma: no cover
+AUTOTHROTTLE_MAX_DELAY = 10  # pragma: no cover
+AUTOTHROTTLE_TARGET_CONCURRENCY = 4.0  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover
 
