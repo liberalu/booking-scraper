@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, text
@@ -14,6 +15,17 @@ STALE_HEARTBEAT_MINUTES = 5
 DEAD_RUN_HOURS = 2
 
 
+def _pid_alive(pid: int | None) -> bool | None:
+    """Check if a process is alive. Returns None if PID not recorded."""
+    if pid is None:
+        return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 def get_run_health(run: ScrapeRun) -> str:
     """Return health status for a running scrape run.
 
@@ -21,6 +33,11 @@ def get_run_health(run: ScrapeRun) -> str:
     """
     if run.status != "running":
         return ""
+
+    pid_status = _pid_alive(run.pid)
+    if pid_status is False:
+        return "dead"
+
     now = datetime.now(UTC)
     last_activity = run.last_heartbeat or run.started_at
     if last_activity is None:

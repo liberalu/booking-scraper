@@ -215,6 +215,7 @@ class ScrapeRun(Base):
     last_heartbeat: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(

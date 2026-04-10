@@ -16,7 +16,17 @@
         <tr><td><strong>4xx Errors</strong></td><td>{{ run.errors_4xx }}</td></tr>
         <tr><td><strong>5xx Errors</strong></td><td>{{ run.errors_5xx }}</td></tr>
         <tr><td><strong>Total Errors</strong></td><td>{{ run.error_count }}</td></tr>
+        <tr><td><strong>PID</strong></td><td>{{ run.pid or '-' }}</td></tr>
+        <tr>
+            <td><strong>Last Heartbeat</strong></td>
+            <td>{{ run.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if run.last_heartbeat else '-' }}</td>
+        </tr>
     </table>
+    {% if run.status == 'running' and run.pid %}
+    <div id="kill-result">
+        <button class="secondary" hx-post="/runs/{{ run.id }}/kill" hx-target="#kill-result" hx-swap="innerHTML" hx-confirm="Kill process {{ run.pid }}?">Kill Process</button>
+    </div>
+    {% endif %}
 </article>
 
 {% if issues %}

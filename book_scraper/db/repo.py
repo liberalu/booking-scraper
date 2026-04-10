@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -235,6 +236,7 @@ def create_scrape_run(
         status="running",
         urls_total=urls_total,
         last_heartbeat=datetime.now(UTC),
+        pid=os.getpid(),
     )
     session.add(run)
     session.flush()

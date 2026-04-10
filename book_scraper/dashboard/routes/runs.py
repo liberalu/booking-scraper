@@ -1,3 +1,7 @@
+import logging
+import os
+import signal
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -9,6 +13,8 @@ from book_scraper.dashboard.queries import (
     get_run_health,
     mark_stale_runs,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,3 +113,35 @@ def trigger_run(request: Request, phase: str = "scan"):
         f'<p class="success">Started {phase}</p>',
         status_code=200,
     )
+
+
+@router.post("/runs/{run_id}/kill")
+def kill_run(run_id: int, session: Session = Depends(get_db)):
+    run, _ = get_run_detail(session, run_id)
+    if run is None:
+        return HTMLResponse("Run not found", status_code=404)
+    if run.status != "running":
+        return HTMLResponse("Run is not running", status_code=400)
+    if run.pid is None:
+        return HTMLResponse("No PID recorded for this run", status_code=400)
+
+    try:
+        os.kill(run.pid, signal.SIGTERM)
+        logger.info("Sent SIGTERM to PID %d (run #%d)", run.pid, run_id)
+        return HTMLResponse(
+            f'<p class="success">Sent SIGTERM to PID {run.pid}</p>'
+        )
+    except ProcessLookupError:
+        from datetime import UTC, datetime
+
+        run.status = "failed"
+        run.finished_at = datetime.now(UTC)
+        session.commit()
+        return HTMLResponse(
+            f'<p>Process {run.pid} already dead. Marked as failed.</p>'
+        )
+    except PermissionError:
+        return HTMLResponse(
+            f'<p class="error">No permission to kill PID {run.pid}</p>',
+            status_code=403,
+        )
