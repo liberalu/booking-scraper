@@ -74,18 +74,16 @@
 </article>
 
 
+{% if run.status == 'running' and run.pid %}
 <article>
     <h3>Actions</h3>
     <div class="actions" id="action-result">
-        {% if run.status == 'running' and run.pid %}
         <button class="secondary" hx-post="/runs/{{ run.id }}/kill" hx-target="#action-result" hx-swap="innerHTML" hx-confirm="Send SIGTERM to PID {{ run.pid }}?">Stop Scraping</button>
-        {% endif %}
-        <button hx-post="/runs/trigger?phase=discover_sitemap" hx-target="#action-result" hx-swap="innerHTML">Discover (Sitemap)</button>
-        <button hx-post="/runs/trigger?phase=discover_categories" hx-target="#action-result" hx-swap="innerHTML">Discover (Categories)</button>
-        <button hx-post="/runs/trigger?phase=scan" hx-target="#action-result" hx-swap="innerHTML">Scan</button>
-        <button class="secondary" hx-post="/runs/trigger?phase=rescrape" hx-target="#action-result" hx-swap="innerHTML">Rescrape All</button>
     </div>
 </article>
+{% endif %}
+
+<p>Run commands available on the <a href="/shops/{{ run.shop.name }}">{{ run.shop.name }} shop page</a>.</p>
 
 {% if issues %}
 <h2>Validation Issues ({{ issues|length }})</h2>

@@ -2,12 +2,14 @@ import os
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.db.models import (
+    DiscoveredUrl,
     Listing,
     Price,
     ScrapeRun,
+    Shop,
     ValidationIssue,
 )
 
@@ -94,6 +96,7 @@ def get_overview_stats(session: Session) -> dict:
 def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
     return (
         session.query(ScrapeRun)
+        .options(joinedload(ScrapeRun.shop))
         .order_by(ScrapeRun.started_at.desc())
         .limit(limit)
         .all()
@@ -239,3 +242,57 @@ def get_inventory_stats(session: Session) -> dict:
         "with_publisher": with_publisher,
         "by_format": by_format,
     }
+
+
+def get_all_shops(session: Session) -> list[Shop]:
+    return session.query(Shop).order_by(Shop.name).all()
+
+
+def get_shop_by_name(session: Session, name: str) -> Shop | None:
+    return session.query(Shop).filter(Shop.name == name).first()
+
+
+def get_shop_stats(session: Session, shop_id: int) -> dict:
+    listings = (
+        session.query(func.count(Listing.id))
+        .filter(Listing.shop_id == shop_id)
+        .scalar()
+        or 0
+    )
+    active = (
+        session.query(func.count(Listing.id))
+        .filter(Listing.shop_id == shop_id, Listing.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    discovered = (
+        session.query(func.count(DiscoveredUrl.id))
+        .filter(DiscoveredUrl.shop_id == shop_id)
+        .scalar()
+        or 0
+    )
+    prices = (
+        session.query(func.count(Price.id))
+        .join(Listing)
+        .filter(Listing.shop_id == shop_id)
+        .scalar()
+        or 0
+    )
+    return {
+        "listings": listings,
+        "active": active,
+        "discovered_urls": discovered,
+        "prices": prices,
+    }
+
+
+def get_shop_runs(
+    session: Session, shop_id: int, limit: int = 20
+) -> list[ScrapeRun]:
+    return (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.shop_id == shop_id)
+        .order_by(ScrapeRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )

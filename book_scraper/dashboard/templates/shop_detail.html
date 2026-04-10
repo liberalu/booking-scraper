@@ -1,21 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Runs{% endblock %}
+{% block title %}{{ shop.name }} - Book Scraper{% endblock %}
 {% block content %}
 <style>
     .health-healthy { color: #2ecc40; }
     .health-stale { color: #ffdc00; }
     .health-dead { color: #ff4136; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 </style>
-<h1>Scrape Runs</h1>
 
-<p>To start a scrape, go to <a href="/shops">Shops</a> and use the run commands there.</p>
+<h1>{{ shop.name }} <small>{{ shop.base_url }}</small></h1>
 
-<div hx-get="/runs" hx-trigger="every 10s" hx-select="table" hx-target="table" hx-swap="outerHTML">
+<div class="stat-grid">
+    <article class="stat-card"><h2>{{ stats.discovered_urls }}</h2><small>Discovered URLs</small></article>
+    <article class="stat-card"><h2>{{ stats.listings }}</h2><small>Listings</small></article>
+    <article class="stat-card"><h2>{{ stats.active }}</h2><small>Active</small></article>
+    <article class="stat-card"><h2>{{ stats.prices }}</h2><small>Price Records</small></article>
+</div>
+
+<article>
+    <h3>Run Commands</h3>
+    <div class="actions">
+        <button hx-post="/shops/{{ shop.name }}/run?phase=discover_sitemap" hx-target="#run-result" hx-swap="innerHTML">Discover (Sitemap)</button>
+        <button hx-post="/shops/{{ shop.name }}/run?phase=discover_categories" hx-target="#run-result" hx-swap="innerHTML">Discover (Categories)</button>
+        <button hx-post="/shops/{{ shop.name }}/run?phase=scan" hx-target="#run-result" hx-swap="innerHTML">Scan</button>
+        <button class="secondary" hx-post="/shops/{{ shop.name }}/run?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
+    </div>
+    <div id="run-result" style="margin-top: 0.5rem;"></div>
+</article>
+
+<h2>Recent Runs</h2>
+<div hx-get="/shops/{{ shop.name }}" hx-trigger="every 10s" hx-select="table" hx-target="table" hx-swap="outerHTML">
 <table>
     <thead>
         <tr>
             <th>ID</th>
-            <th>Shop</th>
             <th>Phase</th>
             <th>Status</th>
             <th>Health</th>
@@ -31,17 +49,16 @@
         {% for run in runs %}
         <tr>
             <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
-            <td><a href="/shops/{{ run.shop.name }}">{{ run.shop.name }}</a></td>
             <td>{{ run.phase }}</td>
             <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
             <td>
                 {% set health = run_health.get(run.id, '') %}
                 {% if health == 'healthy' %}
-                    <span class="health-healthy" title="Heartbeat active">&#9679; active</span>
+                    <span class="health-healthy">&#9679; active</span>
                 {% elif health == 'stale' %}
-                    <span class="health-stale" title="No heartbeat for >5 min">&#9679; stale</span>
+                    <span class="health-stale">&#9679; stale</span>
                 {% elif health == 'dead' %}
-                    <span class="health-dead" title="No heartbeat for >2 hours">&#9679; dead</span>
+                    <span class="health-dead">&#9679; dead</span>
                 {% endif %}
             </td>
             <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>

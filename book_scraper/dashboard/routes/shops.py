@@ -1,0 +1,106 @@
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
+
+from book_scraper.dashboard.deps import get_db, get_docker_client, templates
+from book_scraper.dashboard.queries import (
+    get_all_shops,
+    get_run_health,
+    get_shop_by_name,
+    get_shop_runs,
+    get_shop_stats,
+    mark_stale_runs,
+)
+
+router = APIRouter()
+
+SHOP_COMMANDS = {
+    "discover_sitemap": [
+        "scrapy", "crawl", "discover",
+        "-a", "shop={shop}", "-a", "strategy=sitemap",
+    ],
+    "discover_categories": [
+        "scrapy", "crawl", "discover",
+        "-a", "shop={shop}", "-a", "strategy=categories",
+    ],
+    "scan": [
+        "scrapy", "crawl", "scan", "-a", "shop={shop}",
+    ],
+    "rescrape": [
+        "scrapy", "crawl", "scan",
+        "-a", "shop={shop}", "-a", "rescrape=true",
+    ],
+}
+
+
+@router.get("/shops")
+def shops_list(request: Request, session: Session = Depends(get_db)):
+    shops = get_all_shops(session)
+    shop_data = []
+    for shop in shops:
+        stats = get_shop_stats(session, shop.id)
+        shop_data.append({"shop": shop, "stats": stats})
+    return templates.TemplateResponse(
+        request,
+        "shops.html",
+        {"active_page": "shops", "shop_data": shop_data},
+    )
+
+
+@router.get("/shops/{shop_name}")
+def shop_detail(
+    shop_name: str, request: Request, session: Session = Depends(get_db)
+):
+    shop = get_shop_by_name(session, shop_name)
+    if shop is None:
+        return HTMLResponse("Shop not found", status_code=404)
+    mark_stale_runs(session)
+    stats = get_shop_stats(session, shop.id)
+    runs = get_shop_runs(session, shop.id)
+    run_health = {run.id: get_run_health(run) for run in runs}
+    return templates.TemplateResponse(
+        request,
+        "shop_detail.html",
+        {
+            "active_page": "shops",
+            "shop": shop,
+            "stats": stats,
+            "runs": runs,
+            "run_health": run_health,
+        },
+    )
+
+
+@router.post("/shops/{shop_name}/run")
+def trigger_shop_run(shop_name: str, phase: str = "scan"):
+    cmd_template = SHOP_COMMANDS.get(phase)
+    if not cmd_template:
+        return HTMLResponse(
+            f'<p class="error">Unknown phase: {phase}</p>',
+            status_code=400,
+        )
+
+    cmd = [arg.replace("{shop}", shop_name) for arg in cmd_template]
+
+    client = get_docker_client()
+    if client is None:
+        return HTMLResponse(
+            '<p class="error">Docker not available</p>',
+            status_code=503,
+        )
+
+    containers = client.containers.list(
+        filters={"label": "com.docker.compose.service=scraper"}
+    )
+    if not containers:
+        return HTMLResponse(
+            '<p class="error">Scraper container not found</p>',
+            status_code=503,
+        )
+
+    container = containers[0]
+    container.exec_run(cmd, detach=True)
+    return HTMLResponse(
+        f'<p class="success">Started {phase} for {shop_name}</p>',
+        status_code=200,
+    )
