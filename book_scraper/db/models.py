@@ -212,6 +212,9 @@ class ScrapeRun(Base):
     errors_4xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     errors_5xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_heartbeat: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(

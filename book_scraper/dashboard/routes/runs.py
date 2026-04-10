@@ -3,7 +3,12 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
-from book_scraper.dashboard.queries import get_recent_runs, get_run_detail
+from book_scraper.dashboard.queries import (
+    get_recent_runs,
+    get_run_detail,
+    get_run_health,
+    mark_stale_runs,
+)
 
 router = APIRouter()
 
@@ -41,13 +46,16 @@ PHASE_COMMANDS: dict[str, list[str]] = {
 
 @router.get("/runs")
 def runs_list(request: Request, session: Session = Depends(get_db)):
+    mark_stale_runs(session)
     recent_runs = get_recent_runs(session, limit=20)
+    run_health = {run.id: get_run_health(run) for run in recent_runs}
     return templates.TemplateResponse(
         request,
         "runs.html",
         {
             "active_page": "runs",
             "runs": recent_runs,
+            "run_health": run_health,
         },
     )
 

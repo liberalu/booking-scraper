@@ -234,6 +234,7 @@ def create_scrape_run(
         phase=phase,
         status="running",
         urls_total=urls_total,
+        last_heartbeat=datetime.now(UTC),
     )
     session.add(run)
     session.flush()
@@ -299,6 +300,7 @@ def update_scrape_run_progress(
     if run is None:
         return
     run.urls_processed = urls_processed
+    run.last_heartbeat = datetime.now(UTC)
     session.flush()
 
 

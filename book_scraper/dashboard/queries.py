@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
@@ -9,6 +9,48 @@ from book_scraper.db.models import (
     ScrapeRun,
     ValidationIssue,
 )
+
+STALE_HEARTBEAT_MINUTES = 5
+DEAD_RUN_HOURS = 2
+
+
+def get_run_health(run: ScrapeRun) -> str:
+    """Return health status for a running scrape run.
+
+    Returns: 'healthy', 'stale', 'dead', or '' for non-running runs.
+    """
+    if run.status != "running":
+        return ""
+    now = datetime.now(UTC)
+    last_activity = run.last_heartbeat or run.started_at
+    if last_activity is None:
+        return "dead"
+    elapsed = now - last_activity
+    if elapsed > timedelta(hours=DEAD_RUN_HOURS):
+        return "dead"
+    if elapsed > timedelta(minutes=STALE_HEARTBEAT_MINUTES):
+        return "stale"
+    return "healthy"
+
+
+def mark_stale_runs(session: Session) -> int:
+    """Mark runs with no heartbeat for over DEAD_RUN_HOURS as failed."""
+    cutoff = datetime.now(UTC) - timedelta(hours=DEAD_RUN_HOURS)
+    stale = (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.status == "running")
+        .all()
+    )
+    marked = 0
+    for run in stale:
+        last_activity = run.last_heartbeat or run.started_at
+        if last_activity and last_activity < cutoff:
+            run.status = "failed"
+            run.finished_at = datetime.now(UTC)
+            marked += 1
+    if marked:
+        session.commit()
+    return marked
 
 
 def get_overview_stats(session: Session) -> dict:
