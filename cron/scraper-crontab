@@ -1,0 +1,5 @@
+# Discover new URLs via sitemap daily at 2am
+0 2 * * * cd /app && DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper PYTHONPATH=. /app/.venv/bin/python -m scrapy crawl discover -a shop=vaga -a strategy=sitemap >> /var/log/scraper.log 2>&1
+
+# Scan product pages daily at 3am
+0 3 * * * cd /app && DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper PYTHONPATH=. /app/.venv/bin/python -m scrapy crawl scan -a shop=vaga >> /var/log/scraper.log 2>&1

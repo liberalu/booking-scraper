@@ -9,9 +9,15 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres-test:
     image: postgres:16
+    profiles: ["test"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -21,6 +27,34 @@ services:
     volumes:
       - pgdata_test:/var/lib/postgresql/data
 
+  scraper:
+    build:
+      context: .
+      target: scraper
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
+    volumes:
+      - scraper_logs:/var/log
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - scraper_logs:/var/log:ro
+
 volumes:
   pgdata:
   pgdata_test:
+  scraper_logs:
