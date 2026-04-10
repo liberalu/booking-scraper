@@ -121,7 +121,6 @@ document.body.addEventListener('htmx:beforeSwap', function(evt) {
             const data = JSON.parse(evt.detail.xhr.responseText);
             const healthClass = data.health ? 'health-' + data.health : '';
             const healthLabel = data.health || '-';
-            const pidStatus = data.pid_alive === true ? 'alive' : data.pid_alive === false ? 'DEAD' : '?';
             const hbAgo = data.heartbeat_seconds_ago !== null ? data.heartbeat_seconds_ago + 's ago' : 'never';
             const progress = data.urls_total ? `${data.urls_processed}/${data.urls_total}` : `${data.urls_processed}`;
             const elapsed = data.elapsed_seconds ? `${Math.floor(data.elapsed_seconds/60)}m ${data.elapsed_seconds%60}s` : '-';
@@ -129,7 +128,7 @@ document.body.addEventListener('htmx:beforeSwap', function(evt) {
             evt.detail.serverResponse = `
                 <dl>
                     <dt>Health:</dt><dd><span class="${healthClass}">&#9679; ${healthLabel}</span></dd>
-                    <dt>PID ${data.pid || '-'}:</dt><dd>${pidStatus}</dd>
+                    <dt>PID:</dt><dd>${data.pid || '-'}</dd>
                     <dt>Heartbeat:</dt><dd>${hbAgo}</dd>
                     <dt>Progress:</dt><dd>${progress}</dd>
                     <dt>Items:</dt><dd>+${data.items_added} ~${data.items_updated}</dd>

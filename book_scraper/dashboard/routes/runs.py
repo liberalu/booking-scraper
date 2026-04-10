@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
-    _pid_alive,
     get_recent_runs,
     get_run_detail,
     get_run_health,
@@ -81,7 +80,6 @@ def run_status(run_id: int, session: Session = Depends(get_db)):
         return JSONResponse({"error": "not found"}, status_code=404)
 
     health = get_run_health(run)
-    pid_alive = _pid_alive(run.pid)
     elapsed = None
     if run.started_at:
         end = run.finished_at or datetime.now(UTC)
@@ -97,7 +95,6 @@ def run_status(run_id: int, session: Session = Depends(get_db)):
             "status": run.status,
             "health": health,
             "pid": run.pid,
-            "pid_alive": pid_alive,
             "urls_processed": run.urls_processed,
             "urls_total": run.urls_total,
             "items_added": run.items_added,

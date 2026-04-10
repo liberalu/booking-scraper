@@ -32,13 +32,11 @@ def get_run_health(run: ScrapeRun) -> str:
     """Return health status for a running scrape run.
 
     Returns: 'healthy', 'stale', 'dead', or '' for non-running runs.
+    Relies on heartbeat only — PID check is unreliable across Docker
+    containers (different PID namespaces).
     """
     if run.status != "running":
         return ""
-
-    pid_status = _pid_alive(run.pid)
-    if pid_status is False:
-        return "dead"
 
     now = datetime.now(UTC)
     last_activity = run.last_heartbeat or run.started_at
