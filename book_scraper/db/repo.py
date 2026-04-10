@@ -282,6 +282,7 @@ def get_latest_completed_run(
             ScrapeRun.status == "completed",
         )
         .order_by(ScrapeRun.finished_at.desc())
+        .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
 

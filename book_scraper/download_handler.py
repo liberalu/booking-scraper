@@ -43,10 +43,15 @@ class HttpxMiddleware:  # pragma: no cover
         """
         try:
             response = await self.client.get(str(request.url))
+            # httpx auto-decompresses gzip, so remove Content-Encoding
+            # to prevent Scrapy's HttpCompressionMiddleware from
+            # trying to decompress again.
+            headers = dict(response.headers)
+            headers.pop("content-encoding", None)
             return HtmlResponse(
                 url=str(response.url),
                 status=response.status_code,
-                headers=dict(response.headers),
+                headers=headers,
                 body=response.content,
                 request=request,
                 encoding=response.encoding or "utf-8",
