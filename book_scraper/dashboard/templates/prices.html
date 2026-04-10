@@ -23,7 +23,7 @@
     <tbody>
         {% for l in listings %}
         <tr>
-            <td>{{ l.title }}</td>
+            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 }}</a></td>
             <td>{{ l.author or '-' }}</td>
             <td>{{ l.price or '-' }}</td>
             <td>{{ l.price_original or '-' }}</td>
@@ -56,7 +56,7 @@
     <tbody>
         {% for c in changes %}
         <tr>
-            <td>{{ c.title }}</td>
+            <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
             <td>{{ c.prev_price }}</td>
             <td>{{ c.new_price }}</td>
             <td style="color: {{ 'green' if c.change < 0 else 'red' }}">

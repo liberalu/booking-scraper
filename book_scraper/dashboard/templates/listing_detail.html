@@ -17,6 +17,11 @@
     </p>
 </hgroup>
 
+<div style="margin: 1rem 0;">
+    <button hx-post="/shops/{{ listing.shop.name }}/scrape-url?url={{ listing.url }}" hx-target="#scrape-result" hx-swap="innerHTML">Re-scrape this listing</button>
+    <span id="scrape-result"></span>
+</div>
+
 <div class="grid">
     <div>
         <table>

@@ -263,9 +263,22 @@ def get_listings_page(
         else:
             query = query.filter(Listing.format == format_filter)
     if missing_field:
-        col = getattr(Listing, missing_field, None)
-        if col is not None:
-            query = query.filter(col.is_(None))
+        if missing_field == "any":
+            from sqlalchemy import or_
+
+            query = query.filter(
+                or_(
+                    Listing.author.is_(None),
+                    Listing.isbn.is_(None),
+                    Listing.year.is_(None),
+                    Listing.publisher.is_(None),
+                    Listing.format.is_(None),
+                )
+            )
+        else:
+            col = getattr(Listing, missing_field, None)
+            if col is not None:
+                query = query.filter(col.is_(None))
 
     total = query.count()
     listings = (
@@ -356,3 +369,51 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
         .limit(limit)
         .all()
     )
+
+
+def get_run_listings(
+    session: Session, run_id: int
+) -> tuple[list[Listing], list[Listing]]:
+    """Get listings created and updated in a specific run."""
+    created = (
+        session.query(Listing)
+        .filter(Listing.last_run_id == run_id, Listing.last_run_action == "created")
+        .order_by(Listing.title)
+        .all()
+    )
+    updated = (
+        session.query(Listing)
+        .filter(Listing.last_run_id == run_id, Listing.last_run_action == "updated")
+        .order_by(Listing.title)
+        .all()
+    )
+    return created, updated
+
+
+def get_shop_field_stats(session: Session, shop_id: int) -> dict:
+    """Get per-field completeness stats for a shop."""
+    total = (
+        session.query(func.count(Listing.id))
+        .filter(Listing.shop_id == shop_id)
+        .scalar()
+        or 0
+    )
+    fields = {}
+    for field_name in (
+        "author",
+        "isbn",
+        "year",
+        "publisher",
+        "format",
+        "description",
+        "image_url",
+    ):
+        col = getattr(Listing, field_name)
+        missing = (
+            session.query(func.count(Listing.id))
+            .filter(Listing.shop_id == shop_id, col.is_(None))
+            .scalar()
+            or 0
+        )
+        fields[field_name] = {"missing": missing, "present": total - missing}
+    return {"total": total, "fields": fields}

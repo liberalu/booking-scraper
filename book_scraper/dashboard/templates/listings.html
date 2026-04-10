@@ -21,6 +21,7 @@
         </select>
         <select name="missing">
             <option value="">No missing filter</option>
+            <option value="any" {{ 'selected' if missing == 'any' else '' }}>Any field missing</option>
             <option value="author" {{ 'selected' if missing == 'author' else '' }}>Missing author</option>
             <option value="isbn" {{ 'selected' if missing == 'isbn' else '' }}>Missing ISBN</option>
             <option value="year" {{ 'selected' if missing == 'year' else '' }}>Missing year</option>

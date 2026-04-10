@@ -17,6 +17,32 @@
     <article class="stat-card"><h2>{{ stats.prices }}</h2><small>Price Records</small></article>
 </div>
 
+{% if field_stats and field_stats.total > 0 %}
+<article>
+    <h3>Data Completeness</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Present</th>
+                <th>Missing</th>
+                <th>% Complete</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for field_name, counts in field_stats.fields.items() %}
+            <tr>
+                <td>{{ field_name }}</td>
+                <td>{{ counts.present }}</td>
+                <td>{{ counts.missing }}</td>
+                <td>{{ '%.1f%%'|format(counts.present / field_stats.total * 100) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</article>
+{% endif %}
+
 <article>
     <h3>Run Commands</h3>
     <div class="actions">
@@ -26,6 +52,12 @@
         <button class="secondary" hx-post="/shops/{{ shop.name }}/run?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
     </div>
     <div id="run-result" style="margin-top: 0.5rem;"></div>
+    <hr>
+    <h4>Scrape Single URL</h4>
+    <form hx-post="/shops/{{ shop.name }}/scrape-url" hx-target="#run-result" hx-swap="innerHTML" style="display: flex; gap: 0.5rem;">
+        <input type="text" name="url" placeholder="https://vaga.lt/product-url" style="flex: 1;">
+        <button type="submit">Scrape</button>
+    </form>
 </article>
 
 <h2>Recent Runs</h2>

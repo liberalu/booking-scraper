@@ -113,6 +113,54 @@
 <p>No validation issues for this run.</p>
 {% endif %}
 
+{% if created %}
+<h2>Created ({{ created|length }})</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>ISBN</th>
+            <th>Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for l in created %}
+        <tr>
+            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
+            <td>{{ l.author or '-' }}</td>
+            <td>{{ l.isbn or '-' }}</td>
+            <td>{{ l.price or '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if updated %}
+<h2>Updated ({{ updated|length }})</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>ISBN</th>
+            <th>Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for l in updated %}
+        <tr>
+            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
+            <td>{{ l.author or '-' }}</td>
+            <td>{{ l.isbn or '-' }}</td>
+            <td>{{ l.price or '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 <script>
 // Handle JSON status response for live polling
 document.body.addEventListener('htmx:beforeSwap', function(evt) {

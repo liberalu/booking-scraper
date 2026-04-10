@@ -12,6 +12,7 @@ from book_scraper.dashboard.queries import (
     get_recent_runs,
     get_run_detail,
     get_run_health,
+    get_run_listings,
     mark_stale_runs,
 )
 
@@ -23,17 +24,32 @@ _SCRAPY = "/app/.venv/bin/scrapy"
 
 PHASE_COMMANDS: dict[str, list[str]] = {
     "discover_sitemap": [
-        _SCRAPY, "crawl", "discover",
-        "-a", "shop=vaga", "-a", "strategy=sitemap",
+        _SCRAPY,
+        "crawl",
+        "discover",
+        "-a",
+        "shop=vaga",
+        "-a",
+        "strategy=sitemap",
     ],
     "discover_categories": [
-        _SCRAPY, "crawl", "discover",
-        "-a", "shop=vaga", "-a", "strategy=categories",
+        _SCRAPY,
+        "crawl",
+        "discover",
+        "-a",
+        "shop=vaga",
+        "-a",
+        "strategy=categories",
     ],
     "scan": [_SCRAPY, "crawl", "scan", "-a", "shop=vaga"],
     "rescrape": [
-        _SCRAPY, "crawl", "scan",
-        "-a", "shop=vaga", "-a", "rescrape=true",
+        _SCRAPY,
+        "crawl",
+        "scan",
+        "-a",
+        "shop=vaga",
+        "-a",
+        "rescrape=true",
     ],
 }
 
@@ -60,6 +76,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
     health = get_run_health(run)
+    created, updated = get_run_listings(session, run_id)
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -68,6 +85,8 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             "run": run,
             "issues": issues,
             "health": health,
+            "created": created,
+            "updated": updated,
         },
     )
 

@@ -45,6 +45,7 @@ def upsert_listing(
     price: Decimal | None = None,
     price_original: Decimal | None = None,
     in_stock: bool = True,
+    run_id: int | None = None,
 ) -> tuple[Listing, bool, Decimal | None]:
     """Upsert a listing. Returns (listing, created, old_price)."""
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
@@ -68,6 +69,8 @@ def upsert_listing(
             price=price,
             price_original=price_original,
             in_stock=in_stock,
+            last_run_id=run_id,
+            last_run_action="created",
             first_seen_at=now,
             last_seen_at=now,
         )
@@ -76,6 +79,8 @@ def upsert_listing(
         return listing, True, None
     else:
         old_price = listing.price
+        listing.last_run_id = run_id
+        listing.last_run_action = "updated"
         listing.title = title
         listing.author = author
         # Only update fields if provided (don't overwrite with None from price spider)

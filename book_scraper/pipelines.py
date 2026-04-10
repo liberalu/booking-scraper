@@ -261,6 +261,13 @@ class PostgresPipeline:
     def spider(self) -> Any:
         return self.crawler.spider if self.crawler else None
 
+    @property
+    def _run_id(self) -> int | None:
+        spider = self.spider
+        if spider and hasattr(spider, "_run_id"):
+            return spider._run_id
+        return None
+
     def _flush_stats(self, run_id: int) -> None:
         if self._stats_added or self._stats_updated:
             assert self.session is not None
@@ -361,6 +368,7 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                run_id=self._run_id,
             )
             if created:
                 self._stats_added += 1
@@ -394,6 +402,7 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                run_id=self._run_id,
             )
             if created:
                 self._stats_added += 1

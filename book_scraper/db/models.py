@@ -92,6 +92,12 @@ class Listing(Base):
     )
     match_method: Mapped[str | None] = mapped_column(match_method_enum, nullable=True)
 
+    # Run tracking
+    last_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
+    )
+    last_run_action: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Lifecycle
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     first_seen_at: Mapped[datetime] = mapped_column(

@@ -7,6 +7,7 @@ from book_scraper.dashboard.queries import (
     get_all_shops,
     get_run_health,
     get_shop_by_name,
+    get_shop_field_stats,
     get_shop_runs,
     get_shop_stats,
     mark_stale_runs,
@@ -18,19 +19,38 @@ _SCRAPY = "/app/.venv/bin/scrapy"
 
 SHOP_COMMANDS = {
     "discover_sitemap": [
-        _SCRAPY, "crawl", "discover",
-        "-a", "shop={shop}", "-a", "strategy=sitemap",
+        _SCRAPY,
+        "crawl",
+        "discover",
+        "-a",
+        "shop={shop}",
+        "-a",
+        "strategy=sitemap",
     ],
     "discover_categories": [
-        _SCRAPY, "crawl", "discover",
-        "-a", "shop={shop}", "-a", "strategy=categories",
+        _SCRAPY,
+        "crawl",
+        "discover",
+        "-a",
+        "shop={shop}",
+        "-a",
+        "strategy=categories",
     ],
     "scan": [
-        _SCRAPY, "crawl", "scan", "-a", "shop={shop}",
+        _SCRAPY,
+        "crawl",
+        "scan",
+        "-a",
+        "shop={shop}",
     ],
     "rescrape": [
-        _SCRAPY, "crawl", "scan",
-        "-a", "shop={shop}", "-a", "rescrape=true",
+        _SCRAPY,
+        "crawl",
+        "scan",
+        "-a",
+        "shop={shop}",
+        "-a",
+        "rescrape=true",
     ],
 }
 
@@ -56,6 +76,7 @@ def shop_detail(shop_name: str, request: Request, session: Session = Depends(get
         return HTMLResponse("Shop not found", status_code=404)
     mark_stale_runs(session)
     stats = get_shop_stats(session, shop.id)
+    field_stats = get_shop_field_stats(session, shop.id)
     runs = get_shop_runs(session, shop.id)
     run_health = {run.id: get_run_health(run) for run in runs}
     return templates.TemplateResponse(
@@ -65,6 +86,7 @@ def shop_detail(shop_name: str, request: Request, session: Session = Depends(get
             "active_page": "shops",
             "shop": shop,
             "stats": stats,
+            "field_stats": field_stats,
             "runs": runs,
             "run_health": run_health,
         },
@@ -112,3 +134,44 @@ def trigger_shop_run(shop_name: str, phase: str = "scan"):
         f'<p class="success">Started {phase} for {shop_name}</p>',
         status_code=200,
     )
+
+
+@router.post("/shops/{shop_name}/scrape-url")
+def scrape_single_url(shop_name: str, url: str = ""):
+    if not url:
+        return HTMLResponse('<p class="error">No URL provided</p>', status_code=400)
+
+    client = get_docker_client()
+    if client is None:
+        return HTMLResponse(
+            '<p class="error">Docker not available</p>', status_code=503
+        )
+
+    containers = client.containers.list(
+        filters={"label": "com.docker.compose.service=scraper"}
+    )
+    if not containers:
+        return HTMLResponse(
+            '<p class="error">Scraper container not found</p>', status_code=503
+        )
+
+    cmd = [
+        _SCRAPY,
+        "crawl",
+        "scan",
+        "-a",
+        f"shop={shop_name}",
+        "-a",
+        f"urls={url}",
+    ]
+    container = containers[0]
+    container.exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
+    return HTMLResponse(f'<p class="success">Scraping {url}</p>')
