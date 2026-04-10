@@ -73,14 +73,19 @@
     </table>
 </article>
 
-{% if run.status != 'running' %}
+
 <article>
     <h3>Actions</h3>
     <div class="actions" id="action-result">
-        <button hx-post="/runs/trigger?phase={{ run.phase.replace('discover_', '') if 'discover' in run.phase else run.phase }}" hx-target="#action-result" hx-swap="innerHTML">Re-run {{ run.phase }}</button>
+        {% if run.status == 'running' and run.pid %}
+        <button class="secondary" hx-post="/runs/{{ run.id }}/kill" hx-target="#action-result" hx-swap="innerHTML" hx-confirm="Send SIGTERM to PID {{ run.pid }}?">Stop Scraping</button>
+        {% endif %}
+        <button hx-post="/runs/trigger?phase=discover_sitemap" hx-target="#action-result" hx-swap="innerHTML">Discover (Sitemap)</button>
+        <button hx-post="/runs/trigger?phase=discover_categories" hx-target="#action-result" hx-swap="innerHTML">Discover (Categories)</button>
+        <button hx-post="/runs/trigger?phase=scan" hx-target="#action-result" hx-swap="innerHTML">Scan</button>
+        <button class="secondary" hx-post="/runs/trigger?phase=rescrape" hx-target="#action-result" hx-swap="innerHTML">Rescrape All</button>
     </div>
 </article>
-{% endif %}
 
 {% if issues %}
 <h2>Validation Issues ({{ issues|length }})</h2>
