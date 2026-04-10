@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from book_scraper.dashboard.app import templates
-from book_scraper.dashboard.deps import get_db
+from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
     get_price_changes,
     get_price_history,
@@ -22,9 +21,9 @@ def prices_page(
     listings = search_listings(session, q) if q else []
     changes = get_price_changes(session, days=7)
     return templates.TemplateResponse(
+        request,
         "prices.html",
         {
-            "request": request,
             "active_page": "prices",
             "query": q,
             "listings": listings,

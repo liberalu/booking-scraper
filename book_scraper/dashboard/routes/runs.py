@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from book_scraper.dashboard.app import templates
-from book_scraper.dashboard.deps import get_db, get_docker_client
+from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import get_recent_runs, get_run_detail
 
 router = APIRouter()
@@ -44,9 +43,9 @@ PHASE_COMMANDS: dict[str, list[str]] = {
 def runs_list(request: Request, session: Session = Depends(get_db)):
     recent_runs = get_recent_runs(session, limit=20)
     return templates.TemplateResponse(
+        request,
         "runs.html",
         {
-            "request": request,
             "active_page": "runs",
             "runs": recent_runs,
         },
@@ -59,9 +58,9 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
     return templates.TemplateResponse(
+        request,
         "run_detail.html",
         {
-            "request": request,
             "active_page": "runs",
             "run": run,
             "issues": issues,

@@ -1,7 +1,4 @@
-from pathlib import Path
-
 from fastapi import FastAPI
-from fastapi.templating import Jinja2Templates
 
 from book_scraper.dashboard.routes import (
     inventory,
@@ -13,8 +10,6 @@ from book_scraper.dashboard.routes import (
 )
 
 app = FastAPI(title="Book Scraper Dashboard")
-
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 app.include_router(overview.router)
 app.include_router(runs.router)

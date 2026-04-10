@@ -1,7 +1,8 @@
 import os
 from collections.abc import Generator
+from pathlib import Path
 
-import docker
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from book_scraper.db.session import get_session_factory
@@ -22,8 +23,15 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
-def get_docker_client() -> docker.DockerClient | None:  # type: ignore[name-defined]
+templates = Jinja2Templates(
+    directory=str(Path(__file__).parent / "templates")
+)
+
+
+def get_docker_client():  # type: ignore[no-untyped-def]
     try:
+        import docker
+
         return docker.from_env()
     except Exception:
         return None

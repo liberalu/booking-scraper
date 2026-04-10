@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from book_scraper.dashboard.app import templates
+from book_scraper.dashboard.deps import templates
 
 router = APIRouter()
 
@@ -18,9 +18,9 @@ def logs_page(request: Request):
         all_lines = LOG_FILE.read_text().splitlines()
         lines = all_lines[-100:]
     return templates.TemplateResponse(
+        request,
         "logs.html",
         {
-            "request": request,
             "active_page": "logs",
             "lines": lines,
         },
