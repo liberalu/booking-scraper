@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Validation{% endblock %}
+{% block content %}
+<h1>Validation Issues</h1>
+
+{% if summary %}
+<table>
+    <thead>
+        <tr>
+            <th>Issue Type</th>
+            <th>Count</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in summary %}
+        <tr>
+            <td><a href="/validation/{{ s.issue_type }}">{{ s.issue_type }}</a></td>
+            <td>{{ s.count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No validation issues found.</p>
+{% endif %}
+{% endblock %}

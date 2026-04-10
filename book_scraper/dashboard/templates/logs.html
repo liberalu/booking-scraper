@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+<h1>Logs</h1>
+
+<div id="log-output">{% for line in lines %}{{ line }}
+{% endfor %}</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const output = document.getElementById('log-output');
+    const evtSource = new EventSource('/api/logs/stream');
+    evtSource.onmessage = function(event) {
+        output.textContent += event.data + '\n';
+        output.scrollTop = output.scrollHeight;
+    };
+    evtSource.onerror = function() {
+        output.textContent += '\n[SSE connection lost]\n';
+    };
+    // Auto-scroll to bottom on load
+    output.scrollTop = output.scrollHeight;
+});
+</script>
+{% endblock %}

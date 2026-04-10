@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Prices{% endblock %}
+{% block content %}
+<h1>Prices</h1>
+
+<form method="get" action="/prices" role="search">
+    <input type="search" name="q" placeholder="Search listings by title..." value="{{ query }}">
+    <button type="submit">Search</button>
+</form>
+
+{% if listings %}
+<h2>Search Results</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Price</th>
+            <th>Original</th>
+            <th>Chart</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for l in listings %}
+        <tr>
+            <td>{{ l.title }}</td>
+            <td>{{ l.author or '-' }}</td>
+            <td>{{ l.price or '-' }}</td>
+            <td>{{ l.price_original or '-' }}</td>
+            <td><button class="outline" onclick="loadChart({{ l.id }}, '{{ l.title|e }}')">Show chart</button></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% elif query %}
+<p>No listings found for "{{ query }}".</p>
+{% endif %}
+
+<div id="chart-container" style="display:none; margin: 2rem 0;">
+    <h3 id="chart-title"></h3>
+    <canvas id="priceChart" height="100"></canvas>
+</div>
+
+<h2>Recent Price Changes (7 days)</h2>
+{% if changes %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Previous</th>
+            <th>New</th>
+            <th>Change</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in changes %}
+        <tr>
+            <td>{{ c.title }}</td>
+            <td>{{ c.prev_price }}</td>
+            <td>{{ c.new_price }}</td>
+            <td style="color: {{ 'green' if c.change < 0 else 'red' }}">
+                {{ '%+.2f'|format(c.change|float) }}
+            </td>
+            <td>{{ c.scraped_at.strftime('%Y-%m-%d %H:%M') if c.scraped_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No price changes in the last 7 days.</p>
+{% endif %}
+
+<script>
+let chartInstance = null;
+function loadChart(listingId, title) {
+    fetch('/api/prices/' + listingId + '/chart')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('chart-container').style.display = 'block';
+            document.getElementById('chart-title').textContent = title;
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            const datasets = [{
+                label: 'Price',
+                data: data.prices,
+                borderColor: '#3498db',
+                tension: 0.1,
+                fill: false
+            }];
+            if (data.original_prices.some(p => p !== null)) {
+                datasets.push({
+                    label: 'Original Price',
+                    data: data.original_prices,
+                    borderColor: '#95a5a6',
+                    borderDash: [5, 5],
+                    tension: 0.1,
+                    fill: false
+                });
+            }
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels: data.labels.map(l => l.split('T')[0]), datasets: datasets },
+                options: { responsive: true, scales: { y: { beginAtZero: false } } }
+            });
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }}{% endblock %}
+{% block content %}
+<h1>Run #{{ run.id }}</h1>
+
+<article>
+    <table>
+        <tr><td><strong>Phase</strong></td><td>{{ run.phase }}</td></tr>
+        <tr><td><strong>Status</strong></td><td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td></tr>
+        <tr><td><strong>Started</strong></td><td>{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-' }}</td></tr>
+        <tr><td><strong>Finished</strong></td><td>{{ run.finished_at.strftime('%Y-%m-%d %H:%M:%S') if run.finished_at else '-' }}</td></tr>
+        <tr><td><strong>URLs Total</strong></td><td>{{ run.urls_total if run.urls_total is not none else '-' }}</td></tr>
+        <tr><td><strong>URLs Processed</strong></td><td>{{ run.urls_processed }}</td></tr>
+        <tr><td><strong>Items Added</strong></td><td>{{ run.items_added }}</td></tr>
+        <tr><td><strong>Items Updated</strong></td><td>{{ run.items_updated }}</td></tr>
+        <tr><td><strong>4xx Errors</strong></td><td>{{ run.errors_4xx }}</td></tr>
+        <tr><td><strong>5xx Errors</strong></td><td>{{ run.errors_5xx }}</td></tr>
+        <tr><td><strong>Total Errors</strong></td><td>{{ run.error_count }}</td></tr>
+    </table>
+</article>
+
+{% if issues %}
+<h2>Validation Issues ({{ issues|length }})</h2>
+<table>
+    <thead>
+        <tr>
+            <th>URL</th>
+            <th>Field</th>
+            <th>Issue</th>
+            <th>Raw Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for issue in issues %}
+        <tr>
+            <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ issue.url }}</td>
+            <td>{{ issue.field }}</td>
+            <td>{{ issue.issue }}</td>
+            <td>{{ issue.raw_value or '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No validation issues for this run.</p>
+{% endif %}
+{% endblock %}

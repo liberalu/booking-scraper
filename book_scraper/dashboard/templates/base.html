@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} - Book Scraper</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        nav ul li a { font-weight: normal; }
+        nav ul li a.active { font-weight: bold; text-decoration: underline; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: var(--pico-card-background-color); border-radius: var(--pico-border-radius); padding: 1rem; text-align: center; border: 1px solid var(--pico-muted-border-color); }
+        .stat-card h2 { margin: 0; font-size: 2rem; }
+        .stat-card small { color: var(--pico-muted-color); }
+        .badge { padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+        .badge-completed { background: #2ecc71; color: #fff; }
+        .badge-failed { background: #e74c3c; color: #fff; }
+        .badge-running { background: #f39c12; color: #fff; }
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
+        #log-output { background: #1a1a2e; color: #0f0; padding: 1rem; font-family: monospace; font-size: 0.85rem; height: 500px; overflow-y: auto; white-space: pre-wrap; border-radius: var(--pico-border-radius); }
+    </style>
+</head>
+<body>
+    <nav class="container-fluid">
+        <ul>
+            <li><strong>Book Scraper</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/" class="{{ 'active' if active_page == 'overview' else '' }}">Overview</a></li>
+            <li><a href="/runs" class="{{ 'active' if active_page == 'runs' else '' }}">Runs</a></li>
+            <li><a href="/validation" class="{{ 'active' if active_page == 'validation' else '' }}">Validation</a></li>
+            <li><a href="/prices" class="{{ 'active' if active_page == 'prices' else '' }}">Prices</a></li>
+            <li><a href="/inventory" class="{{ 'active' if active_page == 'inventory' else '' }}">Inventory</a></li>
+            <li><a href="/logs" class="{{ 'active' if active_page == 'logs' else '' }}">Logs</a></li>
+        </ul>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

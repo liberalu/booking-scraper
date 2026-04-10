@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Runs{% endblock %}
+{% block content %}
+<h1>Scrape Runs</h1>
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+    <button hx-post="/runs/trigger?phase=discover_sitemap" hx-target="#trigger-result" hx-swap="innerHTML">Discover (Sitemap)</button>
+    <button hx-post="/runs/trigger?phase=discover_categories" hx-target="#trigger-result" hx-swap="innerHTML">Discover (Categories)</button>
+    <button hx-post="/runs/trigger?phase=scan" hx-target="#trigger-result" hx-swap="innerHTML">Scan</button>
+    <button hx-post="/runs/trigger?phase=rescrape" hx-target="#trigger-result" hx-swap="innerHTML" class="secondary">Rescrape All</button>
+</div>
+<div id="trigger-result"></div>
+
+<div hx-get="/runs" hx-trigger="every 10s" hx-select="table" hx-target="table" hx-swap="outerHTML">
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Phase</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Added</th>
+            <th>Updated</th>
+            <th>Errors</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr>
+            <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+            <td>{{ run.phase }}</td>
+            <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+            <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
+            <td>
+                {% if run.finished_at and run.started_at %}
+                    {{ (run.finished_at - run.started_at) }}
+                {% elif run.status == 'running' %}
+                    running...
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ run.items_added }}</td>
+            <td>{{ run.items_updated }}</td>
+            <td>{{ run.error_count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

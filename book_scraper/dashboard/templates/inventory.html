@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<h1>Inventory</h1>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <h2>{{ stats.total }}</h2>
+        <small>Total</small>
+    </div>
+    <div class="stat-card">
+        <h2>{{ stats.active }}</h2>
+        <small>Active</small>
+    </div>
+    <div class="stat-card">
+        <h2>{{ stats.total - stats.active }}</h2>
+        <small>Inactive</small>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div>
+        <h2>Format Breakdown</h2>
+        <canvas id="formatChart" height="200"></canvas>
+    </div>
+    <div>
+        <h2>Data Completeness</h2>
+        <canvas id="completenessChart" height="200"></canvas>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Format pie chart
+    const formatData = {{ stats.by_format | tojson }};
+    new Chart(document.getElementById('formatChart').getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: formatData.map(f => f.format),
+            datasets: [{
+                data: formatData.map(f => f.count),
+                backgroundColor: ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#95a5a6']
+            }]
+        },
+        options: { responsive: true }
+    });
+
+    // Completeness bar chart
+    const total = {{ stats.total }};
+    const fields = {
+        'ISBN': {{ stats.with_isbn }},
+        'Author': {{ stats.with_author }},
+        'Year': {{ stats.with_year }},
+        'Publisher': {{ stats.with_publisher }}
+    };
+    new Chart(document.getElementById('completenessChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(fields),
+            datasets: [{
+                label: '% Complete',
+                data: Object.values(fields).map(v => total > 0 ? Math.round(v / total * 100) : 0),
+                backgroundColor: '#3498db'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } }
+        }
+    });
+});
+</script>
+{% endblock %}

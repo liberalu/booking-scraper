@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Validation: {{ issue_type }}{% endblock %}
+{% block content %}
+<h1>Validation: {{ issue_type }}</h1>
+<p><a href="/validation">Back to summary</a></p>
+
+{% if issues %}
+<table>
+    <thead>
+        <tr>
+            <th>URL</th>
+            <th>Field</th>
+            <th>Raw Value</th>
+            <th>Run</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for issue in issues %}
+        <tr>
+            <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ issue.url }}</td>
+            <td>{{ issue.field }}</td>
+            <td>{{ issue.raw_value or '-' }}</td>
+            <td><a href="/runs/{{ issue.scrape_run_id }}">Run #{{ issue.scrape_run_id }}</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No issues of this type found.</p>
+{% endif %}
+{% endblock %}
