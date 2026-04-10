@@ -20,34 +20,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_SCRAPY = "/app/.venv/bin/scrapy"
+
 PHASE_COMMANDS: dict[str, list[str]] = {
     "discover_sitemap": [
-        "scrapy",
-        "crawl",
-        "discover",
-        "-a",
-        "shop=vaga",
-        "-a",
-        "strategy=sitemap",
+        _SCRAPY, "crawl", "discover",
+        "-a", "shop=vaga", "-a", "strategy=sitemap",
     ],
     "discover_categories": [
-        "scrapy",
-        "crawl",
-        "discover",
-        "-a",
-        "shop=vaga",
-        "-a",
-        "strategy=categories",
+        _SCRAPY, "crawl", "discover",
+        "-a", "shop=vaga", "-a", "strategy=categories",
     ],
-    "scan": ["scrapy", "crawl", "scan", "-a", "shop=vaga"],
+    "scan": [_SCRAPY, "crawl", "scan", "-a", "shop=vaga"],
     "rescrape": [
-        "scrapy",
-        "crawl",
-        "scan",
-        "-a",
-        "shop=vaga",
-        "-a",
-        "rescrape=true",
+        _SCRAPY, "crawl", "scan",
+        "-a", "shop=vaga", "-a", "rescrape=true",
     ],
 }
 
@@ -102,24 +89,24 @@ def run_status(run_id: int, session: Session = Depends(get_db)):
 
     heartbeat_ago = None
     if run.last_heartbeat:
-        heartbeat_ago = int(
-            (datetime.now(UTC) - run.last_heartbeat).total_seconds()
-        )
+        heartbeat_ago = int((datetime.now(UTC) - run.last_heartbeat).total_seconds())
 
-    return JSONResponse({
-        "id": run.id,
-        "status": run.status,
-        "health": health,
-        "pid": run.pid,
-        "pid_alive": pid_alive,
-        "urls_processed": run.urls_processed,
-        "urls_total": run.urls_total,
-        "items_added": run.items_added,
-        "items_updated": run.items_updated,
-        "error_count": run.error_count,
-        "elapsed_seconds": elapsed,
-        "heartbeat_seconds_ago": heartbeat_ago,
-    })
+    return JSONResponse(
+        {
+            "id": run.id,
+            "status": run.status,
+            "health": health,
+            "pid": run.pid,
+            "pid_alive": pid_alive,
+            "urls_processed": run.urls_processed,
+            "urls_total": run.urls_total,
+            "items_added": run.items_added,
+            "items_updated": run.items_updated,
+            "error_count": run.error_count,
+            "elapsed_seconds": elapsed,
+            "heartbeat_seconds_ago": heartbeat_ago,
+        }
+    )
 
 
 @router.post("/runs/trigger")
@@ -148,7 +135,15 @@ def trigger_run(request: Request, phase: str = "scan"):
         )
 
     container = containers[0]
-    container.exec_run(cmd, detach=True)
+    container.exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
     return HTMLResponse(
         f'<p class="success">Started {phase}</p>',
         status_code=200,
@@ -168,16 +163,12 @@ def kill_run(run_id: int, session: Session = Depends(get_db)):
     try:
         os.kill(run.pid, signal.SIGTERM)
         logger.info("Sent SIGTERM to PID %d (run #%d)", run.pid, run_id)
-        return HTMLResponse(
-            f'<p class="success">Sent SIGTERM to PID {run.pid}</p>'
-        )
+        return HTMLResponse(f'<p class="success">Sent SIGTERM to PID {run.pid}</p>')
     except ProcessLookupError:
         run.status = "failed"
         run.finished_at = datetime.now(UTC)
         session.commit()
-        return HTMLResponse(
-            f'<p>Process {run.pid} already dead. Marked as failed.</p>'
-        )
+        return HTMLResponse(f"<p>Process {run.pid} already dead. Marked as failed.</p>")
     except PermissionError:
         return HTMLResponse(
             f'<p class="error">No permission to kill PID {run.pid}</p>',

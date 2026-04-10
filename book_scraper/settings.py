@@ -58,5 +58,7 @@ ITEM_PIPELINES = {  # pragma: no cover
     "book_scraper.pipelines.PostgresPipeline": 200,  # pragma: no cover
 }  # pragma: no cover
 
-# Database connection
-DATABASE_URL = _config.database.url  # pragma: no cover
+# Database connection (env var overrides config for Docker)
+import os  # pragma: no cover  # noqa: E402
+
+DATABASE_URL = os.environ.get("DATABASE_URL", _config.database.url)  # pragma: no cover

@@ -14,20 +14,22 @@ from book_scraper.dashboard.queries import (
 
 router = APIRouter()
 
+_SCRAPY = "/app/.venv/bin/scrapy"
+
 SHOP_COMMANDS = {
     "discover_sitemap": [
-        "scrapy", "crawl", "discover",
+        _SCRAPY, "crawl", "discover",
         "-a", "shop={shop}", "-a", "strategy=sitemap",
     ],
     "discover_categories": [
-        "scrapy", "crawl", "discover",
+        _SCRAPY, "crawl", "discover",
         "-a", "shop={shop}", "-a", "strategy=categories",
     ],
     "scan": [
-        "scrapy", "crawl", "scan", "-a", "shop={shop}",
+        _SCRAPY, "crawl", "scan", "-a", "shop={shop}",
     ],
     "rescrape": [
-        "scrapy", "crawl", "scan",
+        _SCRAPY, "crawl", "scan",
         "-a", "shop={shop}", "-a", "rescrape=true",
     ],
 }
@@ -48,9 +50,7 @@ def shops_list(request: Request, session: Session = Depends(get_db)):
 
 
 @router.get("/shops/{shop_name}")
-def shop_detail(
-    shop_name: str, request: Request, session: Session = Depends(get_db)
-):
+def shop_detail(shop_name: str, request: Request, session: Session = Depends(get_db)):
     shop = get_shop_by_name(session, shop_name)
     if shop is None:
         return HTMLResponse("Shop not found", status_code=404)
@@ -99,7 +99,15 @@ def trigger_shop_run(shop_name: str, phase: str = "scan"):
         )
 
     container = containers[0]
-    container.exec_run(cmd, detach=True)
+    container.exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
     return HTMLResponse(
         f'<p class="success">Started {phase} for {shop_name}</p>',
         status_code=200,

@@ -55,11 +55,7 @@ def get_run_health(run: ScrapeRun) -> str:
 def mark_stale_runs(session: Session) -> int:
     """Mark runs with no heartbeat for over DEAD_RUN_HOURS as failed."""
     cutoff = datetime.now(UTC) - timedelta(hours=DEAD_RUN_HOURS)
-    stale = (
-        session.query(ScrapeRun)
-        .filter(ScrapeRun.status == "running")
-        .all()
-    )
+    stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
     marked = 0
     for run in stale:
         last_activity = run.last_heartbeat or run.started_at
@@ -244,6 +240,74 @@ def get_inventory_stats(session: Session) -> dict:
     }
 
 
+def get_listings_page(
+    session: Session,
+    page: int = 1,
+    per_page: int = 50,
+    search: str = "",
+    category: str = "",
+    format_filter: str = "",
+    missing_field: str = "",
+    shop_id: int | None = None,
+) -> tuple[list[Listing], int]:
+    """Return paginated listings with filters. Returns (listings, total_count)."""
+    query = session.query(Listing).options(joinedload(Listing.shop))
+
+    if shop_id:
+        query = query.filter(Listing.shop_id == shop_id)
+    if search:
+        query = query.filter(Listing.title.ilike(f"%{search}%"))
+    if category:
+        query = query.filter(Listing.categories.any(category))
+    if format_filter:
+        if format_filter == "none":
+            query = query.filter(Listing.format.is_(None))
+        else:
+            query = query.filter(Listing.format == format_filter)
+    if missing_field:
+        col = getattr(Listing, missing_field, None)
+        if col is not None:
+            query = query.filter(col.is_(None))
+
+    total = query.count()
+    listings = (
+        query.order_by(Listing.last_seen_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return listings, total
+
+
+def get_all_categories(session: Session, limit: int = 200) -> list[str]:
+    """Get distinct category names (excluding last breadcrumb item)."""
+    sql = text("""
+        SELECT DISTINCT cat, count(*) as cnt
+        FROM (
+            SELECT unnest(categories[1:array_length(categories,1)-1]) as cat
+            FROM listings
+            WHERE categories IS NOT NULL AND array_length(categories,1) > 1
+        ) sub
+        GROUP BY cat
+        ORDER BY cnt DESC
+        LIMIT :limit
+    """)
+    rows = session.execute(sql, {"limit": limit}).all()
+    return [row[0] for row in rows]
+
+
+def get_all_formats(session: Session) -> list[str]:
+    """Get distinct format values."""
+    rows = (
+        session.query(Listing.format)
+        .filter(Listing.format.isnot(None))
+        .distinct()
+        .order_by(Listing.format)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
 def get_all_shops(session: Session) -> list[Shop]:
     return session.query(Shop).order_by(Shop.name).all()
 
@@ -286,9 +350,7 @@ def get_shop_stats(session: Session, shop_id: int) -> dict:
     }
 
 
-def get_shop_runs(
-    session: Session, shop_id: int, limit: int = 20
-) -> list[ScrapeRun]:
+def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[ScrapeRun]:
     return (
         session.query(ScrapeRun)
         .filter(ScrapeRun.shop_id == shop_id)
