@@ -1,13 +1,15 @@
 import logging
 import os
 import signal
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
+    _pid_alive,
     get_recent_runs,
     get_run_detail,
     get_run_health,
@@ -71,6 +73,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
     run, issues = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
+    health = get_run_health(run)
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -78,8 +81,45 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             "active_page": "runs",
             "run": run,
             "issues": issues,
+            "health": health,
         },
     )
+
+
+@router.get("/api/runs/{run_id}/status")
+def run_status(run_id: int, session: Session = Depends(get_db)):
+    """Live status check for a run — used by HTMX polling."""
+    run, _ = get_run_detail(session, run_id)
+    if run is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    health = get_run_health(run)
+    pid_alive = _pid_alive(run.pid)
+    elapsed = None
+    if run.started_at:
+        end = run.finished_at or datetime.now(UTC)
+        elapsed = int((end - run.started_at).total_seconds())
+
+    heartbeat_ago = None
+    if run.last_heartbeat:
+        heartbeat_ago = int(
+            (datetime.now(UTC) - run.last_heartbeat).total_seconds()
+        )
+
+    return JSONResponse({
+        "id": run.id,
+        "status": run.status,
+        "health": health,
+        "pid": run.pid,
+        "pid_alive": pid_alive,
+        "urls_processed": run.urls_processed,
+        "urls_total": run.urls_total,
+        "items_added": run.items_added,
+        "items_updated": run.items_updated,
+        "error_count": run.error_count,
+        "elapsed_seconds": elapsed,
+        "heartbeat_seconds_ago": heartbeat_ago,
+    })
 
 
 @router.post("/runs/trigger")
@@ -132,8 +172,6 @@ def kill_run(run_id: int, session: Session = Depends(get_db)):
             f'<p class="success">Sent SIGTERM to PID {run.pid}</p>'
         )
     except ProcessLookupError:
-        from datetime import UTC, datetime
-
         run.status = "failed"
         run.finished_at = datetime.now(UTC)
         session.commit()

@@ -1,33 +1,86 @@
 {% extends "base.html" %}
 {% block title %}Run #{{ run.id }}{% endblock %}
 {% block content %}
-<h1>Run #{{ run.id }}</h1>
+<style>
+    .health-healthy { color: #2ecc40; font-weight: bold; }
+    .health-stale { color: #ffdc00; font-weight: bold; }
+    .health-dead { color: #ff4136; font-weight: bold; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+    .actions button { margin: 0; }
+    #live-status { font-family: monospace; font-size: 0.85rem; padding: 1rem; background: var(--pico-card-background-color); border-radius: 8px; }
+    #live-status dt { font-weight: bold; display: inline; }
+    #live-status dd { display: inline; margin-left: 0.5rem; margin-right: 1.5rem; }
+</style>
+
+<h1>Run #{{ run.id }} <span class="badge badge-{{ run.status }}">{{ run.status }}</span></h1>
+
+{% if run.status == 'running' %}
+<article>
+    <h3>Live Status <small>(refreshes every 3s)</small></h3>
+    <div id="live-status" hx-get="/api/runs/{{ run.id }}/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
+        Loading...
+    </div>
+    <div class="actions" id="action-result">
+        <button class="secondary outline" hx-post="/runs/{{ run.id }}/kill" hx-target="#action-result" hx-swap="innerHTML" hx-confirm="Send SIGTERM to PID {{ run.pid }}?">Stop Scraping</button>
+    </div>
+</article>
+{% endif %}
 
 <article>
+    <h3>Run Details</h3>
     <table>
         <tr><td><strong>Phase</strong></td><td>{{ run.phase }}</td></tr>
         <tr><td><strong>Status</strong></td><td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td></tr>
+        <tr>
+            <td><strong>Health</strong></td>
+            <td>
+                {% if health == 'healthy' %}
+                    <span class="health-healthy">&#9679; active</span>
+                {% elif health == 'stale' %}
+                    <span class="health-stale">&#9679; stale</span>
+                {% elif health == 'dead' %}
+                    <span class="health-dead">&#9679; dead</span>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        <tr><td><strong>PID</strong></td><td>{{ run.pid or '-' }}</td></tr>
         <tr><td><strong>Started</strong></td><td>{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-' }}</td></tr>
         <tr><td><strong>Finished</strong></td><td>{{ run.finished_at.strftime('%Y-%m-%d %H:%M:%S') if run.finished_at else '-' }}</td></tr>
-        <tr><td><strong>URLs Total</strong></td><td>{{ run.urls_total if run.urls_total is not none else '-' }}</td></tr>
-        <tr><td><strong>URLs Processed</strong></td><td>{{ run.urls_processed }}</td></tr>
+        <tr>
+            <td><strong>Duration</strong></td>
+            <td>
+                {% if run.finished_at and run.started_at %}
+                    {{ (run.finished_at - run.started_at) }}
+                {% elif run.status == 'running' %}
+                    running...
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Last Heartbeat</strong></td>
+            <td>{{ run.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if run.last_heartbeat else '-' }}</td>
+        </tr>
+        <tr><td><strong>URLs</strong></td><td>{{ run.urls_processed }}{% if run.urls_total %} / {{ run.urls_total }}{% endif %}</td></tr>
         <tr><td><strong>Items Added</strong></td><td>{{ run.items_added }}</td></tr>
         <tr><td><strong>Items Updated</strong></td><td>{{ run.items_updated }}</td></tr>
         <tr><td><strong>4xx Errors</strong></td><td>{{ run.errors_4xx }}</td></tr>
         <tr><td><strong>5xx Errors</strong></td><td>{{ run.errors_5xx }}</td></tr>
         <tr><td><strong>Total Errors</strong></td><td>{{ run.error_count }}</td></tr>
-        <tr><td><strong>PID</strong></td><td>{{ run.pid or '-' }}</td></tr>
-        <tr>
-            <td><strong>Last Heartbeat</strong></td>
-            <td>{{ run.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if run.last_heartbeat else '-' }}</td>
-        </tr>
     </table>
-    {% if run.status == 'running' and run.pid %}
-    <div id="kill-result">
-        <button class="secondary" hx-post="/runs/{{ run.id }}/kill" hx-target="#kill-result" hx-swap="innerHTML" hx-confirm="Kill process {{ run.pid }}?">Kill Process</button>
-    </div>
-    {% endif %}
 </article>
+
+{% if run.status != 'running' %}
+<article>
+    <h3>Actions</h3>
+    <div class="actions" id="action-result">
+        <button hx-post="/runs/trigger?phase={{ run.phase.replace('discover_', '') if 'discover' in run.phase else run.phase }}" hx-target="#action-result" hx-swap="innerHTML">Re-run {{ run.phase }}</button>
+    </div>
+</article>
+{% endif %}
 
 {% if issues %}
 <h2>Validation Issues ({{ issues|length }})</h2>
@@ -43,7 +96,9 @@
     <tbody>
         {% for issue in issues %}
         <tr>
-            <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ issue.url }}</td>
+            <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <a href="{{ issue.url }}" target="_blank">{{ issue.url }}</a>
+            </td>
             <td>{{ issue.field }}</td>
             <td>{{ issue.issue }}</td>
             <td>{{ issue.raw_value or '-' }}</td>
@@ -54,4 +109,38 @@
 {% else %}
 <p>No validation issues for this run.</p>
 {% endif %}
+
+<script>
+// Handle JSON status response for live polling
+document.body.addEventListener('htmx:beforeSwap', function(evt) {
+    if (evt.detail.target.id === 'live-status' && evt.detail.xhr.status === 200) {
+        try {
+            const data = JSON.parse(evt.detail.xhr.responseText);
+            const healthClass = data.health ? 'health-' + data.health : '';
+            const healthLabel = data.health || '-';
+            const pidStatus = data.pid_alive === true ? 'alive' : data.pid_alive === false ? 'DEAD' : '?';
+            const hbAgo = data.heartbeat_seconds_ago !== null ? data.heartbeat_seconds_ago + 's ago' : 'never';
+            const progress = data.urls_total ? `${data.urls_processed}/${data.urls_total}` : `${data.urls_processed}`;
+            const elapsed = data.elapsed_seconds ? `${Math.floor(data.elapsed_seconds/60)}m ${data.elapsed_seconds%60}s` : '-';
+
+            evt.detail.serverResponse = `
+                <dl>
+                    <dt>Health:</dt><dd><span class="${healthClass}">&#9679; ${healthLabel}</span></dd>
+                    <dt>PID ${data.pid || '-'}:</dt><dd>${pidStatus}</dd>
+                    <dt>Heartbeat:</dt><dd>${hbAgo}</dd>
+                    <dt>Progress:</dt><dd>${progress}</dd>
+                    <dt>Items:</dt><dd>+${data.items_added} ~${data.items_updated}</dd>
+                    <dt>Errors:</dt><dd>${data.error_count}</dd>
+                    <dt>Elapsed:</dt><dd>${elapsed}</dd>
+                </dl>
+            `;
+
+            // Auto-reload page if run finished
+            if (data.status !== 'running') {
+                setTimeout(() => location.reload(), 1000);
+            }
+        } catch(e) {}
+    }
+});
+</script>
 {% endblock %}
