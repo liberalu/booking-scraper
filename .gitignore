@@ -24,11 +24,18 @@ scrapy_errors.log
 # OS
 .DS_Store
 
-# Testing
+# Testing / Linting
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 htmlcov/
 .coverage
+
+# Claude Code
+.claude/
+
+# Logs
+*.log
 
 # Env files
 .env
