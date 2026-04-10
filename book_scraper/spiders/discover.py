@@ -49,6 +49,7 @@ class DiscoverSpider(scrapy.Spider):
 
         self._run_id: int | None = None
         self._urls_processed: int = 0
+        self._urls_filtered: int = 0
         self._run_session: Session | None = None
 
     def _url_passes_filter(self, url: str) -> bool:
@@ -85,17 +86,52 @@ class DiscoverSpider(scrapy.Spider):
                 callback=self.parse_full_crawl,
             )
 
+    def _report_validation(
+        self,
+        issue: str,
+        field: str,
+        url: str,
+        raw_value: str = "",
+    ) -> None:
+        """Report a validation issue to the ValidationPipeline."""
+        crawler = getattr(self, "crawler", None)
+        vp = getattr(crawler, "validation_pipeline", None) if crawler else None
+        if vp is not None:
+            vp._warn(issue, field, url, raw_value)
+        else:
+            self.logger.warning(
+                "Validation [%s] field=%s url=%s %s",
+                issue, field, url, raw_value,
+            )
+
     def parse_sitemap(
         self, response: scrapy.http.Response
     ) -> Generator[DiscoveredUrlItem, None, None]:
         urls: list[str] = self.parsers.parse_sitemap_urls(response.text)
         self.logger.info("Found %d URLs in sitemap", len(urls))
+
+        # Check for duplicates
+        seen: set[str] = set()
+        duplicates = 0
         for url in urls:
+            if url in seen:
+                duplicates += 1
+            else:
+                seen.add(url)
+        if duplicates:
+            self._report_validation(
+                "duplicate_sitemap_url", "url", response.url,
+                f"{duplicates} duplicates in {len(urls)} URLs",
+            )
+
+        for url in seen:
             if self._url_passes_filter(url):
                 self._urls_processed += 1
                 yield DiscoveredUrlItem(
                     url=url, shop_name=self.shop_name, source="sitemap"
                 )
+            else:
+                self._urls_filtered += 1
 
     def parse_categories(
         self, response: scrapy.http.Response
@@ -112,7 +148,9 @@ class DiscoverSpider(scrapy.Spider):
             if url and not url.startswith("http"):
                 url = base_url + url
 
-            if url and self._url_passes_filter(url):
+            if not url:
+                continue
+            if self._url_passes_filter(url):
                 self._urls_processed += 1
                 yield DiscoveredUrlItem(
                     url=url, shop_name=self.shop_name, source="category"
@@ -128,6 +166,8 @@ class DiscoverSpider(scrapy.Spider):
                         price_original=product.get("price_original"),
                         in_stock=True,
                     )
+            else:
+                self._urls_filtered += 1
 
         # Paginate
         page = response.meta["page"] + 1
@@ -166,6 +206,16 @@ class DiscoverSpider(scrapy.Spider):
             )
 
     def closed(self, reason: str) -> None:
+        if self._urls_filtered:
+            self._report_validation(
+                "url_pattern_filtered", "url", "",
+                f"{self._urls_filtered} URLs excluded by pattern",
+            )
+            self.logger.info(
+                "URL filter: %d passed, %d filtered",
+                self._urls_processed, self._urls_filtered,
+            )
+
         if self._run_id is None or self._run_session is None:
             return
         try:

@@ -12,6 +12,7 @@ from book_scraper.db.models import (
     Price,
     ScrapeRun,
     Shop,
+    ValidationIssue,
 )
 
 
@@ -43,7 +44,8 @@ def upsert_listing(
     price: Decimal | None = None,
     price_original: Decimal | None = None,
     in_stock: bool = True,
-) -> tuple[Listing, bool]:
+) -> tuple[Listing, bool, Decimal | None]:
+    """Upsert a listing. Returns (listing, created, old_price)."""
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
     now = datetime.now(UTC)
@@ -70,8 +72,9 @@ def upsert_listing(
         )
         session.add(listing)
         session.flush()
-        return listing, True
+        return listing, True, None
     else:
+        old_price = listing.price
         listing.title = title
         listing.author = author
         # Only update fields if provided (don't overwrite with None from price spider)
@@ -104,7 +107,7 @@ def upsert_listing(
         listing.last_seen_at = now
         listing.is_active = True
         session.flush()
-        return listing, False
+        return listing, False, old_price
 
 
 def insert_price(
@@ -384,6 +387,16 @@ def check_discover_freshness(
             )
 
     return warnings
+
+
+def bulk_insert_validation_issues(
+    session: Session,
+    issues: list[dict[str, str | int | None]],
+) -> None:
+    """Insert a batch of validation issues."""
+    if not issues:
+        return
+    session.add_all([ValidationIssue(**issue) for issue in issues])
 
 
 def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:

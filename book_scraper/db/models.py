@@ -214,3 +214,21 @@ class ScrapeRun(Base):
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     shop: Mapped["Shop"] = relationship()
+    validation_issues: Mapped[list["ValidationIssue"]] = relationship(
+        back_populates="scrape_run"
+    )
+
+
+class ValidationIssue(Base):
+    __tablename__ = "validation_issues"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scrape_run_id: Mapped[int] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=False, index=True
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    issue: Mapped[str] = mapped_column(String, nullable=False)
+    raw_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")

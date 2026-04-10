@@ -1,4 +1,6 @@
 import asyncio
+import resource
+import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -75,6 +77,8 @@ class ScanSpider(scrapy.Spider):
                 plan.urls_skipped,
             )
 
+            prev_batch_start = time.monotonic()
+
             for batch_num in range(num_batches):
                 start_idx = batch_num * self._batch_size
                 end_idx = min(start_idx + self._batch_size, total)
@@ -85,6 +89,20 @@ class ScanSpider(scrapy.Spider):
                     while self._urls_responded < start_idx:
                         await asyncio.sleep(1)
 
+                    # Log previous batch timing and memory
+                    batch_elapsed = time.monotonic() - prev_batch_start
+                    mem_mb = resource.getrusage(
+                        resource.RUSAGE_SELF
+                    ).ru_maxrss / (1024 * 1024)
+                    self.logger.info(
+                        "Batch %d/%d completed in %.1fs "
+                        "(memory: %.0fMB)",
+                        batch_num,
+                        num_batches,
+                        batch_elapsed,
+                        mem_mb,
+                    )
+
                     self.logger.info(
                         "Batch %d/%d: pausing %.0fs",
                         batch_num + 1,
@@ -92,6 +110,8 @@ class ScanSpider(scrapy.Spider):
                         self._batch_pause,
                     )
                     await asyncio.sleep(self._batch_pause)
+
+                prev_batch_start = time.monotonic()
 
                 self.logger.info(
                     "Batch %d/%d: yielding %d URLs",
@@ -133,6 +153,25 @@ class ScanSpider(scrapy.Spider):
                 increment_fail=True,
             )
             return
+
+        # HTTP-level checks
+        url = response.url.split("?")[0]
+        if len(response.text) < 1024:
+            self._report_validation(
+                "empty_response", "response", url,
+                f"len={len(response.text)}",
+            )
+        request_url = response.request.url.split("?")[0] if response.request else url
+        final_url = url
+        if final_url != request_url:
+            # Check if redirected to homepage or category
+            base = self.conf.shop.base_url.rstrip("/")
+            path = final_url.replace(base, "")
+            if path in ("", "/") or path.count("/") == 1:
+                self._report_validation(
+                    "redirect_to_homepage", "url", request_url,
+                    f"redirected to {final_url}",
+                )
 
         data = self.parsers.parse_product_page(response.text)
 
@@ -194,6 +233,24 @@ class ScanSpider(scrapy.Spider):
             http_status=http_status,
             increment_fail=True,
         )
+
+    def _report_validation(
+        self,
+        issue: str,
+        field: str,
+        url: str,
+        raw_value: str = "",
+    ) -> None:
+        """Report a validation issue to the ValidationPipeline."""
+        crawler = getattr(self, "crawler", None)
+        vp = getattr(crawler, "validation_pipeline", None) if crawler else None
+        if vp is not None:
+            vp._warn(issue, field, url, raw_value)
+        else:
+            self.logger.warning(
+                "Validation [%s] field=%s url=%s %s",
+                issue, field, url, raw_value,
+            )
 
     def _queue_url_status_update(
         self,

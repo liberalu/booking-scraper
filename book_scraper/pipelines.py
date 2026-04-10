@@ -1,3 +1,5 @@
+import logging
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -7,6 +9,7 @@ from scrapy.exceptions import DropItem
 from sqlalchemy.orm import Session, sessionmaker
 
 from book_scraper.db.repo import (
+    bulk_insert_validation_issues,
     increment_scrape_run_stats,
     insert_price,
     update_scrape_run_progress,
@@ -17,10 +20,151 @@ from book_scraper.db.repo import (
 from book_scraper.db.session import get_session_factory
 from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
 
+logger = logging.getLogger(__name__)
+
+_ISBN_13_RE = re.compile(r"^97[89]\d{10}$")
+_ISBN_10_RE = re.compile(r"^\d{9}[\dXx]$")
+_HTML_TAG_RE = re.compile(r"<[a-zA-Z/][^>]*>")
+
+_MIN_YEAR = 1800
+_MAX_YEAR = 2030
+
+
+def _validate_year(adapter: ItemAdapter) -> None:
+    """Validate and fix year field. Detect year/pages swap."""
+    year = adapter.get("year")
+    if year is None:
+        return
+
+    try:
+        year = int(year)
+    except (ValueError, TypeError):
+        adapter["year"] = None
+        return
+
+    if _MIN_YEAR <= year <= _MAX_YEAR:
+        adapter["year"] = year
+        return
+
+    # Possible swap: year has page count, pages has year
+    props = adapter.get("properties")
+    if isinstance(props, dict) and "pages" in props:
+        try:
+            pages = int(props["pages"])
+        except (ValueError, TypeError):
+            pages = None
+        if pages is not None and _MIN_YEAR <= pages <= _MAX_YEAR:
+            adapter["year"] = pages
+            props["pages"] = year
+            return
+
+    # Year out of range and no swap possible — clear it
+    adapter["year"] = None
+
+
+def _is_valid_isbn(raw: str) -> bool:
+    """Check if a string is a valid ISBN-10 or ISBN-13."""
+    cleaned = raw.replace("-", "").replace(" ", "")
+    if _ISBN_13_RE.match(cleaned):
+        total = sum(
+            int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(cleaned)
+        )
+        return total % 10 == 0
+    if _ISBN_10_RE.match(cleaned):
+        total = sum(
+            (10 if c in "Xx" else int(c)) * (10 - i)
+            for i, c in enumerate(cleaned)
+        )
+        return total % 11 == 0
+    return False
+
 
 class ValidationPipeline:
+    def __init__(self, stats: Any = None):
+        self.stats = stats
+        self.issues: list[dict[str, str | int | None]] = []
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "ValidationPipeline":
+        pipeline = cls(stats=crawler.stats)
+        crawler.validation_pipeline = pipeline  # type: ignore[attr-defined]
+        return pipeline
+
+    def _warn(self, issue: str, field: str, url: str, raw_value: str = "") -> None:
+        if self.stats:
+            self.stats.inc_value(f"validation/{issue}")
+        self.issues.append({
+            "url": url, "field": field,
+            "issue": issue, "raw_value": raw_value or None,
+        })
+        logger.warning(
+            "Validation [%s] field=%s url=%s %s",
+            issue, field, url, raw_value,
+        )
+
+    def _check_price_anomalies(
+        self, adapter: ItemAdapter, url: str
+    ) -> None:
+        price = adapter.get("price")
+        if price is None:
+            self._warn("missing_price", "price", url)
+            return
+        price_dec = Decimal(str(price))
+        if price_dec == 0:
+            self._warn("zero_price", "price", url, str(price))
+        price_original = adapter.get("price_original")
+        if price_original is not None:
+            orig_dec = Decimal(str(price_original))
+            if orig_dec > 0 and price_dec > orig_dec:
+                self._warn(
+                    "price_higher_than_original", "price", url,
+                    f"{price}>{price_original}",
+                )
+
+    def _check_content_quality(
+        self, adapter: ItemAdapter, url: str
+    ) -> None:
+        for field in ("title", "author", "description"):
+            val = adapter.get(field)
+            if isinstance(val, str) and _HTML_TAG_RE.search(val):
+                self._warn("html_in_text", field, url, val[:100])
+        title = adapter.get("title")
+        if isinstance(title, str):
+            if len(title) < 2:
+                self._warn(
+                    "suspicious_title", "title", url, title,
+                )
+            elif len(title) > 300:
+                self._warn(
+                    "suspicious_title", "title", url,
+                    f"len={len(title)}",
+                )
+
+    def _check_format_consistency(
+        self, adapter: ItemAdapter, url: str
+    ) -> None:
+        fmt = adapter.get("format")
+        props = adapter.get("properties") or {}
+        if fmt == "audiobook" and "pages" in props:
+            self._warn(
+                "format_mismatch", "format", url,
+                "audiobook with pages",
+            )
+        if fmt in ("book", "hardcover", "paperback") and "duration" in props:
+                self._warn(
+                    "format_mismatch", "format", url,
+                    f"{fmt} with duration",
+                )
+
+    def drain_issues(self) -> list[dict[str, str | int | None]]:
+        """Return buffered issues and clear the buffer."""
+        issues = self.issues
+        self.issues = []
+        return issues
+
     def process_item(self, item: Any) -> Any:
         adapter = ItemAdapter(item)
+        url = adapter.get("url", "")
 
         if isinstance(item, (ListingItem, PriceItem)):
             price = adapter.get("price")
@@ -28,6 +172,7 @@ class ValidationPipeline:
                 try:
                     adapter["price"] = str(Decimal(str(price)))
                 except (InvalidOperation, ValueError) as err:
+                    self._warn("invalid_price", "price", url, str(price))
                     raise DropItem(f"Invalid price: {price}") from err
 
             price_original = adapter.get("price_original")
@@ -35,10 +180,49 @@ class ValidationPipeline:
                 try:
                     adapter["price_original"] = str(Decimal(str(price_original)))
                 except (InvalidOperation, ValueError):
+                    self._warn(
+                        "invalid_price_original", "price_original", url,
+                        str(price_original),
+                    )
                     adapter["price_original"] = None
 
-        if isinstance(item, ListingItem) and not adapter.get("title"):
-            raise DropItem("Missing title")
+            # Price anomaly checks (after decimal conversion)
+            self._check_price_anomalies(adapter, url)
+
+        if isinstance(item, ListingItem):
+            if not adapter.get("title"):
+                self._warn("missing_title", "title", url)
+                raise DropItem("Missing title")
+
+            isbn = adapter.get("isbn")
+            if isbn is not None and not _is_valid_isbn(isbn):
+                self._warn("invalid_isbn", "isbn", url, str(isbn))
+                adapter["isbn"] = None
+
+            year_before = adapter.get("year")
+            _validate_year(adapter)
+            year_after = adapter.get("year")
+            if year_before is not None and year_after is None:
+                self._warn("invalid_year", "year", url, str(year_before))
+            elif year_before is not None and year_before != year_after:
+                self._warn("year_pages_swap", "year", url, str(year_before))
+
+            # Strip whitespace from text fields
+            for field in ("title", "author", "publisher"):
+                val = adapter.get(field)
+                if isinstance(val, str):
+                    val = val.strip()
+                    adapter[field] = val or None
+
+            if not url or not url.startswith(("http://", "https://")):
+                self._warn("invalid_url", "url", url)
+                raise DropItem(f"Invalid URL: {url}")
+
+            # Content quality checks
+            self._check_content_quality(adapter, url)
+
+            # Format consistency
+            self._check_format_consistency(adapter, url)
 
         return item
 
@@ -69,6 +253,7 @@ class PostgresPipeline:
             spider = self.spider
             if spider and hasattr(spider, "_run_id") and spider._run_id:
                 self._flush_stats(spider._run_id)
+                self._flush_validation_issues(spider._run_id)
             self.session.commit()
             self.session.close()
 
@@ -87,6 +272,39 @@ class PostgresPipeline:
             )
             self._stats_added = 0
             self._stats_updated = 0
+
+    def _flush_validation_issues(self, run_id: int) -> None:
+        assert self.session is not None
+        vp: ValidationPipeline | None = getattr(
+            self.crawler, "validation_pipeline", None
+        )
+        if vp is None:
+            return
+        issues = vp.drain_issues()
+        for issue in issues:
+            issue["scrape_run_id"] = run_id
+        bulk_insert_validation_issues(self.session, issues)
+
+    _SPIKE_THRESHOLD = Decimal("0.5")  # 50%
+
+    def _check_price_spike(
+        self,
+        url: str,
+        old_price: Decimal | None,
+        new_price: Decimal | None,
+    ) -> None:
+        if old_price is None or new_price is None or old_price == 0:
+            return
+        change = abs(new_price - old_price) / old_price
+        if change > self._SPIKE_THRESHOLD:
+            vp: ValidationPipeline | None = getattr(
+                self.crawler, "validation_pipeline", None
+            )
+            if vp is not None:
+                vp._warn(
+                    "price_spike", "price", url,
+                    f"{old_price}->{new_price} ({change:.0%})",
+                )
 
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
@@ -125,7 +343,7 @@ class PostgresPipeline:
                 else None
             )
 
-            listing, created = upsert_listing(
+            listing, created, old_price = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -148,6 +366,9 @@ class PostgresPipeline:
                 self._stats_added += 1
             else:
                 self._stats_updated += 1
+                self._check_price_spike(
+                    adapter["url"], old_price, price,
+                )
             if price is not None:
                 insert_price(
                     self.session,
@@ -165,7 +386,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing, created = upsert_listing(
+            listing, created, old_price = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -178,6 +399,7 @@ class PostgresPipeline:
                 self._stats_added += 1
             else:
                 self._stats_updated += 1
+                self._check_price_spike(adapter["url"], old_price, price)
             insert_price(
                 self.session,
                 listing_id=listing.id,
@@ -208,5 +430,6 @@ class PostgresPipeline:
                     spider._urls_processed,
                 )
                 self._flush_stats(spider._run_id)
+                self._flush_validation_issues(spider._run_id)
 
         return item
