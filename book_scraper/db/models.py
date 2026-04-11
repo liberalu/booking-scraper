@@ -111,6 +111,7 @@ class Listing(Base):
 
     shop: Mapped["Shop"] = relationship(back_populates="listings")
     prices: Mapped[list["Price"]] = relationship(back_populates="listing")
+    changes: Mapped[list["ListingChange"]] = relationship(back_populates="listing")
 
 
 class Price(Base):
@@ -135,6 +136,26 @@ class Price(Base):
     )
 
     listing: Mapped["Listing"] = relationship(back_populates="prices")
+
+
+class ListingChange(Base):
+    __tablename__ = "listing_changes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id"), nullable=False, index=True
+    )
+    scrape_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
+    )
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    listing: Mapped["Listing"] = relationship(back_populates="changes")
 
 
 discovery_source_enum = Enum(

@@ -138,6 +138,34 @@
 <p>No price history recorded.</p>
 {% endif %}
 
+<h2>Change History</h2>
+{% if changes %}
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Field</th>
+            <th>Old Value</th>
+            <th>New Value</th>
+            <th>Run</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in changes %}
+        <tr>
+            <td>{{ c.changed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ c.field }}</td>
+            <td style="color: {{ '#e74c3c' if c.old_value and not c.new_value else 'inherit' }}">{{ c.old_value or '-' }}</td>
+            <td style="color: {{ '#2ecc71' if c.new_value and not c.old_value else 'inherit' }}">{{ c.new_value or '-' }}</td>
+            <td>{% if c.scrape_run_id %}<a href="/runs/{{ c.scrape_run_id }}">Run #{{ c.scrape_run_id }}</a>{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No changes recorded yet. Changes will appear after the next scrape.</p>
+{% endif %}
+
 <script>
 fetch('/api/prices/{{ listing.id }}/chart')
     .then(r => r.json())

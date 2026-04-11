@@ -314,12 +314,31 @@ class PostgresPipeline:
                 )
 
     def _report_field_changes(
-        self, url: str, changes: list[dict[str, object]]
+        self,
+        url: str,
+        listing_id: int,
+        changes: list[dict[str, object]],
     ) -> None:
+        if not changes:
+            return
+        # Save to listing_changes table
+        from book_scraper.db.models import ListingChange
+
+        assert self.session is not None
+        for change in changes:
+            self.session.add(ListingChange(
+                listing_id=listing_id,
+                scrape_run_id=self._run_id,
+                field=str(change["field"]),
+                old_value=str(change["old"]) if change["old"] is not None else None,
+                new_value=str(change["new"]) if change["new"] is not None else None,
+            ))
+
+        # Also report as validation issues
         vp: ValidationPipeline | None = getattr(
             self.crawler, "validation_pipeline", None
         )
-        if vp is None or not changes:
+        if vp is None:
             return
         for change in changes:
             field = change["field"]
@@ -401,7 +420,7 @@ class PostgresPipeline:
                     adapter["url"], old_price, price,
                 )
                 self._report_field_changes(
-                    adapter["url"], changes,
+                    adapter["url"], listing.id, changes,
                 )
             if price is not None:
                 insert_price(

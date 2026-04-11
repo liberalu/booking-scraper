@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from book_scraper.db.models import (
     DiscoveredUrl,
     Listing,
+    ListingChange,
     Price,
     ScrapeRun,
     Shop,
@@ -449,3 +450,15 @@ def get_shop_field_stats(session: Session, shop_id: int) -> dict:
         )
         fields[field_name] = {"missing": missing, "present": total - missing}
     return {"total": total, "fields": fields}
+
+
+def get_listing_changes(
+    session: Session, listing_id: int, limit: int = 100
+) -> list[ListingChange]:
+    return (
+        session.query(ListingChange)
+        .filter(ListingChange.listing_id == listing_id)
+        .order_by(ListingChange.changed_at.desc())
+        .limit(limit)
+        .all()
+    )

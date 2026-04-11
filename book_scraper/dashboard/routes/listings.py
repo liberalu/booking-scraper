@@ -6,6 +6,7 @@ from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
     get_all_categories,
     get_all_formats,
+    get_listing_changes,
     get_listings_page,
     get_price_history,
 )
@@ -70,6 +71,7 @@ def listing_detail(
     if listing is None:
         return HTMLResponse("Listing not found", status_code=404)
     prices = get_price_history(session, listing_id)
+    changes = get_listing_changes(session, listing_id)
     return templates.TemplateResponse(
         request,
         "listing_detail.html",
@@ -77,5 +79,6 @@ def listing_detail(
             "active_page": "listings",
             "listing": listing,
             "prices": prices,
+            "changes": changes,
         },
     )
