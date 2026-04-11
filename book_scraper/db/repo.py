@@ -46,8 +46,8 @@ def upsert_listing(
     price_original: Decimal | None = None,
     in_stock: bool = True,
     run_id: int | None = None,
-) -> tuple[Listing, bool, Decimal | None]:
-    """Upsert a listing. Returns (listing, created, old_price)."""
+) -> tuple[Listing, bool, Decimal | None, list[dict[str, Any]]]:
+    """Upsert a listing. Returns (listing, created, old_price, changes)."""
     stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
     listing = session.execute(stmt).scalar_one_or_none()
     now = datetime.now(UTC)
@@ -76,32 +76,53 @@ def upsert_listing(
         )
         session.add(listing)
         session.flush()
-        return listing, True, None
+        return listing, True, None, []
     else:
         old_price = listing.price
         listing.last_run_id = run_id
         listing.last_run_action = "updated"
-        listing.title = title
-        listing.author = author
-        # Only update fields if provided (don't overwrite with None from price spider)
-        if sku is not None:
-            listing.sku = sku
-        if isbn is not None:
-            listing.isbn = isbn
-        if publisher is not None:
-            listing.publisher = publisher
-        if year is not None:
-            listing.year = year
-        if format is not None:
-            listing.format = format
-        if description is not None:
-            listing.description = description
-        if image_url is not None:
-            listing.image_url = image_url
+
+        # Track field changes
+        changes: list[dict[str, Any]] = []
+        tracked_fields = {
+            "title": title,
+            "author": author,
+        }
+        # Fields that only update when provided (not None)
+        conditional_fields = {
+            "sku": sku,
+            "isbn": isbn,
+            "publisher": publisher,
+            "year": year,
+            "format": format,
+            "description": description,
+            "image_url": image_url,
+        }
+
+        for field_name, new_val in tracked_fields.items():
+            old_val = getattr(listing, field_name)
+            if old_val != new_val:
+                changes.append({
+                    "field": field_name,
+                    "old": str(old_val) if old_val is not None else None,
+                    "new": str(new_val) if new_val is not None else None,
+                })
+            setattr(listing, field_name, new_val)
+
+        for field_name, new_val in conditional_fields.items():
+            if new_val is not None:
+                old_val = getattr(listing, field_name)
+                if old_val != new_val:
+                    changes.append({
+                        "field": field_name,
+                        "old": str(old_val) if old_val is not None else None,
+                        "new": str(new_val) if new_val is not None else None,
+                    })
+                setattr(listing, field_name, new_val)
+
         if categories is not None:
             listing.categories = categories
         if properties is not None:
-            # Merge with existing properties
             existing = listing.properties or {}
             existing.update(properties)
             listing.properties = existing
@@ -113,7 +134,7 @@ def upsert_listing(
         listing.last_seen_at = now
         listing.is_active = True
         session.flush()
-        return listing, False, old_price
+        return listing, False, old_price, changes
 
 
 def insert_price(

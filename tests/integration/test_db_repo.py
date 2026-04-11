@@ -18,7 +18,7 @@ def test_upsert_shop_returns_existing(db_session):
 
 def test_upsert_listing_creates_new(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing, _, _ = upsert_listing(
+    listing, *_ = upsert_listing(
         db_session,
         shop_id=shop.id,
         url="https://vaga.lt/test-book",
@@ -34,10 +34,10 @@ def test_upsert_listing_creates_new(db_session):
 
 def test_upsert_listing_updates_existing(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing1, _, _ = upsert_listing(
+    listing1, *_ = upsert_listing(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Old"
     )
-    listing2, _, _ = upsert_listing(
+    listing2, *_ = upsert_listing(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="New"
     )
     assert listing1.id == listing2.id
@@ -46,7 +46,7 @@ def test_upsert_listing_updates_existing(db_session):
 
 def test_insert_price(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing, _, _ = upsert_listing(
+    listing, *_ = upsert_listing(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Book"
     )
     price = insert_price(

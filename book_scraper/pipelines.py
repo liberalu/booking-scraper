@@ -313,6 +313,29 @@ class PostgresPipeline:
                     f"{old_price}->{new_price} ({change:.0%})",
                 )
 
+    def _report_field_changes(
+        self, url: str, changes: list[dict[str, object]]
+    ) -> None:
+        vp: ValidationPipeline | None = getattr(
+            self.crawler, "validation_pipeline", None
+        )
+        if vp is None or not changes:
+            return
+        for change in changes:
+            field = change["field"]
+            old = change["old"]
+            new = change["new"]
+            if old is not None and new is None:
+                vp._warn(
+                    "field_cleared", str(field), url,
+                    f"was: {old}",
+                )
+            elif old != new and old is not None:
+                vp._warn(
+                    "field_changed", str(field), url,
+                    f"{old} -> {new}",
+                )
+
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
             assert self.session is not None
@@ -350,7 +373,7 @@ class PostgresPipeline:
                 else None
             )
 
-            listing, created, old_price = upsert_listing(
+            listing, created, old_price, changes = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -377,6 +400,9 @@ class PostgresPipeline:
                 self._check_price_spike(
                     adapter["url"], old_price, price,
                 )
+                self._report_field_changes(
+                    adapter["url"], changes,
+                )
             if price is not None:
                 insert_price(
                     self.session,
@@ -394,7 +420,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing, created, old_price = upsert_listing(
+            listing, created, old_price, _ = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
