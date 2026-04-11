@@ -54,10 +54,29 @@ class ScanSpider(scrapy.Spider):
         self._error_count: int = 0
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
-        # Single-URL mode: skip full scan plan
+        # Single-URL mode: create a run but skip full scan plan
         if self._single_urls:
+            database_url = self.settings.get("DATABASE_URL")
+            session_factory = get_session_factory(database_url)
+            session = session_factory()
+            try:
+                from book_scraper.db.repo import create_scrape_run, upsert_shop
+
+                shop = upsert_shop(
+                    session, self.shop_name, self.conf.shop.base_url
+                )
+                run = create_scrape_run(
+                    session, shop.id, "scan",
+                    urls_total=len(self._single_urls),
+                )
+                session.commit()
+                self._run_id = run.id
+            finally:
+                session.close()
+
             self.logger.info(
-                "Single-URL mode: scraping %d URLs", len(self._single_urls)
+                "Single-URL mode: scraping %d URLs (run #%d)",
+                len(self._single_urls), self._run_id,
             )
             for url in self._single_urls:
                 yield scrapy.Request(
