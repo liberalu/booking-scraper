@@ -26,11 +26,41 @@
     <div>
         <table>
             <tbody>
-                <tr><th>Author</th><td>{{ listing.author or '-' }}</td></tr>
-                <tr><th>Publisher</th><td>{{ listing.publisher or '-' }}</td></tr>
-                <tr><th>ISBN</th><td>{{ listing.isbn or '-' }}</td></tr>
-                <tr><th>Year</th><td>{{ listing.year or '-' }}</td></tr>
-                <tr><th>Format</th><td>{{ listing.format or '-' }}</td></tr>
+                <tr><th>Author</th><td>
+                    {% if listing.author %}
+                        <a href="/listings?q={{ listing.author|urlencode }}">{{ listing.author }}</a>
+                    {% else %}
+                        <a href="/listings?missing=author" class="secondary">missing</a>
+                    {% endif %}
+                </td></tr>
+                <tr><th>Publisher</th><td>
+                    {% if listing.publisher %}
+                        <a href="/listings?q={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
+                    {% else %}
+                        <a href="/listings?missing=publisher" class="secondary">missing</a>
+                    {% endif %}
+                </td></tr>
+                <tr><th>ISBN</th><td>
+                    {% if listing.isbn %}
+                        {{ listing.isbn }}
+                    {% else %}
+                        <a href="/listings?missing=isbn" class="secondary">missing</a>
+                    {% endif %}
+                </td></tr>
+                <tr><th>Year</th><td>
+                    {% if listing.year %}
+                        {{ listing.year }}
+                    {% else %}
+                        <a href="/listings?missing=year" class="secondary">missing</a>
+                    {% endif %}
+                </td></tr>
+                <tr><th>Format</th><td>
+                    {% if listing.format %}
+                        <a href="/listings?format={{ listing.format|urlencode }}">{{ listing.format }}</a>
+                    {% else %}
+                        <a href="/listings?missing=format" class="secondary">missing</a>
+                    {% endif %}
+                </td></tr>
                 <tr><th>Price</th><td>{{ listing.price or '-' }}</td></tr>
                 <tr><th>Original Price</th><td>{{ listing.price_original or '-' }}</td></tr>
                 <tr><th>URL</th><td><a href="{{ listing.url }}" target="_blank" rel="noopener">{{ listing.url[:80] }}{{ '...' if listing.url|length > 80 else '' }}</a></td></tr>
@@ -50,7 +80,7 @@
 <h3>Categories</h3>
 <ul>
     {% for cat in listing.categories[:-1] %}
-    <li>{{ cat }}</li>
+    <li><a href="/listings?category={{ cat|urlencode }}">{{ cat }}</a></li>
     {% endfor %}
 </ul>
 {% endif %}
@@ -63,7 +93,16 @@
     </thead>
     <tbody>
         {% for key, value in listing.properties.items() %}
-        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+        <tr>
+            <td>{{ key }}</td>
+            <td>
+                {% if key == 'cover_type' %}
+                    <a href="/listings?q={{ value|urlencode }}">{{ value }}</a>
+                {% else %}
+                    {{ value }}
+                {% endif %}
+            </td>
+        </tr>
         {% endfor %}
     </tbody>
 </table>
