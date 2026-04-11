@@ -28,14 +28,14 @@
             <tbody>
                 <tr><th>Author</th><td>
                     {% if listing.author %}
-                        <a href="/listings?q={{ listing.author|urlencode }}">{{ listing.author }}</a>
+                        <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
                     {% else %}
                         <a href="/listings?missing=author" class="secondary">missing</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>Publisher</th><td>
                     {% if listing.publisher %}
-                        <a href="/listings?q={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
+                        <a href="/listings?publisher={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
                     {% else %}
                         <a href="/listings?missing=publisher" class="secondary">missing</a>
                     {% endif %}

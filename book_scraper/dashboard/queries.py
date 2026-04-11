@@ -269,6 +269,8 @@ def get_listings_page(
     page: int = 1,
     per_page: int = 50,
     search: str = "",
+    author: str = "",
+    publisher: str = "",
     category: str = "",
     format_filter: str = "",
     missing_field: str = "",
@@ -281,6 +283,10 @@ def get_listings_page(
         query = query.filter(Listing.shop_id == shop_id)
     if search:
         query = query.filter(Listing.title.ilike(f"%{search}%"))
+    if author:
+        query = query.filter(Listing.author.ilike(f"%{author}%"))
+    if publisher:
+        query = query.filter(Listing.publisher.ilike(f"%{publisher}%"))
     if category:
         query = query.filter(Listing.categories.any(category))
     if format_filter:
