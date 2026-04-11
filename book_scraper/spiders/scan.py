@@ -175,9 +175,13 @@ class ScanSpider(scrapy.Spider):
     ) -> Generator[ListingItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
 
+        url = response.url.split("?")[0]
         if 400 <= response.status < 500:
             self._errors_4xx += 1
             self._error_count += 1
+            self._report_validation(
+                "http_4xx", "response", url, str(response.status),
+            )
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=response.status,
@@ -187,6 +191,9 @@ class ScanSpider(scrapy.Spider):
         if 500 <= response.status < 600:
             self._errors_5xx += 1
             self._error_count += 1
+            self._report_validation(
+                "http_5xx", "response", url, str(response.status),
+            )
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=response.status,
@@ -258,14 +265,26 @@ class ScanSpider(scrapy.Spider):
         """Handle request failures (timeouts, connection errors)."""
         request = failure.request
         discovered_url_id = request.meta.get("discovered_url_id")
+        url = str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None
 
         if http_status and 400 <= http_status < 500:
             self._errors_4xx += 1
+            self._report_validation(
+                "http_4xx", "response", url, str(http_status),
+            )
         elif http_status and 500 <= http_status < 600:
             self._errors_5xx += 1
+            self._report_validation(
+                "http_5xx", "response", url, str(http_status),
+            )
+        else:
+            error_type = type(failure.value).__name__
+            self._report_validation(
+                "request_error", "response", url, error_type,
+            )
         self._error_count += 1
 
         self._queue_url_status_update(
