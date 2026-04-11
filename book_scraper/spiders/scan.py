@@ -18,12 +18,19 @@ from book_scraper.spiders.registry import load_parsers
 class ScanSpider(scrapy.Spider):
     name = "scan"
 
-    def __init__(self, shop: str | None = None, rescrape: str = "false", **kwargs: Any):
+    def __init__(
+        self,
+        shop: str | None = None,
+        rescrape: str = "false",
+        urls: str = "",
+        **kwargs: Any,
+    ):
         super().__init__(**kwargs)
         if not shop:
             raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
         self._rescrape = rescrape.lower() in ("true", "1", "yes")
+        self._single_urls = [u.strip() for u in urls.split(",") if u.strip()]
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -47,6 +54,20 @@ class ScanSpider(scrapy.Spider):
         self._error_count: int = 0
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
+        # Single-URL mode: skip full scan plan
+        if self._single_urls:
+            self.logger.info(
+                "Single-URL mode: scraping %d URLs", len(self._single_urls)
+            )
+            for url in self._single_urls:
+                yield scrapy.Request(
+                    url,
+                    callback=self.parse_product,
+                    errback=self.handle_error,
+                    meta={"discovered_url_id": None},
+                )
+            return
+
         database_url = self.settings.get("DATABASE_URL")
         session_factory = get_session_factory(database_url)
         session: Session = session_factory()

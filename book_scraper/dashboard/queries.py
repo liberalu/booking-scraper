@@ -126,14 +126,40 @@ def get_validation_summary(session: Session) -> list[dict]:
 
 def get_validation_by_type(
     session: Session, issue_type: str, limit: int = 100
-) -> list[ValidationIssue]:
-    return (
+) -> list[dict]:
+    """Get validation issues with listing IDs resolved from URL."""
+    issues = (
         session.query(ValidationIssue)
         .filter(ValidationIssue.issue == issue_type)
         .order_by(ValidationIssue.id.desc())
         .limit(limit)
         .all()
     )
+    # Resolve listing IDs by URL
+    urls = {i.url for i in issues}
+    url_to_listing = {}
+    if urls:
+        rows = (
+            session.query(Listing.url, Listing.id, Listing.title)
+            .filter(Listing.url.in_(urls))
+            .all()
+        )
+        url_to_listing = {r.url: {"id": r.id, "title": r.title} for r in rows}
+
+    result = []
+    for issue in issues:
+        listing = url_to_listing.get(issue.url)
+        result.append({
+            "id": issue.id,
+            "url": issue.url,
+            "field": issue.field,
+            "issue": issue.issue,
+            "raw_value": issue.raw_value,
+            "scrape_run_id": issue.scrape_run_id,
+            "listing_id": listing["id"] if listing else None,
+            "listing_title": listing["title"] if listing else None,
+        })
+    return result
 
 
 def search_listings(session: Session, query: str, limit: int = 50) -> list[Listing]:

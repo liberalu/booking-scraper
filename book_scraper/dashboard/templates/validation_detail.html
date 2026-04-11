@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Validation: {{ issue_type }}{% endblock %}
 {% block content %}
-<h1>Validation: {{ issue_type }}</h1>
+<h1>Validation: {{ issue_type }} ({{ issues|length }})</h1>
 <p><a href="/validation">Back to summary</a></p>
 
 {% if issues %}
 <table>
     <thead>
         <tr>
-            <th>URL</th>
+            <th>ID</th>
+            <th>Listing</th>
             <th>Field</th>
             <th>Raw Value</th>
             <th>Run</th>
@@ -17,7 +18,14 @@
     <tbody>
         {% for issue in issues %}
         <tr>
-            <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ issue.url }}</td>
+            <td>{{ issue.id }}</td>
+            <td>
+                {% if issue.listing_id %}
+                    <a href="/listings/{{ issue.listing_id }}">{{ issue.listing_title[:50] }}{{ '...' if issue.listing_title|length > 50 }}</a>
+                {% else %}
+                    <a href="{{ issue.url }}" target="_blank" style="max-width:250px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ issue.url }}</a>
+                {% endif %}
+            </td>
             <td>{{ issue.field }}</td>
             <td>{{ issue.raw_value or '-' }}</td>
             <td><a href="/runs/{{ issue.scrape_run_id }}">Run #{{ issue.scrape_run_id }}</a></td>
