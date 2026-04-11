@@ -34,7 +34,13 @@
             <tr>
                 <td>{{ field_name }}</td>
                 <td>{{ counts.present }}</td>
-                <td>{{ counts.missing }}</td>
+                <td>
+                    {% if counts.missing > 0 %}
+                    <a href="/listings?missing={{ field_name }}">{{ counts.missing }}</a>
+                    {% else %}
+                    0
+                    {% endif %}
+                </td>
                 <td>{{ '%.1f%%'|format(counts.present / field_stats.total * 100) }}</td>
             </tr>
             {% endfor %}
