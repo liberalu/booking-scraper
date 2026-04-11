@@ -30,35 +30,35 @@
                     {% if listing.author %}
                         <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
                     {% else %}
-                        <a href="/listings?missing=author" class="secondary">missing</a>
+                        <a href="/listings?missing=author" class="secondary">-</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>Publisher</th><td>
                     {% if listing.publisher %}
                         <a href="/listings?publisher={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
                     {% else %}
-                        <a href="/listings?missing=publisher" class="secondary">missing</a>
+                        <a href="/listings?missing=publisher" class="secondary">-</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>ISBN</th><td>
                     {% if listing.isbn %}
                         {{ listing.isbn }}
                     {% else %}
-                        <a href="/listings?missing=isbn" class="secondary">missing</a>
+                        <a href="/listings?missing=isbn" class="secondary">-</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>Year</th><td>
                     {% if listing.year %}
                         {{ listing.year }}
                     {% else %}
-                        <a href="/listings?missing=year" class="secondary">missing</a>
+                        <a href="/listings?missing=year" class="secondary">-</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>Format</th><td>
                     {% if listing.format %}
                         <a href="/listings?format={{ listing.format|urlencode }}">{{ listing.format }}</a>
                     {% else %}
-                        <a href="/listings?missing=format" class="secondary">missing</a>
+                        <a href="/listings?missing=format" class="secondary">-</a>
                     {% endif %}
                 </td></tr>
                 <tr><th>Price</th><td>{{ listing.price or '-' }}</td></tr>
