@@ -150,16 +150,18 @@ def get_validation_by_type(
     result = []
     for issue in issues:
         listing = url_to_listing.get(issue.url)
-        result.append({
-            "id": issue.id,
-            "url": issue.url,
-            "field": issue.field,
-            "issue": issue.issue,
-            "raw_value": issue.raw_value,
-            "scrape_run_id": issue.scrape_run_id,
-            "listing_id": listing["id"] if listing else None,
-            "listing_title": listing["title"] if listing else None,
-        })
+        result.append(
+            {
+                "id": issue.id,
+                "url": issue.url,
+                "field": issue.field,
+                "issue": issue.issue,
+                "raw_value": issue.raw_value,
+                "scrape_run_id": issue.scrape_run_id,
+                "listing_id": listing["id"] if listing else None,
+                "listing_title": listing["title"] if listing else None,
+            }
+        )
     return result
 
 
@@ -182,9 +184,12 @@ def get_price_history(session: Session, listing_id: int) -> list[Price]:
     )
 
 
-def get_price_changes(session: Session, days: int = 7) -> list[dict]:
+def get_price_changes(
+    session: Session, days: int = 7, shop_id: int | None = None
+) -> list[dict]:
     cutoff = datetime.utcnow() - timedelta(days=days)
-    sql = text("""
+    shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
+    sql = text(f"""
         WITH ranked AS (
             SELECT
                 p.listing_id,
@@ -194,23 +199,37 @@ def get_price_changes(session: Session, days: int = 7) -> list[dict]:
                     PARTITION BY p.listing_id ORDER BY p.scraped_at
                 ) AS prev_price
             FROM prices p
+            JOIN listings l ON l.id = p.listing_id
             WHERE p.scraped_at >= :cutoff
+            {shop_filter}
+        ),
+        changes AS (
+            SELECT
+                r.listing_id,
+                l.title,
+                r.prev_price,
+                r.price AS new_price,
+                r.price - r.prev_price AS change,
+                r.scraped_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.listing_id, r.prev_price, r.price
+                    ORDER BY r.scraped_at DESC
+                ) AS rn
+            FROM ranked r
+            JOIN listings l ON l.id = r.listing_id
+            WHERE r.prev_price IS NOT NULL
+              AND r.price != r.prev_price
         )
-        SELECT
-            r.listing_id,
-            l.title,
-            r.prev_price,
-            r.price AS new_price,
-            r.price - r.prev_price AS change,
-            r.scraped_at
-        FROM ranked r
-        JOIN listings l ON l.id = r.listing_id
-        WHERE r.prev_price IS NOT NULL
-          AND r.price != r.prev_price
-        ORDER BY ABS(r.price - r.prev_price) DESC
+        SELECT listing_id, title, prev_price, new_price, change, scraped_at
+        FROM changes
+        WHERE rn = 1
+        ORDER BY ABS(change) DESC
         LIMIT 50
     """)
-    rows = session.execute(sql, {"cutoff": cutoff}).mappings().all()
+    params: dict = {"cutoff": cutoff}
+    if shop_id:
+        params["shop_id"] = shop_id
+    rows = session.execute(sql, params).mappings().all()
     return [dict(r) for r in rows]
 
 
