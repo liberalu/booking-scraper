@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
-from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
@@ -10,6 +9,7 @@ from book_scraper.dashboard.queries import (
     get_listing_changes,
     get_listings_page,
     get_price_history,
+    get_shop_by_name,
 )
 from book_scraper.db.models import Listing
 
@@ -26,8 +26,15 @@ def listings_page(
     category: str = "",
     format: str = "",
     missing: str = "",
+    active: str = "",
+    has_isbn: bool = False,
+    shop: str = "",
+    sort: str = "",
+    order: str = "desc",
     session: Session = Depends(get_db),
-) -> Response:
+) -> HTMLResponse:
+    shop_obj = get_shop_by_name(session, shop) if shop else None
+    shop_id = shop_obj.id if shop_obj else None
     listings, total = get_listings_page(
         session,
         page=page,
@@ -37,6 +44,11 @@ def listings_page(
         category=category,
         format_filter=format,
         missing_field=missing,
+        shop_id=shop_id,
+        active_filter=active,
+        has_isbn=has_isbn,
+        sort_by=sort,
+        sort_order=order,
     )
     categories = get_all_categories(session)
     formats = get_all_formats(session)
@@ -56,6 +68,11 @@ def listings_page(
             "category": category,
             "format_filter": format,
             "missing": missing,
+            "active_filter": active,
+            "has_isbn": has_isbn,
+            "shop_filter": shop,
+            "sort": sort,
+            "order": order,
             "categories": categories,
             "formats": formats,
         },
@@ -67,7 +84,7 @@ def listing_detail(
     listing_id: int,
     request: Request,
     session: Session = Depends(get_db),
-) -> Response:
+) -> HTMLResponse:
     listing = session.get(Listing, listing_id)
     if listing is None:
         return HTMLResponse("Listing not found", status_code=404)

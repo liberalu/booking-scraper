@@ -4,22 +4,22 @@
 <h1>Overview</h1>
 
 <div class="stat-grid">
-    <div class="stat-card">
+    <a href="/listings" class="stat-card" style="text-decoration:none; color:inherit;">
         <h2>{{ stats.total_listings }}</h2>
         <small>Total Listings</small>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/listings?active=true" class="stat-card" style="text-decoration:none; color:inherit;">
         <h2>{{ stats.active_listings }}</h2>
         <small>Active Listings</small>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/listings?has_isbn=true" class="stat-card" style="text-decoration:none; color:inherit;">
         <h2>{{ stats.with_isbn }}</h2>
         <small>With ISBN</small>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="/prices" class="stat-card" style="text-decoration:none; color:inherit;">
         <h2>{{ stats.total_prices }}</h2>
         <small>Price Records</small>
-    </div>
+    </a>
 </div>
 
 <h2>Recent Runs</h2>
@@ -31,6 +31,7 @@
             <th>Status</th>
             <th>Started</th>
             <th>Items Added</th>
+            <th>Updated</th>
             <th>Errors</th>
         </tr>
     </thead>
@@ -41,8 +42,9 @@
             <td>{{ run.phase }}</td>
             <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
             <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
-            <td>{{ run.items_added }}</td>
-            <td>{{ run.error_count }}</td>
+            <td><a href="/runs/{{ run.id }}">{{ run.items_added }}</a></td>
+            <td><a href="/runs/{{ run.id }}">{{ run.items_updated }}</a></td>
+            <td><a href="/runs/{{ run.id }}">{{ run.error_count }}</a></td>
         </tr>
         {% endfor %}
     </tbody>

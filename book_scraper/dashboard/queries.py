@@ -301,6 +301,17 @@ def get_inventory_stats(session: Session) -> dict[str, Any]:
     }
 
 
+SORT_COLUMNS = {
+    "id": Listing.id,
+    "title": Listing.title,
+    "author": Listing.author,
+    "isbn": Listing.isbn,
+    "price": Listing.price,
+    "year": Listing.year,
+    "is_active": Listing.is_active,
+}
+
+
 def get_listings_page(
     session: Session,
     page: int = 1,
@@ -312,6 +323,10 @@ def get_listings_page(
     format_filter: str = "",
     missing_field: str = "",
     shop_id: int | None = None,
+    active_filter: str = "",
+    has_isbn: bool = False,
+    sort_by: str = "",
+    sort_order: str = "asc",
 ) -> tuple[list[Listing], int]:
     """Return paginated listings with filters. Returns (listings, total_count)."""
     query = session.query(Listing).options(joinedload(Listing.shop))
@@ -348,14 +363,20 @@ def get_listings_page(
             col = getattr(Listing, missing_field, None)
             if col is not None:
                 query = query.filter(col.is_(None))
+    if active_filter == "true":
+        query = query.filter(Listing.is_active.is_(True))
+    elif active_filter == "false":
+        query = query.filter(Listing.is_active.is_(False))
+    if has_isbn:
+        query = query.filter(Listing.isbn.isnot(None))
 
     total = query.count()
-    listings = (
-        query.order_by(Listing.last_seen_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
+    order_col = SORT_COLUMNS.get(sort_by, Listing.last_seen_at)
+    if sort_order == "asc":
+        query = query.order_by(order_col.asc().nulls_last())
+    else:
+        query = query.order_by(order_col.desc().nulls_last())
+    listings = query.offset((page - 1) * per_page).limit(per_page).all()
     return listings, total
 
 

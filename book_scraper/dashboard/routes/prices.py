@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
-from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
@@ -22,7 +21,7 @@ def prices_page(
     sort: str = "",
     order: str = "desc",
     session: Session = Depends(get_db),
-) -> Response:
+) -> HTMLResponse:
     listings = search_listings(session, q) if q else []
     shop_id = None
     if shop:
