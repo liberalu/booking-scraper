@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import sort_header %}
 {% block title %}{{ shop.name }} - Book Scraper{% endblock %}
 {% block content %}
 <style>
@@ -12,118 +13,139 @@
 
 <div class="stat-grid">
     <article class="stat-card"><h2>{{ stats.discovered_urls }}</h2><small>Discovered URLs</small></article>
-    <article class="stat-card"><h2>{{ stats.listings }}</h2><small>Listings</small></article>
-    <article class="stat-card"><h2>{{ stats.active }}</h2><small>Active</small></article>
-    <article class="stat-card"><h2>{{ stats.prices }}</h2><small>Price Records</small></article>
+    <a href="/listings?shop={{ shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
+        <h2>{{ stats.listings }}</h2><small>Listings</small>
+    </a>
+    <a href="/listings?shop={{ shop.name }}&active=true" class="stat-card" style="text-decoration:none; color:inherit;">
+        <h2>{{ stats.active }}</h2><small>Active</small>
+    </a>
+    <a href="/prices?shop={{ shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
+        <h2>{{ stats.prices }}</h2><small>Price Records</small>
+    </a>
+    <a href="/shops/{{ shop.name }}/not-listed" class="stat-card" style="text-decoration:none; color:inherit;">
+        <h2>{{ not_listed_count }}</h2><small>Not Listed</small>
+    </a>
 </div>
 
-{% if field_stats and field_stats.total > 0 %}
-<article>
-    <h3>Data Completeness</h3>
-    <table>
+<div class="tab-bar">
+    <button class="active" onclick="switchTab('runs', this)">Runs</button>
+    <button onclick="switchTab('data', this)">Data</button>
+</div>
+
+<div id="tab-runs" class="tab-content active">
+    <article>
+        <h3>Run Commands</h3>
+        <div class="actions">
+            <button hx-post="/shops/{{ shop.name }}/run?phase=discover_sitemap" hx-target="#run-result" hx-swap="innerHTML">Discover (Sitemap)</button>
+            <button hx-post="/shops/{{ shop.name }}/run?phase=discover_categories" hx-target="#run-result" hx-swap="innerHTML">Discover (Categories)</button>
+            <button hx-post="/shops/{{ shop.name }}/run?phase=scan" hx-target="#run-result" hx-swap="innerHTML">Scan</button>
+            <button class="secondary" hx-post="/shops/{{ shop.name }}/run?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
+        </div>
+        <div id="run-result" style="margin-top: 0.5rem;"></div>
+    </article>
+
+    <h2>Recent Runs</h2>
+    <div hx-get="/shops/{{ shop.name }}?sort={{ sort }}&order={{ order }}" hx-trigger="every 10s" hx-select="#runs-table" hx-target="#runs-table" hx-swap="outerHTML">
+    <table id="runs-table">
         <thead>
             <tr>
-                <th>Field</th>
-                <th>Present</th>
-                <th>Missing</th>
-                <th>% Complete</th>
+                <th>{{ sort_header('id', 'ID', sort, order) }}</th>
+                <th>Phase</th>
+                <th>Status</th>
+                <th>Health</th>
+                <th>{{ sort_header('started_at', 'Started', sort, order) }}</th>
+                <th>Duration</th>
+                <th>Progress</th>
+                <th>{{ sort_header('items_added', 'Added', sort, order) }}</th>
+                <th>{{ sort_header('items_updated', 'Updated', sort, order) }}</th>
+                <th>{{ sort_header('error_count', 'Errors', sort, order) }}</th>
             </tr>
         </thead>
         <tbody>
-            {% for field_name, counts in field_stats.fields.items() %}
+            {% for run in runs %}
             <tr>
-                <td>{{ field_name }}</td>
-                <td>{{ counts.present }}</td>
+                <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+                <td>{{ run.phase }}</td>
+                <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
                 <td>
-                    {% if counts.missing > 0 %}
-                    <a href="/listings?missing={{ field_name }}">{{ counts.missing }}</a>
-                    {% else %}
-                    0
+                    {% set health = run_health.get(run.id, '') %}
+                    {% if health == 'healthy' %}
+                        <span class="health-healthy">&#9679; active</span>
+                    {% elif health == 'stale' %}
+                        <span class="health-stale">&#9679; stale</span>
+                    {% elif health == 'dead' %}
+                        <span class="health-dead">&#9679; dead</span>
                     {% endif %}
                 </td>
-                <td>{{ '%.1f%%'|format(counts.present / field_stats.total * 100) }}</td>
+                <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
+                <td>
+                    {% if run.finished_at and run.started_at %}
+                        {{ (run.finished_at - run.started_at) }}
+                    {% elif run.status == 'running' %}
+                        running...
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if run.urls_total %}
+                        {{ run.urls_processed }}/{{ run.urls_total }}
+                    {% elif run.urls_processed %}
+                        {{ run.urls_processed }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td><a href="/runs/{{ run.id }}">{{ run.items_added }}</a></td>
+                <td><a href="/runs/{{ run.id }}">{{ run.items_updated }}</a></td>
+                <td><a href="/runs/{{ run.id }}">{{ run.error_count }}</a></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-</article>
-{% endif %}
-
-<article>
-    <h3>Run Commands</h3>
-    <div class="actions">
-        <button hx-post="/shops/{{ shop.name }}/run?phase=discover_sitemap" hx-target="#run-result" hx-swap="innerHTML">Discover (Sitemap)</button>
-        <button hx-post="/shops/{{ shop.name }}/run?phase=discover_categories" hx-target="#run-result" hx-swap="innerHTML">Discover (Categories)</button>
-        <button hx-post="/shops/{{ shop.name }}/run?phase=scan" hx-target="#run-result" hx-swap="innerHTML">Scan</button>
-        <button class="secondary" hx-post="/shops/{{ shop.name }}/run?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
     </div>
-    <div id="run-result" style="margin-top: 0.5rem;"></div>
-    <hr>
-    <h4>Scrape Single URL</h4>
-    <form hx-post="/shops/{{ shop.name }}/scrape-url" hx-target="#run-result" hx-swap="innerHTML" style="display: flex; gap: 0.5rem;">
-        <input type="text" name="url" placeholder="https://vaga.lt/product-url" style="flex: 1;">
-        <button type="submit">Scrape</button>
-    </form>
-</article>
-
-<h2>Recent Runs</h2>
-<div hx-get="/shops/{{ shop.name }}" hx-trigger="every 10s" hx-select="table" hx-target="table" hx-swap="outerHTML">
-<table>
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Phase</th>
-            <th>Status</th>
-            <th>Health</th>
-            <th>Started</th>
-            <th>Duration</th>
-            <th>Progress</th>
-            <th>Added</th>
-            <th>Updated</th>
-            <th>Errors</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for run in runs %}
-        <tr>
-            <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
-            <td>{{ run.phase }}</td>
-            <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
-            <td>
-                {% set health = run_health.get(run.id, '') %}
-                {% if health == 'healthy' %}
-                    <span class="health-healthy">&#9679; active</span>
-                {% elif health == 'stale' %}
-                    <span class="health-stale">&#9679; stale</span>
-                {% elif health == 'dead' %}
-                    <span class="health-dead">&#9679; dead</span>
-                {% endif %}
-            </td>
-            <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
-            <td>
-                {% if run.finished_at and run.started_at %}
-                    {{ (run.finished_at - run.started_at) }}
-                {% elif run.status == 'running' %}
-                    running...
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-            <td>
-                {% if run.urls_total %}
-                    {{ run.urls_processed }}/{{ run.urls_total }}
-                {% elif run.urls_processed %}
-                    {{ run.urls_processed }}
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-            <td>{{ run.items_added }}</td>
-            <td>{{ run.items_updated }}</td>
-            <td>{{ run.error_count }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
 </div>
+
+<div id="tab-data" class="tab-content">
+    {% if field_stats and field_stats.total > 0 %}
+    <article>
+        <h3>Data Completeness</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Present</th>
+                    <th>Missing</th>
+                    <th>% Complete</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for field_name, counts in field_stats.fields.items() %}
+                <tr>
+                    <td>{{ field_name }}</td>
+                    <td>{{ counts.present }}</td>
+                    <td>
+                        {% if counts.missing > 0 %}
+                        <a href="/listings?shop={{ shop.name }}&missing={{ field_name }}">{{ counts.missing }}</a>
+                        {% else %}
+                        0
+                        {% endif %}
+                    </td>
+                    <td>{{ '%.1f%%'|format(counts.present / field_stats.total * 100) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+    {% endif %}
+</div>
+
+<script>
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    btn.classList.add('active');
+}
+</script>
 {% endblock %}

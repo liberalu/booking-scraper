@@ -88,11 +88,27 @@ def get_overview_stats(session: Session) -> dict:
     }
 
 
-def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
+def get_recent_runs(
+    session: Session,
+    limit: int = 20,
+    sort_by: str = "",
+    sort_order: str = "desc",
+) -> list[ScrapeRun]:
+    sort_columns = {
+        "id": ScrapeRun.id,
+        "phase": ScrapeRun.phase,
+        "status": ScrapeRun.status,
+        "started_at": ScrapeRun.started_at,
+        "items_added": ScrapeRun.items_added,
+        "items_updated": ScrapeRun.items_updated,
+        "error_count": ScrapeRun.error_count,
+    }
+    order_col = sort_columns.get(sort_by, ScrapeRun.started_at)
+    order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
     return (
         session.query(ScrapeRun)
         .options(joinedload(ScrapeRun.shop))
-        .order_by(ScrapeRun.started_at.desc())
+        .order_by(order_expr)
         .limit(limit)
         .all()
     )
@@ -413,11 +429,28 @@ def get_shop_stats(session: Session, shop_id: int) -> dict:
     }
 
 
-def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[ScrapeRun]:
+def get_shop_runs(
+    session: Session,
+    shop_id: int,
+    limit: int = 50,
+    sort_by: str = "",
+    sort_order: str = "desc",
+) -> list[ScrapeRun]:
+    sort_columns = {
+        "id": ScrapeRun.id,
+        "phase": ScrapeRun.phase,
+        "status": ScrapeRun.status,
+        "started_at": ScrapeRun.started_at,
+        "items_added": ScrapeRun.items_added,
+        "items_updated": ScrapeRun.items_updated,
+        "error_count": ScrapeRun.error_count,
+    }
+    order_col = sort_columns.get(sort_by, ScrapeRun.started_at)
+    order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
     return (
         session.query(ScrapeRun)
         .filter(ScrapeRun.shop_id == shop_id)
-        .order_by(ScrapeRun.started_at.desc())
+        .order_by(order_expr)
         .limit(limit)
         .all()
     )
@@ -481,3 +514,64 @@ def get_listing_changes(
         .limit(limit)
         .all()
     )
+
+
+def get_not_listed_count(session: Session, shop_id: int) -> int:
+    """Count discovered URLs that have no matching listing."""
+    sql = text("""
+        SELECT COUNT(*)
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+    """)
+    return session.execute(sql, {"shop_id": shop_id}).scalar() or 0
+
+
+def get_not_listed_urls(
+    session: Session,
+    shop_id: int,
+    page: int = 1,
+    per_page: int = 50,
+    sort_by: str = "",
+    sort_order: str = "desc",
+) -> tuple[list[dict], int]:
+    """Get discovered URLs that have no matching listing, paginated."""
+    count_sql = text("""
+        SELECT COUNT(*)
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+    """)
+    total = session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
+
+    sort_col = "du.discovered_at"
+    if sort_by == "url":
+        sort_col = "du.url"
+    direction = "ASC" if sort_order == "asc" else "DESC"
+
+    data_sql = text(f"""
+        SELECT du.url, du.discovered_at, du.source, du.url_type
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+        ORDER BY {sort_col} {direction}
+        OFFSET :offset LIMIT :limit
+    """)
+    rows = (
+        session.execute(
+            data_sql,
+            {"shop_id": shop_id, "offset": (page - 1) * per_page, "limit": per_page},
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows], total
