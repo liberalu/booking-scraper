@@ -557,6 +557,21 @@ a.stat-card:hover {
     font-size: 0.8rem;
     color: var(--badge-error-fg);
     margin-top: 0.2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.validation-inline-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.validation-inline-item:hover {
+    color: var(--link);
 }
 
 /* ── Health Indicators ────────────────────────────────────── */

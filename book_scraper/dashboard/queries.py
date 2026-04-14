@@ -485,3 +485,23 @@ def get_listing_changes(
         .limit(limit)
         .all()
     )
+
+
+def get_data_completeness(session: Session) -> list[dict]:
+    """Get field completeness percentages for the overview page."""
+    total = session.query(func.count(Listing.id)).scalar() or 0
+    if total == 0:
+        return []
+    fields = ["author", "isbn", "publisher", "year", "format"]
+    result = []
+    for field_name in fields:
+        col = getattr(Listing, field_name)
+        present = (
+            session.query(func.count(Listing.id))
+            .filter(col.isnot(None))
+            .scalar()
+            or 0
+        )
+        pct = round(present / total * 100, 1) if total > 0 else 0
+        result.append({"field": field_name, "present": present, "total": total, "pct": pct})
+    return result
