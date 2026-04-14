@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Validation{% endblock %}
 {% block content %}
-<h1>Validation Issues</h1>
+<h1 class="page-title">Validation Issues</h1>
 
 {% if summary %}
-<table>
-    <thead>
-        <tr>
-            <th>Issue Type</th>
-            <th>Count</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for s in summary %}
-        <tr>
-            <td><a href="/validation/{{ s.issue_type }}">{{ s.issue_type }}</a></td>
-            <td>{{ s.count }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Issue Type</th>
+                <th class="text-right">Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in summary %}
+            <tr>
+                <td><a href="/validation/{{ s.issue_type }}">{{ s.issue_type }}</a></td>
+                <td class="text-right"><span class="badge badge-warning">{{ s.count }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% else %}
 <p>No validation issues found.</p>
 {% endif %}
