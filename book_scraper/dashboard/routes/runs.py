@@ -55,9 +55,14 @@ PHASE_COMMANDS: dict[str, list[str]] = {
 
 
 @router.get("/runs")
-def runs_list(request: Request, session: Session = Depends(get_db)):
+def runs_list(
+    request: Request,
+    sort: str = "",
+    order: str = "desc",
+    session: Session = Depends(get_db),
+):
     mark_stale_runs(session)
-    recent_runs = get_recent_runs(session, limit=20)
+    recent_runs = get_recent_runs(session, limit=50, sort_by=sort, sort_order=order)
     run_health = {run.id: get_run_health(run) for run in recent_runs}
     return templates.TemplateResponse(
         request,
@@ -66,6 +71,8 @@ def runs_list(request: Request, session: Session = Depends(get_db)):
             "active_page": "runs",
             "runs": recent_runs,
             "run_health": run_health,
+            "sort": sort,
+            "order": order,
         },
     )
 
