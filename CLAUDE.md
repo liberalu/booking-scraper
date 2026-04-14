@@ -81,6 +81,13 @@ Tests are split into `tests/unit/` (fast, no DB) and `tests/integration/` (real 
 - Scrapy boilerplate (`settings.py`, `middlewares.py`, lifecycle methods) marked `# pragma: no cover`
 - HTML fixtures in `tests/fixtures/` shared by parser and spider tests
 
+## Post-Task Checklist
+
+After completing any task that changes code, suggest to the user:
+
+1. `docker compose build dashboard && docker compose up -d dashboard` — rebuild and restart
+2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes
+
 ## Code Conventions
 
 - Python 3.12+, strict mypy
