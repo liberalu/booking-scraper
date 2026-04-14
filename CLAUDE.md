@@ -25,14 +25,19 @@ uv run mypy book_scraper/                     # Type check
 make audit                                    # Check for vulnerable dependencies
 make deps                                     # Check for unused/missing dependencies
 uv run pre-commit run --all-files             # Run pre-commit hooks
+docker compose build dashboard                # Rebuild dashboard image
+docker compose up -d dashboard                # Restart dashboard container
+uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after deploy
 ```
 
 ## Architecture
 
 - **Framework:** Scrapy with asyncio reactor
 - **DB:** PostgreSQL via SQLAlchemy 2.0, migrations via Alembic
+- **Dashboard:** FastAPI + Jinja2 + Pico CSS, served via Docker at `http://localhost:8000`
 - **Config:** TOML files in `config/` (global defaults + per-shop overrides)
 - **Package manager:** uv
+- **Deployment:** Everything runs in Docker via `docker-compose.yml`. Rebuild + restart to see changes.
 
 ### Pipeline Phases
 
@@ -90,5 +95,7 @@ Tests are split into `tests/unit/` (fast, no DB) and `tests/integration/` (real 
 - Implementation plan: `docs/superpowers/plans/2026-04-05-book-scraper-plan.md`
 - Fault tolerance spec: `docs/superpowers/specs/2026-04-06-fault-tolerance-design.md`
 - Fault tolerance plan: `docs/superpowers/plans/2026-04-06-fault-tolerance-plan.md`
+- Dashboard redesign spec: `docs/superpowers/specs/2026-04-14-dashboard-redesign-design.md`
+- Dashboard redesign plan: `docs/superpowers/plans/2026-04-14-dashboard-redesign-plan.md`
 - vaga.lt strategy: Notion page "vaga.lt scraping strategy"
 - Architecture: Notion page "Scraping Strategy & Architecture"
