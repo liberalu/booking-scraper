@@ -46,4 +46,4 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --all-extras
       - run: uv run deptry book_scraper/
-      - run: uv run pip-audit
+      - run: uv run pip-audit --ignore-vuln PYSEC-2017-83

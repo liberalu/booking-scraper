@@ -89,7 +89,7 @@ def upsert_listing(
             "author": author,
         }
         # Fields that only update when provided (not None)
-        conditional_fields = {
+        conditional_fields: dict[str, str | int | None] = {
             "sku": sku,
             "isbn": isbn,
             "publisher": publisher,
@@ -102,23 +102,27 @@ def upsert_listing(
         for field_name, new_val in tracked_fields.items():
             old_val = getattr(listing, field_name)
             if old_val != new_val:
-                changes.append({
-                    "field": field_name,
-                    "old": str(old_val) if old_val is not None else None,
-                    "new": str(new_val) if new_val is not None else None,
-                })
-            setattr(listing, field_name, new_val)
-
-        for field_name, new_val in conditional_fields.items():
-            if new_val is not None:
-                old_val = getattr(listing, field_name)
-                if old_val != new_val:
-                    changes.append({
+                changes.append(
+                    {
                         "field": field_name,
                         "old": str(old_val) if old_val is not None else None,
                         "new": str(new_val) if new_val is not None else None,
-                    })
-                setattr(listing, field_name, new_val)
+                    }
+                )
+            setattr(listing, field_name, new_val)
+
+        for cond_field, cond_val in conditional_fields.items():
+            if cond_val is not None:
+                old_val = getattr(listing, cond_field)
+                if old_val != cond_val:
+                    changes.append(
+                        {
+                            "field": cond_field,
+                            "old": str(old_val) if old_val is not None else None,
+                            "new": str(cond_val) if cond_val is not None else None,
+                        }
+                    )
+                setattr(listing, cond_field, cond_val)
 
         if categories is not None:
             listing.categories = categories

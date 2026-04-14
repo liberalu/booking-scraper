@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
@@ -67,7 +68,7 @@ def mark_stale_runs(session: Session) -> int:
     return marked
 
 
-def get_overview_stats(session: Session) -> dict:
+def get_overview_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(Listing.id)).scalar() or 0
     active = (
         session.query(func.count(Listing.id))
@@ -128,7 +129,7 @@ def get_run_detail(
     return run, issues
 
 
-def get_validation_summary(session: Session) -> list[dict]:
+def get_validation_summary(session: Session) -> list[dict[str, Any]]:
     rows = (
         session.query(
             ValidationIssue.issue,
@@ -143,7 +144,7 @@ def get_validation_summary(session: Session) -> list[dict]:
 
 def get_validation_by_type(
     session: Session, issue_type: str, limit: int = 100
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get validation issues with listing IDs resolved from URL."""
     issues = (
         session.query(ValidationIssue)
@@ -202,7 +203,7 @@ def get_price_history(session: Session, listing_id: int) -> list[Price]:
 
 def get_price_changes(
     session: Session, days: int = 7, shop_id: int | None = None
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     cutoff = datetime.utcnow() - timedelta(days=days)
     shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
     sql = text(f"""
@@ -242,14 +243,14 @@ def get_price_changes(
         ORDER BY ABS(change) DESC
         LIMIT 50
     """)
-    params: dict = {"cutoff": cutoff}
+    params: dict[str, Any] = {"cutoff": cutoff}
     if shop_id:
         params["shop_id"] = shop_id
     rows = session.execute(sql, params).mappings().all()
     return [dict(r) for r in rows]
 
 
-def get_inventory_stats(session: Session) -> dict:
+def get_inventory_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(Listing.id)).scalar() or 0
     active = (
         session.query(func.count(Listing.id))
@@ -324,7 +325,7 @@ def get_listings_page(
     if publisher:
         query = query.filter(Listing.publisher.ilike(f"%{publisher}%"))
     if category:
-        query = query.filter(Listing.categories.any(category))
+        query = query.filter(Listing.categories.contains([category]))
     if format_filter:
         if format_filter == "none":
             query = query.filter(Listing.format.is_(None))
@@ -395,7 +396,7 @@ def get_shop_by_name(session: Session, name: str) -> Shop | None:
     return session.query(Shop).filter(Shop.name == name).first()
 
 
-def get_shop_stats(session: Session, shop_id: int) -> dict:
+def get_shop_stats(session: Session, shop_id: int) -> dict[str, Any]:
     listings = (
         session.query(func.count(Listing.id))
         .filter(Listing.shop_id == shop_id)
@@ -475,7 +476,7 @@ def get_run_listings(
     return created, updated
 
 
-def get_shop_field_stats(session: Session, shop_id: int) -> dict:
+def get_shop_field_stats(session: Session, shop_id: int) -> dict[str, Any]:
     """Get per-field completeness stats for a shop."""
     total = (
         session.query(func.count(Listing.id))
@@ -537,7 +538,7 @@ def get_not_listed_urls(
     per_page: int = 50,
     sort_by: str = "",
     sort_order: str = "desc",
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Get discovered URLs that have no matching listing, paginated."""
     count_sql = text("""
         SELECT COUNT(*)

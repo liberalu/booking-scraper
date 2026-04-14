@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
@@ -11,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/validation")
-def validation_list(request: Request, session: Session = Depends(get_db)):
+def validation_list(request: Request, session: Session = Depends(get_db)) -> Response:
     summary = get_validation_summary(session)
     return templates.TemplateResponse(
         request,
@@ -28,7 +29,7 @@ def validation_detail(
     issue_type: str,
     request: Request,
     session: Session = Depends(get_db),
-):
+) -> Response:
     issues = get_validation_by_type(session, issue_type, limit=100)
     return templates.TemplateResponse(
         request,

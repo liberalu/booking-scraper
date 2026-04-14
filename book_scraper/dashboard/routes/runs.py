@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
@@ -60,7 +61,7 @@ def runs_list(
     sort: str = "",
     order: str = "desc",
     session: Session = Depends(get_db),
-):
+) -> Response:
     mark_stale_runs(session)
     recent_runs = get_recent_runs(session, limit=50, sort_by=sort, sort_order=order)
     run_health = {run.id: get_run_health(run) for run in recent_runs}
@@ -78,7 +79,9 @@ def runs_list(
 
 
 @router.get("/runs/{run_id}")
-def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)):
+def run_detail(
+    run_id: int, request: Request, session: Session = Depends(get_db)
+) -> Response:
     run, issues = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
@@ -99,7 +102,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
 
 
 @router.get("/api/runs/{run_id}/status")
-def run_status(run_id: int, session: Session = Depends(get_db)):
+def run_status(run_id: int, session: Session = Depends(get_db)) -> JSONResponse:
     """Live status check for a run — used by HTMX polling."""
     run, _ = get_run_detail(session, run_id)
     if run is None:
@@ -133,7 +136,7 @@ def run_status(run_id: int, session: Session = Depends(get_db)):
 
 
 @router.post("/runs/trigger")
-def trigger_run(request: Request, phase: str = "scan"):
+def trigger_run(request: Request, phase: str = "scan") -> HTMLResponse:
     cmd = PHASE_COMMANDS.get(phase)
     if not cmd:
         return HTMLResponse(
@@ -174,7 +177,7 @@ def trigger_run(request: Request, phase: str = "scan"):
 
 
 @router.post("/runs/{run_id}/kill")
-def kill_run(run_id: int, session: Session = Depends(get_db)):
+def kill_run(run_id: int, session: Session = Depends(get_db)) -> HTMLResponse:
     run, _ = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)

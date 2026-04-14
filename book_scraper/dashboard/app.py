@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from book_scraper.dashboard.routes import (
     inventory,
     listings,
-    logs,
     overview,
     prices,
     runs,
@@ -20,4 +19,3 @@ app.include_router(runs.router)
 app.include_router(validation.router)
 app.include_router(prices.router)
 app.include_router(inventory.router)
-app.include_router(logs.router)

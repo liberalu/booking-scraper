@@ -62,11 +62,11 @@ class ScanSpider(scrapy.Spider):
             try:
                 from book_scraper.db.repo import create_scrape_run, upsert_shop
 
-                shop = upsert_shop(
-                    session, self.shop_name, self.conf.shop.base_url
-                )
+                shop = upsert_shop(session, self.shop_name, self.conf.shop.base_url)
                 run = create_scrape_run(
-                    session, shop.id, "scan",
+                    session,
+                    shop.id,
+                    "scan",
                     urls_total=len(self._single_urls),
                 )
                 session.commit()
@@ -76,7 +76,8 @@ class ScanSpider(scrapy.Spider):
 
             self.logger.info(
                 "Single-URL mode: scraping %d URLs (run #%d)",
-                len(self._single_urls), self._run_id,
+                len(self._single_urls),
+                self._run_id,
             )
             for url in self._single_urls:
                 yield scrapy.Request(
@@ -89,7 +90,7 @@ class ScanSpider(scrapy.Spider):
 
         database_url = self.settings.get("DATABASE_URL")
         session_factory = get_session_factory(database_url)
-        session: Session = session_factory()
+        session = session_factory()
 
         try:
             service = ScanService(session)
@@ -131,12 +132,11 @@ class ScanSpider(scrapy.Spider):
 
                     # Log previous batch timing and memory
                     batch_elapsed = time.monotonic() - prev_batch_start
-                    mem_mb = resource.getrusage(
-                        resource.RUSAGE_SELF
-                    ).ru_maxrss / (1024 * 1024)
+                    mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (
+                        1024 * 1024
+                    )
                     self.logger.info(
-                        "Batch %d/%d completed in %.1fs "
-                        "(memory: %.0fMB)",
+                        "Batch %d/%d completed in %.1fs (memory: %.0fMB)",
                         batch_num,
                         num_batches,
                         batch_elapsed,
@@ -180,7 +180,10 @@ class ScanSpider(scrapy.Spider):
             self._errors_4xx += 1
             self._error_count += 1
             self._report_validation(
-                "http_4xx", "response", url, str(response.status),
+                "http_4xx",
+                "response",
+                url,
+                str(response.status),
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -192,7 +195,10 @@ class ScanSpider(scrapy.Spider):
             self._errors_5xx += 1
             self._error_count += 1
             self._report_validation(
-                "http_5xx", "response", url, str(response.status),
+                "http_5xx",
+                "response",
+                url,
+                str(response.status),
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -205,7 +211,9 @@ class ScanSpider(scrapy.Spider):
         url = response.url.split("?")[0]
         if len(response.text) < 1024:
             self._report_validation(
-                "empty_response", "response", url,
+                "empty_response",
+                "response",
+                url,
                 f"len={len(response.text)}",
             )
         request_url = response.request.url.split("?")[0] if response.request else url
@@ -216,7 +224,9 @@ class ScanSpider(scrapy.Spider):
             path = final_url.replace(base, "")
             if path in ("", "/") or path.count("/") == 1:
                 self._report_validation(
-                    "redirect_to_homepage", "url", request_url,
+                    "redirect_to_homepage",
+                    "url",
+                    request_url,
                     f"redirected to {final_url}",
                 )
 
@@ -273,17 +283,26 @@ class ScanSpider(scrapy.Spider):
         if http_status and 400 <= http_status < 500:
             self._errors_4xx += 1
             self._report_validation(
-                "http_4xx", "response", url, str(http_status),
+                "http_4xx",
+                "response",
+                url,
+                str(http_status),
             )
         elif http_status and 500 <= http_status < 600:
             self._errors_5xx += 1
             self._report_validation(
-                "http_5xx", "response", url, str(http_status),
+                "http_5xx",
+                "response",
+                url,
+                str(http_status),
             )
         else:
             error_type = type(failure.value).__name__
             self._report_validation(
-                "request_error", "response", url, error_type,
+                "request_error",
+                "response",
+                url,
+                error_type,
             )
         self._error_count += 1
 
@@ -308,7 +327,10 @@ class ScanSpider(scrapy.Spider):
         else:
             self.logger.warning(
                 "Validation [%s] field=%s url=%s %s",
-                issue, field, url, raw_value,
+                issue,
+                field,
+                url,
+                raw_value,
             )
 
     def _queue_url_status_update(
