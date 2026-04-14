@@ -7,7 +7,7 @@
 <article>
     <h3><a href="/shops/{{ item.shop.name }}">{{ item.shop.name }}</a> <small>{{ item.shop.base_url }}</small></h3>
     <div class="stat-grid">
-        <div class="stat-card"><h2>{{ item.stats.discovered_urls }}</h2><small>Discovered URLs</small></div>
+        <a href="/shops/{{ item.shop.name }}/not-listed" class="stat-card" style="text-decoration:none; color:inherit;"><h2>{{ item.stats.discovered_urls }}</h2><small>Discovered URLs</small></a>
         <a href="/listings?shop={{ item.shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
             <h2>{{ item.stats.listings }}</h2><small>Listings</small>
         </a>
