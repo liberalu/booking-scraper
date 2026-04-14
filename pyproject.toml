@@ -83,6 +83,8 @@ DEP002 = [
     "pre-commit",          # CLI tool
     "deptry",              # CLI tool
     "pip-audit",           # CLI tool
+    "uvicorn",             # ASGI server, run via CLI not imported
+    "jinja2",              # used by FastAPI's Jinja2Templates (starlette dependency)
 ]
 
 [build-system]

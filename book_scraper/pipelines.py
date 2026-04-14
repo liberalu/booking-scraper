@@ -66,14 +66,11 @@ def _is_valid_isbn(raw: str) -> bool:
     """Check if a string is a valid ISBN-10 or ISBN-13."""
     cleaned = raw.replace("-", "").replace(" ", "")
     if _ISBN_13_RE.match(cleaned):
-        total = sum(
-            int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(cleaned)
-        )
+        total = sum(int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(cleaned))
         return total % 10 == 0
     if _ISBN_10_RE.match(cleaned):
         total = sum(
-            (10 if c in "Xx" else int(c)) * (10 - i)
-            for i, c in enumerate(cleaned)
+            (10 if c in "Xx" else int(c)) * (10 - i) for i, c in enumerate(cleaned)
         )
         return total % 11 == 0
     return False
@@ -93,18 +90,23 @@ class ValidationPipeline:
     def _warn(self, issue: str, field: str, url: str, raw_value: str = "") -> None:
         if self.stats:
             self.stats.inc_value(f"validation/{issue}")
-        self.issues.append({
-            "url": url, "field": field,
-            "issue": issue, "raw_value": raw_value or None,
-        })
+        self.issues.append(
+            {
+                "url": url,
+                "field": field,
+                "issue": issue,
+                "raw_value": raw_value or None,
+            }
+        )
         logger.warning(
             "Validation [%s] field=%s url=%s %s",
-            issue, field, url, raw_value,
+            issue,
+            field,
+            url,
+            raw_value,
         )
 
-    def _check_price_anomalies(
-        self, adapter: ItemAdapter, url: str
-    ) -> None:
+    def _check_price_anomalies(self, adapter: ItemAdapter, url: str) -> None:
         price = adapter.get("price")
         if price is None:
             self._warn("missing_price", "price", url)
@@ -117,13 +119,13 @@ class ValidationPipeline:
             orig_dec = Decimal(str(price_original))
             if orig_dec > 0 and price_dec > orig_dec:
                 self._warn(
-                    "price_higher_than_original", "price", url,
+                    "price_higher_than_original",
+                    "price",
+                    url,
                     f"{price}>{price_original}",
                 )
 
-    def _check_content_quality(
-        self, adapter: ItemAdapter, url: str
-    ) -> None:
+    def _check_content_quality(self, adapter: ItemAdapter, url: str) -> None:
         for field in ("title", "author", "description"):
             val = adapter.get(field)
             if isinstance(val, str) and _HTML_TAG_RE.search(val):
@@ -132,29 +134,36 @@ class ValidationPipeline:
         if isinstance(title, str):
             if len(title) < 2:
                 self._warn(
-                    "suspicious_title", "title", url, title,
+                    "suspicious_title",
+                    "title",
+                    url,
+                    title,
                 )
             elif len(title) > 300:
                 self._warn(
-                    "suspicious_title", "title", url,
+                    "suspicious_title",
+                    "title",
+                    url,
                     f"len={len(title)}",
                 )
 
-    def _check_format_consistency(
-        self, adapter: ItemAdapter, url: str
-    ) -> None:
+    def _check_format_consistency(self, adapter: ItemAdapter, url: str) -> None:
         fmt = adapter.get("format")
         props = adapter.get("properties") or {}
         if fmt == "audiobook" and "pages" in props:
             self._warn(
-                "format_mismatch", "format", url,
+                "format_mismatch",
+                "format",
+                url,
                 "audiobook with pages",
             )
         if fmt in ("book", "hardcover", "paperback") and "duration" in props:
-                self._warn(
-                    "format_mismatch", "format", url,
-                    f"{fmt} with duration",
-                )
+            self._warn(
+                "format_mismatch",
+                "format",
+                url,
+                f"{fmt} with duration",
+            )
 
     def drain_issues(self) -> list[dict[str, str | int | None]]:
         """Return buffered issues and clear the buffer."""
@@ -181,7 +190,9 @@ class ValidationPipeline:
                     adapter["price_original"] = str(Decimal(str(price_original)))
                 except (InvalidOperation, ValueError):
                     self._warn(
-                        "invalid_price_original", "price_original", url,
+                        "invalid_price_original",
+                        "price_original",
+                        url,
                         str(price_original),
                     )
                     adapter["price_original"] = None
@@ -309,7 +320,9 @@ class PostgresPipeline:
             )
             if vp is not None:
                 vp._warn(
-                    "price_spike", "price", url,
+                    "price_spike",
+                    "price",
+                    url,
                     f"{old_price}->{new_price} ({change:.0%})",
                 )
 
@@ -326,13 +339,15 @@ class PostgresPipeline:
 
         assert self.session is not None
         for change in changes:
-            self.session.add(ListingChange(
-                listing_id=listing_id,
-                scrape_run_id=self._run_id,
-                field=str(change["field"]),
-                old_value=str(change["old"]) if change["old"] is not None else None,
-                new_value=str(change["new"]) if change["new"] is not None else None,
-            ))
+            self.session.add(
+                ListingChange(
+                    listing_id=listing_id,
+                    scrape_run_id=self._run_id,
+                    field=str(change["field"]),
+                    old_value=str(change["old"]) if change["old"] is not None else None,
+                    new_value=str(change["new"]) if change["new"] is not None else None,
+                )
+            )
 
         # Also report as validation issues
         vp: ValidationPipeline | None = getattr(
@@ -346,12 +361,16 @@ class PostgresPipeline:
             new = change["new"]
             if old is not None and new is None:
                 vp._warn(
-                    "field_cleared", str(field), url,
+                    "field_cleared",
+                    str(field),
+                    url,
                     f"was: {old}",
                 )
             elif old != new and old is not None:
                 vp._warn(
-                    "field_changed", str(field), url,
+                    "field_changed",
+                    str(field),
+                    url,
                     f"{old} -> {new}",
                 )
 
@@ -417,10 +436,14 @@ class PostgresPipeline:
             else:
                 self._stats_updated += 1
                 self._check_price_spike(
-                    adapter["url"], old_price, price,
+                    adapter["url"],
+                    old_price,
+                    price,
                 )
                 self._report_field_changes(
-                    adapter["url"], listing.id, changes,
+                    adapter["url"],
+                    listing.id,
+                    changes,
                 )
             if price is not None:
                 insert_price(

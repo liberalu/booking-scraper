@@ -102,22 +102,26 @@ def upsert_listing(
         for field_name, new_val in tracked_fields.items():
             old_val = getattr(listing, field_name)
             if old_val != new_val:
-                changes.append({
-                    "field": field_name,
-                    "old": str(old_val) if old_val is not None else None,
-                    "new": str(new_val) if new_val is not None else None,
-                })
+                changes.append(
+                    {
+                        "field": field_name,
+                        "old": str(old_val) if old_val is not None else None,
+                        "new": str(new_val) if new_val is not None else None,
+                    }
+                )
             setattr(listing, field_name, new_val)
 
         for field_name, new_val in conditional_fields.items():
             if new_val is not None:
                 old_val = getattr(listing, field_name)
                 if old_val != new_val:
-                    changes.append({
-                        "field": field_name,
-                        "old": str(old_val) if old_val is not None else None,
-                        "new": str(new_val) if new_val is not None else None,
-                    })
+                    changes.append(
+                        {
+                            "field": field_name,
+                            "old": str(old_val) if old_val is not None else None,
+                            "new": str(new_val) if new_val is not None else None,
+                        }
+                    )
                 setattr(listing, field_name, new_val)
 
         if categories is not None:

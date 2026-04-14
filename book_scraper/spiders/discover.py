@@ -101,7 +101,10 @@ class DiscoverSpider(scrapy.Spider):
         else:
             self.logger.warning(
                 "Validation [%s] field=%s url=%s %s",
-                issue, field, url, raw_value,
+                issue,
+                field,
+                url,
+                raw_value,
             )
 
     def parse_sitemap(
@@ -120,7 +123,9 @@ class DiscoverSpider(scrapy.Spider):
                 seen.add(url)
         if duplicates:
             self._report_validation(
-                "duplicate_sitemap_url", "url", response.url,
+                "duplicate_sitemap_url",
+                "url",
+                response.url,
                 f"{duplicates} duplicates in {len(urls)} URLs",
             )
 
@@ -208,12 +213,15 @@ class DiscoverSpider(scrapy.Spider):
     def closed(self, reason: str) -> None:
         if self._urls_filtered:
             self._report_validation(
-                "url_pattern_filtered", "url", "",
+                "url_pattern_filtered",
+                "url",
+                "",
                 f"{self._urls_filtered} URLs excluded by pattern",
             )
             self.logger.info(
                 "URL filter: %d passed, %d filtered",
-                self._urls_processed, self._urls_filtered,
+                self._urls_processed,
+                self._urls_filtered,
             )
 
         if self._run_id is None or self._run_session is None:
