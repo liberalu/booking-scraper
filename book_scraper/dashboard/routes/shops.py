@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
@@ -58,7 +59,7 @@ SHOP_COMMANDS = {
 
 
 @router.get("/shops")
-def shops_list(request: Request, session: Session = Depends(get_db)):
+def shops_list(request: Request, session: Session = Depends(get_db)) -> Response:
     shops = get_all_shops(session)
     shop_data = []
     for shop in shops:
@@ -78,7 +79,7 @@ def shop_detail(
     sort: str = "",
     order: str = "desc",
     session: Session = Depends(get_db),
-):
+) -> Response:
     shop = get_shop_by_name(session, shop_name)
     if shop is None:
         return HTMLResponse("Shop not found", status_code=404)
@@ -113,7 +114,7 @@ def not_listed_page(
     sort: str = "",
     order: str = "desc",
     session: Session = Depends(get_db),
-):
+) -> Response:
     shop = get_shop_by_name(session, shop_name)
     if shop is None:
         return HTMLResponse("Shop not found", status_code=404)
@@ -138,7 +139,7 @@ def not_listed_page(
 
 
 @router.post("/shops/{shop_name}/run")
-def trigger_shop_run(shop_name: str, phase: str = "scan"):
+def trigger_shop_run(shop_name: str, phase: str = "scan") -> HTMLResponse:
     cmd_template = SHOP_COMMANDS.get(phase)
     if not cmd_template:
         return HTMLResponse(

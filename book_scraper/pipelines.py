@@ -276,7 +276,8 @@ class PostgresPipeline:
     def _run_id(self) -> int | None:
         spider = self.spider
         if spider and hasattr(spider, "_run_id"):
-            return spider._run_id
+            run_id: int | None = spider._run_id
+            return run_id
         return None
 
     def _flush_stats(self, run_id: int) -> None:

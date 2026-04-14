@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
@@ -26,7 +27,7 @@ def listings_page(
     format: str = "",
     missing: str = "",
     session: Session = Depends(get_db),
-):
+) -> Response:
     listings, total = get_listings_page(
         session,
         page=page,
@@ -66,7 +67,7 @@ def listing_detail(
     listing_id: int,
     request: Request,
     session: Session = Depends(get_db),
-):
+) -> Response:
     listing = session.get(Listing, listing_id)
     if listing is None:
         return HTMLResponse("Listing not found", status_code=404)

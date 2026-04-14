@@ -90,7 +90,7 @@ class ScanSpider(scrapy.Spider):
 
         database_url = self.settings.get("DATABASE_URL")
         session_factory = get_session_factory(database_url)
-        session: Session = session_factory()
+        session = session_factory()
 
         try:
             service = ScanService(session)
