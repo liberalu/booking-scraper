@@ -55,14 +55,9 @@ PHASE_COMMANDS: dict[str, list[str]] = {
 
 
 @router.get("/runs")
-def runs_list(
-    request: Request,
-    sort: str = "",
-    order: str = "desc",
-    session: Session = Depends(get_db),
-) -> HTMLResponse:
+def runs_list(request: Request, session: Session = Depends(get_db)):
     mark_stale_runs(session)
-    recent_runs = get_recent_runs(session, limit=50, sort_by=sort, sort_order=order)
+    recent_runs = get_recent_runs(session, limit=20)
     run_health = {run.id: get_run_health(run) for run in recent_runs}
     return templates.TemplateResponse(
         request,
@@ -71,16 +66,12 @@ def runs_list(
             "active_page": "runs",
             "runs": recent_runs,
             "run_health": run_health,
-            "sort": sort,
-            "order": order,
         },
     )
 
 
 @router.get("/runs/{run_id}")
-def run_detail(
-    run_id: int, request: Request, session: Session = Depends(get_db)
-) -> HTMLResponse:
+def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)):
     run, issues = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
@@ -101,7 +92,7 @@ def run_detail(
 
 
 @router.get("/api/runs/{run_id}/status")
-def run_status(run_id: int, session: Session = Depends(get_db)) -> JSONResponse:
+def run_status(run_id: int, session: Session = Depends(get_db)):
     """Live status check for a run — used by HTMX polling."""
     run, _ = get_run_detail(session, run_id)
     if run is None:
@@ -135,7 +126,7 @@ def run_status(run_id: int, session: Session = Depends(get_db)) -> JSONResponse:
 
 
 @router.post("/runs/trigger")
-def trigger_run(request: Request, phase: str = "scan") -> HTMLResponse:
+def trigger_run(request: Request, phase: str = "scan"):
     cmd = PHASE_COMMANDS.get(phase)
     if not cmd:
         return HTMLResponse(
@@ -176,7 +167,7 @@ def trigger_run(request: Request, phase: str = "scan") -> HTMLResponse:
 
 
 @router.post("/runs/{run_id}/kill")
-def kill_run(run_id: int, session: Session = Depends(get_db)) -> HTMLResponse:
+def kill_run(run_id: int, session: Session = Depends(get_db)):
     run, _ = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)

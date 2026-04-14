@@ -1,6 +1,5 @@
 import os
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
@@ -68,7 +67,7 @@ def mark_stale_runs(session: Session) -> int:
     return marked
 
 
-def get_overview_stats(session: Session) -> dict[str, Any]:
+def get_overview_stats(session: Session) -> dict:
     total = session.query(func.count(Listing.id)).scalar() or 0
     active = (
         session.query(func.count(Listing.id))
@@ -89,27 +88,11 @@ def get_overview_stats(session: Session) -> dict[str, Any]:
     }
 
 
-def get_recent_runs(
-    session: Session,
-    limit: int = 20,
-    sort_by: str = "",
-    sort_order: str = "desc",
-) -> list[ScrapeRun]:
-    sort_columns = {
-        "id": ScrapeRun.id,
-        "phase": ScrapeRun.phase,
-        "status": ScrapeRun.status,
-        "started_at": ScrapeRun.started_at,
-        "items_added": ScrapeRun.items_added,
-        "items_updated": ScrapeRun.items_updated,
-        "error_count": ScrapeRun.error_count,
-    }
-    order_col = sort_columns.get(sort_by, ScrapeRun.started_at)
-    order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
+def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
     return (
         session.query(ScrapeRun)
         .options(joinedload(ScrapeRun.shop))
-        .order_by(order_expr)
+        .order_by(ScrapeRun.started_at.desc())
         .limit(limit)
         .all()
     )
@@ -129,7 +112,7 @@ def get_run_detail(
     return run, issues
 
 
-def get_validation_summary(session: Session) -> list[dict[str, Any]]:
+def get_validation_summary(session: Session) -> list[dict]:
     rows = (
         session.query(
             ValidationIssue.issue,
@@ -144,7 +127,7 @@ def get_validation_summary(session: Session) -> list[dict[str, Any]]:
 
 def get_validation_by_type(
     session: Session, issue_type: str, limit: int = 100
-) -> list[dict[str, Any]]:
+) -> list[dict]:
     """Get validation issues with listing IDs resolved from URL."""
     issues = (
         session.query(ValidationIssue)
@@ -201,12 +184,9 @@ def get_price_history(session: Session, listing_id: int) -> list[Price]:
     )
 
 
-def get_price_changes(
-    session: Session, days: int = 7, shop_id: int | None = None
-) -> list[dict[str, Any]]:
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
-    sql = text(f"""
+def get_price_changes(session: Session, days: int = 7) -> list[dict]:
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    sql = text("""
         WITH ranked AS (
             SELECT
                 p.listing_id,
@@ -216,41 +196,27 @@ def get_price_changes(
                     PARTITION BY p.listing_id ORDER BY p.scraped_at
                 ) AS prev_price
             FROM prices p
-            JOIN listings l ON l.id = p.listing_id
             WHERE p.scraped_at >= :cutoff
-            {shop_filter}
-        ),
-        changes AS (
-            SELECT
-                r.listing_id,
-                l.title,
-                r.prev_price,
-                r.price AS new_price,
-                r.price - r.prev_price AS change,
-                r.scraped_at,
-                ROW_NUMBER() OVER (
-                    PARTITION BY r.listing_id, r.prev_price, r.price
-                    ORDER BY r.scraped_at DESC
-                ) AS rn
-            FROM ranked r
-            JOIN listings l ON l.id = r.listing_id
-            WHERE r.prev_price IS NOT NULL
-              AND r.price != r.prev_price
         )
-        SELECT listing_id, title, prev_price, new_price, change, scraped_at
-        FROM changes
-        WHERE rn = 1
-        ORDER BY ABS(change) DESC
+        SELECT
+            r.listing_id,
+            l.title,
+            r.prev_price,
+            r.price AS new_price,
+            r.price - r.prev_price AS change,
+            r.scraped_at
+        FROM ranked r
+        JOIN listings l ON l.id = r.listing_id
+        WHERE r.prev_price IS NOT NULL
+          AND r.price != r.prev_price
+        ORDER BY ABS(r.price - r.prev_price) DESC
         LIMIT 50
     """)
-    params: dict[str, Any] = {"cutoff": cutoff}
-    if shop_id:
-        params["shop_id"] = shop_id
-    rows = session.execute(sql, params).mappings().all()
+    rows = session.execute(sql, {"cutoff": cutoff}).mappings().all()
     return [dict(r) for r in rows]
 
 
-def get_inventory_stats(session: Session) -> dict[str, Any]:
+def get_inventory_stats(session: Session) -> dict:
     total = session.query(func.count(Listing.id)).scalar() or 0
     active = (
         session.query(func.count(Listing.id))
@@ -340,7 +306,7 @@ def get_listings_page(
     if publisher:
         query = query.filter(Listing.publisher.ilike(f"%{publisher}%"))
     if category:
-        query = query.filter(Listing.categories.contains([category]))
+        query = query.filter(Listing.categories.any(category))
     if format_filter:
         if format_filter == "none":
             query = query.filter(Listing.format.is_(None))
@@ -417,7 +383,7 @@ def get_shop_by_name(session: Session, name: str) -> Shop | None:
     return session.query(Shop).filter(Shop.name == name).first()
 
 
-def get_shop_stats(session: Session, shop_id: int) -> dict[str, Any]:
+def get_shop_stats(session: Session, shop_id: int) -> dict:
     listings = (
         session.query(func.count(Listing.id))
         .filter(Listing.shop_id == shop_id)
@@ -451,28 +417,11 @@ def get_shop_stats(session: Session, shop_id: int) -> dict[str, Any]:
     }
 
 
-def get_shop_runs(
-    session: Session,
-    shop_id: int,
-    limit: int = 50,
-    sort_by: str = "",
-    sort_order: str = "desc",
-) -> list[ScrapeRun]:
-    sort_columns = {
-        "id": ScrapeRun.id,
-        "phase": ScrapeRun.phase,
-        "status": ScrapeRun.status,
-        "started_at": ScrapeRun.started_at,
-        "items_added": ScrapeRun.items_added,
-        "items_updated": ScrapeRun.items_updated,
-        "error_count": ScrapeRun.error_count,
-    }
-    order_col = sort_columns.get(sort_by, ScrapeRun.started_at)
-    order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
+def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[ScrapeRun]:
     return (
         session.query(ScrapeRun)
         .filter(ScrapeRun.shop_id == shop_id)
-        .order_by(order_expr)
+        .order_by(ScrapeRun.started_at.desc())
         .limit(limit)
         .all()
     )
@@ -497,7 +446,7 @@ def get_run_listings(
     return created, updated
 
 
-def get_shop_field_stats(session: Session, shop_id: int) -> dict[str, Any]:
+def get_shop_field_stats(session: Session, shop_id: int) -> dict:
     """Get per-field completeness stats for a shop."""
     total = (
         session.query(func.count(Listing.id))
@@ -538,62 +487,94 @@ def get_listing_changes(
     )
 
 
-def get_not_listed_count(session: Session, shop_id: int) -> int:
-    """Count discovered URLs that have no matching listing."""
-    sql = text("""
-        SELECT COUNT(*)
-        FROM discovered_urls du
-        WHERE du.shop_id = :shop_id
-          AND NOT EXISTS (
-              SELECT 1 FROM listings l
-              WHERE l.shop_id = du.shop_id AND l.url = du.url
-          )
-    """)
-    return session.execute(sql, {"shop_id": shop_id}).scalar() or 0
+def get_data_completeness(session: Session) -> list[dict]:
+    """Get field completeness percentages for the overview page."""
+    total = session.query(func.count(Listing.id)).scalar() or 0
+    if total == 0:
+        return []
+    fields = ["author", "isbn", "publisher", "year", "format"]
+    result = []
+    for field_name in fields:
+        col = getattr(Listing, field_name)
+        present = (
+            session.query(func.count(Listing.id))
+            .filter(col.isnot(None))
+            .scalar()
+            or 0
+        )
+        pct = round(present / total * 100, 1) if total > 0 else 0
+        result.append({
+            "field": field_name, "present": present,
+            "total": total, "pct": pct,
+        })
+    return result
 
 
-def get_not_listed_urls(
+DISCOVERED_URL_SORT_COLUMNS = {
+    "url": DiscoveredUrl.url,
+    "fails": DiscoveredUrl.fail_count,
+    "discovered": DiscoveredUrl.discovered_at,
+}
+
+
+def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> dict:
+    """Get stats for discovered URLs page."""
+    base = session.query(DiscoveredUrl)
+    if shop_id:
+        base = base.filter(DiscoveredUrl.shop_id == shop_id)
+    total = base.count()
+    in_listings = (
+        base.join(
+            Listing,
+            (Listing.shop_id == DiscoveredUrl.shop_id)
+            & (Listing.url == DiscoveredUrl.url),
+        )
+        .count()
+    )
+    not_in_listings = total - in_listings
+    failed = base.filter(DiscoveredUrl.fail_count >= 3).count()
+    return {
+        "total": total,
+        "in_listings": in_listings,
+        "not_in_listings": not_in_listings,
+        "failed": failed,
+    }
+
+
+def get_discovered_urls_page(
     session: Session,
-    shop_id: int,
     page: int = 1,
     per_page: int = 50,
-    sort_by: str = "",
+    shop_id: int | None = None,
+    source: str = "",
+    status: str = "",
+    search: str = "",
+    sort_by: str = "discovered",
     sort_order: str = "desc",
-) -> tuple[list[dict[str, Any]], int]:
-    """Get discovered URLs that have no matching listing, paginated."""
-    count_sql = text("""
-        SELECT COUNT(*)
-        FROM discovered_urls du
-        WHERE du.shop_id = :shop_id
-          AND NOT EXISTS (
-              SELECT 1 FROM listings l
-              WHERE l.shop_id = du.shop_id AND l.url = du.url
-          )
-    """)
-    total = session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
-
-    sort_col = "du.discovered_at"
-    if sort_by == "url":
-        sort_col = "du.url"
-    direction = "ASC" if sort_order == "asc" else "DESC"
-
-    data_sql = text(f"""
-        SELECT du.url, du.discovered_at, du.source, du.url_type
-        FROM discovered_urls du
-        WHERE du.shop_id = :shop_id
-          AND NOT EXISTS (
-              SELECT 1 FROM listings l
-              WHERE l.shop_id = du.shop_id AND l.url = du.url
-          )
-        ORDER BY {sort_col} {direction}
-        OFFSET :offset LIMIT :limit
-    """)
-    rows = (
-        session.execute(
-            data_sql,
-            {"shop_id": shop_id, "offset": (page - 1) * per_page, "limit": per_page},
-        )
-        .mappings()
-        .all()
-    )
-    return [dict(r) for r in rows], total
+) -> tuple[list, int]:
+    """Return paginated discovered URLs with filters."""
+    query = session.query(DiscoveredUrl).options(joinedload(DiscoveredUrl.shop))
+    if shop_id:
+        query = query.filter(DiscoveredUrl.shop_id == shop_id)
+    if source:
+        query = query.filter(DiscoveredUrl.source == source)
+    if search:
+        query = query.filter(DiscoveredUrl.url.ilike(f"%{search}%"))
+    if status == "not_in_listings":
+        query = query.outerjoin(
+            Listing,
+            (Listing.shop_id == DiscoveredUrl.shop_id)
+            & (Listing.url == DiscoveredUrl.url),
+        ).filter(Listing.id.is_(None))
+    elif status == "failed":
+        query = query.filter(DiscoveredUrl.fail_count >= 3)
+    elif status in ("unknown", "product", "non_product"):
+        query = query.filter(DiscoveredUrl.url_type == status)
+    total = query.count()
+    order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.discovered_at)
+    if sort_order == "asc":
+        query = query.order_by(order_col.asc().nulls_last())
+    else:
+        query = query.order_by(order_col.desc().nulls_last())
+    urls = query.offset((page - 1) * per_page).limit(per_page).all()
+    return urls, total

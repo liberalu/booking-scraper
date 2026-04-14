@@ -32,7 +32,7 @@ def listings_page(
     sort: str = "",
     order: str = "desc",
     session: Session = Depends(get_db),
-) -> HTMLResponse:
+):
     shop_obj = get_shop_by_name(session, shop) if shop else None
     shop_id = shop_obj.id if shop_obj else None
     listings, total = get_listings_page(
@@ -84,7 +84,7 @@ def listing_detail(
     listing_id: int,
     request: Request,
     session: Session = Depends(get_db),
-) -> HTMLResponse:
+):
     listing = session.get(Listing, listing_id)
     if listing is None:
         return HTMLResponse("Listing not found", status_code=404)

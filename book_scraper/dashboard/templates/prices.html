@@ -1,85 +1,83 @@
 {% extends "base.html" %}
-{% from "macros.html" import sort_header %}
 {% block title %}Prices{% endblock %}
 {% block content %}
-<h1>Prices</h1>
+<h1 class="page-title">Prices</h1>
 
-{% set base_params = "q=" ~ query|urlencode ~ "&shop=" ~ shop_filter|urlencode %}
-
-{% if shop_filter %}
-<div style="margin-bottom: 1rem;">
-    <span class="filter-badge">Shop: {{ shop_filter }} <a href="/prices?q={{ query|urlencode }}">✕</a></span>
-</div>
-{% endif %}
-
-<form method="get" action="/prices" role="search">
-    {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
+<form method="get" action="/prices" role="search" class="filter-bar">
     <input type="search" name="q" placeholder="Search listings by title..." value="{{ query }}">
     <button type="submit">Search</button>
 </form>
 
 {% if listings %}
-<h2>Search Results</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Author</th>
-            <th>Price</th>
-            <th>Original</th>
-            <th>Chart</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for l in listings %}
-        <tr>
-            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 }}</a></td>
-            <td>{{ l.author or '-' }}</td>
-            <td>{{ l.price or '-' }}</td>
-            <td>{{ l.price_original or '-' }}</td>
-            <td><button class="outline" onclick="loadChart({{ l.id }}, '{{ l.title|e }}')">Show chart</button></td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 1rem 1rem 0;">
+        <p class="card-title">Search Results</p>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Price</th>
+                <th>Original</th>
+                <th>Chart</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in listings %}
+            <tr>
+                <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 }}</a></td>
+                <td>{{ l.author or '-' }}</td>
+                <td>{{ l.price or '-' }}</td>
+                <td>{{ l.price_original or '-' }}</td>
+                <td><button class="outline" onclick="loadChart({{ l.id }}, '{{ l.title|e }}')">Show chart</button></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% elif query %}
 <p>No listings found for "{{ query }}".</p>
 {% endif %}
 
-<div id="chart-container" style="display:none; margin: 2rem 0;">
-    <h3 id="chart-title"></h3>
+<div id="chart-container" class="card" style="display:none;">
+    <p class="card-title" id="chart-title"></p>
     <canvas id="priceChart" height="100"></canvas>
 </div>
 
-<h2>Recent Price Changes (7 days)</h2>
-{% if changes %}
-<table>
-    <thead>
-        <tr>
-            <th>{{ sort_header('title', 'Title', sort, order, base_params) }}</th>
-            <th>{{ sort_header('prev_price', 'Previous', sort, order, base_params) }}</th>
-            <th>{{ sort_header('new_price', 'New', sort, order, base_params) }}</th>
-            <th>{{ sort_header('change', 'Change', sort, order, base_params) }}</th>
-            <th>{{ sort_header('scraped_at', 'Date', sort, order, base_params) }}</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for c in changes %}
-        <tr>
-            <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
-            <td>{{ c.prev_price }}</td>
-            <td>{{ c.new_price }}</td>
-            <td style="color: {{ 'green' if c.change < 0 else 'red' }}">
-                {{ '%+.2f'|format(c.change|float) }}
-            </td>
-            <td>{{ c.scraped_at.strftime('%Y-%m-%d %H:%M') if c.scraped_at else '-' }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p>No price changes in the last 7 days.</p>
-{% endif %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 1rem 1rem 0;">
+        <p class="card-title">Recent Price Changes (7 days)</p>
+    </div>
+    {% if changes %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Previous</th>
+                <th>New</th>
+                <th>Change</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in changes %}
+            <tr>
+                <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
+                <td>{{ c.prev_price }}</td>
+                <td>{{ c.new_price }}</td>
+                <td class="{{ 'price-down' if c.change < 0 else 'price-up' }}">
+                    {{ '%+.2f'|format(c.change|float) }}
+                </td>
+                <td>{{ c.scraped_at.strftime('%Y-%m-%d %H:%M') if c.scraped_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="padding: 1rem;">No price changes in the last 7 days.</p>
+    {% endif %}
+</div>
 
 <script>
 let chartInstance = null;
@@ -87,14 +85,18 @@ function loadChart(listingId, title) {
     fetch('/api/prices/' + listingId + '/chart')
         .then(r => r.json())
         .then(data => {
-            document.getElementById('chart-container').style.display = 'block';
+            const container = document.getElementById('chart-container');
+            container.style.display = 'block';
             document.getElementById('chart-title').textContent = title;
+            const style = getComputedStyle(document.documentElement);
+            const color1 = style.getPropertyValue('--chart-1').trim();
+            const color2 = style.getPropertyValue('--chart-2').trim();
             const ctx = document.getElementById('priceChart').getContext('2d');
             if (chartInstance) chartInstance.destroy();
             const datasets = [{
                 label: 'Price',
                 data: data.prices,
-                borderColor: '#3498db',
+                borderColor: color1,
                 tension: 0.1,
                 fill: false
             }];
@@ -102,7 +104,7 @@ function loadChart(listingId, title) {
                 datasets.push({
                     label: 'Original Price',
                     data: data.original_prices,
-                    borderColor: '#95a5a6',
+                    borderColor: color2,
                     borderDash: [5, 5],
                     tension: 0.1,
                     fill: false

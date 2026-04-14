@@ -1,24 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Shops - Book Scraper{% endblock %}
 {% block content %}
-<h1>Shops</h1>
+<h1 class="page-title">Shops</h1>
 
 {% for item in shop_data %}
-<article>
-    <h3><a href="/shops/{{ item.shop.name }}">{{ item.shop.name }}</a> <small>{{ item.shop.base_url }}</small></h3>
-    <div class="stat-grid">
-        <a href="/shops/{{ item.shop.name }}/not-listed" class="stat-card" style="text-decoration:none; color:inherit;"><h2>{{ item.stats.discovered_urls }}</h2><small>Discovered URLs</small></a>
-        <a href="/listings?shop={{ item.shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
-            <h2>{{ item.stats.listings }}</h2><small>Listings</small>
-        </a>
-        <a href="/listings?shop={{ item.shop.name }}&active=true" class="stat-card" style="text-decoration:none; color:inherit;">
-            <h2>{{ item.stats.active }}</h2><small>Active</small>
-        </a>
-        <a href="/prices?shop={{ item.shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
-            <h2>{{ item.stats.prices }}</h2><small>Price Records</small>
-        </a>
+<div class="card">
+    <div class="card-title">
+        <a href="/shops/{{ item.shop.name }}">{{ item.shop.name }}</a>
+        <span class="text-muted" style="font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 0.85rem; margin-left: 0.5rem;">{{ item.shop.base_url }}</span>
     </div>
-</article>
+    <div class="stat-grid">
+        <a href="/urls?shop={{ item.shop.name }}" class="stat-card">
+            <div class="stat-label">Discovered URLs</div>
+            <div class="stat-value">{{ "{:,}".format(item.stats.discovered_urls) }}</div>
+        </a>
+        <a href="/listings?shop={{ item.shop.name }}" class="stat-card">
+            <div class="stat-label">Listings</div>
+            <div class="stat-value">{{ "{:,}".format(item.stats.listings) }}</div>
+        </a>
+        <a href="/listings?shop={{ item.shop.name }}&active=true" class="stat-card">
+            <div class="stat-label">Active</div>
+            <div class="stat-value">{{ "{:,}".format(item.stats.active) }}</div>
+        </a>
+        <div class="stat-card">
+            <div class="stat-label">Price Records</div>
+            <div class="stat-value">{{ "{:,}".format(item.stats.prices) }}</div>
+        </div>
+    </div>
+</div>
 {% endfor %}
 
 {% if not shop_data %}

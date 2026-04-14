@@ -2,15 +2,13 @@
 {% from "macros.html" import sort_header %}
 {% block title %}Listings{% endblock %}
 {% block content %}
-<h1>Listings</h1>
+<h1 class="page-title">Listings</h1>
 
 <form method="get" action="/listings">
-    <div class="grid">
+    <div class="filter-bar">
         <input type="search" name="q" placeholder="Search by title..." value="{{ query }}">
         <input type="search" name="author" placeholder="Filter by author..." value="{{ author_filter }}">
         <input type="search" name="publisher" placeholder="Filter by publisher..." value="{{ publisher_filter }}">
-    </div>
-    <div class="grid">
         <select name="category">
             <option value="">All categories</option>
             {% for cat in categories %}
@@ -33,25 +31,21 @@
             <option value="publisher" {{ 'selected' if missing == 'publisher' else '' }}>Missing publisher</option>
             <option value="format" {{ 'selected' if missing == 'format' else '' }}>Missing format</option>
         </select>
-    </div>
-    <div class="grid">
         <select name="active">
             <option value="">All statuses</option>
             <option value="true" {{ 'selected' if active_filter == 'true' else '' }}>Active</option>
             <option value="false" {{ 'selected' if active_filter == 'false' else '' }}>Not Active</option>
         </select>
-        <div></div>
-        <div></div>
+        {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
+        {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
+        <button type="submit">Filter</button>
     </div>
-    {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
-    {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
-    <button type="submit">Filter</button>
 </form>
 
 {% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
 
 {% if shop_filter or has_isbn or active_filter %}
-<div style="margin-bottom: 1rem;">
+<div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
     {% if shop_filter %}
     <span class="filter-badge">Shop: {{ shop_filter }} <a href="/listings?{{ filter_params|replace('&shop=' ~ shop_filter|urlencode, '') }}">✕</a></span>
     {% endif %}
@@ -64,71 +58,75 @@
 </div>
 {% endif %}
 
-<p><strong>{{ total }}</strong> results{% if author_filter %} for author "{{ author_filter }}"{% endif %}{% if publisher_filter %} for publisher "{{ publisher_filter }}"{% endif %}</p>
+<p class="text-muted" style="margin-bottom: 1rem;">
+    <strong style="color: var(--text-primary);">{{ "{:,}".format(total) }}</strong> results{% if author_filter %} for author "{{ author_filter }}"{% endif %}{% if publisher_filter %} for publisher "{{ publisher_filter }}"{% endif %}
+</p>
 
 {% if listings %}
-<table>
-    <thead>
-        <tr>
-            <th>{{ sort_header('id', 'ID', sort, order, filter_params) }}</th>
-            <th>{{ sort_header('title', 'Title', sort, order, filter_params) }}</th>
-            <th>{{ sort_header('author', 'Author', sort, order, filter_params) }}</th>
-            <th>{{ sort_header('isbn', 'ISBN', sort, order, filter_params) }}</th>
-            <th>Format</th>
-            <th>{{ sort_header('price', 'Price', sort, order, filter_params) }}</th>
-            <th>Original</th>
-            <th>{{ sort_header('year', 'Year', sort, order, filter_params) }}</th>
-            <th>{{ sort_header('is_active', 'Active', sort, order, filter_params) }}</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for l in listings %}
-        <tr>
-            <td>{{ l.id }}</td>
-            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
-            <td>
-                {% if l.author %}
-                <a href="/listings?author={{ l.author|urlencode }}">{{ l.author[:30] }}{{ '...' if l.author|length > 30 else '' }}</a>
-                {% else %}-{% endif %}
-            </td>
-            <td>
-                {% if l.isbn %}
-                <a href="/listings?has_isbn=true&q={{ l.isbn|urlencode }}">{{ l.isbn }}</a>
-                {% else %}-{% endif %}
-            </td>
-            <td>{{ l.format or '-' }}</td>
-            <td>{{ l.price or '-' }}</td>
-            <td>{{ l.price_original or '-' }}</td>
-            <td>{{ l.year or '-' }}</td>
-            <td>{{ 'Yes' if l.is_active else 'No' }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>{{ sort_header('id', 'ID', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('title', 'Title', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('author', 'Author', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('isbn', 'ISBN', sort, order, filter_params) }}</th>
+                <th>Format</th>
+                <th class="text-right">{{ sort_header('price', 'Price', sort, order, filter_params) }}</th>
+                <th class="text-right">Original</th>
+                <th class="text-right">{{ sort_header('year', 'Year', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('is_active', 'Active', sort, order, filter_params) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in listings %}
+            <tr>
+                <td class="text-muted">{{ l.id }}</td>
+                <td class="cell-truncate"><a href="/listings/{{ l.id }}">{{ l.title }}</a></td>
+                <td>
+                    {% if l.author %}
+                    <a href="/listings?author={{ l.author|urlencode }}">{{ l.author[:30] }}{{ '...' if l.author|length > 30 else '' }}</a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                    {% if l.isbn %}
+                    <a href="/listings?has_isbn=true&q={{ l.isbn|urlencode }}">{{ l.isbn }}</a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>{{ l.format or '<span class="text-muted">—</span>' }}</td>
+                <td class="text-right">{{ l.price or '<span class="text-muted">—</span>' }}</td>
+                <td class="text-right text-muted">{{ l.price_original or '—' }}</td>
+                <td class="text-right text-muted">{{ l.year or '—' }}</td>
+                <td>
+                    {% if l.is_active %}
+                    <span class="badge badge-completed">Yes</span>
+                    {% else %}
+                    <span class="badge badge-neutral">No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 {% if total_pages > 1 %}
-<nav>
-    <ul>
-        <li>
-            {% if page > 1 %}
-            <a href="/listings?page={{ page - 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">Previous</a>
-            {% else %}
-            <span class="secondary">Previous</span>
-            {% endif %}
-        </li>
-        <li>Page {{ page }} of {{ total_pages }}</li>
-        <li>
-            {% if page < total_pages %}
-            <a href="/listings?page={{ page + 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">Next</a>
-            {% else %}
-            <span class="secondary">Next</span>
-            {% endif %}
-        </li>
-    </ul>
-</nav>
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/listings?page={{ page - 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">← Prev</a>
+    {% else %}
+    <span class="disabled">← Prev</span>
+    {% endif %}
+    <span class="current">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/listings?page={{ page + 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">Next →</a>
+    {% else %}
+    <span class="disabled">Next →</span>
+    {% endif %}
+</div>
 {% endif %}
 
 {% else %}
-<p>No listings found.</p>
+<p class="text-muted">No listings found.</p>
 {% endif %}
 {% endblock %}

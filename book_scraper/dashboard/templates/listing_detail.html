@@ -1,180 +1,228 @@
 {% extends "base.html" %}
 {% block title %}{{ listing.title }}{% endblock %}
 {% block content %}
-<hgroup>
-    <h1>{{ listing.title }}</h1>
-    <p>
-        {% if listing.is_active %}
-        <span class="badge badge-completed">Active</span>
-        {% else %}
-        <span class="badge badge-failed">Inactive</span>
-        {% endif %}
-        {% if listing.in_stock %}
-        <span class="badge badge-completed">In Stock</span>
-        {% elif listing.in_stock is not none %}
-        <span class="badge badge-failed">Out of Stock</span>
-        {% endif %}
-    </p>
-</hgroup>
 
-<div style="margin: 1rem 0;">
-    <button hx-post="/shops/{{ listing.shop.name }}/scrape-url?url={{ listing.url }}" hx-target="#scrape-result" hx-swap="innerHTML">Re-scrape this listing</button>
-    <span id="scrape-result"></span>
-</div>
-
-<div class="grid">
+<div class="page-header">
     <div>
-        <table>
-            <tbody>
-                <tr><th>Author</th><td>
-                    {% if listing.author %}
-                        <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
-                    {% else %}
-                        <a href="/listings?missing=author" class="secondary">-</a>
-                    {% endif %}
-                </td></tr>
-                <tr><th>Publisher</th><td>
-                    {% if listing.publisher %}
-                        <a href="/listings?publisher={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
-                    {% else %}
-                        <a href="/listings?missing=publisher" class="secondary">-</a>
-                    {% endif %}
-                </td></tr>
-                <tr><th>ISBN</th><td>
-                    {% if listing.isbn %}
-                        {{ listing.isbn }}
-                    {% else %}
-                        <a href="/listings?missing=isbn" class="secondary">-</a>
-                    {% endif %}
-                </td></tr>
-                <tr><th>Year</th><td>
-                    {% if listing.year %}
-                        {{ listing.year }}
-                    {% else %}
-                        <a href="/listings?missing=year" class="secondary">-</a>
-                    {% endif %}
-                </td></tr>
-                <tr><th>Format</th><td>
-                    {% if listing.format %}
-                        <a href="/listings?format={{ listing.format|urlencode }}">{{ listing.format }}</a>
-                    {% else %}
-                        <a href="/listings?missing=format" class="secondary">-</a>
-                    {% endif %}
-                </td></tr>
-                <tr><th>Price</th><td>{{ listing.price or '-' }}</td></tr>
-                <tr><th>Original Price</th><td>{{ listing.price_original or '-' }}</td></tr>
-                <tr><th>URL</th><td><a href="{{ listing.url }}" target="_blank" rel="noopener">{{ listing.url[:80] }}{{ '...' if listing.url|length > 80 else '' }}</a></td></tr>
-                <tr><th>First Seen</th><td>{{ listing.first_seen_at.strftime('%Y-%m-%d %H:%M') if listing.first_seen_at else '-' }}</td></tr>
-                <tr><th>Last Seen</th><td>{{ listing.last_seen_at.strftime('%Y-%m-%d %H:%M') if listing.last_seen_at else '-' }}</td></tr>
-            </tbody>
-        </table>
+        <h1 class="page-title" style="margin-bottom: 0.5rem;">{{ listing.title }}</h1>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+            {% if listing.is_active %}
+            <span class="badge badge-completed">Active</span>
+            {% else %}
+            <span class="badge badge-failed">Inactive</span>
+            {% endif %}
+            {% if listing.in_stock %}
+            <span class="badge badge-completed">In Stock</span>
+            {% elif listing.in_stock is not none %}
+            <span class="badge badge-failed">Out of Stock</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="actions">
+        <button hx-post="/shops/{{ listing.shop.name }}/scrape-url?url={{ listing.url }}" hx-target="#scrape-result" hx-swap="innerHTML">Re-scrape</button>
+        <span id="scrape-result" class="text-muted"></span>
     </div>
 </div>
 
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="data-table">
+        <tbody>
+            <tr>
+                <th style="width: 140px;">Author</th>
+                <td>
+                    {% if listing.author %}
+                        <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
+                    {% else %}
+                        <a href="/listings?missing=author" class="text-muted">—</a>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Publisher</th>
+                <td>
+                    {% if listing.publisher %}
+                        <a href="/listings?publisher={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
+                    {% else %}
+                        <a href="/listings?missing=publisher" class="text-muted">—</a>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>ISBN</th>
+                <td>
+                    {% if listing.isbn %}
+                        {{ listing.isbn }}
+                    {% else %}
+                        <a href="/listings?missing=isbn" class="text-muted">—</a>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Year</th>
+                <td>
+                    {% if listing.year %}
+                        {{ listing.year }}
+                    {% else %}
+                        <a href="/listings?missing=year" class="text-muted">—</a>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Format</th>
+                <td>
+                    {% if listing.format %}
+                        <a href="/listings?format={{ listing.format|urlencode }}">{{ listing.format }}</a>
+                    {% else %}
+                        <a href="/listings?missing=format" class="text-muted">—</a>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Price</th>
+                <td>{{ listing.price or '<span class="text-muted">—</span>' }}</td>
+            </tr>
+            <tr>
+                <th>Original Price</th>
+                <td>{{ listing.price_original or '<span class="text-muted">—</span>' }}</td>
+            </tr>
+            <tr>
+                <th>URL</th>
+                <td><a href="{{ listing.url }}" target="_blank" rel="noopener">{{ listing.url[:80] }}{{ '...' if listing.url|length > 80 else '' }}</a></td>
+            </tr>
+            <tr>
+                <th>First Seen</th>
+                <td class="text-muted">{{ listing.first_seen_at.strftime('%Y-%m-%d %H:%M') if listing.first_seen_at else '—' }}</td>
+            </tr>
+            <tr>
+                <th>Last Seen</th>
+                <td class="text-muted">{{ listing.last_seen_at.strftime('%Y-%m-%d %H:%M') if listing.last_seen_at else '—' }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
 {% if listing.description %}
-<h3>Description</h3>
-<p>{{ listing.description }}</p>
+<div class="card">
+    <div class="card-title">Description</div>
+    <p style="margin: 0;">{{ listing.description }}</p>
+</div>
 {% endif %}
 
 {% if listing.categories %}
-<h3>Categories</h3>
-<ul>
-    {% for cat in listing.categories[:-1] %}
-    <li><a href="/listings?category={{ cat|urlencode }}">{{ cat }}</a></li>
-    {% endfor %}
-</ul>
+<div class="card">
+    <div class="card-title">Categories</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+        {% for cat in listing.categories[:-1] %}
+        <a href="/listings?category={{ cat|urlencode }}" class="badge badge-neutral">{{ cat }}</a>
+        {% endfor %}
+    </div>
+</div>
 {% endif %}
 
 {% if listing.properties %}
-<h3>Properties</h3>
-<table>
-    <thead>
-        <tr><th>Key</th><th>Value</th></tr>
-    </thead>
-    <tbody>
-        {% for key, value in listing.properties.items() %}
-        <tr>
-            <td>{{ key }}</td>
-            <td>
-                {% if key == 'cover_type' %}
-                    <a href="/listings?q={{ value|urlencode }}">{{ value }}</a>
-                {% else %}
-                    {{ value }}
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div class="card-title" style="padding: 1rem 1.25rem 0;">Properties</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for key, value in listing.properties.items() %}
+            <tr>
+                <td class="text-muted">{{ key }}</td>
+                <td>
+                    {% if key == 'cover_type' %}
+                        <a href="/listings?q={{ value|urlencode }}">{{ value }}</a>
+                    {% else %}
+                        {{ value }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endif %}
 
-<h2>Price History</h2>
-<div style="margin: 2rem 0;">
-    <canvas id="priceChart" height="100"></canvas>
+<div class="card">
+    <div class="card-title">Price History</div>
+    <canvas id="priceChart" height="80"></canvas>
 </div>
 
 {% if prices %}
-<table>
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Price</th>
-            <th>Original</th>
-            <th>Discount</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for p in prices %}
-        <tr>
-            <td>{{ p.scraped_at.strftime('%Y-%m-%d %H:%M') if p.scraped_at else '-' }}</td>
-            <td>{{ p.price or '-' }}</td>
-            <td>{{ p.price_original or '-' }}</td>
-            <td>{{ '%.0f%%'|format(p.discount_pct|float) if p.discount_pct else '-' }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div class="card-title" style="padding: 1rem 1.25rem 0;">Price Records</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Original</th>
+                <th class="text-right">Discount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in prices %}
+            <tr>
+                <td class="text-muted">{{ p.scraped_at.strftime('%Y-%m-%d %H:%M') if p.scraped_at else '—' }}</td>
+                <td class="text-right">{{ p.price or '<span class="text-muted">—</span>' }}</td>
+                <td class="text-right text-muted">{{ p.price_original or '—' }}</td>
+                <td class="text-right">{{ '%.0f%%'|format(p.discount_pct|float) if p.discount_pct else '<span class="text-muted">—</span>' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% else %}
-<p>No price history recorded.</p>
+<p class="text-muted">No price history recorded.</p>
 {% endif %}
 
-<h2>Change History</h2>
-{% if changes %}
-<table>
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Field</th>
-            <th>Old Value</th>
-            <th>New Value</th>
-            <th>Run</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for c in changes %}
-        <tr>
-            <td>{{ c.changed_at.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>{{ c.field }}</td>
-            <td style="color: {{ '#e74c3c' if c.old_value and not c.new_value else 'inherit' }}">{{ c.old_value or '-' }}</td>
-            <td style="color: {{ '#2ecc71' if c.new_value and not c.old_value else 'inherit' }}">{{ c.new_value or '-' }}</td>
-            <td>{% if c.scrape_run_id %}<a href="/runs/{{ c.scrape_run_id }}">Run #{{ c.scrape_run_id }}</a>{% else %}-{% endif %}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p>No changes recorded yet. Changes will appear after the next scrape.</p>
-{% endif %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div class="card-title" style="padding: 1rem 1.25rem 0;">Change History</div>
+    {% if changes %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Field</th>
+                <th>Old Value</th>
+                <th>New Value</th>
+                <th>Run</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in changes %}
+            <tr>
+                <td class="text-muted">{{ c.changed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ c.field }}</td>
+                <td style="color: var(--price-up);">{{ c.old_value or '—' }}</td>
+                <td style="color: var(--price-down);">{{ c.new_value or '—' }}</td>
+                <td>{% if c.scrape_run_id %}<a href="/runs/{{ c.scrape_run_id }}">Run #{{ c.scrape_run_id }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted" style="padding: 1rem 1.25rem;">No changes recorded yet. Changes will appear after the next scrape.</p>
+    {% endif %}
+</div>
 
 <script>
 fetch('/api/prices/{{ listing.id }}/chart')
     .then(r => r.json())
     .then(data => {
+        const style = getComputedStyle(document.documentElement);
+        const chartPrice = style.getPropertyValue('--chart-1').trim();
+        const chartOriginal = style.getPropertyValue('--chart-2').trim();
         const ctx = document.getElementById('priceChart').getContext('2d');
         const datasets = [{
             label: 'Price',
             data: data.prices,
-            borderColor: '#3498db',
+            borderColor: chartPrice || '#1971c2',
+            backgroundColor: 'transparent',
             tension: 0.1,
             fill: false
         }];
@@ -182,8 +230,9 @@ fetch('/api/prices/{{ listing.id }}/chart')
             datasets.push({
                 label: 'Original Price',
                 data: data.original_prices,
-                borderColor: '#95a5a6',
+                borderColor: chartOriginal || '#2b8a3e',
                 borderDash: [5, 5],
+                backgroundColor: 'transparent',
                 tension: 0.1,
                 fill: false
             });

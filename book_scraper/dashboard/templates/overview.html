@@ -1,70 +1,101 @@
 {% extends "base.html" %}
 {% block title %}Overview{% endblock %}
 {% block content %}
-<h1>Overview</h1>
+<h1 class="page-title">Overview</h1>
 
 <div class="stat-grid">
-    <a href="/listings" class="stat-card" style="text-decoration:none; color:inherit;">
-        <h2>{{ stats.total_listings }}</h2>
-        <small>Total Listings</small>
+    <a href="/listings" class="stat-card">
+        <div class="stat-label">Total Listings</div>
+        <div class="stat-value">{{ "{:,}".format(stats.total_listings) }}</div>
     </a>
-    <a href="/listings?active=true" class="stat-card" style="text-decoration:none; color:inherit;">
-        <h2>{{ stats.active_listings }}</h2>
-        <small>Active Listings</small>
+    <a href="/listings?active=true" class="stat-card">
+        <div class="stat-label">Active</div>
+        <div class="stat-value">{{ "{:,}".format(stats.active_listings) }}</div>
+        <div class="stat-sub">
+            {% if stats.total_listings > 0 %}
+            {{ "%.1f"|format(stats.active_listings / stats.total_listings * 100) }}% of total
+            {% else %}—{% endif %}
+        </div>
     </a>
-    <a href="/listings?has_isbn=true" class="stat-card" style="text-decoration:none; color:inherit;">
-        <h2>{{ stats.with_isbn }}</h2>
-        <small>With ISBN</small>
+    <a href="/listings?has_isbn=true" class="stat-card">
+        <div class="stat-label">With ISBN</div>
+        <div class="stat-value">{{ "{:,}".format(stats.with_isbn) }}</div>
+        <div class="stat-sub">
+            {% if stats.total_listings > 0 %}
+            {{ "%.1f"|format(stats.with_isbn / stats.total_listings * 100) }}% of total
+            {% else %}—{% endif %}
+        </div>
     </a>
-    <a href="/prices" class="stat-card" style="text-decoration:none; color:inherit;">
-        <h2>{{ stats.total_prices }}</h2>
-        <small>Price Records</small>
+    <a href="/prices" class="stat-card">
+        <div class="stat-label">Price Records</div>
+        <div class="stat-value">{{ "{:,}".format(stats.total_prices) }}</div>
     </a>
 </div>
 
-<h2>Recent Runs</h2>
-<table>
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Phase</th>
-            <th>Status</th>
-            <th>Started</th>
-            <th>Items Added</th>
-            <th>Updated</th>
-            <th>Errors</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for run in recent_runs %}
-        <tr>
-            <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
-            <td>{{ run.phase }}</td>
-            <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
-            <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
-            <td><a href="/runs/{{ run.id }}">{{ run.items_added }}</a></td>
-            <td><a href="/runs/{{ run.id }}">{{ run.items_updated }}</a></td>
-            <td><a href="/runs/{{ run.id }}">{{ run.error_count }}</a></td>
-        </tr>
+<div class="grid-2col">
+    <div class="card mb-0">
+        <div class="card-title">Data Completeness</div>
+        {% for item in completeness %}
+        <div class="progress-item">
+            <div class="progress-label">{{ item.field }} {{ item.pct }}%</div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: {{ item.pct }}%"></div>
+            </div>
+        </div>
         {% endfor %}
-    </tbody>
-</table>
+        {% if not completeness %}
+        <p class="text-muted">No listings yet.</p>
+        {% endif %}
+    </div>
 
-<h2>Validation Summary</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Issue Type</th>
-            <th>Count</th>
-        </tr>
-    </thead>
-    <tbody>
+    <div class="card mb-0">
+        <div class="card-title">Recent Runs</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Shop</th>
+                    <th>Phase</th>
+                    <th>Status</th>
+                    <th class="text-right">Added</th>
+                    <th class="text-right">Updated</th>
+                    <th class="text-right text-muted">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in recent_runs %}
+                <tr>
+                    <td><a href="/runs/{{ run.id }}">{{ run.shop.name if run.shop else '—' }}</a></td>
+                    <td>{{ run.phase }}</td>
+                    <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+                    <td class="text-right">{{ "{:,}".format(run.items_added) if run.items_added else '0' }}</td>
+                    <td class="text-right">{{ "{:,}".format(run.items_updated) if run.items_updated else '0' }}</td>
+                    <td class="text-right text-muted">
+                        {% if run.finished_at and run.started_at %}
+                            {% set secs = (run.finished_at - run.started_at).total_seconds() | int %}
+                            {% if secs >= 60 %}{{ (secs // 60) }}m{% else %}{{ secs }}s{% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not recent_runs %}
+                <tr><td colspan="6" class="text-muted">No runs yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if validation %}
+<div class="card">
+    <div class="card-title">Validation Issues</div>
+    <div class="validation-inline">
         {% for v in validation %}
-        <tr>
-            <td><a href="/validation/{{ v.issue_type }}">{{ v.issue_type }}</a></td>
-            <td>{{ v.count }}</td>
-        </tr>
+        <a href="/validation/{{ v.issue_type }}" class="validation-inline-item">
+            <span class="badge badge-warning">{{ "{:,}".format(v.count) }}</span>
+            {{ v.issue_type }}
+        </a>
         {% endfor %}
-    </tbody>
-</table>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
