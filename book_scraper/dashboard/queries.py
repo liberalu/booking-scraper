@@ -503,7 +503,10 @@ def get_data_completeness(session: Session) -> list[dict]:
             or 0
         )
         pct = round(present / total * 100, 1) if total > 0 else 0
-        result.append({"field": field_name, "present": present, "total": total, "pct": pct})
+        result.append({
+            "field": field_name, "present": present,
+            "total": total, "pct": pct,
+        })
     return result
 
 
@@ -521,7 +524,11 @@ def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> d
         base = base.filter(DiscoveredUrl.shop_id == shop_id)
     total = base.count()
     in_listings = (
-        base.join(Listing, (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url))
+        base.join(
+            Listing,
+            (Listing.shop_id == DiscoveredUrl.shop_id)
+            & (Listing.url == DiscoveredUrl.url),
+        )
         .count()
     )
     not_in_listings = total - in_listings
@@ -556,7 +563,8 @@ def get_discovered_urls_page(
     if status == "not_in_listings":
         query = query.outerjoin(
             Listing,
-            (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url),
+            (Listing.shop_id == DiscoveredUrl.shop_id)
+            & (Listing.url == DiscoveredUrl.url),
         ).filter(Listing.id.is_(None))
     elif status == "failed":
         query = query.filter(DiscoveredUrl.fail_count >= 3)
