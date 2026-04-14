@@ -178,3 +178,47 @@ def trigger_shop_run(shop_name: str, phase: str = "scan") -> HTMLResponse:
         f'<p class="success">Started {phase} for {shop_name}</p>',
         status_code=200,
     )
+
+
+@router.post("/shops/{shop_name}/scrape-url")
+def scrape_single_url(shop_name: str, url: str = "") -> HTMLResponse:
+    if not url:
+        return HTMLResponse(
+            '<p class="error">No URL provided</p>', status_code=400
+        )
+
+    client = get_docker_client()
+    if client is None:
+        return HTMLResponse(
+            '<p class="error">Docker not available</p>', status_code=503
+        )
+
+    containers = client.containers.list(
+        filters={"label": "com.docker.compose.service=scraper"}
+    )
+    if not containers:
+        return HTMLResponse(
+            '<p class="error">Scraper container not found</p>',
+            status_code=503,
+        )
+
+    cmd = [
+        _SCRAPY,
+        "crawl",
+        "scan",
+        "-a",
+        f"shop={shop_name}",
+        "-a",
+        f"urls={url}",
+    ]
+    container = containers[0]
+    container.exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
+    return HTMLResponse(f'<p class="success">Scraping {url}</p>')
