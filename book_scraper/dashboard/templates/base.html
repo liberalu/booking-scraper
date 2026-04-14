@@ -20,7 +20,6 @@
         .badge-running { background: #f39c12; color: #fff; }
         .success { color: #2ecc71; }
         .error { color: #e74c3c; }
-        #log-output { background: #1a1a2e; color: #0f0; padding: 1rem; font-family: monospace; font-size: 0.85rem; height: 500px; overflow-y: auto; white-space: pre-wrap; border-radius: var(--pico-border-radius); }
     </style>
 </head>
 <body>
@@ -36,7 +35,6 @@
             <li><a href="/validation" class="{{ 'active' if active_page == 'validation' else '' }}">Validation</a></li>
             <li><a href="/prices" class="{{ 'active' if active_page == 'prices' else '' }}">Prices</a></li>
             <li><a href="/inventory" class="{{ 'active' if active_page == 'inventory' else '' }}">Inventory</a></li>
-            <li><a href="/logs" class="{{ 'active' if active_page == 'logs' else '' }}">Logs</a></li>
         </ul>
     </nav>
     <main class="container">
