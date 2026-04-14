@@ -204,7 +204,7 @@ def get_price_history(session: Session, listing_id: int) -> list[Price]:
 def get_price_changes(
     session: Session, days: int = 7, shop_id: int | None = None
 ) -> list[dict[str, Any]]:
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
     sql = text(f"""
         WITH ranked AS (
