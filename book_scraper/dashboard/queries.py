@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
@@ -184,9 +185,12 @@ def get_price_history(session: Session, listing_id: int) -> list[Price]:
     )
 
 
-def get_price_changes(session: Session, days: int = 7) -> list[dict]:
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    sql = text("""
+def get_price_changes(
+    session: Session, days: int = 7, shop_id: int | None = None
+) -> list[dict[str, Any]]:
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
+    sql = text(f"""
         WITH ranked AS (
             SELECT
                 p.listing_id,
@@ -196,23 +200,38 @@ def get_price_changes(session: Session, days: int = 7) -> list[dict]:
                     PARTITION BY p.listing_id ORDER BY p.scraped_at
                 ) AS prev_price
             FROM prices p
+            JOIN listings l ON l.id = p.listing_id
             WHERE p.scraped_at >= :cutoff
+            {shop_filter}
+        ),
+        changes AS (
+            SELECT
+                r.listing_id,
+                l.title,
+                r.prev_price,
+                r.price AS new_price,
+                r.price - r.prev_price AS change,
+                r.scraped_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.listing_id, r.prev_price, r.price
+                    ORDER BY r.scraped_at DESC
+                ) AS rn
+            FROM ranked r
+            JOIN listings l ON l.id = r.listing_id
+            WHERE r.prev_price IS NOT NULL
+              AND r.price != r.prev_price
         )
-        SELECT
-            r.listing_id,
-            l.title,
-            r.prev_price,
-            r.price AS new_price,
-            r.price - r.prev_price AS change,
-            r.scraped_at
-        FROM ranked r
-        JOIN listings l ON l.id = r.listing_id
-        WHERE r.prev_price IS NOT NULL
-          AND r.price != r.prev_price
-        ORDER BY ABS(r.price - r.prev_price) DESC
+        SELECT listing_id, title, prev_price, new_price, change,
+               scraped_at
+        FROM changes
+        WHERE rn = 1
+        ORDER BY ABS(change) DESC
         LIMIT 50
     """)
-    rows = session.execute(sql, {"cutoff": cutoff}).mappings().all()
+    params: dict[str, Any] = {"cutoff": cutoff}
+    if shop_id:
+        params["shop_id"] = shop_id
+    rows = session.execute(sql, params).mappings().all()
     return [dict(r) for r in rows]
 
 
@@ -508,6 +527,73 @@ def get_data_completeness(session: Session) -> list[dict]:
             "total": total, "pct": pct,
         })
     return result
+
+
+def get_not_listed_count(session: Session, shop_id: int) -> int:
+    """Count discovered URLs that have no matching listing."""
+    sql = text("""
+        SELECT COUNT(*)
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+    """)
+    return session.execute(sql, {"shop_id": shop_id}).scalar() or 0
+
+
+def get_not_listed_urls(
+    session: Session,
+    shop_id: int,
+    page: int = 1,
+    per_page: int = 50,
+    sort_by: str = "",
+    sort_order: str = "desc",
+) -> tuple[list[dict[str, Any]], int]:
+    """Get discovered URLs that have no matching listing, paginated."""
+    count_sql = text("""
+        SELECT COUNT(*)
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+    """)
+    total = (
+        session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
+    )
+
+    sort_col = "du.discovered_at"
+    if sort_by == "url":
+        sort_col = "du.url"
+    direction = "ASC" if sort_order == "asc" else "DESC"
+
+    data_sql = text(f"""
+        SELECT du.url, du.discovered_at, du.source, du.url_type
+        FROM discovered_urls du
+        WHERE du.shop_id = :shop_id
+          AND NOT EXISTS (
+              SELECT 1 FROM listings l
+              WHERE l.shop_id = du.shop_id AND l.url = du.url
+          )
+        ORDER BY {sort_col} {direction}
+        OFFSET :offset LIMIT :limit
+    """)
+    rows = (
+        session.execute(
+            data_sql,
+            {
+                "shop_id": shop_id,
+                "offset": (page - 1) * per_page,
+                "limit": per_page,
+            },
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows], total
 
 
 DISCOVERED_URL_SORT_COLUMNS = {

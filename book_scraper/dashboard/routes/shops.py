@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
     get_all_shops,
+    get_not_listed_urls,
     get_run_health,
     get_shop_by_name,
     get_shop_field_stats,
@@ -175,3 +176,35 @@ def scrape_single_url(shop_name: str, url: str = ""):
         },
     )
     return HTMLResponse(f'<p class="success">Scraping {url}</p>')
+
+
+@router.get("/shops/{shop_name}/not-listed")
+def not_listed_page(
+    shop_name: str,
+    request: Request,
+    page: int = 1,
+    sort: str = "",
+    order: str = "desc",
+    session: Session = Depends(get_db),
+) -> HTMLResponse:
+    shop = get_shop_by_name(session, shop_name)
+    if shop is None:
+        return HTMLResponse("Shop not found", status_code=404)
+    urls, total = get_not_listed_urls(
+        session, shop.id, page=page, sort_by=sort, sort_order=order
+    )
+    total_pages = (total + 49) // 50
+    return templates.TemplateResponse(
+        request,
+        "not_listed.html",
+        {
+            "active_page": "shops",
+            "shop": shop,
+            "urls": urls,
+            "total": total,
+            "page": page,
+            "total_pages": total_pages,
+            "sort": sort,
+            "order": order,
+        },
+    )
