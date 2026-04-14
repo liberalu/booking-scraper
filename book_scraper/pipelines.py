@@ -453,6 +453,7 @@ class PostgresPipeline:
                     price=price,
                     price_original=price_original,
                     in_stock=adapter.get("in_stock", True),
+                    run_id=self._run_id,
                 )
 
         elif isinstance(item, PriceItem):
@@ -484,6 +485,7 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                run_id=self._run_id,
             )
 
         elif isinstance(item, DiscoveredUrlItem):

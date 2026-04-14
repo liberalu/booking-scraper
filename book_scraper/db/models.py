@@ -127,6 +127,9 @@ class Price(Base):
     scraped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
+    scrape_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True, index=True
+    )
     discount_pct: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         Computed(

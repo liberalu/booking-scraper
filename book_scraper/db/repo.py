@@ -147,6 +147,7 @@ def insert_price(
     price: Decimal,
     price_original: Decimal | None,
     in_stock: bool,
+    run_id: int | None = None,
 ) -> Price:
     record = Price(
         listing_id=listing_id,
@@ -154,6 +155,7 @@ def insert_price(
         price_original=price_original,
         in_stock=in_stock,
         scraped_at=datetime.now(UTC),
+        scrape_run_id=run_id,
     )
     session.add(record)
     session.flush()

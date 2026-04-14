@@ -481,7 +481,44 @@ def get_shop_runs(
 def get_run_listings(
     session: Session, run_id: int
 ) -> tuple[list[Listing], list[Listing]]:
-    """Get listings created and updated in a specific run."""
+    """Get listings created and updated in a specific run.
+
+    Uses the prices table (append-only, keyed by scrape_run_id) to find
+    listings touched by the run.  A listing whose first_seen_at falls within
+    the run window *and* whose earliest price row belongs to this run is
+    counted as "created"; everything else is "updated".
+
+    Falls back to the legacy last_run_id column when no price rows reference
+    the run (e.g. discover-only runs that don't insert prices).
+    """
+    # All listing IDs that have a price row for this run
+    price_listing_ids = (
+        session.query(Price.listing_id)
+        .filter(Price.scrape_run_id == run_id)
+        .distinct()
+        .subquery()
+    )
+
+    listings_in_run = (
+        session.query(Listing)
+        .filter(Listing.id.in_(session.query(price_listing_ids.c.listing_id)))
+        .order_by(Listing.title)
+        .all()
+    )
+
+    if listings_in_run:
+        created = [
+            listing
+            for listing in listings_in_run
+            if listing.last_run_id == run_id
+            and listing.last_run_action == "created"
+        ]
+        updated = [
+            listing for listing in listings_in_run if listing not in created
+        ]
+        return created, updated
+
+    # Fallback: legacy last_run_id (works for the most recent run only)
     created = (
         session.query(Listing)
         .filter(Listing.last_run_id == run_id, Listing.last_run_action == "created")
