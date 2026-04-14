@@ -12,7 +12,9 @@
 <h1>{{ shop.name }} <small>{{ shop.base_url }}</small></h1>
 
 <div class="stat-grid">
-    <article class="stat-card"><h2>{{ stats.discovered_urls }}</h2><small>Discovered URLs</small></article>
+    <a href="/shops/{{ shop.name }}/not-listed" class="stat-card" style="text-decoration:none; color:inherit;">
+        <h2>{{ stats.discovered_urls }}</h2><small>Discovered URLs</small>
+    </a>
     <a href="/listings?shop={{ shop.name }}" class="stat-card" style="text-decoration:none; color:inherit;">
         <h2>{{ stats.listings }}</h2><small>Listings</small>
     </a>
