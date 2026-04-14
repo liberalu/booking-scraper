@@ -505,3 +505,68 @@ def get_data_completeness(session: Session) -> list[dict]:
         pct = round(present / total * 100, 1) if total > 0 else 0
         result.append({"field": field_name, "present": present, "total": total, "pct": pct})
     return result
+
+
+DISCOVERED_URL_SORT_COLUMNS = {
+    "url": DiscoveredUrl.url,
+    "fails": DiscoveredUrl.fail_count,
+    "discovered": DiscoveredUrl.discovered_at,
+}
+
+
+def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> dict:
+    """Get stats for discovered URLs page."""
+    base = session.query(DiscoveredUrl)
+    if shop_id:
+        base = base.filter(DiscoveredUrl.shop_id == shop_id)
+    total = base.count()
+    in_listings = (
+        base.join(Listing, (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url))
+        .count()
+    )
+    not_in_listings = total - in_listings
+    failed = base.filter(DiscoveredUrl.fail_count >= 3).count()
+    return {
+        "total": total,
+        "in_listings": in_listings,
+        "not_in_listings": not_in_listings,
+        "failed": failed,
+    }
+
+
+def get_discovered_urls_page(
+    session: Session,
+    page: int = 1,
+    per_page: int = 50,
+    shop_id: int | None = None,
+    source: str = "",
+    status: str = "",
+    search: str = "",
+    sort_by: str = "discovered",
+    sort_order: str = "desc",
+) -> tuple[list, int]:
+    """Return paginated discovered URLs with filters."""
+    query = session.query(DiscoveredUrl).options(joinedload(DiscoveredUrl.shop))
+    if shop_id:
+        query = query.filter(DiscoveredUrl.shop_id == shop_id)
+    if source:
+        query = query.filter(DiscoveredUrl.source == source)
+    if search:
+        query = query.filter(DiscoveredUrl.url.ilike(f"%{search}%"))
+    if status == "not_in_listings":
+        query = query.outerjoin(
+            Listing,
+            (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url),
+        ).filter(Listing.id.is_(None))
+    elif status == "failed":
+        query = query.filter(DiscoveredUrl.fail_count >= 3)
+    elif status in ("unknown", "product", "non_product"):
+        query = query.filter(DiscoveredUrl.url_type == status)
+    total = query.count()
+    order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.discovered_at)
+    if sort_order == "asc":
+        query = query.order_by(order_col.asc().nulls_last())
+    else:
+        query = query.order_by(order_col.desc().nulls_last())
+    urls = query.offset((page - 1) * per_page).limit(per_page).all()
+    return urls, total
