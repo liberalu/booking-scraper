@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Listings{% endblock %}
+{% block content %}
+<h1>Listings</h1>
+
+<form method="get" action="/listings">
+    <div class="grid">
+        <input type="search" name="q" placeholder="Search by title..." value="{{ query }}">
+        <input type="search" name="author" placeholder="Filter by author..." value="{{ author_filter }}">
+        <input type="search" name="publisher" placeholder="Filter by publisher..." value="{{ publisher_filter }}">
+    </div>
+    <div class="grid">
+        <select name="category">
+            <option value="">All categories</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+        <select name="format">
+            <option value="">All formats</option>
+            <option value="none" {{ 'selected' if format_filter == 'none' else '' }}>Missing format</option>
+            {% for fmt in formats %}
+            <option value="{{ fmt }}" {{ 'selected' if format_filter == fmt else '' }}>{{ fmt }}</option>
+            {% endfor %}
+        </select>
+        <select name="missing">
+            <option value="">No missing filter</option>
+            <option value="any" {{ 'selected' if missing == 'any' else '' }}>Any field missing</option>
+            <option value="author" {{ 'selected' if missing == 'author' else '' }}>Missing author</option>
+            <option value="isbn" {{ 'selected' if missing == 'isbn' else '' }}>Missing ISBN</option>
+            <option value="year" {{ 'selected' if missing == 'year' else '' }}>Missing year</option>
+            <option value="publisher" {{ 'selected' if missing == 'publisher' else '' }}>Missing publisher</option>
+            <option value="format" {{ 'selected' if missing == 'format' else '' }}>Missing format</option>
+        </select>
+    </div>
+    <button type="submit">Filter</button>
+</form>
+
+{% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode %}
+
+<p><strong>{{ total }}</strong> results{% if author_filter %} for author "{{ author_filter }}"{% endif %}{% if publisher_filter %} for publisher "{{ publisher_filter }}"{% endif %}</p>
+
+{% if listings %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>ISBN</th>
+            <th>Format</th>
+            <th>Price</th>
+            <th>Original</th>
+            <th>Year</th>
+            <th>Active</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for l in listings %}
+        <tr>
+            <td>{{ l.id }}</td>
+            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
+            <td>
+                {% if l.author %}
+                <a href="/listings?author={{ l.author|urlencode }}">{{ l.author[:30] }}{{ '...' if l.author|length > 30 else '' }}</a>
+                {% else %}-{% endif %}
+            </td>
+            <td>{{ l.isbn or '-' }}</td>
+            <td>{{ l.format or '-' }}</td>
+            <td>{{ l.price or '-' }}</td>
+            <td>{{ l.price_original or '-' }}</td>
+            <td>{{ l.year or '-' }}</td>
+            <td>{{ 'Yes' if l.is_active else 'No' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<nav>
+    <ul>
+        <li>
+            {% if page > 1 %}
+            <a href="/listings?page={{ page - 1 }}&{{ filter_params }}">Previous</a>
+            {% else %}
+            <span class="secondary">Previous</span>
+            {% endif %}
+        </li>
+        <li>Page {{ page }} of {{ total_pages }}</li>
+        <li>
+            {% if page < total_pages %}
+            <a href="/listings?page={{ page + 1 }}&{{ filter_params }}">Next</a>
+            {% else %}
+            <span class="secondary">Next</span>
+            {% endif %}
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<p>No listings found.</p>
+{% endif %}
+{% endblock %}

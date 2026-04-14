@@ -92,6 +92,12 @@ class Listing(Base):
     )
     match_method: Mapped[str | None] = mapped_column(match_method_enum, nullable=True)
 
+    # Run tracking
+    last_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
+    )
+    last_run_action: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Lifecycle
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     first_seen_at: Mapped[datetime] = mapped_column(
@@ -105,6 +111,7 @@ class Listing(Base):
 
     shop: Mapped["Shop"] = relationship(back_populates="listings")
     prices: Mapped[list["Price"]] = relationship(back_populates="listing")
+    changes: Mapped[list["ListingChange"]] = relationship(back_populates="listing")
 
 
 class Price(Base):
@@ -129,6 +136,26 @@ class Price(Base):
     )
 
     listing: Mapped["Listing"] = relationship(back_populates="prices")
+
+
+class ListingChange(Base):
+    __tablename__ = "listing_changes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id"), nullable=False, index=True
+    )
+    scrape_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
+    )
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    listing: Mapped["Listing"] = relationship(back_populates="changes")
 
 
 discovery_source_enum = Enum(
@@ -212,6 +239,10 @@ class ScrapeRun(Base):
     errors_4xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     errors_5xx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_heartbeat: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(

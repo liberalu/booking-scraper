@@ -23,9 +23,7 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
-templates = Jinja2Templates(
-    directory=str(Path(__file__).parent / "templates")
-)
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 def get_docker_client():  # type: ignore[no-untyped-def]

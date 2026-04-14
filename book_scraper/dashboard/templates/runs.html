@@ -1,36 +1,60 @@
 {% extends "base.html" %}
+{% from "macros.html" import sort_header %}
 {% block title %}Runs{% endblock %}
 {% block content %}
+<style>
+    .health-healthy { color: #2ecc40; }
+    .health-stale { color: #ffdc00; }
+    .health-dead { color: #ff4136; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+</style>
 <h1>Scrape Runs</h1>
 
-<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
-    <button hx-post="/runs/trigger?phase=discover_sitemap" hx-target="#trigger-result" hx-swap="innerHTML">Discover (Sitemap)</button>
-    <button hx-post="/runs/trigger?phase=discover_categories" hx-target="#trigger-result" hx-swap="innerHTML">Discover (Categories)</button>
-    <button hx-post="/runs/trigger?phase=scan" hx-target="#trigger-result" hx-swap="innerHTML">Scan</button>
-    <button hx-post="/runs/trigger?phase=rescrape" hx-target="#trigger-result" hx-swap="innerHTML" class="secondary">Rescrape All</button>
-</div>
-<div id="trigger-result"></div>
+<article>
+    <h3>Run Commands</h3>
+    <div class="actions">
+        <button hx-post="/runs/trigger?phase=discover_sitemap" hx-target="#run-result" hx-swap="innerHTML">Discover (Sitemap)</button>
+        <button hx-post="/runs/trigger?phase=discover_categories" hx-target="#run-result" hx-swap="innerHTML">Discover (Categories)</button>
+        <button hx-post="/runs/trigger?phase=scan" hx-target="#run-result" hx-swap="innerHTML">Scan</button>
+        <button class="secondary" hx-post="/runs/trigger?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
+    </div>
+    <div id="run-result" style="margin-top: 0.5rem;"></div>
+</article>
 
-<div hx-get="/runs" hx-trigger="every 10s" hx-select="table" hx-target="table" hx-swap="outerHTML">
-<table>
+<div hx-get="/runs?sort={{ sort }}&order={{ order }}" hx-trigger="every 10s" hx-select="#runs-table" hx-target="#runs-table" hx-swap="outerHTML">
+<table id="runs-table">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Phase</th>
-            <th>Status</th>
-            <th>Started</th>
+            <th>{{ sort_header('id', 'ID', sort, order) }}</th>
+            <th>Shop</th>
+            <th>{{ sort_header('phase', 'Phase', sort, order) }}</th>
+            <th>{{ sort_header('status', 'Status', sort, order) }}</th>
+            <th>Health</th>
+            <th>{{ sort_header('started_at', 'Started', sort, order) }}</th>
             <th>Duration</th>
-            <th>Added</th>
-            <th>Updated</th>
-            <th>Errors</th>
+            <th>Progress</th>
+            <th>{{ sort_header('items_added', 'Added', sort, order) }}</th>
+            <th>{{ sort_header('items_updated', 'Updated', sort, order) }}</th>
+            <th>{{ sort_header('error_count', 'Errors', sort, order) }}</th>
         </tr>
     </thead>
     <tbody>
         {% for run in runs %}
         <tr>
             <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+            <td><a href="/shops/{{ run.shop.name }}">{{ run.shop.name }}</a></td>
             <td>{{ run.phase }}</td>
             <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+            <td>
+                {% set health = run_health.get(run.id, '') %}
+                {% if health == 'healthy' %}
+                    <span class="health-healthy" title="Heartbeat active">&#9679; active</span>
+                {% elif health == 'stale' %}
+                    <span class="health-stale" title="No heartbeat for >5 min">&#9679; stale</span>
+                {% elif health == 'dead' %}
+                    <span class="health-dead" title="No heartbeat for >2 hours">&#9679; dead</span>
+                {% endif %}
+            </td>
             <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
             <td>
                 {% if run.finished_at and run.started_at %}
@@ -41,9 +65,18 @@
                     -
                 {% endif %}
             </td>
-            <td>{{ run.items_added }}</td>
-            <td>{{ run.items_updated }}</td>
-            <td>{{ run.error_count }}</td>
+            <td>
+                {% if run.urls_total %}
+                    {{ run.urls_processed }}/{{ run.urls_total }}
+                {% elif run.urls_processed %}
+                    {{ run.urls_processed }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td><a href="/runs/{{ run.id }}">{{ run.items_added }}</a></td>
+            <td><a href="/runs/{{ run.id }}">{{ run.items_updated }}</a></td>
+            <td><a href="/runs/{{ run.id }}">{{ run.error_count }}</a></td>
         </tr>
         {% endfor %}
     </tbody>

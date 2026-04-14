@@ -18,12 +18,19 @@ from book_scraper.spiders.registry import load_parsers
 class ScanSpider(scrapy.Spider):
     name = "scan"
 
-    def __init__(self, shop: str | None = None, rescrape: str = "false", **kwargs: Any):
+    def __init__(
+        self,
+        shop: str | None = None,
+        rescrape: str = "false",
+        urls: str = "",
+        **kwargs: Any,
+    ):
         super().__init__(**kwargs)
         if not shop:
             raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
         self._rescrape = rescrape.lower() in ("true", "1", "yes")
+        self._single_urls = [u.strip() for u in urls.split(",") if u.strip()]
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -47,6 +54,39 @@ class ScanSpider(scrapy.Spider):
         self._error_count: int = 0
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
+        # Single-URL mode: create a run but skip full scan plan
+        if self._single_urls:
+            database_url = self.settings.get("DATABASE_URL")
+            session_factory = get_session_factory(database_url)
+            session = session_factory()
+            try:
+                from book_scraper.db.repo import create_scrape_run, upsert_shop
+
+                shop = upsert_shop(
+                    session, self.shop_name, self.conf.shop.base_url
+                )
+                run = create_scrape_run(
+                    session, shop.id, "scan",
+                    urls_total=len(self._single_urls),
+                )
+                session.commit()
+                self._run_id = run.id
+            finally:
+                session.close()
+
+            self.logger.info(
+                "Single-URL mode: scraping %d URLs (run #%d)",
+                len(self._single_urls), self._run_id,
+            )
+            for url in self._single_urls:
+                yield scrapy.Request(
+                    url,
+                    callback=self.parse_product,
+                    errback=self.handle_error,
+                    meta={"discovered_url_id": None},
+                )
+            return
+
         database_url = self.settings.get("DATABASE_URL")
         session_factory = get_session_factory(database_url)
         session: Session = session_factory()
@@ -135,9 +175,13 @@ class ScanSpider(scrapy.Spider):
     ) -> Generator[ListingItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
 
+        url = response.url.split("?")[0]
         if 400 <= response.status < 500:
             self._errors_4xx += 1
             self._error_count += 1
+            self._report_validation(
+                "http_4xx", "response", url, str(response.status),
+            )
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=response.status,
@@ -147,6 +191,9 @@ class ScanSpider(scrapy.Spider):
         if 500 <= response.status < 600:
             self._errors_5xx += 1
             self._error_count += 1
+            self._report_validation(
+                "http_5xx", "response", url, str(response.status),
+            )
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=response.status,
@@ -218,14 +265,26 @@ class ScanSpider(scrapy.Spider):
         """Handle request failures (timeouts, connection errors)."""
         request = failure.request
         discovered_url_id = request.meta.get("discovered_url_id")
+        url = str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None
 
         if http_status and 400 <= http_status < 500:
             self._errors_4xx += 1
+            self._report_validation(
+                "http_4xx", "response", url, str(http_status),
+            )
         elif http_status and 500 <= http_status < 600:
             self._errors_5xx += 1
+            self._report_validation(
+                "http_5xx", "response", url, str(http_status),
+            )
+        else:
+            error_type = type(failure.value).__name__
+            self._report_validation(
+                "request_error", "response", url, error_type,
+            )
         self._error_count += 1
 
         self._queue_url_status_update(

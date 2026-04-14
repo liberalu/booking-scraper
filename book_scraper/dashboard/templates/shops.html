@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Shops - Book Scraper{% endblock %}
+{% block content %}
+<h1>Shops</h1>
+
+{% for item in shop_data %}
+<article>
+    <h3><a href="/shops/{{ item.shop.name }}">{{ item.shop.name }}</a> <small>{{ item.shop.base_url }}</small></h3>
+    <div class="stat-grid">
+        <div class="stat-card"><h2>{{ item.stats.discovered_urls }}</h2><small>Discovered URLs</small></div>
+        <div class="stat-card"><h2>{{ item.stats.listings }}</h2><small>Listings</small></div>
+        <div class="stat-card"><h2>{{ item.stats.active }}</h2><small>Active</small></div>
+        <div class="stat-card"><h2>{{ item.stats.prices }}</h2><small>Price Records</small></div>
+    </div>
+</article>
+{% endfor %}
+
+{% if not shop_data %}
+<p>No shops configured yet. Run a discover command to register a shop.</p>
+{% endif %}
+{% endblock %}

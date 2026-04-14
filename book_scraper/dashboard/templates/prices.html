@@ -1,9 +1,19 @@
 {% extends "base.html" %}
+{% from "macros.html" import sort_header %}
 {% block title %}Prices{% endblock %}
 {% block content %}
 <h1>Prices</h1>
 
+{% set base_params = "q=" ~ query|urlencode ~ "&shop=" ~ shop_filter|urlencode %}
+
+{% if shop_filter %}
+<div style="margin-bottom: 1rem;">
+    <span class="filter-badge">Shop: {{ shop_filter }} <a href="/prices?q={{ query|urlencode }}">✕</a></span>
+</div>
+{% endif %}
+
 <form method="get" action="/prices" role="search">
+    {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
     <input type="search" name="q" placeholder="Search listings by title..." value="{{ query }}">
     <button type="submit">Search</button>
 </form>
@@ -23,7 +33,7 @@
     <tbody>
         {% for l in listings %}
         <tr>
-            <td>{{ l.title }}</td>
+            <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 }}</a></td>
             <td>{{ l.author or '-' }}</td>
             <td>{{ l.price or '-' }}</td>
             <td>{{ l.price_original or '-' }}</td>
@@ -46,17 +56,17 @@
 <table>
     <thead>
         <tr>
-            <th>Title</th>
-            <th>Previous</th>
-            <th>New</th>
-            <th>Change</th>
-            <th>Date</th>
+            <th>{{ sort_header('title', 'Title', sort, order, base_params) }}</th>
+            <th>{{ sort_header('prev_price', 'Previous', sort, order, base_params) }}</th>
+            <th>{{ sort_header('new_price', 'New', sort, order, base_params) }}</th>
+            <th>{{ sort_header('change', 'Change', sort, order, base_params) }}</th>
+            <th>{{ sort_header('scraped_at', 'Date', sort, order, base_params) }}</th>
         </tr>
     </thead>
     <tbody>
         {% for c in changes %}
         <tr>
-            <td>{{ c.title }}</td>
+            <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
             <td>{{ c.prev_price }}</td>
             <td>{{ c.new_price }}</td>
             <td style="color: {{ 'green' if c.change < 0 else 'red' }}">

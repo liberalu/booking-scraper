@@ -261,6 +261,13 @@ class PostgresPipeline:
     def spider(self) -> Any:
         return self.crawler.spider if self.crawler else None
 
+    @property
+    def _run_id(self) -> int | None:
+        spider = self.spider
+        if spider and hasattr(spider, "_run_id"):
+            return spider._run_id
+        return None
+
     def _flush_stats(self, run_id: int) -> None:
         if self._stats_added or self._stats_updated:
             assert self.session is not None
@@ -306,6 +313,48 @@ class PostgresPipeline:
                     f"{old_price}->{new_price} ({change:.0%})",
                 )
 
+    def _report_field_changes(
+        self,
+        url: str,
+        listing_id: int,
+        changes: list[dict[str, object]],
+    ) -> None:
+        if not changes:
+            return
+        # Save to listing_changes table
+        from book_scraper.db.models import ListingChange
+
+        assert self.session is not None
+        for change in changes:
+            self.session.add(ListingChange(
+                listing_id=listing_id,
+                scrape_run_id=self._run_id,
+                field=str(change["field"]),
+                old_value=str(change["old"]) if change["old"] is not None else None,
+                new_value=str(change["new"]) if change["new"] is not None else None,
+            ))
+
+        # Also report as validation issues
+        vp: ValidationPipeline | None = getattr(
+            self.crawler, "validation_pipeline", None
+        )
+        if vp is None:
+            return
+        for change in changes:
+            field = change["field"]
+            old = change["old"]
+            new = change["new"]
+            if old is not None and new is None:
+                vp._warn(
+                    "field_cleared", str(field), url,
+                    f"was: {old}",
+                )
+            elif old != new and old is not None:
+                vp._warn(
+                    "field_changed", str(field), url,
+                    f"{old} -> {new}",
+                )
+
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
             assert self.session is not None
@@ -343,7 +392,7 @@ class PostgresPipeline:
                 else None
             )
 
-            listing, created, old_price = upsert_listing(
+            listing, created, old_price, changes = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -361,6 +410,7 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                run_id=self._run_id,
             )
             if created:
                 self._stats_added += 1
@@ -368,6 +418,9 @@ class PostgresPipeline:
                 self._stats_updated += 1
                 self._check_price_spike(
                     adapter["url"], old_price, price,
+                )
+                self._report_field_changes(
+                    adapter["url"], listing.id, changes,
                 )
             if price is not None:
                 insert_price(
@@ -386,7 +439,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing, created, old_price = upsert_listing(
+            listing, created, old_price, _ = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -394,6 +447,7 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                run_id=self._run_id,
             )
             if created:
                 self._stats_added += 1
