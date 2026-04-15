@@ -76,6 +76,7 @@
                 <th class="text-right">Original</th>
                 <th class="text-right">{{ sort_header('year', 'Year', sort, order, filter_params) }}</th>
                 <th>{{ sort_header('is_active', 'Active', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('last_seen_at', 'Updated', sort, order, filter_params) }}</th>
             </tr>
         </thead>
         <tbody>
@@ -104,6 +105,7 @@
                     <span class="badge badge-neutral">No</span>
                     {% endif %}
                 </td>
+                <td class="text-muted">{{ l.last_seen_at.strftime('%Y-%m-%d') if l.last_seen_at else '—' }}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -294,6 +294,7 @@ SORT_COLUMNS = {
     "price": Listing.price,
     "year": Listing.year,
     "is_active": Listing.is_active,
+    "last_seen_at": Listing.last_seen_at,
 }
 
 
