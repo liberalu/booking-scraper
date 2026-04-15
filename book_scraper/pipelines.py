@@ -375,6 +375,47 @@ class PostgresPipeline:
                     f"{old} -> {new}",
                 )
 
+    _WATCHED_EMPTY_FIELDS = (
+        "author",
+        "isbn",
+        "publisher",
+        "year",
+        "format",
+        "description",
+        "image_url",
+    )
+
+    def _report_empty_fields(
+        self,
+        url: str,
+        adapter: ItemAdapter,
+        prior_values: dict[str, Any],
+    ) -> None:
+        """Emit a validation issue when a full scrape returns None for a
+        field that was previously populated.
+
+        Covers the case where a product page parser silently regresses
+        (e.g. selector breaks) — the upsert leaves the old value in
+        place, so users never notice the scrape provided nothing.
+        """
+        if not prior_values:
+            return
+        vp: ValidationPipeline | None = getattr(
+            self.crawler, "validation_pipeline", None
+        )
+        if vp is None:
+            return
+        for field in self._WATCHED_EMPTY_FIELDS:
+            old = prior_values.get(field)
+            new = adapter.get(field)
+            if old is not None and new is None:
+                vp._warn(
+                    "field_missing",
+                    field,
+                    url,
+                    f"was: {old}",
+                )
+
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:
             assert self.session is not None
@@ -412,6 +453,32 @@ class PostgresPipeline:
                 else None
             )
 
+            # Capture existing values so we can detect fields the full
+            # scrape failed to re-extract (empty-parse regression).
+            from book_scraper.db.models import Listing as _Listing
+
+            prior = (
+                self.session.query(_Listing)
+                .filter_by(shop_id=shop_id, url=adapter["url"])
+                .first()
+            )
+            prior_values = (
+                {
+                    f: getattr(prior, f)
+                    for f in (
+                        "author",
+                        "isbn",
+                        "publisher",
+                        "year",
+                        "format",
+                        "description",
+                        "image_url",
+                    )
+                }
+                if prior
+                else {}
+            )
+
             listing, created, old_price, changes = upsert_listing(
                 self.session,
                 shop_id=shop_id,
@@ -445,6 +512,11 @@ class PostgresPipeline:
                     adapter["url"],
                     listing.id,
                     changes,
+                )
+                self._report_empty_fields(
+                    adapter["url"],
+                    adapter,
+                    prior_values,
                 )
             if price is not None:
                 insert_price(
