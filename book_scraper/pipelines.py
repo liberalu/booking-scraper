@@ -537,7 +537,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing, created, old_price, _ = upsert_listing(
+            listing, created, old_price, changes = upsert_listing(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -553,6 +553,11 @@ class PostgresPipeline:
             else:
                 self._stats_updated += 1
                 self._check_price_spike(adapter["url"], old_price, price)
+                self._report_field_changes(
+                    adapter["url"],
+                    listing.id,
+                    changes,
+                )
             insert_price(
                 self.session,
                 listing_id=listing.id,
