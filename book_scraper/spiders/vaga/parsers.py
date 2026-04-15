@@ -33,6 +33,14 @@ def parse_category_page(html: str) -> list[dict[str, str | None]]:
         url = name_match.group(1).split("?")[0].strip()
         title = html_module.unescape(name_match.group(2).strip())
 
+        author = None
+        author_match = re.search(
+            r'<p class="Autorius">\s*([^<]+?)\s*</p>',
+            seg,
+        )
+        if author_match:
+            author = html_module.unescape(author_match.group(1).strip())
+
         price = None
         price_match = re.search(r'class="price coupon">([0-9,]+)€', seg)
         if price_match:
@@ -52,6 +60,7 @@ def parse_category_page(html: str) -> list[dict[str, str | None]]:
             {
                 "url": url,
                 "title": title,
+                "author": author,
                 "price": price,
                 "price_original": price_original,
                 "image_url": image_url,

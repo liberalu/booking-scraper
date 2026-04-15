@@ -86,10 +86,13 @@ def upsert_listing(
         changes: list[dict[str, Any]] = []
         tracked_fields = {
             "title": title,
-            "author": author,
         }
-        # Fields that only update when provided (not None)
+        # Fields that only update when provided (not None). Author is
+        # conditional so a lightweight PriceItem (category scrape) that
+        # didn't parse an author can't clobber one captured from the full
+        # product page.
         conditional_fields: dict[str, str | int | None] = {
+            "author": author,
             "sku": sku,
             "isbn": isbn,
             "publisher": publisher,

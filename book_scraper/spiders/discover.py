@@ -167,6 +167,7 @@ class DiscoverSpider(scrapy.Spider):
                         url=url,
                         shop_name=self.shop_name,
                         title=product.get("title", ""),
+                        author=product.get("author"),
                         price=product.get("price"),
                         price_original=product.get("price_original"),
                         in_stock=True,

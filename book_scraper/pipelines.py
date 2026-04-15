@@ -469,6 +469,7 @@ class PostgresPipeline:
                 shop_id=shop_id,
                 url=adapter["url"],
                 title=adapter.get("title") or adapter["url"],
+                author=adapter.get("author"),
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),

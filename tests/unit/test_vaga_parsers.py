@@ -70,6 +70,23 @@ def test_parse_category_page_unescapes_html_entities_in_title():
     assert products[0]["title"] == "Scythe & Sparrow"
 
 
+def test_parse_category_page_extracts_author():
+    html_doc = """
+    <div class="product-item-container product-1">
+      <p class="name"><a href="https://vaga.lt/x">Title</a></p>
+      <p class="Autorius">Paulo Coelho</p>
+      <span class="price coupon">10,00€</span>
+    </div>
+    <div class="product-item-container product-2">
+      <p class="name"><a href="https://vaga.lt/y">No Author</a></p>
+      <span class="price coupon">5,00€</span>
+    </div>
+    """
+    products = parse_category_page(html_doc)
+    assert products[0]["author"] == "Paulo Coelho"
+    assert products[1]["author"] is None
+
+
 def test_parse_product_page_unescapes_author():
     html_doc = """
     <div class="brand"><span>Autorius </span><a>Tom &amp; Jerry</a></div>
