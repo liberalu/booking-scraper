@@ -140,6 +140,21 @@ def parse_product_page(html: str) -> dict[str, object]:
                 if item.get("name")
             ]
 
+    # Some products show a "price-new special" promotional price that's
+    # DIFFERENT from JSON-LD offers.price. When present, it's the price the
+    # user actually sees, so treat it as authoritative and promote the
+    # JSON-LD price (which in this layout is the higher list price) to
+    # price_original.
+    special_match = re.search(
+        r'class="price-new special"[^>]*>\s*([\d,]+)€',
+        html,
+    )
+    if special_match:
+        list_price = data["price"]
+        data["price"] = special_match.group(1).replace(",", ".")
+        if not data["price_original"] and list_price:
+            data["price_original"] = list_price
+
     # Extract original/bookstore price from HTML (not in JSON-LD)
     original_match = re.search(r'class="price-knygyne">([0-9,]+)€', html)
     if original_match:

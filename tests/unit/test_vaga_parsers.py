@@ -76,3 +76,40 @@ def test_parse_product_page_unescapes_author():
     """
     data = parse_product_page(html_doc)
     assert data["author"] == "Tom & Jerry"
+
+
+def test_parse_product_page_price_new_special_overrides_jsonld():
+    """When 'price-new special' is present, it's the true selling price;
+    JSON-LD offers.price is the (higher) list price on that layout."""
+    ld = (
+        '{"@type":"Book","name":"X","sku":"1",'
+        '"offers":{"price":"26.14","availability":"InStock"}}'
+    )
+    html_doc = (
+        '<html><body><script type="application/ld+json">'
+        + ld
+        + '</script><div class="product-price-wrapper prices">'
+        '<span class="price-new special"> 15,80€ </span></div>'
+        "</body></html>"
+    )
+    data = parse_product_page(html_doc)
+    assert data["price"] == "15.80"
+    assert data["price_original"] == "26.14"
+
+
+def test_parse_product_page_price_knygyne_still_wins_for_original():
+    """price-knygyne represents the bookstore RRP and overrides the
+    promoted JSON-LD value when both are present."""
+    ld = (
+        '{"@type":"Book","name":"X","sku":"1",'
+        '"offers":{"price":"26.14","availability":"InStock"}}'
+    )
+    html_doc = (
+        '<html><body><script type="application/ld+json">'
+        + ld
+        + '</script><span class="price-new special">15,80€</span>'
+        '<div class="price-knygyne">18,90€</div></body></html>'
+    )
+    data = parse_product_page(html_doc)
+    assert data["price"] == "15.80"
+    assert data["price_original"] == "18.90"
