@@ -76,7 +76,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
     health = get_run_health(run)
-    created, updated = get_run_listings(session, run_id)
+    created, changed, unchanged = get_run_listings(session, run_id)
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -86,7 +86,8 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             "issues": issues,
             "health": health,
             "created": created,
-            "updated": updated,
+            "changed": changed,
+            "unchanged": unchanged,
         },
     )
 

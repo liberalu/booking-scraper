@@ -448,13 +448,15 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
 
 def get_run_listings(
     session: Session, run_id: int
-) -> tuple[list[Listing], list[Listing]]:
-    """Get listings created and updated in a specific run.
+) -> tuple[list[Listing], list[Listing], list[Listing]]:
+    """Get listings created, changed, and unchanged in a specific run.
 
     Uses the prices table (append-only, keyed by scrape_run_id) to find
     listings touched by the run.  A listing whose first_seen_at falls within
     the run window *and* whose earliest price row belongs to this run is
-    counted as "created"; everything else is "updated".
+    counted as "created".  Among existing listings, those with field changes
+    (in listing_changes) or price changes are "changed"; the rest are
+    "unchanged".
 
     Falls back to the legacy last_run_id column when no price rows reference
     the run (e.g. discover-only runs that don't insert prices).
@@ -474,32 +476,125 @@ def get_run_listings(
         .all()
     )
 
-    if listings_in_run:
+    if not listings_in_run:
+        # Fallback: legacy last_run_id (works for the most recent run only)
+        created = (
+            session.query(Listing)
+            .filter(
+                Listing.last_run_id == run_id,
+                Listing.last_run_action == "created",
+            )
+            .order_by(Listing.title)
+            .all()
+        )
+        rest = (
+            session.query(Listing)
+            .filter(
+                Listing.last_run_id == run_id,
+                Listing.last_run_action == "updated",
+            )
+            .order_by(Listing.title)
+            .all()
+        )
+        listings_in_run = created + rest
+    else:
         created = [
             listing
             for listing in listings_in_run
             if listing.last_run_id == run_id
             and listing.last_run_action == "created"
         ]
-        updated = [
+        rest = [
             listing for listing in listings_in_run if listing not in created
         ]
-        return created, updated
 
-    # Fallback: legacy last_run_id (works for the most recent run only)
-    created = (
-        session.query(Listing)
-        .filter(Listing.last_run_id == run_id, Listing.last_run_action == "created")
-        .order_by(Listing.title)
+    if not rest:
+        return created, [], []
+
+    # IDs of listings with field-level changes in this run
+    changed_ids = set(
+        row[0]
+        for row in session.query(ListingChange.listing_id)
+        .filter(ListingChange.scrape_run_id == run_id)
+        .distinct()
         .all()
     )
-    updated = (
-        session.query(Listing)
-        .filter(Listing.last_run_id == run_id, Listing.last_run_action == "updated")
-        .order_by(Listing.title)
-        .all()
-    )
-    return created, updated
+
+    # IDs of listings with price changes in this run
+    rest_ids = [listing.id for listing in rest]
+    if rest_ids:
+        # Current run prices
+        cur = (
+            session.query(Price.listing_id, Price.price, Price.in_stock)
+            .filter(
+                Price.scrape_run_id == run_id,
+                Price.listing_id.in_(rest_ids),
+            )
+            .subquery()
+        )
+
+        # Previous price: most recent price before this run's price
+        run_prices = (
+            session.query(Price)
+            .filter(Price.scrape_run_id == run_id)
+            .subquery()
+        )
+        prev = (
+            session.query(
+                Price.listing_id,
+                Price.price,
+                Price.in_stock,
+            )
+            .filter(
+                Price.listing_id.in_(rest_ids),
+                Price.scrape_run_id != run_id,
+                Price.scraped_at < (
+                    session.query(func.min(run_prices.c.scraped_at))
+                    .filter(
+                        run_prices.c.listing_id == Price.listing_id,
+                    )
+                    .correlate(Price)
+                    .scalar_subquery()
+                ),
+            )
+            .distinct(Price.listing_id)
+            .order_by(Price.listing_id, Price.scraped_at.desc())
+            .subquery()
+        )
+
+        # Find listings where price or in_stock differs
+        price_changed_rows = (
+            session.query(cur.c.listing_id)
+            .outerjoin(prev, cur.c.listing_id == prev.c.listing_id)
+            .filter(
+                (prev.c.listing_id.is_(None))  # first re-scrape (no prev)
+                | (cur.c.price != prev.c.price)
+                | (cur.c.in_stock != prev.c.in_stock)
+            )
+            .all()
+        )
+        # Only count as price-changed if there WAS a previous price
+        # (no prev = first scrape of existing listing, not a "change")
+        price_changed_rows = (
+            session.query(cur.c.listing_id)
+            .join(prev, cur.c.listing_id == prev.c.listing_id)
+            .filter(
+                (cur.c.price != prev.c.price)
+                | (cur.c.in_stock != prev.c.in_stock)
+            )
+            .all()
+        )
+        price_changed_ids = {row[0] for row in price_changed_rows}
+    else:
+        price_changed_ids = set()
+
+    all_changed_ids = changed_ids | price_changed_ids
+    changed = [listing for listing in rest if listing.id in all_changed_ids]
+    unchanged = [
+        listing for listing in rest if listing.id not in all_changed_ids
+    ]
+
+    return created, changed, unchanged
 
 
 def get_shop_field_stats(session: Session, shop_id: int) -> dict:
