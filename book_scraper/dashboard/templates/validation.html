@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Validation{% endblock %}
+{% block title %}Issues{% endblock %}
 {% block content %}
-<h1 class="page-title">Validation Issues</h1>
+<h1 class="page-title">Issues</h1>
 
-{% if summary %}
 <div class="card" style="padding: 0; overflow: hidden;">
+    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Validation Issues</p>
+    {% if summary %}
     <table class="data-table">
         <thead>
             <tr>
@@ -21,8 +22,40 @@
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p style="padding: 1rem;">No validation issues found.</p>
+    {% endif %}
 </div>
-{% else %}
-<p>No validation issues found.</p>
-{% endif %}
+
+<div class="card" style="padding: 0; overflow: hidden; margin-top: 1rem;">
+    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Recent Price Changes (7 days)</p>
+    {% if price_changes %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th class="text-right">Previous</th>
+                <th class="text-right">New</th>
+                <th class="text-right">Change</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in price_changes %}
+            <tr>
+                <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
+                <td class="text-right">{{ c.prev_price }}</td>
+                <td class="text-right">{{ c.new_price }}</td>
+                <td class="text-right {{ 'price-down' if c.change < 0 else 'price-up' }}">
+                    {{ '%+.2f'|format(c.change|float) }}
+                </td>
+                <td class="text-muted">{{ c.scraped_at.strftime('%Y-%m-%d %H:%M') if c.scraped_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="padding: 1rem;">No price changes in the last 7 days.</p>
+    {% endif %}
+</div>
 {% endblock %}

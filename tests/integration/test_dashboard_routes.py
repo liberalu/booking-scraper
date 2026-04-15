@@ -43,13 +43,12 @@ ROUTES = [
     "/shops/vaga",
     "/shops/vaga/not-listed",
     "/runs",
-    "/prices",
+    "/validation",
     "/listings",
     # Filter combinations
     "/listings?active=true",
     "/listings?has_isbn=true",
     "/listings?shop=vaga",
-    "/prices?shop=vaga",
     # Sorting
     "/runs?sort=started_at&order=desc",
     "/runs?sort=id&order=asc",
