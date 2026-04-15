@@ -186,19 +186,21 @@ def parse_product_page(html: str) -> dict[str, object]:
             ]
 
     # Some products show a "price-new special" promotional price that's
-    # DIFFERENT from JSON-LD offers.price. When present, it's the price the
-    # user actually sees, so treat it as authoritative and promote the
-    # JSON-LD price (which in this layout is the higher list price) to
-    # price_original.
+    # DIFFERENT from JSON-LD offers.price. The user-facing page shows the
+    # "price-new special" value and no secondary/original price, so treat
+    # it as authoritative and DROP the JSON-LD price rather than promote
+    # it — vaga's JSON-LD carries a non-public wholesale/club price in
+    # that layout and it would mislead users as a strikethrough "was"
+    # price.
+    # "price-new special" and "price-new coupon" both carry the actual
+    # displayed price on product pages; JSON-LD on these layouts is a
+    # non-public value and should be ignored.
     special_match = re.search(
-        r'class="price-new special"[^>]*>\s*([\d,]+)€',
+        r'class="price-new (?:special|coupon)"[^>]*>\s*([\d,]+)€',
         html,
     )
     if special_match:
-        list_price = data["price"]
         data["price"] = special_match.group(1).replace(",", ".")
-        if not data["price_original"] and list_price:
-            data["price_original"] = list_price
 
     # Extract original/bookstore price from HTML (not in JSON-LD)
     original_match = re.search(r'class="price-knygyne">([0-9,]+)€', html)

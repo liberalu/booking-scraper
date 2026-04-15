@@ -391,12 +391,11 @@ class PostgresPipeline:
         adapter: ItemAdapter,
         prior_values: dict[str, Any],
     ) -> None:
-        """Emit a validation issue when a full scrape returns None for a
-        field that was previously populated.
+        """Emit a validation issue for every watched field that comes
+        back empty on a full scrape of an existing listing.
 
-        Covers the case where a product page parser silently regresses
-        (e.g. selector breaks) — the upsert leaves the old value in
-        place, so users never notice the scrape provided nothing.
+        Prior-value context is included when available so the Issues
+        view can distinguish "never had one" from a regression.
         """
         if not prior_values:
             return
@@ -406,15 +405,17 @@ class PostgresPipeline:
         if vp is None:
             return
         for field in self._WATCHED_EMPTY_FIELDS:
-            old = prior_values.get(field)
             new = adapter.get(field)
-            if old is not None and new is None:
-                vp._warn(
-                    "field_missing",
-                    field,
-                    url,
-                    f"was: {old}",
-                )
+            if new is not None:
+                continue
+            old = prior_values.get(field)
+            raw = f"was: {old}" if old is not None else "never populated"
+            vp._warn(
+                "field_missing",
+                field,
+                url,
+                raw,
+            )
 
     def _get_shop_id(self, shop_name: str) -> int:
         if shop_name not in self.shop_cache:

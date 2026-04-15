@@ -96,8 +96,9 @@ def test_parse_product_page_unescapes_author():
 
 
 def test_parse_product_page_price_new_special_overrides_jsonld():
-    """When 'price-new special' is present, it's the true selling price;
-    JSON-LD offers.price is the (higher) list price on that layout."""
+    """When 'price-new special' is present, it's the true selling price.
+    The JSON-LD offers.price is a non-public value on that layout, so we
+    drop it rather than surface it as a strikethrough 'was' price."""
     ld = (
         '{"@type":"Book","name":"X","sku":"1",'
         '"offers":{"price":"26.14","availability":"InStock"}}'
@@ -111,7 +112,7 @@ def test_parse_product_page_price_new_special_overrides_jsonld():
     )
     data = parse_product_page(html_doc)
     assert data["price"] == "15.80"
-    assert data["price_original"] == "26.14"
+    assert data["price_original"] is None
 
 
 def test_parse_product_page_extracts_rich_description():
@@ -143,6 +144,22 @@ def test_parse_product_page_extracts_rich_description():
     assert "alert(1)" not in data["description"]
     assert "style=" not in data["description"]
     assert "should strip" in data["description"]  # tag stripped, text kept
+
+
+def test_parse_product_page_price_new_coupon_also_overrides():
+    """price-new coupon and price-new special share the same semantic."""
+    ld = (
+        '{"@type":"Book","name":"X","sku":"1",'
+        '"offers":{"price":"15.50","availability":"InStock"}}'
+    )
+    html_doc = (
+        '<html><body><script type="application/ld+json">'
+        + ld
+        + '</script><span class="price-new coupon">10,85€</span>'
+        "</body></html>"
+    )
+    data = parse_product_page(html_doc)
+    assert data["price"] == "10.85"
 
 
 def test_parse_product_page_price_knygyne_still_wins_for_original():
