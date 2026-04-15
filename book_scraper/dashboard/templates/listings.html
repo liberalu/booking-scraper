@@ -93,8 +93,8 @@
                     <a href="/listings?has_isbn=true&q={{ l.isbn|urlencode }}">{{ l.isbn }}</a>
                     {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
-                <td>{{ l.format or '<span class="text-muted">—</span>' }}</td>
-                <td class="text-right">{{ l.price or '<span class="text-muted">—</span>' }}</td>
+                <td>{% if l.format %}{{ l.format }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-right">{% if l.price %}{{ l.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                 <td class="text-right text-muted">{{ l.price_original or '—' }}</td>
                 <td class="text-right text-muted">{{ l.year or '—' }}</td>
                 <td>

@@ -79,11 +79,11 @@
             </tr>
             <tr>
                 <th>Price</th>
-                <td>{{ listing.price or '<span class="text-muted">—</span>' }}</td>
+                <td>{% if listing.price %}{{ listing.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             <tr>
                 <th>Original Price</th>
-                <td>{{ listing.price_original or '<span class="text-muted">—</span>' }}</td>
+                <td>{% if listing.price_original %}{{ listing.price_original }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             <tr>
                 <th>URL</th>
@@ -168,9 +168,9 @@
             {% for p in prices %}
             <tr>
                 <td class="text-muted">{{ p.scraped_at.strftime('%Y-%m-%d %H:%M') if p.scraped_at else '—' }}</td>
-                <td class="text-right">{{ p.price or '<span class="text-muted">—</span>' }}</td>
+                <td class="text-right">{% if p.price %}{{ p.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                 <td class="text-right text-muted">{{ p.price_original or '—' }}</td>
-                <td class="text-right">{{ '%.0f%%'|format(p.discount_pct|float) if p.discount_pct else '<span class="text-muted">—</span>' }}</td>
+                <td class="text-right">{% if p.discount_pct %}{{ '%.0f%%'|format(p.discount_pct|float) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
