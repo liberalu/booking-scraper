@@ -9,6 +9,7 @@ from book_scraper.config import load_shop_config
 from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
+    mark_listings_inactive,
     mark_stale_runs_failed,
     upsert_shop,
 )
@@ -48,9 +49,13 @@ class DiscoverSpider(scrapy.Spider):
         self.strategy_conf: Any = strategy_conf
 
         self._run_id: int | None = None
+        self._shop_id: int | None = None
         self._urls_processed: int = 0
         self._urls_filtered: int = 0
         self._run_session: Session | None = None
+        # URLs discovered this run, used for change detection on the
+        # sitemap strategy (sitemap is comprehensive per shop).
+        self._sitemap_urls: set[str] = set()
 
     def _url_passes_filter(self, url: str) -> bool:
         if self.url_pattern is None:
@@ -74,6 +79,7 @@ class DiscoverSpider(scrapy.Spider):
             run = create_scrape_run(self._run_session, shop.id, phase)
             self._run_session.commit()
             self._run_id = run.id
+            self._shop_id = shop.id
 
         if self.strategy == "sitemap":
             yield scrapy.Request(self.strategy_conf.url, callback=self.parse_sitemap)
@@ -132,6 +138,7 @@ class DiscoverSpider(scrapy.Spider):
         for url in seen:
             if self._url_passes_filter(url):
                 self._urls_processed += 1
+                self._sitemap_urls.add(url)
                 yield DiscoveredUrlItem(
                     url=url, shop_name=self.shop_name, source="sitemap"
                 )
@@ -229,6 +236,24 @@ class DiscoverSpider(scrapy.Spider):
             return
         try:
             status = "completed" if reason == "finished" else "failed"
+            # Only the sitemap strategy enumerates every live URL in the
+            # shop, so only it can reliably mark vanished listings inactive.
+            if (
+                status == "completed"
+                and self.strategy == "sitemap"
+                and self._sitemap_urls
+                and self._shop_id is not None
+            ):
+                deactivated = mark_listings_inactive(
+                    self._run_session,
+                    shop_id=self._shop_id,
+                    active_urls=self._sitemap_urls,
+                )
+                if deactivated:
+                    self.logger.info(
+                        "Change detection: marked %d listing(s) inactive",
+                        deactivated,
+                    )
             finish_scrape_run(self._run_session, self._run_id, status)
             self._run_session.commit()
         finally:
