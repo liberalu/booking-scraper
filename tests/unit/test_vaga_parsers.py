@@ -114,6 +114,37 @@ def test_parse_product_page_price_new_special_overrides_jsonld():
     assert data["price_original"] == "26.14"
 
 
+def test_parse_product_page_extracts_rich_description():
+    """collapse-description block wins over flat JSON-LD description and
+    retains allowed paragraph tags."""
+    ld = (
+        '{"@type":"Book","name":"X","sku":"1","description":"plain flat",'
+        '"offers":{"price":"10","availability":"InStock"}}'
+    )
+    body = (
+        '<div id="collapse-description" class="desc-collapse">'
+        "<p>First para.</p><p>Second <strong>bold</strong> para.</p>"
+        '<script>alert(1)</script>'
+        '<span style="color:red">should strip</span>'
+        "</div>"
+    )
+    html_doc = (
+        '<html><body><script type="application/ld+json">'
+        + ld
+        + "</script>"
+        + body
+        + "</body></html>"
+    )
+    data = parse_product_page(html_doc)
+    assert "First para." in data["description"]
+    assert "<p>" in data["description"]
+    assert "<strong>bold</strong>" in data["description"]
+    assert "<script>" not in data["description"]
+    assert "alert(1)" not in data["description"]
+    assert "style=" not in data["description"]
+    assert "should strip" in data["description"]  # tag stripped, text kept
+
+
 def test_parse_product_page_price_knygyne_still_wins_for_original():
     """price-knygyne represents the bookstore RRP and overrides the
     promoted JSON-LD value when both are present."""

@@ -10,6 +10,42 @@ def _unescape(value: object) -> object:
     return html_module.unescape(value) if isinstance(value, str) else value
 
 
+_ALLOWED_DESCRIPTION_TAGS = frozenset(
+    {"p", "br", "strong", "em", "b", "i", "u", "ul", "ol", "li"}
+)
+
+
+def _sanitize_description_html(markup: str) -> str:
+    """Strip all tags except a small allowlist used by vaga descriptions.
+
+    Attributes are dropped; `<script>` / `<style>` blocks are removed
+    with their contents. Output is safe to feed into a Jinja `|safe`
+    filter for rendering.
+    """
+    # Drop entire script/style blocks (content + tags).
+    markup = re.sub(
+        r"<(script|style)\b[^>]*>.*?</\1>",
+        "",
+        markup,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Drop HTML comments.
+    markup = re.sub(r"<!--.*?-->", "", markup, flags=re.DOTALL)
+
+    def _filter(match: re.Match[str]) -> str:
+        slash, tag = match.group(1), match.group(2).lower()
+        if tag in _ALLOWED_DESCRIPTION_TAGS:
+            return f"<{slash}{tag}>"
+        return ""
+
+    markup = re.sub(
+        r"<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>",
+        _filter,
+        markup,
+    )
+    return markup.strip()
+
+
 def parse_sitemap_urls(xml_content: str) -> list[str]:
     """Extract all URLs from a vaga.lt sitemap XML string."""
     root = ET.fromstring(xml_content)
@@ -168,6 +204,18 @@ def parse_product_page(html: str) -> dict[str, object]:
     original_match = re.search(r'class="price-knygyne">([0-9,]+)€', html)
     if original_match:
         data["price_original"] = original_match.group(1).replace(",", ".")
+
+    # Prefer the rich-text description block over the flat JSON-LD value.
+    # vaga.lt keeps paragraph markup here in <p>..</p> form.
+    desc_block = re.search(
+        r'<div[^>]*id=["\']collapse-description["\'][^>]*>(.*?)</div>',
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if desc_block:
+        rich = _sanitize_description_html(desc_block.group(1))
+        if rich:
+            data["description"] = html_module.unescape(rich)
 
     # Parse HTML property spans (note: class has typo "propery")
     props = re.findall(
