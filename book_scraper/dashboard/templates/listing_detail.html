@@ -119,20 +119,27 @@
 </div>
 {% endif %}
 
+{% set property_labels = {
+    'cover_type': 'Cover',
+    'duration': 'Duration',
+    'narrator': 'Narrator',
+    'translator': 'Translator',
+    'pages': 'Pages',
+} %}
 {% if listing.properties %}
 <div class="card" style="padding: 0; overflow: hidden;">
-    <div class="card-title" style="padding: 1rem 1.25rem 0;">Properties</div>
+    <div class="card-title" style="padding: 1rem 1.25rem 0;">Attributes</div>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Key</th>
+                <th>Attribute</th>
                 <th>Value</th>
             </tr>
         </thead>
         <tbody>
             {% for key, value in listing.properties.items() %}
             <tr>
-                <td class="text-muted">{{ key }}</td>
+                <td class="text-muted">{{ property_labels.get(key, key|replace('_', ' ')|title) }}</td>
                 <td>
                     {% if key == 'cover_type' %}
                         <a href="/listings?q={{ value|urlencode }}">{{ value }}</a>
