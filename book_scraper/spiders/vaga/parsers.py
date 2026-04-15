@@ -1,7 +1,13 @@
 import contextlib
+import html as html_module
 import json
 import re
 import xml.etree.ElementTree as ET
+
+
+def _unescape(value: object) -> object:
+    """html.unescape on str values; pass through None and non-strings."""
+    return html_module.unescape(value) if isinstance(value, str) else value
 
 
 def parse_sitemap_urls(xml_content: str) -> list[str]:
@@ -25,7 +31,7 @@ def parse_category_page(html: str) -> list[dict[str, str | None]]:
         if not name_match:
             continue
         url = name_match.group(1).split("?")[0].strip()
-        title = name_match.group(2).strip()
+        title = html_module.unescape(name_match.group(2).strip())
 
         price = None
         price_match = re.search(r'class="price coupon">([0-9,]+)€', seg)
@@ -88,7 +94,7 @@ def parse_product_page(html: str) -> dict[str, object]:
         html,
     )
     if author_match:
-        data["author"] = author_match.group(1).strip()
+        data["author"] = html_module.unescape(author_match.group(1).strip())
 
     # Parse JSON-LD blocks
     blocks = re.findall(
@@ -111,8 +117,8 @@ def parse_product_page(html: str) -> dict[str, object]:
             is_product = ld_type in ("Product", "Book")
 
         if is_product:
-            data["title"] = ld.get("name")
-            data["description"] = ld.get("description")
+            data["title"] = _unescape(ld.get("name"))
+            data["description"] = _unescape(ld.get("description"))
             data["sku"] = ld.get("sku")
             offers = ld.get("offers", {})
             data["price"] = offers.get("price")
@@ -120,7 +126,7 @@ def parse_product_page(html: str) -> dict[str, object]:
             related = ld.get("isRelatedTo", {})
             data["isbn"] = related.get("isbn")
             brand = ld.get("brand", {})
-            data["publisher"] = brand.get("name")
+            data["publisher"] = _unescape(brand.get("name"))
             images = ld.get("image", [])
             if images:
                 data["image_url"] = images[0] if isinstance(images, list) else images
@@ -129,7 +135,9 @@ def parse_product_page(html: str) -> dict[str, object]:
         if ld.get("@type") == "BreadcrumbList":
             items = ld.get("itemListElement", [])
             data["categories"] = [
-                item.get("name", "") for item in items if item.get("name")
+                html_module.unescape(item.get("name", ""))
+                for item in items
+                if item.get("name")
             ]
 
     # Extract original/bookstore price from HTML (not in JSON-LD)
@@ -143,7 +151,7 @@ def parse_product_page(html: str) -> dict[str, object]:
         r'\s*<span class="propery-des">(.*?)</span>',
         html,
     )
-    prop_map = {k.strip(): v.strip() for k, v in props}
+    prop_map = {k.strip(): html_module.unescape(v.strip()) for k, v in props}
     if "ISBN" in prop_map:
         data["isbn"] = data["isbn"] or prop_map["ISBN"]
     if "Metai" in prop_map:

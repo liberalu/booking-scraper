@@ -36,3 +36,43 @@ def test_parse_product_page():
     assert "isbn" in data
     assert "in_stock" in data
     assert "categories" in data
+
+
+def test_parse_product_page_unescapes_html_entities_in_title():
+    """JSON-LD carries raw HTML entities like &amp; — unescape before storing."""
+    ld = (
+        '{"@type":"Book",'
+        '"name":"Scythe &amp; Sparrow",'
+        '"description":"A &quot;great&quot; read &lt;3",'
+        '"sku":"1",'
+        '"offers":{"price":"10","availability":"InStock"},'
+        '"brand":{"name":"Tom &amp; Jerry Press"}}'
+    )
+    html_doc = (
+        '<html><body><script type="application/ld+json">'
+        + ld
+        + "</script></body></html>"
+    )
+    data = parse_product_page(html_doc)
+    assert data["title"] == "Scythe & Sparrow"
+    assert data["description"] == 'A "great" read <3'
+    assert data["publisher"] == "Tom & Jerry Press"
+
+
+def test_parse_category_page_unescapes_html_entities_in_title():
+    html_doc = """
+    <div class="product-item-container product-1">
+      <p class="name"><a href="https://vaga.lt/x">Scythe &amp; Sparrow</a></p>
+      <span class="price coupon">10,00€</span>
+    </div>
+    """
+    products = parse_category_page(html_doc)
+    assert products[0]["title"] == "Scythe & Sparrow"
+
+
+def test_parse_product_page_unescapes_author():
+    html_doc = """
+    <div class="brand"><span>Autorius </span><a>Tom &amp; Jerry</a></div>
+    """
+    data = parse_product_page(html_doc)
+    assert data["author"] == "Tom & Jerry"
