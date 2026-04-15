@@ -39,6 +39,9 @@
         {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
         {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
         <button type="submit">Filter</button>
+        {% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter or shop_filter or has_isbn %}
+        <a href="/listings" role="button" class="secondary">Reset</a>
+        {% endif %}
     </div>
 </form>
 
