@@ -19,9 +19,19 @@ class HttpxMiddleware:  # pragma: no cover
     """Replace Scrapy's Twisted downloader with async httpx."""
 
     def __init__(self, timeout: float, user_agent: str):
+        # max_keepalive_connections=0 matches the `Connection: close`
+        # header — vaga.lt silently blocks reused sockets after ~150
+        # requests. Without this the default pool (keepalive=20,
+        # max=100) wedges around request ~100: httpx still holds the
+        # sockets that the server marked stale, and process_request
+        # awaits a pool slot that never frees.
         self.client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=200,
+                max_keepalive_connections=0,
+            ),
             headers={
                 "User-Agent": user_agent,
                 "Connection": "close",

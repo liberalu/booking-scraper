@@ -1,6 +1,3 @@
-import asyncio
-import resource
-import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -36,10 +33,6 @@ class ScanSpider(scrapy.Spider):
         self.allowed_domains = [
             self.conf.shop.base_url.replace("https://", "").replace("http://", "")
         ]
-
-        scraping = self.conf.scraping
-        self._batch_size: int = scraping.batch_size
-        self._batch_pause: float = scraping.batch_pause
 
         self._run_id: int | None = None
         self._urls_processed: int = 0
@@ -106,67 +99,26 @@ class ScanSpider(scrapy.Spider):
                 self.logger.warning(warning)
 
             total = len(plan.urls_to_scrape)
-            num_batches = (total + self._batch_size - 1) // self._batch_size
-
             self.logger.info(
-                "Scan starting: %d URLs in %d batches of %d "
-                "(%.0fs pause between batches, %d skipped)",
+                "Scan starting: %d URLs (%d skipped). Pacing via Scrapy "
+                "CONCURRENT_REQUESTS_PER_DOMAIN + DOWNLOAD_DELAY + AUTOTHROTTLE.",
                 total,
-                num_batches,
-                self._batch_size,
-                self._batch_pause,
                 plan.urls_skipped,
             )
 
-            prev_batch_start = time.monotonic()
-
-            for batch_num in range(num_batches):
-                start_idx = batch_num * self._batch_size
-                end_idx = min(start_idx + self._batch_size, total)
-                batch = plan.urls_to_scrape[start_idx:end_idx]
-
-                if batch_num > 0:
-                    # Wait for previous batch to finish processing
-                    while self._urls_responded < start_idx:
-                        await asyncio.sleep(1)
-
-                    # Log previous batch timing and memory
-                    batch_elapsed = time.monotonic() - prev_batch_start
-                    mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (
-                        1024 * 1024
-                    )
-                    self.logger.info(
-                        "Batch %d/%d completed in %.1fs (memory: %.0fMB)",
-                        batch_num,
-                        num_batches,
-                        batch_elapsed,
-                        mem_mb,
-                    )
-
-                    self.logger.info(
-                        "Batch %d/%d: pausing %.0fs",
-                        batch_num + 1,
-                        num_batches,
-                        self._batch_pause,
-                    )
-                    await asyncio.sleep(self._batch_pause)
-
-                prev_batch_start = time.monotonic()
-
-                self.logger.info(
-                    "Batch %d/%d: yielding %d URLs",
-                    batch_num + 1,
-                    num_batches,
-                    len(batch),
+            # Yield all requests upfront. Scrapy's scheduler, download
+            # delay, per-domain concurrency cap, and AutoThrottle handle
+            # pacing. A manual batching loop used to live here but
+            # could hang forever if the _urls_responded counter fell
+            # short of the batch boundary (e.g. a dupefilter drop or a
+            # middleware skip produced no status-update callback).
+            for url_record in plan.urls_to_scrape:
+                yield scrapy.Request(
+                    url_record.url,
+                    callback=self.parse_product,
+                    errback=self.handle_error,
+                    meta={"discovered_url_id": url_record.id},
                 )
-
-                for url_record in batch:
-                    yield scrapy.Request(
-                        url_record.url,
-                        callback=self.parse_product,
-                        errback=self.handle_error,
-                        meta={"discovered_url_id": url_record.id},
-                    )
         finally:
             session.close()
 
