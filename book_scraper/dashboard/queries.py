@@ -294,6 +294,7 @@ SORT_COLUMNS = {
     "price": Listing.price,
     "year": Listing.year,
     "is_active": Listing.is_active,
+    "inactive_since": Listing.inactive_since,
     "last_seen_at": Listing.last_seen_at,
 }
 
@@ -502,12 +503,9 @@ def get_run_listings(
         created = [
             listing
             for listing in listings_in_run
-            if listing.last_run_id == run_id
-            and listing.last_run_action == "created"
+            if listing.last_run_id == run_id and listing.last_run_action == "created"
         ]
-        rest = [
-            listing for listing in listings_in_run if listing not in created
-        ]
+        rest = [listing for listing in listings_in_run if listing not in created]
 
     if not rest:
         return created, [], []
@@ -536,9 +534,7 @@ def get_run_listings(
 
         # Previous price: most recent price before this run's price
         run_prices = (
-            session.query(Price)
-            .filter(Price.scrape_run_id == run_id)
-            .subquery()
+            session.query(Price).filter(Price.scrape_run_id == run_id).subquery()
         )
         prev = (
             session.query(
@@ -549,7 +545,8 @@ def get_run_listings(
             .filter(
                 Price.listing_id.in_(rest_ids),
                 Price.scrape_run_id != run_id,
-                Price.scraped_at < (
+                Price.scraped_at
+                < (
                     session.query(func.min(run_prices.c.scraped_at))
                     .filter(
                         run_prices.c.listing_id == Price.listing_id,
@@ -579,10 +576,7 @@ def get_run_listings(
         price_changed_rows = (
             session.query(cur.c.listing_id)
             .join(prev, cur.c.listing_id == prev.c.listing_id)
-            .filter(
-                (cur.c.price != prev.c.price)
-                | (cur.c.in_stock != prev.c.in_stock)
-            )
+            .filter((cur.c.price != prev.c.price) | (cur.c.in_stock != prev.c.in_stock))
             .all()
         )
         price_changed_ids = {row[0] for row in price_changed_rows}
@@ -591,9 +585,7 @@ def get_run_listings(
 
     all_changed_ids = changed_ids | price_changed_ids
     changed = [listing for listing in rest if listing.id in all_changed_ids]
-    unchanged = [
-        listing for listing in rest if listing.id not in all_changed_ids
-    ]
+    unchanged = [listing for listing in rest if listing.id not in all_changed_ids]
 
     return created, changed, unchanged
 
@@ -649,16 +641,17 @@ def get_data_completeness(session: Session) -> list[dict]:
     for field_name in fields:
         col = getattr(Listing, field_name)
         present = (
-            session.query(func.count(Listing.id))
-            .filter(col.isnot(None))
-            .scalar()
-            or 0
+            session.query(func.count(Listing.id)).filter(col.isnot(None)).scalar() or 0
         )
         pct = round(present / total * 100, 1) if total > 0 else 0
-        result.append({
-            "field": field_name, "present": present,
-            "total": total, "pct": pct,
-        })
+        result.append(
+            {
+                "field": field_name,
+                "present": present,
+                "total": total,
+                "pct": pct,
+            }
+        )
     return result
 
 
@@ -694,9 +687,7 @@ def get_not_listed_urls(
               WHERE l.shop_id = du.shop_id AND l.url = du.url
           )
     """)
-    total = (
-        session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
-    )
+    total = session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
 
     sort_col = "du.discovered_at"
     if sort_by == "url":
@@ -742,14 +733,10 @@ def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> d
     if shop_id:
         base = base.filter(DiscoveredUrl.shop_id == shop_id)
     total = base.count()
-    in_listings = (
-        base.join(
-            Listing,
-            (Listing.shop_id == DiscoveredUrl.shop_id)
-            & (Listing.url == DiscoveredUrl.url),
-        )
-        .count()
-    )
+    in_listings = base.join(
+        Listing,
+        (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url),
+    ).count()
     not_in_listings = total - in_listings
     failed = base.filter(DiscoveredUrl.fail_count >= 3).count()
     return {

@@ -125,7 +125,7 @@ def test_parse_product_page_extracts_rich_description():
     body = (
         '<div id="collapse-description" class="desc-collapse">'
         "<p>First para.</p><p>Second <strong>bold</strong> para.</p>"
-        '<script>alert(1)</script>'
+        "<script>alert(1)</script>"
         '<span style="color:red">should strip</span>'
         "</div>"
     )

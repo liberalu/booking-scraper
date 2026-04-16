@@ -28,17 +28,33 @@ def discovered_urls_page(
     shop_id = shop_obj.id if shop_obj else None
     stats = get_discovered_urls_stats(session, shop_id=shop_id)
     urls, total = get_discovered_urls_page(
-        session, page=page, shop_id=shop_id, source=source,
-        status=status, search=q, sort_by=sort, sort_order=order,
+        session,
+        page=page,
+        shop_id=shop_id,
+        source=source,
+        status=status,
+        search=q,
+        sort_by=sort,
+        sort_order=order,
     )
     shops = get_all_shops(session)
     total_pages = (total + 49) // 50
     return templates.TemplateResponse(
-        request, "discovered_urls.html",
+        request,
+        "discovered_urls.html",
         {
-            "active_page": "urls", "urls": urls, "stats": stats,
-            "total": total, "page": page, "total_pages": total_pages,
-            "query": q, "shop_filter": shop, "source_filter": source,
-            "status_filter": status, "sort": sort, "order": order, "shops": shops,
+            "active_page": "urls",
+            "urls": urls,
+            "stats": stats,
+            "total": total,
+            "page": page,
+            "total_pages": total_pages,
+            "query": q,
+            "shop_filter": shop,
+            "source_filter": source,
+            "status_filter": status,
+            "sort": sort,
+            "order": order,
+            "shops": shops,
         },
     )

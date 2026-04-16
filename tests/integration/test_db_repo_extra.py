@@ -58,7 +58,29 @@ class TestMarkListingsInactive:
         db_session.refresh(listing1)
         db_session.refresh(listing2)
         assert listing1.is_active is True
+        assert listing1.inactive_since is None
         assert listing2.is_active is False
+        assert listing2.inactive_since is not None
+
+    def test_reactivation_clears_inactive_since(self, db_session):
+        """When a vanished listing reappears and is re-upserted, the
+        transition stamp should be cleared."""
+        shop = upsert_shop(db_session, name="rehydrate_shop", base_url="https://r.lt")
+        listing, *_ = upsert_listing(
+            db_session, shop_id=shop.id, url="https://r.lt/book", title="Book"
+        )
+        mark_listings_inactive(db_session, shop_id=shop.id, active_urls=set())
+        db_session.refresh(listing)
+        assert listing.is_active is False
+        assert listing.inactive_since is not None
+
+        # Re-upsert (listing is visible again in the shop).
+        upsert_listing(
+            db_session, shop_id=shop.id, url="https://r.lt/book", title="Book"
+        )
+        db_session.refresh(listing)
+        assert listing.is_active is True
+        assert listing.inactive_since is None
 
 
 @pytest.mark.integration
@@ -91,6 +113,8 @@ class TestUpsertListingUpdateFields:
         assert updated.year == 2020
 
     def test_properties_merge(self, db_session):
+        """Properties from successive upserts should accumulate as
+        listing_attributes rows (each key preserved across scrapes)."""
         shop = upsert_shop(db_session, name="merge_shop", base_url="https://m.lt")
         upsert_listing(
             db_session,
@@ -106,7 +130,8 @@ class TestUpsertListingUpdateFields:
             title="Book",
             properties={"narrator": "John"},
         )
-        assert updated.properties == {"pages": 200, "narrator": "John"}
+        attrs = {a.key: a.value for a in updated.attributes}
+        assert attrs == {"pages": "200", "narrator": "John"}
 
 
 @pytest.mark.integration

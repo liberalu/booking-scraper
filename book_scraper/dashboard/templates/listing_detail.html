@@ -9,7 +9,10 @@
             {% if listing.is_active %}
             <span class="badge badge-completed">Active</span>
             {% else %}
-            <span class="badge badge-failed">Inactive</span>
+            <span class="badge badge-failed"
+                {%- if listing.inactive_since %} title="Inactive since {{ listing.inactive_since.strftime('%Y-%m-%d %H:%M UTC') }}"{% endif -%}>
+                Inactive{% if listing.inactive_since %} since {{ listing.inactive_since.strftime('%Y-%m-%d') }}{% endif %}
+            </span>
             {% endif %}
             {% if listing.in_stock %}
             <span class="badge badge-completed">In Stock</span>

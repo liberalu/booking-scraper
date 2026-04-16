@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -16,7 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -76,9 +75,6 @@ class Listing(Base):
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
 
-    # Format-specific properties (pages, cover_type, duration, etc.)
-    properties: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-
     # Pricing (latest snapshot, also stored in prices table)
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     price_original: Mapped[Decimal | None] = mapped_column(
@@ -100,6 +96,9 @@ class Listing(Base):
 
     # Lifecycle
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    inactive_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
@@ -129,9 +128,7 @@ class ListingAttribute(Base):
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "listing_id", "key", name="uq_listing_attribute_listing_key"
-        ),
+        UniqueConstraint("listing_id", "key", name="uq_listing_attribute_listing_key"),
     )
 
     listing: Mapped["Listing"] = relationship(back_populates="attributes")

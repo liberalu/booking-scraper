@@ -41,9 +41,7 @@ def _sync_attribute_rows(
         row = existing_rows.get(key)
         if row is None:
             session.add(
-                ListingAttribute(
-                    listing_id=listing.id, key=key, value=str_value
-                )
+                ListingAttribute(listing_id=listing.id, key=key, value=str_value)
             )
         elif row.value != str_value:
             row.value = str_value
@@ -98,7 +96,6 @@ def upsert_listing(
             description=description,
             image_url=image_url,
             categories=categories,
-            properties=properties,
             price=price,
             price_original=price_original,
             in_stock=in_stock,
@@ -165,10 +162,7 @@ def upsert_listing(
         if categories is not None:
             listing.categories = categories
         if properties is not None:
-            existing = listing.properties or {}
-            existing.update(properties)
-            listing.properties = existing
-            _sync_attribute_rows(session, listing, existing)
+            _sync_attribute_rows(session, listing, properties)
         if price is not None:
             listing.price = price
         if price_original is not None:
@@ -176,6 +170,9 @@ def upsert_listing(
         listing.in_stock = in_stock
         listing.last_seen_at = now
         listing.is_active = True
+        # Clear the transition stamp when a previously-vanished listing
+        # comes back; keeps the "inactive_since" semantics meaningful.
+        listing.inactive_since = None
         session.flush()
         return listing, False, old_price, changes
 
@@ -216,15 +213,22 @@ def upsert_category(
 def mark_listings_inactive(
     session: Session, shop_id: int, active_urls: set[str]
 ) -> int:
-    """Mark listings not in active_urls as inactive. Returns count of deactivated."""
+    """Mark listings not in active_urls as inactive. Returns count of deactivated.
+
+    Stamps `inactive_since` with the transition time so the dashboard
+    can show "inactive since <date>" and so downstream jobs can prune
+    long-vanished listings.
+    """
     stmt = select(Listing).where(
         Listing.shop_id == shop_id, Listing.is_active.is_(True)
     )
     listings = session.execute(stmt).scalars().all()
+    now = datetime.now(UTC)
     count = 0
     for listing in listings:
         if listing.url not in active_urls:
             listing.is_active = False
+            listing.inactive_since = now
             count += 1
     session.flush()
     return count
