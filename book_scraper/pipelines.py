@@ -592,5 +592,14 @@ class PostgresPipeline:
                 )
                 self._flush_stats(spider._run_id)
                 self._flush_validation_issues(spider._run_id)
+                # Commit again so the scrape_runs row lock is released
+                # before the next item. The spider's own progress
+                # session (used by _flush_progress inside parse_product)
+                # also writes to scrape_runs; without this commit the
+                # pipeline sits `idle in transaction` between item-100
+                # boundaries holding the row lock, and the spider
+                # deadlocks the moment it tries to flush its own
+                # heartbeat.
+                self.session.commit()
 
         return item
