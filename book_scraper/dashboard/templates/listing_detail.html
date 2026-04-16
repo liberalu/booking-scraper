@@ -126,7 +126,7 @@
     'translator': 'Translator',
     'pages': 'Pages',
 } %}
-{% if listing.properties %}
+{% if listing.attributes %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <div class="card-title" style="padding: 1rem 1.25rem 0;">Attributes</div>
     <table class="data-table">
@@ -137,14 +137,14 @@
             </tr>
         </thead>
         <tbody>
-            {% for key, value in listing.properties.items() %}
+            {% for attr in listing.attributes %}
             <tr>
-                <td class="text-muted">{{ property_labels.get(key, key|replace('_', ' ')|title) }}</td>
+                <td class="text-muted">{{ property_labels.get(attr.key, attr.key|replace('_', ' ')|title) }}</td>
                 <td>
-                    {% if key == 'cover_type' %}
-                        <a href="/listings?q={{ value|urlencode }}">{{ value }}</a>
+                    {% if attr.key == 'cover_type' %}
+                        <a href="/listings?q={{ attr.value|urlencode }}">{{ attr.value }}</a>
                     {% else %}
-                        {{ value }}
+                        {{ attr.value }}
                     {% endif %}
                 </td>
             </tr>

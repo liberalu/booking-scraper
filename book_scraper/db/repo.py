@@ -10,11 +10,44 @@ from book_scraper.db.models import (
     Category,
     DiscoveredUrl,
     Listing,
+    ListingAttribute,
     Price,
     ScrapeRun,
     Shop,
     ValidationIssue,
 )
+
+
+def _sync_attribute_rows(
+    session: Session,
+    listing: "Listing",
+    properties: dict[str, Any],
+) -> None:
+    """Upsert (listing_id, key) rows in listing_attributes to match the
+    provided dict.
+
+    Missing keys leave existing rows alone so a partial scrape doesn't
+    clobber previously-captured attributes. Only the keys present in
+    `properties` are inserted/updated.
+    """
+    if not properties:
+        return
+    existing_rows = {
+        row.key: row
+        for row in session.query(ListingAttribute).filter_by(listing_id=listing.id)
+    }
+    for key, value in properties.items():
+        str_value = None if value is None else str(value)
+        row = existing_rows.get(key)
+        if row is None:
+            session.add(
+                ListingAttribute(
+                    listing_id=listing.id, key=key, value=str_value
+                )
+            )
+        elif row.value != str_value:
+            row.value = str_value
+    session.flush()
 
 
 def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
@@ -76,6 +109,8 @@ def upsert_listing(
         )
         session.add(listing)
         session.flush()
+        if properties:
+            _sync_attribute_rows(session, listing, properties)
         return listing, True, None, []
     else:
         old_price = listing.price
@@ -133,6 +168,7 @@ def upsert_listing(
             existing = listing.properties or {}
             existing.update(properties)
             listing.properties = existing
+            _sync_attribute_rows(session, listing, existing)
         if price is not None:
             listing.price = price
         if price_original is not None:

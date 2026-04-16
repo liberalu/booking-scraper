@@ -112,6 +112,29 @@ class Listing(Base):
     shop: Mapped["Shop"] = relationship(back_populates="listings")
     prices: Mapped[list["Price"]] = relationship(back_populates="listing")
     changes: Mapped[list["ListingChange"]] = relationship(back_populates="listing")
+    attributes: Mapped[list["ListingAttribute"]] = relationship(
+        back_populates="listing",
+        cascade="all, delete-orphan",
+    )
+
+
+class ListingAttribute(Base):
+    __tablename__ = "listing_attributes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id", "key", name="uq_listing_attribute_listing_key"
+        ),
+    )
+
+    listing: Mapped["Listing"] = relationship(back_populates="attributes")
 
 
 class Price(Base):
