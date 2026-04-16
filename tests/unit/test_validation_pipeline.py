@@ -382,7 +382,9 @@ def test_html_in_title_flagged(pipeline, stats):
     assert stats.values.get("validation/html_in_text") == 1
 
 
-def test_html_in_description_flagged(pipeline, stats):
+def test_html_in_description_allowed(pipeline, stats):
+    # description intentionally stores sanitised rich HTML, so the
+    # html_in_text check must not flag <p>...</p> there.
     item = ListingItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
@@ -391,7 +393,7 @@ def test_html_in_description_flagged(pipeline, stats):
         price="5.00",
     )
     pipeline.process_item(item)
-    assert stats.values.get("validation/html_in_text") == 1
+    assert stats.values.get("validation/html_in_text") is None
 
 
 def test_html_in_author_flagged(pipeline, stats):

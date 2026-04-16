@@ -126,7 +126,9 @@ class ValidationPipeline:
                 )
 
     def _check_content_quality(self, adapter: ItemAdapter, url: str) -> None:
-        for field in ("title", "author", "description"):
+        # description intentionally stores sanitised rich HTML now, so
+        # skip it here — only flag HTML bleeding into title/author.
+        for field in ("title", "author"):
             val = adapter.get(field)
             if isinstance(val, str) and _HTML_TAG_RE.search(val):
                 self._warn("html_in_text", field, url, val[:100])
