@@ -852,6 +852,105 @@ def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
     return True
 
 
+def acknowledge_validation_issues_bulk(
+    session: Session,
+    issue_type: str | None = None,
+    state: str | None = None,
+    shop_id: int | None = None,
+    run_id: int | None = None,
+    q: str = "",
+) -> int:
+    """Bulk-acknowledge open issues matching the filter set. Returns count updated.
+
+    Any combination of filters is allowed. Passing no filters at all
+    acknowledges every open issue (callers wanting the global 'ack all
+    open' behaviour rely on this).
+    """
+    from sqlalchemy import or_
+
+    from book_scraper.db.models import ShopBook
+
+    now = datetime.now(UTC)
+    query = session.query(ValidationIssue).filter(
+        ValidationIssue.lifecycle_state != "already_seen"
+    )
+    if issue_type is not None:
+        query = query.filter(ValidationIssue.issue == issue_type)
+    if state in {"new", "recurring"}:
+        query = query.filter(ValidationIssue.lifecycle_state == state)
+    if shop_id is not None or q:
+        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+    if shop_id is not None:
+        query = query.filter(ScrapeRun.shop_id == shop_id)
+    if run_id is not None:
+        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+    if q:
+        pattern = f"%{q}%"
+        query = query.outerjoin(
+            ShopBook, ValidationIssue.shop_book_id == ShopBook.id
+        ).filter(
+            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
+        )
+    issues = query.all()
+    for issue in issues:
+        issue.lifecycle_state = "already_seen"
+        issue.acknowledged_at = now
+    session.flush()
+    return len(issues)
+
+
+def delete_validation_issues_matching(
+    session: Session,
+    issue_type: str | None = None,
+    state: str | None = None,
+    shop_id: int | None = None,
+    run_id: int | None = None,
+    q: str = "",
+) -> int:
+    """Hard-delete validation issues matching the filter. Returns count deleted.
+
+    At least one filter must be set — a guardrail to prevent the UI
+    from wiping the whole table with an unintended empty request.
+    """
+    from sqlalchemy import or_
+
+    from book_scraper.db.models import ShopBook
+
+    if not (issue_type or state or shop_id or run_id or q):
+        raise ValueError(
+            "delete_validation_issues_matching requires at least one filter"
+        )
+
+    query = session.query(ValidationIssue)
+    if issue_type is not None:
+        query = query.filter(ValidationIssue.issue == issue_type)
+    if state in {"new", "recurring", "already_seen"}:
+        query = query.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        query = query.filter(ValidationIssue.lifecycle_state != "already_seen")
+    if shop_id is not None or q:
+        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+    if shop_id is not None:
+        query = query.filter(ScrapeRun.shop_id == shop_id)
+    if run_id is not None:
+        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+    if q:
+        pattern = f"%{q}%"
+        query = query.outerjoin(
+            ShopBook, ValidationIssue.shop_book_id == ShopBook.id
+        ).filter(
+            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
+        )
+    ids = [i.id for i in query.all()]
+    if not ids:
+        return 0
+    session.query(ValidationIssue).filter(ValidationIssue.id.in_(ids)).delete(
+        synchronize_session=False
+    )
+    session.flush()
+    return len(ids)
+
+
 def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:
     """Return URLs already scraped (marked as 'product' in discovered_urls)."""
     return set(
