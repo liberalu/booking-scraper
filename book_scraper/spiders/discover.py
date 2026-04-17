@@ -6,6 +6,7 @@ import scrapy
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
+from book_scraper.db.models import DiscoveredUrl
 from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
@@ -65,6 +66,10 @@ class DiscoverSpider(scrapy.Spider):
         # URLs discovered this run, used for change detection on the
         # sitemap strategy (sitemap is comprehensive per shop).
         self._sitemap_urls: set[str] = set()
+        # Set when handle_start_error or parse_categories already reported a
+        # more specific zero-yield cause — avoids duplicate noise from the
+        # generic closed() check.
+        self._zero_yield_suppressed: bool = False
 
     def _url_passes_filter(self, url: str) -> bool:
         if self.url_pattern is None:
@@ -130,6 +135,7 @@ class DiscoverSpider(scrapy.Spider):
             str(request.url),
             detail,
         )
+        self._zero_yield_suppressed = True
         self.logger.error(
             "Discover %s failed to fetch %s: %s",
             self.strategy,
@@ -208,6 +214,7 @@ class DiscoverSpider(scrapy.Spider):
                     response.url,
                     f"page 1 returned 0 products (len={len(response.text)})",
                 )
+                self._zero_yield_suppressed = True
             return  # No more pages
 
         base_url: str = self.conf.shop.base_url
@@ -329,6 +336,31 @@ class DiscoverSpider(scrapy.Spider):
                 self._run_id,
                 self._urls_processed,
             )
+            # A completed run that found zero URLs on a shop that already
+            # had some is almost always a parser break — surface it as a
+            # validation issue so it appears in the Issues dashboard
+            # instead of silently passing as "completed". Skip when a more
+            # specific issue (fetch_failed / empty_first_page) already
+            # fired, and on the legitimate first-ever discovery.
+            if (
+                status == "completed"
+                and self._urls_processed == 0
+                and not self._zero_yield_suppressed
+                and self._shop_id is not None
+            ):
+                prior_count = (
+                    self._run_session.query(DiscoveredUrl)
+                    .filter(DiscoveredUrl.shop_id == self._shop_id)
+                    .count()
+                )
+                if prior_count > 0:
+                    self._report_validation(
+                        "discover_zero_yield",
+                        "run",
+                        self.conf.shop.base_url,
+                        f"phase=discover_{self.strategy}, "
+                        f"shop had {prior_count} URLs pre-run",
+                    )
             finish_scrape_run(self._run_session, self._run_id, status)
             self._run_session.commit()
         finally:
