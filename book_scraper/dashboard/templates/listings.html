@@ -52,12 +52,23 @@
 
 {# Show the filtered-scrape button whenever any narrowing filter is
    active. The endpoint handles cross-shop filters by spawning one
-   subprocess per shop; the 1000-URL cap is the real safety net. #}
+   subprocess per shop; the URL cap is the real safety net. When the
+   active filter matches more than max_filtered_urls rows we disable
+   the button and point the user at the fix. #}
 {% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter or shop_filter or has_isbn %}
-<form method="post" action="/scrape/filtered?{{ filter_params }}" style="margin: 0.5rem 0 1rem;"
-      onsubmit="return confirm('Start a scrape for the currently filtered listings?');">
-    <button type="submit" class="secondary">▶ Run scrape for filtered list ({{ total }})</button>
-</form>
+<div style="margin: 0.5rem 0 1rem;">
+    {% if total > max_filtered_urls %}
+    <button type="button" class="secondary" disabled
+            title="Filter matches {{ total }} listings — over the {{ max_filtered_urls }} cap. Narrow the filter first (e.g. pick a shop).">
+        ▶ Run scrape for filtered list ({{ total }}) — over cap, narrow first
+    </button>
+    {% else %}
+    <form method="post" action="/scrape/filtered?{{ filter_params }}" style="display: inline;"
+          onsubmit="return confirm('Start a scrape for {{ total }} listing(s)?');">
+        <button type="submit" class="secondary">▶ Run scrape for filtered list ({{ total }})</button>
+    </form>
+    {% endif %}
+</div>
 {% endif %}
 
 {% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}

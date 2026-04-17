@@ -29,8 +29,11 @@ from book_scraper.dashboard.queries import get_listings_page, get_shop_by_name
 router = APIRouter()
 
 # Cap so a "filtered" scrape can't accidentally turn into a full
-# catalog pass (we have `scan` without filters for that).
-MAX_FILTERED_URLS = 1000
+# catalog pass (we have `scan` without filters for that). The number
+# is the count of URLs a single POST will spawn across all matching
+# shops combined — narrow the filter or drop to a shop-specific scan
+# if you hit it.
+MAX_FILTERED_URLS = 5000
 
 
 def _default_runner(cmd: list[str]) -> subprocess.Popen[bytes]:

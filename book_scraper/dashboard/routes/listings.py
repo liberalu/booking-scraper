@@ -11,6 +11,7 @@ from book_scraper.dashboard.queries import (
     get_price_history,
     get_shop_by_name,
 )
+from book_scraper.dashboard.routes.scrape import MAX_FILTERED_URLS
 from book_scraper.db.models import Listing
 
 router = APIRouter()
@@ -75,6 +76,7 @@ def listings_page(
             "order": order,
             "categories": categories,
             "formats": formats,
+            "max_filtered_urls": MAX_FILTERED_URLS,
         },
     )
 
