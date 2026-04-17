@@ -11,6 +11,7 @@ from book_scraper.db.repo import (
     finish_scrape_run,
     mark_listings_inactive,
     mark_stale_runs_failed,
+    update_scrape_run_progress,
     upsert_shop,
 )
 from book_scraper.db.session import get_session_factory
@@ -82,15 +83,51 @@ class DiscoverSpider(scrapy.Spider):
             self._shop_id = shop.id
 
         if self.strategy == "sitemap":
-            yield scrapy.Request(self.strategy_conf.url, callback=self.parse_sitemap)
+            yield scrapy.Request(
+                self.strategy_conf.url,
+                callback=self.parse_sitemap,
+                errback=self.handle_start_error,
+            )
         elif self.strategy == "categories":
             url = self.strategy_conf.url.format(page=1)
-            yield scrapy.Request(url, callback=self.parse_categories, meta={"page": 1})
+            yield scrapy.Request(
+                url,
+                callback=self.parse_categories,
+                errback=self.handle_start_error,
+                meta={"page": 1},
+            )
         elif self.strategy == "full_crawl":
             yield scrapy.Request(
                 self.strategy_conf.start_url,
                 callback=self.parse_full_crawl,
+                errback=self.handle_start_error,
             )
+
+    def handle_start_error(self, failure: Any) -> None:
+        """Surface discovery fetch failures as validation issues.
+
+        Without this a 4xx/5xx/timeout on the first category or sitemap
+        request leaves the run silently "completed with 0 URLs", which
+        hides broken URL patterns for hours at a time.
+        """
+        request = failure.request
+        status_obj = getattr(failure.value, "response", None)
+        http_status = status_obj.status if status_obj else None
+        detail = f"{type(failure.value).__name__}"
+        if http_status is not None:
+            detail = f"HTTP {http_status}"
+        self._report_validation(
+            "discover_fetch_failed",
+            "url",
+            str(request.url),
+            detail,
+        )
+        self.logger.error(
+            "Discover %s failed to fetch %s: %s",
+            self.strategy,
+            request.url,
+            detail,
+        )
 
     def _report_validation(
         self,
@@ -152,6 +189,17 @@ class DiscoverSpider(scrapy.Spider):
             response.text
         )
         if not products:
+            # If we hit an empty response on page 1, the upstream URL
+            # pattern is probably broken — warn so the next run isn't
+            # another silent "completed with 0 URLs" outcome.
+            page = response.meta.get("page", 0)
+            if page == 1:
+                self._report_validation(
+                    "discover_empty_first_page",
+                    "url",
+                    response.url,
+                    f"page 1 returned 0 products (len={len(response.text)})",
+                )
             return  # No more pages
 
         base_url: str = self.conf.shop.base_url
@@ -254,6 +302,14 @@ class DiscoverSpider(scrapy.Spider):
                         "Change detection: marked %d listing(s) inactive",
                         deactivated,
                     )
+            # Record final urls_processed — the pipeline only flushes
+            # progress every 100 items, so short discover runs would
+            # otherwise always show 0.
+            update_scrape_run_progress(
+                self._run_session,
+                self._run_id,
+                self._urls_processed,
+            )
             finish_scrape_run(self._run_session, self._run_id, status)
             self._run_session.commit()
         finally:

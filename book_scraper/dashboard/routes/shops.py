@@ -1,3 +1,7 @@
+import logging
+import threading
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -13,6 +17,8 @@ from book_scraper.dashboard.queries import (
     get_shop_stats,
     mark_stale_runs,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -94,8 +100,40 @@ def shop_detail(shop_name: str, request: Request, session: Session = Depends(get
     )
 
 
+def _run_exec_in_thread(container: Any, cmd: list[str], label: str) -> None:
+    """Run a container exec to completion in a worker thread.
+
+    We can't use `detach=True` on `container.exec_run` — the docker SDK
+    starts the exec but the process silently dies almost immediately,
+    leaving no trace (no scrape_run row, no logs). Running the exec in
+    the foreground from a worker thread keeps the HTTP request snappy
+    while actually letting scrapy finish.
+    """
+    logger.info("exec %s starting: %s", label, " ".join(cmd))
+    try:
+        result = container.exec_run(
+            cmd,
+            workdir="/app",
+            environment={
+                "PYTHONPATH": "/app",
+                "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+            },
+        )
+        logger.info(
+            "exec %s finished: exit=%s tail=%r",
+            label,
+            result.exit_code,
+            (result.output or b"").decode(errors="replace")[-500:],
+        )
+    except Exception:
+        logger.exception("exec %s crashed", label)
+
+
 @router.post("/shops/{shop_name}/run")
-def trigger_shop_run(shop_name: str, phase: str = "scan"):
+def trigger_shop_run(
+    shop_name: str,
+    phase: str = "scan",
+) -> HTMLResponse:
     cmd_template = SHOP_COMMANDS.get(phase)
     if not cmd_template:
         return HTMLResponse(
@@ -122,23 +160,26 @@ def trigger_shop_run(shop_name: str, phase: str = "scan"):
         )
 
     container = containers[0]
-    container.exec_run(
-        cmd,
-        detach=True,
-        workdir="/app",
-        environment={
-            "PYTHONPATH": "/app",
-            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
-        },
+    # Kick the scrapy exec into a daemon thread so the HTTP request
+    # returns immediately but the process actually runs. `detach=True`
+    # on exec_run is broken (SDK quirk: the process silently dies);
+    # BackgroundTasks would block the next request on the same worker
+    # because exec_run is synchronous; a thread sidesteps both.
+    t = threading.Thread(
+        target=_run_exec_in_thread,
+        args=(container, cmd, f"{phase}:{shop_name}"),
+        daemon=True,
     )
+    t.start()
     return HTMLResponse(
-        f'<p class="success">Started {phase} for {shop_name}</p>',
+        f'<p class="success">Started {phase} for {shop_name} '
+        '(watch progress on <a href="/runs">/runs</a>)</p>',
         status_code=200,
     )
 
 
 @router.post("/shops/{shop_name}/scrape-url")
-def scrape_single_url(shop_name: str, url: str = ""):
+def scrape_single_url(shop_name: str, url: str = "") -> HTMLResponse:
     if not url:
         return HTMLResponse('<p class="error">No URL provided</p>', status_code=400)
 
@@ -166,15 +207,12 @@ def scrape_single_url(shop_name: str, url: str = ""):
         f"urls={url}",
     ]
     container = containers[0]
-    container.exec_run(
-        cmd,
-        detach=True,
-        workdir="/app",
-        environment={
-            "PYTHONPATH": "/app",
-            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
-        },
+    t = threading.Thread(
+        target=_run_exec_in_thread,
+        args=(container, cmd, f"scrape-url:{shop_name}"),
+        daemon=True,
     )
+    t.start()
     return HTMLResponse(f'<p class="success">Scraping {url}</p>')
 
 
