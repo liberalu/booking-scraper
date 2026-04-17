@@ -80,7 +80,7 @@
                 <td>{{ s.field }}</td>
                 <td>{{ s.issue }}</td>
                 <td>{{ s.count }}</td>
-                <td><a href="/validation/{{ s.issue | urlencode }}?run_id={{ run.id }}">View all &rarr;</a></td>
+                <td><a href="/validation?issue_type={{ s.issue | urlencode }}&run_id={{ run.id }}">View all &rarr;</a></td>
             </tr>
             {% endfor %}
         </tbody>

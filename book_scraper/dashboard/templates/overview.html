@@ -90,7 +90,7 @@
     <div class="card-title">Validation Issues</div>
     <div class="validation-inline">
         {% for v in validation %}
-        <a href="/validation/{{ v.issue_type }}" class="validation-inline-item">
+        <a href="/validation?issue_type={{ v.issue_type|urlencode }}" class="validation-inline-item">
             <span class="badge badge-warning">{{ "{:,}".format(v.count) }}</span>
             {{ v.issue_type }}
         </a>
