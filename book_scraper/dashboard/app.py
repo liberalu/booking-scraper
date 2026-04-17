@@ -8,6 +8,7 @@ from book_scraper.dashboard.routes import (
     overview,
     prices,
     runs,
+    scrape,
     shops,
     urls,
     validation,
@@ -28,3 +29,4 @@ app.include_router(runs.router)
 app.include_router(urls.router)
 app.include_router(validation.router)
 app.include_router(prices.router)
+app.include_router(scrape.router)

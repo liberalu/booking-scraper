@@ -50,6 +50,15 @@
     </div>
 </form>
 
+{# A filtered scrape requires a shop filter so we never accidentally
+   fan out across every shop at once. #}
+{% if shop_filter and (query or author_filter or publisher_filter or category or format_filter or missing or active_filter or has_isbn) %}
+<form method="post" action="/scrape/filtered?{{ filter_params }}" style="margin: 0.5rem 0 1rem;"
+      onsubmit="return confirm('Start a scrape for the currently filtered listings?');">
+    <button type="submit" class="secondary">▶ Run scrape for filtered list ({{ total }})</button>
+</form>
+{% endif %}
+
 {% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
 {% set sort_params = ("sort=" ~ sort ~ "&order=" ~ order) if sort else "" %}
 {% set filter_and_sort = filter_params ~ ("&" ~ sort_params if sort_params else "") %}

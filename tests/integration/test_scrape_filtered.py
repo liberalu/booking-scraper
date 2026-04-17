@@ -1,0 +1,135 @@
+"""POST /scrape/filtered — verify it resolves filters to URLs and spawns
+a subprocess with the right args."""
+
+from collections.abc import Generator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from book_scraper.dashboard.app import app
+from book_scraper.dashboard.deps import get_db
+from book_scraper.dashboard.routes import scrape as scrape_route
+from book_scraper.db.models import Listing, Shop
+
+
+class _FakeProcess:
+    def __init__(self, pid: int = 42):
+        self.pid = pid
+
+
+@pytest.fixture()
+def captured_cmd() -> list[list[str]]:
+    """Swap the subprocess runner for a capture-only stub."""
+    captured: list[list[str]] = []
+
+    def runner(cmd: list[str]) -> _FakeProcess:  # type: ignore[override]
+        captured.append(cmd)
+        return _FakeProcess()
+
+    original = scrape_route._subprocess_runner
+    scrape_route.set_subprocess_runner(runner)  # type: ignore[arg-type]
+    try:
+        yield captured
+    finally:
+        scrape_route.set_subprocess_runner(original)
+
+
+@pytest.fixture()
+def client(db_session: Session) -> Generator[TestClient, None, None]:
+    def _override_get_db() -> Generator[Session, None, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _seed(db_session: Session) -> None:
+    shop = Shop(name="vaga", base_url="https://vaga.lt")
+    db_session.add(shop)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Listing(
+                shop_id=shop.id,
+                url=f"https://vaga.lt/a-{i}",
+                title=f"Title {i}",
+                author="Alice",
+            )
+            for i in range(3)
+        ]
+    )
+    db_session.add(
+        Listing(
+            shop_id=shop.id,
+            url="https://vaga.lt/other",
+            title="Other",
+            author="Bob",
+        )
+    )
+    db_session.flush()
+
+
+def test_scrape_filtered_rejects_missing_shop(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    resp = client.post("/scrape/filtered?author=Alice")
+    assert resp.status_code == 400
+    assert captured_cmd == []
+
+
+def test_scrape_filtered_rejects_unfiltered_request(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    resp = client.post("/scrape/filtered?shop=vaga")
+    assert resp.status_code == 400
+    assert captured_cmd == []
+
+
+def test_scrape_filtered_404_when_no_matches(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    resp = client.post(
+        "/scrape/filtered?shop=vaga&author=DoesNotExist"
+    )
+    assert resp.status_code == 404
+    assert captured_cmd == []
+
+
+def test_scrape_filtered_spawns_with_correct_urls(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    resp = client.post("/scrape/filtered?shop=vaga&author=Alice")
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["status"] == "started"
+    assert body["urls_count"] == 3
+    assert body["shop"] == "vaga"
+
+    assert len(captured_cmd) == 1
+    cmd = captured_cmd[0]
+    assert "scrapy" in cmd
+    assert "crawl" in cmd
+    assert "scan" in cmd
+    # The -a urls=... arg should contain only the 3 Alice URLs.
+    urls_arg = next(a for a in cmd if a.startswith("urls="))
+    urls = urls_arg.removeprefix("urls=").split(",")
+    assert len(urls) == 3
+    for url in urls:
+        assert url.startswith("https://vaga.lt/a-")
+    assert "https://vaga.lt/other" not in urls
+
+
+def test_scrape_filtered_over_cap_returns_413(
+    client: TestClient,
+    captured_cmd: list[list[str]],
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Lower the cap so we don't have to seed thousands of rows.
+    monkeypatch.setattr(scrape_route, "MAX_FILTERED_URLS", 2)
+    resp = client.post("/scrape/filtered?shop=vaga&author=Alice")
+    assert resp.status_code == 413
+    assert captured_cmd == []
