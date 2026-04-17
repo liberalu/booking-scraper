@@ -142,3 +142,19 @@ def test_lifecycle_counts_filters_by_issue_type_and_run(db_session: Session) -> 
     assert counts["recurring"] == 1
     assert counts["new"] == 0
     assert counts["open"] == 1
+
+
+@pytest.mark.integration
+def test_lifecycle_counts_filters_by_search(db_session: Session) -> None:
+    """`q=` exercises the outerjoin(ShopBook) + ILIKE branch."""
+    _seed(db_session)
+    # Match by book title (resolved shop_book)
+    counts_title = get_validation_lifecycle_counts(db_session, q="Test Book")
+    assert counts_title["new"] == 1
+    assert counts_title["recurring"] == 0
+    assert counts_title["open"] == 1
+    # Match by URL substring (unresolved shop_book)
+    counts_url = get_validation_lifecycle_counts(db_session, q="vaga.lt/y")
+    assert counts_url["recurring"] == 1
+    assert counts_url["new"] == 0
+    assert counts_url["open"] == 1

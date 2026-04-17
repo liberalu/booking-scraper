@@ -254,6 +254,8 @@ def get_validation_lifecycle_counts(
     run_id: int | None = None,
     q: str = "",
 ) -> dict[str, int]:
+    """Bucket counts of issues (new/recurring/already_seen/open) under the same
+    filter semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs."""
     from sqlalchemy import or_
 
     query = session.query(
