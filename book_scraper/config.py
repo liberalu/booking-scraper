@@ -1,7 +1,7 @@
 import tomllib
 from pathlib import Path
 
-from book_scraper.config_models import DefaultConfig, ShopConfig
+from book_scraper.config_models import AttributesConfig, DefaultConfig, ShopConfig
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -21,4 +21,11 @@ def load_shop_config(shop_name: str) -> ShopConfig:
         raise FileNotFoundError(f"Shop config not found: {path}")
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return ShopConfig.model_validate(data)
+    # Flatten the optional [attributes] section before pydantic sees it
+    # so we can keep subtables like [attributes.format] in the TOML
+    # while still exposing a clean { allowed_keys, rules } shape.
+    attrs = data.pop("attributes", None)
+    config = ShopConfig.model_validate(data)
+    if isinstance(attrs, dict):
+        config.attributes = AttributesConfig.from_toml(attrs)
+    return config

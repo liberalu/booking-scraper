@@ -1,6 +1,49 @@
 """Typed configuration models validated with Pydantic."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class AttributeRule(BaseModel):
+    """Optional per-key validation rule.
+
+    `enum` restricts values to a fixed set. `pattern` is a regex the
+    value must fully match. Both are optional and, if both given, both
+    are enforced.
+    """
+
+    enum: list[str] | None = None
+    pattern: str | None = None
+
+
+class AttributesConfig(BaseModel):
+    """Per-shop attribute schema.
+
+    When present, every attribute key scraped from a listing must be in
+    `allowed_keys`; unknown keys fire a validation issue. Individual
+    keys can further restrict their values with `enum` or `pattern`.
+    When the whole section is omitted the feature is opt-out — all
+    attributes pass through unchecked.
+    """
+
+    allowed_keys: list[str] = Field(default_factory=list)
+    rules: dict[str, AttributeRule] = Field(default_factory=dict)
+
+    @classmethod
+    def from_toml(cls, data: dict[str, object]) -> "AttributesConfig":
+        """Split the flat TOML form `{allowed_keys, format={enum=..}, ..}`
+        into the structured `{allowed_keys, rules}` shape the pipeline
+        uses. TOML subtables under `[attributes.X]` arrive as sibling
+        keys in the parent dict.
+        """
+        allowed = data.get("allowed_keys") or []
+        rules: dict[str, AttributeRule] = {}
+        for key, value in data.items():
+            if key == "allowed_keys":
+                continue
+            if isinstance(value, dict):
+                rules[key] = AttributeRule.model_validate(value)
+        assert isinstance(allowed, list)
+        return cls(allowed_keys=[str(k) for k in allowed], rules=rules)
 
 
 class ScrapingConfig(BaseModel):
@@ -50,6 +93,7 @@ class ShopConfig(BaseModel):
     scraping: ScrapingConfig = ScrapingConfig()
     discover: DiscoverConfig = DiscoverConfig()
     scan: ScanConfig = ScanConfig()
+    attributes: AttributesConfig | None = None
 
 
 class ScrapyConfig(BaseModel):

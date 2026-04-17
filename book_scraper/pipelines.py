@@ -85,10 +85,14 @@ class ValidationPipeline:
     def __init__(self, stats: Any = None):
         self.stats = stats
         self.issues: list[dict[str, str | int | None]] = []
+        self.crawler: Crawler | None = None
+        # Compiled regexes for attribute value checks, keyed by key name.
+        self._attr_patterns: dict[str, re.Pattern[str]] = {}
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "ValidationPipeline":
         pipeline = cls(stats=crawler.stats)
+        pipeline.crawler = crawler
         crawler.validation_pipeline = pipeline  # type: ignore[attr-defined]
         return pipeline
 
@@ -160,6 +164,55 @@ class ValidationPipeline:
         author = adapter.get("author")
         if isinstance(author, str) and _MULTI_AUTHOR_RE.search(author):
             self._warn("multi_author", "author", url, author[:200])
+
+    def _check_attributes(self, adapter: ItemAdapter, url: str) -> None:
+        """Validate `properties` against the per-shop schema, if any.
+
+        Unknown keys fire `attribute_unknown_key`; values that don't
+        satisfy the rule's enum/pattern fire `attribute_invalid_value`.
+        Valid attributes pass through unchanged for the storage layer.
+        """
+        spider = getattr(self.crawler, "spider", None) if self.crawler else None
+        shop_conf = getattr(spider, "conf", None)
+        attrs_conf = getattr(shop_conf, "attributes", None)
+        if attrs_conf is None:
+            return
+        props = adapter.get("properties") or {}
+        if not isinstance(props, dict):
+            return
+        allowed = set(attrs_conf.allowed_keys)
+        for key, value in props.items():
+            if key not in allowed:
+                self._warn(
+                    "attribute_unknown_key",
+                    "properties",
+                    url,
+                    f"{key}={value}",
+                )
+                continue
+            rule = attrs_conf.rules.get(key)
+            if rule is None or value is None:
+                continue
+            str_value = str(value)
+            if rule.enum is not None and str_value not in rule.enum:
+                self._warn(
+                    "attribute_invalid_value",
+                    key,
+                    url,
+                    f"not in enum: {str_value}",
+                )
+            if rule.pattern is not None:
+                regex = self._attr_patterns.get(key)
+                if regex is None:
+                    regex = re.compile(rule.pattern)
+                    self._attr_patterns[key] = regex
+                if not regex.fullmatch(str_value):
+                    self._warn(
+                        "attribute_invalid_value",
+                        key,
+                        url,
+                        f"pattern mismatch: {str_value}",
+                    )
 
     def _check_format_consistency(self, adapter: ItemAdapter, url: str) -> None:
         fmt = adapter.get("format")
@@ -248,6 +301,9 @@ class ValidationPipeline:
 
             # Format consistency
             self._check_format_consistency(adapter, url)
+
+            # Per-shop attribute schema (opt-in via TOML)
+            self._check_attributes(adapter, url)
 
         return item
 
