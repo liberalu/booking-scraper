@@ -27,7 +27,7 @@ def listings_page(
     category: str = "",
     format: str = "",
     missing: str = "",
-    active: str = "",
+    active: str = "true",
     has_isbn: bool = False,
     shop: str = "",
     sort: str = "",

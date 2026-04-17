@@ -444,6 +444,7 @@ def get_listings_page(
         query = query.filter(Listing.is_active.is_(True))
     elif active_filter == "false":
         query = query.filter(Listing.is_active.is_(False))
+    # "all" or "" — no active/inactive filter applied
     if has_isbn:
         query = query.filter(Listing.isbn.isnot(None))
 

@@ -68,11 +68,11 @@ def test_filter_badge_remove_preserves_sort(client: TestClient) -> None:
     """The ✕ on a filter badge drops only that filter, not the sort."""
     import re
 
+    # active=all puts up the "All statuses" badge; shop=vaga puts up the
+    # shop badge. Active=true is the default and renders no badge.
     html = client.get(
-        "/listings?shop=vaga&active=true&sort=price&order=desc"
+        "/listings?shop=vaga&active=all&sort=price&order=desc"
     ).text
-    # Gather the two badge-remove hrefs — they drop shop and active
-    # respectively, and both must carry the active sort.
     badge_hrefs = re.findall(
         r'filter-badge[^<]*<a href="([^"]*)"', html, re.DOTALL
     )
