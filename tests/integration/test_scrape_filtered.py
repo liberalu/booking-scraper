@@ -41,7 +41,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    yield TestClient(app)
+    yield TestClient(app, follow_redirects=False)
     app.dependency_overrides.clear()
 
 
@@ -93,14 +93,11 @@ def test_scrape_filtered_404_when_no_matches(
 def test_scrape_filtered_spawns_with_correct_urls(
     client: TestClient, captured_cmd: list[list[str]]
 ) -> None:
+    """Default POST redirects back to listings with a flash flag."""
     resp = client.post("/scrape/filtered?shop=vaga&author=Alice")
-    assert resp.status_code == 202
-    body = resp.json()
-    assert body["status"] == "started"
-    assert body["urls_count"] == 3
-    assert len(body["jobs"]) == 1
-    assert body["jobs"][0]["shop"] == "vaga"
-    assert body["jobs"][0]["urls_count"] == 3
+    assert resp.status_code == 303
+    assert "/listings?" in resp.headers["location"]
+    assert "scrape_started=3" in resp.headers["location"]
 
     assert len(captured_cmd) == 1
     cmd = captured_cmd[0]
@@ -116,12 +113,24 @@ def test_scrape_filtered_spawns_with_correct_urls(
     assert "https://vaga.lt/other" not in urls
 
 
+def test_scrape_filtered_json_mode(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    """?output=json preserves the structured response for API callers."""
+    resp = client.post("/scrape/filtered?shop=vaga&author=Alice&output=json")
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["status"] == "started"
+    assert body["urls_count"] == 3
+    assert len(body["jobs"]) == 1
+
+
 def test_scrape_filtered_without_shop_uses_filter_alone(
     client: TestClient, captured_cmd: list[list[str]]
 ) -> None:
     """Filter-only (no shop) should still work — endpoint groups URLs
     by shop and spawns a subprocess per shop."""
-    resp = client.post("/scrape/filtered?author=Alice")
+    resp = client.post("/scrape/filtered?author=Alice&output=json")
     assert resp.status_code == 202
     body = resp.json()
     assert body["urls_count"] == 3

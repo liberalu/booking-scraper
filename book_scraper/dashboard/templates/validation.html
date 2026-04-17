@@ -14,7 +14,9 @@
 
 {% if flat_issues is defined and flat_issues %}
 <div class="card" style="padding: 0; overflow: hidden;">
-    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Issues ({{ flat_issues|length }})</p>
+    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">
+        Issues — showing {{ flat_issues|length }} of {{ "{:,}".format(flat_total) }}
+    </p>
     <table class="data-table">
         <thead>
             <tr>
@@ -53,6 +55,21 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if flat_total_pages > 1 %}
+    <div class="pagination" style="padding: 0.75rem 1rem;">
+        {% if flat_page > 1 %}
+        <a href="/validation?state={{ state }}&page={{ flat_page - 1 }}">← Prev</a>
+        {% else %}
+        <span class="disabled">← Prev</span>
+        {% endif %}
+        <span class="current">Page {{ flat_page }} of {{ flat_total_pages }}</span>
+        {% if flat_page < flat_total_pages %}
+        <a href="/validation?state={{ state }}&page={{ flat_page + 1 }}">Next →</a>
+        {% else %}
+        <span class="disabled">Next →</span>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% else %}
 <div class="card" style="padding: 0; overflow: hidden;">

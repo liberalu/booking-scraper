@@ -4,6 +4,12 @@
 {% block content %}
 <h1 class="page-title">Listings</h1>
 
+{% if scrape_started %}
+<div class="card" style="background: #e7f5e7; padding: 0.75rem 1rem; margin-bottom: 1rem; border-left: 4px solid var(--price-down);">
+    ▶ Scrape started for {{ scrape_started }} listing(s). Progress shows on <a href="/runs">/runs</a>.
+</div>
+{% endif %}
+
 <form method="get" action="/listings">
     <div class="filter-bar">
         <input type="search" name="q" placeholder="Search by title..." value="{{ query }}">

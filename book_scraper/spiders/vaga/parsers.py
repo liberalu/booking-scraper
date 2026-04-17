@@ -245,8 +245,15 @@ def parse_product_page(html: str) -> dict[str, object]:
     if "Vertėjas" in prop_map:
         data["translator"] = prop_map["Vertėjas"]
 
-    # Auto-detect format from available properties
-    if "Trukmė" in prop_map:
+    # Auto-detect format from available properties.
+    # Only trust Trukmė (duration) when it's non-zero — vaga.lt leaves
+    # the field on regular books with "0 val. 00 min." which would
+    # otherwise misclassify textbooks as audiobooks.
+    trukme = prop_map.get("Trukmė", "").strip()
+    has_real_duration = bool(
+        trukme and re.search(r"[1-9]", trukme)
+    )
+    if has_real_duration:
         data["format"] = "audiobook"
     elif "Viršelis" in prop_map:
         cover = prop_map["Viršelis"].lower()

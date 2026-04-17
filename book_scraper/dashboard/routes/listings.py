@@ -32,6 +32,7 @@ def listings_page(
     shop: str = "",
     sort: str = "",
     order: str = "desc",
+    scrape_started: str = "",
     session: Session = Depends(get_db),
 ):
     shop_obj = get_shop_by_name(session, shop) if shop else None
@@ -77,6 +78,7 @@ def listings_page(
             "categories": categories,
             "formats": formats,
             "max_filtered_urls": MAX_FILTERED_URLS,
+            "scrape_started": scrape_started,
         },
     )
 

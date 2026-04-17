@@ -18,10 +18,11 @@ import shlex
 import subprocess
 from collections import defaultdict
 from collections.abc import Callable
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from book_scraper.dashboard.deps import get_db
 from book_scraper.dashboard.queries import get_listings_page, get_shop_by_name
@@ -181,13 +182,37 @@ def scrape_filtered(
             }
         )
 
-    return JSONResponse(
-        {
-            "status": "started",
-            "urls_count": len(pairs),
-            "jobs": jobs,
-        },
-        status_code=202,
+    # Browsers submit this form and expect to navigate somewhere sane,
+    # not stare at a JSON payload. Redirect back to /listings with the
+    # same filters plus a flash-style query param the template renders
+    # as a toast. Clients that want structured output can still pass
+    # `?output=json` to get the original response (using a custom param
+    # name to avoid colliding with the `format` listing filter).
+    wants_json = request.query_params.get("output") == "json"
+    if wants_json:
+        return JSONResponse(
+            {"status": "started", "urls_count": len(pairs), "jobs": jobs},
+            status_code=202,
+        )
+    back_params = {
+        k: v
+        for k, v in {
+            "shop": shop,
+            "q": q,
+            "author": author,
+            "publisher": publisher,
+            "category": category,
+            "format": format,
+            "missing": missing,
+            "active": active,
+            "has_isbn": "true" if has_isbn else "",
+        }.items()
+        if v
+    }
+    back_params["scrape_started"] = str(len(pairs))
+    return RedirectResponse(
+        url=f"/listings?{urlencode(back_params)}",
+        status_code=303,
     )
 
 

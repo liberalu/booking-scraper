@@ -82,6 +82,7 @@
             <tr>
                 <th>{{ sort_header('url', 'URL', sort, order, filter_params) }}</th>
                 <th>Shop</th>
+                <th>Listing</th>
                 <th>Source</th>
                 <th>Type</th>
                 <th class="text-right">{{ sort_header('fails', 'Fails', sort, order, filter_params) }}</th>
@@ -96,6 +97,13 @@
                     <a href="{{ u.url }}" target="_blank" rel="noopener noreferrer">{{ u.url }}</a>
                 </td>
                 <td class="text-muted">{{ u.shop.name if u.shop else '—' }}</td>
+                <td>
+                    {% if u.listing_id %}
+                    <a href="/listings/{{ u.listing_id }}">#{{ u.listing_id }}</a>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
                 <td class="text-muted">{{ u.source or '—' }}</td>
                 <td>
                     {% if u.url_type == 'product' %}

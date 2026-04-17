@@ -27,6 +27,7 @@ def _normalize_state(state: str | None) -> str:
 def validation_list(
     request: Request,
     state: str = "open",
+    page: int = 1,
     session: Session = Depends(get_db),
 ) -> Response:
     state = _normalize_state(state)
@@ -39,8 +40,13 @@ def validation_list(
     # for new/recurring/already_seen; keep the grouped view as the
     # default "Open" and "All" overviews.
     flat_issues: list[dict] = []
+    flat_total = 0
+    per_page = 100
     if state in {"new", "recurring", "already_seen"}:
-        flat_issues = get_validation_issues_flat(session, state=state, limit=200)
+        flat_issues, flat_total = get_validation_issues_flat(
+            session, state=state, page=page, per_page=per_page
+        )
+    total_pages = (flat_total + per_page - 1) // per_page
     return templates.TemplateResponse(
         request,
         "validation.html",
@@ -51,6 +57,9 @@ def validation_list(
             "lifecycle_state": state,
             "lifecycle_counts": counts,
             "flat_issues": flat_issues,
+            "flat_total": flat_total,
+            "flat_page": page,
+            "flat_total_pages": total_pages,
         },
     )
 

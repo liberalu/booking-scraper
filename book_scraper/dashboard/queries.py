@@ -133,9 +133,12 @@ def get_validation_summary(
 
 
 def get_validation_issues_flat(
-    session: Session, state: str | None = None, limit: int = 200
-) -> list[dict]:
-    """Return a flat, per-issue view for a given lifecycle state.
+    session: Session,
+    state: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> tuple[list[dict], int]:
+    """Return (rows, total) for a given lifecycle state, paginated.
 
     Pulls the Listing title when a listing_id is set so the template
     can show a meaningful link instead of the raw URL.
@@ -145,7 +148,13 @@ def get_validation_issues_flat(
         q = q.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
         q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
-    issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
+    total = q.count()
+    issues = (
+        q.order_by(ValidationIssue.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
 
     listing_ids = {i.listing_id for i in issues if i.listing_id}
     titles: dict[int, str] = {}
@@ -157,7 +166,7 @@ def get_validation_issues_flat(
         )
         titles = {row.id: row.title for row in rows}
 
-    return [
+    rows = [
         {
             "id": i.id,
             "url": i.url,
@@ -173,6 +182,7 @@ def get_validation_issues_flat(
         }
         for i in issues
     ]
+    return rows, total
 
 
 def get_validation_lifecycle_counts(session: Session) -> dict[str, int]:
