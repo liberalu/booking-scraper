@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from book_scraper.config_models import AttributeRule, AttributesConfig
-from book_scraper.items import ListingItem
+from book_scraper.items import ShopBookItem
 from book_scraper.pipelines import ValidationPipeline
 
 
@@ -12,8 +12,8 @@ def _pipeline_with_schema(schema: AttributesConfig | None) -> ValidationPipeline
     return pipeline
 
 
-def _item(**properties: str) -> ListingItem:
-    return ListingItem(
+def _item(**properties: str) -> ShopBookItem:
+    return ShopBookItem(
         url="https://vaga.lt/x",
         shop_name="vaga",
         title="Title",

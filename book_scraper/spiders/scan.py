@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from book_scraper.config import load_shop_config
 from book_scraper.db.repo import increment_scrape_run_stats
 from book_scraper.db.session import get_session_factory
-from book_scraper.items import ListingItem
+from book_scraper.items import ShopBookItem
 from book_scraper.services.scan import ScanService
 from book_scraper.spiders.registry import load_parsers
 
@@ -139,7 +139,7 @@ class ScanSpider(scrapy.Spider):
 
     def parse_product(
         self, response: scrapy.http.Response
-    ) -> Generator[ListingItem, None, None]:
+    ) -> Generator[ShopBookItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
 
         url = response.url.split("?")[0]
@@ -211,7 +211,7 @@ class ScanSpider(scrapy.Spider):
             if data.get(key) is not None:
                 props[key] = data[key]
 
-        item = ListingItem(
+        item = ShopBookItem(
             url=response.url.split("?")[0],
             shop_name=self.shop_name,
             title=data["title"],

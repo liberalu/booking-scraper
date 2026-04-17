@@ -14,11 +14,11 @@
             <div class="stat-label">Discovered URLs</div>
             <div class="stat-value">{{ "{:,}".format(item.stats.discovered_urls) }}</div>
         </a>
-        <a href="/listings?shop={{ item.shop.name }}" class="stat-card">
-            <div class="stat-label">Listings</div>
-            <div class="stat-value">{{ "{:,}".format(item.stats.listings) }}</div>
+        <a href="/shop-books?shop={{ item.shop.name }}" class="stat-card">
+            <div class="stat-label">Shop Books</div>
+            <div class="stat-value">{{ "{:,}".format(item.stats.shop_books) }}</div>
         </a>
-        <a href="/listings?shop={{ item.shop.name }}&active=true" class="stat-card">
+        <a href="/shop-books?shop={{ item.shop.name }}&active=true" class="stat-card">
             <div class="stat-label">Active</div>
             <div class="stat-value">{{ "{:,}".format(item.stats.active) }}</div>
         </a>

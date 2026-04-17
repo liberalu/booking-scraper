@@ -13,15 +13,15 @@ from book_scraper.db.repo import (
     bulk_insert_validation_issues,
     increment_scrape_run_stats,
     insert_price,
-    link_discovered_url_to_listing,
-    touch_listing_field_updates,
+    link_discovered_url_to_shop_book,
+    touch_shop_book_field_updates,
     update_scrape_run_progress,
     upsert_discovered_url,
-    upsert_listing,
     upsert_shop,
+    upsert_shop_book,
 )
 from book_scraper.db.session import get_session_factory
-from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
+from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +154,8 @@ class ValidationPipeline:
                     url,
                     f"len={len(title)}",
                 )
-        # (Multi-author detection removed — upsert_listing now splits
-        # the raw author string into shop_authors + listing_authors, so
+        # (Multi-author detection removed — upsert_shop_book now splits
+        # the raw author string into shop_authors + shop_book_authors, so
         # flagging a raw multi-author string is redundant noise.)
 
     def _check_attributes(self, adapter: ItemAdapter, url: str) -> None:
@@ -235,7 +235,7 @@ class ValidationPipeline:
         adapter = ItemAdapter(item)
         url = adapter.get("url", "")
 
-        if isinstance(item, (ListingItem, PriceItem)):
+        if isinstance(item, (ShopBookItem, PriceItem)):
             price = adapter.get("price")
             if price is not None:
                 try:
@@ -260,7 +260,7 @@ class ValidationPipeline:
             # Price anomaly checks (after decimal conversion)
             self._check_price_anomalies(adapter, url)
 
-        if isinstance(item, ListingItem):
+        if isinstance(item, ShopBookItem):
             # Convert any inbound HTML description to Markdown at the
             # boundary. Shops vary in their source markup; keeping the
             # stored form as Markdown is portable, diff-friendly, and
@@ -420,19 +420,19 @@ class PostgresPipeline:
     def _report_field_changes(
         self,
         url: str,
-        listing_id: int,
+        shop_book_id: int,
         changes: list[dict[str, object]],
     ) -> None:
         if not changes:
             return
-        # Save to listing_changes table
-        from book_scraper.db.models import ListingChange
+        # Save to shop_book_changes table
+        from book_scraper.db.models import ShopBookChange
 
         assert self.session is not None
         for change in changes:
             self.session.add(
-                ListingChange(
-                    listing_id=listing_id,
+                ShopBookChange(
+                    shop_book_id=shop_book_id,
                     scrape_run_id=self._run_id,
                     field=str(change["field"]),
                     old_value=str(change["old"]) if change["old"] is not None else None,
@@ -443,12 +443,10 @@ class PostgresPipeline:
         # Advance per-field "last updated" timestamps for any tracked
         # field that actually changed.
         touched = [
-            str(c["field"])
-            for c in changes
-            if str(c["field"]) in self._TRACKED_FIELDS
+            str(c["field"]) for c in changes if str(c["field"]) in self._TRACKED_FIELDS
         ]
         if touched:
-            touch_listing_field_updates(self.session, listing_id, touched)
+            touch_shop_book_field_updates(self.session, shop_book_id, touched)
 
         # Also report as validation issues
         vp: ValidationPipeline | None = getattr(
@@ -492,7 +490,7 @@ class PostgresPipeline:
         prior_values: dict[str, Any],
     ) -> None:
         """Emit a validation issue for every watched field that comes
-        back empty on a full scrape of an existing listing.
+        back empty on a full scrape of an existing shop_book.
 
         Prior-value context is included when available so the Issues
         view can distinguish "never had one" from a regression.
@@ -535,7 +533,7 @@ class PostgresPipeline:
         adapter = ItemAdapter(item)
         shop_name: str = adapter.get("shop_name") or ""
 
-        if isinstance(item, ListingItem):
+        if isinstance(item, ShopBookItem):
             shop_id = self._get_shop_id(shop_name)
 
             year = adapter.get("year")
@@ -556,10 +554,10 @@ class PostgresPipeline:
 
             # Capture existing values so we can detect fields the full
             # scrape failed to re-extract (empty-parse regression).
-            from book_scraper.db.models import Listing as _Listing
+            from book_scraper.db.models import ShopBook as _ShopBook
 
             prior = (
-                self.session.query(_Listing)
+                self.session.query(_ShopBook)
                 .filter_by(shop_id=shop_id, url=adapter["url"])
                 .first()
             )
@@ -580,7 +578,7 @@ class PostgresPipeline:
                 else {}
             )
 
-            listing, created, old_price, changes = upsert_listing(
+            shop_book, created, old_price, changes = upsert_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -611,7 +609,7 @@ class PostgresPipeline:
                 )
                 self._report_field_changes(
                     adapter["url"],
-                    listing.id,
+                    shop_book.id,
                     changes,
                 )
                 self._report_empty_fields(
@@ -622,17 +620,17 @@ class PostgresPipeline:
             if price is not None:
                 insert_price(
                     self.session,
-                    listing_id=listing.id,
+                    shop_book_id=shop_book.id,
                     price=price,
                     price_original=price_original,
                     in_stock=adapter.get("in_stock", True),
                     run_id=self._run_id,
                 )
-            link_discovered_url_to_listing(
+            link_discovered_url_to_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
-                listing_id=listing.id,
+                shop_book_id=shop_book.id,
                 run_id=self._run_id,
             )
 
@@ -644,7 +642,7 @@ class PostgresPipeline:
                 if adapter.get("price_original")
                 else None
             )
-            listing, created, old_price, changes = upsert_listing(
+            shop_book, created, old_price, changes = upsert_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
@@ -662,22 +660,22 @@ class PostgresPipeline:
                 self._check_price_spike(adapter["url"], old_price, price)
                 self._report_field_changes(
                     adapter["url"],
-                    listing.id,
+                    shop_book.id,
                     changes,
                 )
             insert_price(
                 self.session,
-                listing_id=listing.id,
+                shop_book_id=shop_book.id,
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
                 run_id=self._run_id,
             )
-            link_discovered_url_to_listing(
+            link_discovered_url_to_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
-                listing_id=listing.id,
+                shop_book_id=shop_book.id,
                 run_id=self._run_id,
             )
 

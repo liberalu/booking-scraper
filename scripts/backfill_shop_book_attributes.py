@@ -1,4 +1,4 @@
-"""Backfill: copy listings.properties JSONB into listing_attributes rows.
+"""Backfill: copy shop_books.properties JSONB into shop_book_attributes rows.
 
 Idempotent. Must be run *before* migration `a4bd6135313a` drops the
 legacy JSONB column — after the drop there is nothing to read from, and
@@ -6,7 +6,7 @@ running this script will be a no-op (the `properties` attribute no
 longer exists on the ORM model).
 
 Usage:
-    PYTHONPATH=. uv run python scripts/backfill_listing_attributes.py
+    PYTHONPATH=. uv run python scripts/backfill_shop_book_attributes.py
 """
 
 from __future__ import annotations
@@ -33,32 +33,32 @@ def main() -> int:
         # not depend on the current ORM shape.
         bind = session.get_bind()
         inspector = inspect(bind)
-        columns = {c["name"] for c in inspector.get_columns("listings")}
+        columns = {c["name"] for c in inspector.get_columns("shop_books")}
         if "properties" not in columns:
             print(
-                "listings.properties column not present — backfill already "
+                "shop_books.properties column not present — backfill already "
                 "applied (or migration a4bd6135313a has dropped it). Nothing "
                 "to do."
             )
             return 0
 
         rows = session.execute(
-            text("SELECT id, properties FROM listings WHERE properties IS NOT NULL")
+            text("SELECT id, properties FROM shop_books WHERE properties IS NOT NULL")
         ).all()
         total = len(rows)
-        print(f"{total} listing(s) to process")
+        print(f"{total} shop_book(s) to process")
 
         # Lazy import so the ORM model is only consulted when we have work.
-        from book_scraper.db.models import Listing
+        from book_scraper.db.models import ShopBook
 
         for batch_start in range(0, total, 500):
             batch = rows[batch_start : batch_start + 500]
-            for listing_id, props in batch:
+            for shop_book_id, props in batch:
                 if not props:
                     continue
-                listing = session.get(Listing, listing_id)
-                if listing is not None:
-                    _sync_attribute_rows(session, listing, props)
+                shop_book = session.get(ShopBook, shop_book_id)
+                if shop_book is not None:
+                    _sync_attribute_rows(session, shop_book, props)
             session.commit()
             print(f"  processed {min(batch_start + 500, total)} / {total}")
         print("done")

@@ -10,12 +10,12 @@ from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
     get_urls_already_scraped,
-    mark_listings_inactive,
+    mark_shop_books_inactive,
     update_discovered_url_status,
     upsert_category,
     upsert_discovered_url,
-    upsert_listing,
     upsert_shop,
+    upsert_shop_book,
 )
 
 
@@ -40,55 +40,55 @@ class TestUpsertCategory:
 
 
 @pytest.mark.integration
-class TestMarkListingsInactive:
+class TestMarkShopBooksInactive:
     def test_marks_missing_urls_inactive(self, db_session):
         shop = upsert_shop(db_session, name="test_shop", base_url="https://test.lt")
-        listing1, *_ = upsert_listing(
+        shop_book1, *_ = upsert_shop_book(
             db_session, shop_id=shop.id, url="https://test.lt/book-1", title="Book 1"
         )
-        listing2, *_ = upsert_listing(
+        shop_book2, *_ = upsert_shop_book(
             db_session, shop_id=shop.id, url="https://test.lt/book-2", title="Book 2"
         )
 
-        count = mark_listings_inactive(
+        count = mark_shop_books_inactive(
             db_session, shop_id=shop.id, active_urls={"https://test.lt/book-1"}
         )
         assert count == 1
 
-        db_session.refresh(listing1)
-        db_session.refresh(listing2)
-        assert listing1.is_active is True
-        assert listing1.inactive_since is None
-        assert listing2.is_active is False
-        assert listing2.inactive_since is not None
+        db_session.refresh(shop_book1)
+        db_session.refresh(shop_book2)
+        assert shop_book1.is_active is True
+        assert shop_book1.inactive_since is None
+        assert shop_book2.is_active is False
+        assert shop_book2.inactive_since is not None
 
     def test_reactivation_clears_inactive_since(self, db_session):
-        """When a vanished listing reappears and is re-upserted, the
+        """When a vanished shop_book reappears and is re-upserted, the
         transition stamp should be cleared."""
         shop = upsert_shop(db_session, name="rehydrate_shop", base_url="https://r.lt")
-        listing, *_ = upsert_listing(
+        shop_book, *_ = upsert_shop_book(
             db_session, shop_id=shop.id, url="https://r.lt/book", title="Book"
         )
-        mark_listings_inactive(db_session, shop_id=shop.id, active_urls=set())
-        db_session.refresh(listing)
-        assert listing.is_active is False
-        assert listing.inactive_since is not None
+        mark_shop_books_inactive(db_session, shop_id=shop.id, active_urls=set())
+        db_session.refresh(shop_book)
+        assert shop_book.is_active is False
+        assert shop_book.inactive_since is not None
 
-        # Re-upsert (listing is visible again in the shop).
-        upsert_listing(
+        # Re-upsert (shop_book is visible again in the shop).
+        upsert_shop_book(
             db_session, shop_id=shop.id, url="https://r.lt/book", title="Book"
         )
-        db_session.refresh(listing)
-        assert listing.is_active is True
-        assert listing.inactive_since is None
+        db_session.refresh(shop_book)
+        assert shop_book.is_active is True
+        assert shop_book.inactive_since is None
 
 
 @pytest.mark.integration
-class TestUpsertListingUpdateFields:
+class TestUpsertShopBookUpdateFields:
     def test_conditional_field_updates(self, db_session):
         """Fields like isbn, publisher, etc. should not be overwritten with None."""
         shop = upsert_shop(db_session, name="update_shop", base_url="https://u.lt")
-        listing, *_ = upsert_listing(
+        shop_book, *_ = upsert_shop_book(
             db_session,
             shop_id=shop.id,
             url="https://u.lt/book",
@@ -98,7 +98,7 @@ class TestUpsertListingUpdateFields:
             year=2020,
         )
 
-        updated, *_ = upsert_listing(
+        updated, *_ = upsert_shop_book(
             db_session,
             shop_id=shop.id,
             url="https://u.lt/book",
@@ -106,7 +106,7 @@ class TestUpsertListingUpdateFields:
             price=Decimal("5.00"),
         )
 
-        assert updated.id == listing.id
+        assert updated.id == shop_book.id
         assert updated.title == "Updated Title"
         assert updated.isbn == "123"
         assert updated.publisher == "Pub"
@@ -114,16 +114,16 @@ class TestUpsertListingUpdateFields:
 
     def test_properties_merge(self, db_session):
         """Properties from successive upserts should accumulate as
-        listing_attributes rows (each key preserved across scrapes)."""
+        shop_book_attributes rows (each key preserved across scrapes)."""
         shop = upsert_shop(db_session, name="merge_shop", base_url="https://m.lt")
-        upsert_listing(
+        upsert_shop_book(
             db_session,
             shop_id=shop.id,
             url="https://m.lt/book",
             title="Book",
             properties={"pages": 200},
         )
-        updated, *_ = upsert_listing(
+        updated, *_ = upsert_shop_book(
             db_session,
             shop_id=shop.id,
             url="https://m.lt/book",

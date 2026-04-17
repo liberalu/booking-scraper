@@ -1,28 +1,28 @@
 {% extends "base.html" %}
-{% block title %}{{ listing.title }}{% endblock %}
+{% block title %}{{ shop_book.title }}{% endblock %}
 {% block content %}
 
 <div class="page-header">
     <div>
-        <h1 class="page-title" style="margin-bottom: 0.5rem;">{{ listing.title }}</h1>
+        <h1 class="page-title" style="margin-bottom: 0.5rem;">{{ shop_book.title }}</h1>
         <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
-            {% if listing.is_active %}
+            {% if shop_book.is_active %}
             <span class="badge badge-completed">Active</span>
             {% else %}
             <span class="badge badge-failed"
-                {%- if listing.inactive_since %} title="Inactive since {{ listing.inactive_since.strftime('%Y-%m-%d %H:%M UTC') }}"{% endif -%}>
-                Inactive{% if listing.inactive_since %} since {{ listing.inactive_since.strftime('%Y-%m-%d') }}{% endif %}
+                {%- if shop_book.inactive_since %} title="Inactive since {{ shop_book.inactive_since.strftime('%Y-%m-%d %H:%M UTC') }}"{% endif -%}>
+                Inactive{% if shop_book.inactive_since %} since {{ shop_book.inactive_since.strftime('%Y-%m-%d') }}{% endif %}
             </span>
             {% endif %}
-            {% if listing.in_stock %}
+            {% if shop_book.in_stock %}
             <span class="badge badge-completed">In Stock</span>
-            {% elif listing.in_stock is not none %}
+            {% elif shop_book.in_stock is not none %}
             <span class="badge badge-failed">Out of Stock</span>
             {% endif %}
         </div>
     </div>
     <div class="actions">
-        <button hx-post="/shops/{{ listing.shop.name }}/scrape-url?url={{ listing.url }}" hx-target="#scrape-result" hx-swap="innerHTML">Re-scrape</button>
+        <button hx-post="/shops/{{ shop_book.shop.name }}/scrape-url?url={{ shop_book.url }}" hx-target="#scrape-result" hx-swap="innerHTML">Re-scrape</button>
         <span id="scrape-result" class="text-muted"></span>
     </div>
 </div>
@@ -37,12 +37,12 @@
             <tr>
                 <th style="width: 140px;">Author</th>
                 <td>
-                    {% if listing.authors %}
-                        {% for a in listing.authors %}<a href="/listings?author={{ a.name|urlencode }}">{{ a.name }}</a>{{ ", " if not loop.last }}{% endfor %}
-                    {% elif listing.author %}
-                        <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
+                    {% if shop_book.authors %}
+                        {% for a in shop_book.authors %}<a href="/shop-books?author={{ a.name|urlencode }}">{{ a.name }}</a>{{ ", " if not loop.last }}{% endfor %}
+                    {% elif shop_book.author %}
+                        <a href="/shop-books?author={{ shop_book.author|urlencode }}">{{ shop_book.author }}</a>
                     {% else %}
-                        <a href="/listings?missing=author" class="text-muted">—</a>
+                        <a href="/shop-books?missing=author" class="text-muted">—</a>
                     {% endif %}
                     {{ changed('author') }}
                 </td>
@@ -50,10 +50,10 @@
             <tr>
                 <th>Publisher</th>
                 <td>
-                    {% if listing.publisher %}
-                        <a href="/listings?publisher={{ listing.publisher|urlencode }}">{{ listing.publisher }}</a>
+                    {% if shop_book.publisher %}
+                        <a href="/shop-books?publisher={{ shop_book.publisher|urlencode }}">{{ shop_book.publisher }}</a>
                     {% else %}
-                        <a href="/listings?missing=publisher" class="text-muted">—</a>
+                        <a href="/shop-books?missing=publisher" class="text-muted">—</a>
                     {% endif %}
                     {{ changed('publisher') }}
                 </td>
@@ -61,10 +61,10 @@
             <tr>
                 <th>ISBN</th>
                 <td>
-                    {% if listing.isbn %}
-                        {{ listing.isbn }}
+                    {% if shop_book.isbn %}
+                        {{ shop_book.isbn }}
                     {% else %}
-                        <a href="/listings?missing=isbn" class="text-muted">—</a>
+                        <a href="/shop-books?missing=isbn" class="text-muted">—</a>
                     {% endif %}
                     {{ changed('isbn') }}
                 </td>
@@ -72,10 +72,10 @@
             <tr>
                 <th>Year</th>
                 <td>
-                    {% if listing.year %}
-                        {{ listing.year }}
+                    {% if shop_book.year %}
+                        {{ shop_book.year }}
                     {% else %}
-                        <a href="/listings?missing=year" class="text-muted">—</a>
+                        <a href="/shop-books?missing=year" class="text-muted">—</a>
                     {% endif %}
                     {{ changed('year') }}
                 </td>
@@ -83,66 +83,66 @@
             <tr>
                 <th>Type</th>
                 <td>
-                    <span class="badge {{ 'badge-warning' if listing.type == 'audio' else 'badge-neutral' }}">{{ listing.type }}</span>
+                    <span class="badge {{ 'badge-warning' if shop_book.type == 'audio' else 'badge-neutral' }}">{{ shop_book.type }}</span>
                 </td>
             </tr>
             <tr>
                 <th>Format</th>
                 <td>
-                    {% if listing.format %}
-                        <a href="/listings?format={{ listing.format|urlencode }}">{{ listing.format }}</a>
+                    {% if shop_book.format %}
+                        <a href="/shop-books?format={{ shop_book.format|urlencode }}">{{ shop_book.format }}</a>
                     {% else %}
-                        <a href="/listings?missing=format" class="text-muted">—</a>
+                        <a href="/shop-books?missing=format" class="text-muted">—</a>
                     {% endif %}
                     {{ changed('format') }}
                 </td>
             </tr>
             <tr>
                 <th>Price</th>
-                <td>{% if listing.price %}{{ listing.price }}{% else %}<span class="text-muted">—</span>{% endif %}{{ changed('price') }}</td>
+                <td>{% if shop_book.price %}{{ shop_book.price }}{% else %}<span class="text-muted">—</span>{% endif %}{{ changed('price') }}</td>
             </tr>
             <tr>
                 <th>Original Price</th>
-                <td>{% if listing.price_original %}{{ listing.price_original }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if shop_book.price_original %}{{ shop_book.price_original }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             <tr>
                 <th>URL</th>
-                <td><a href="{{ listing.url }}" target="_blank" rel="noopener">{{ listing.url[:80] }}{{ '...' if listing.url|length > 80 else '' }}</a></td>
+                <td><a href="{{ shop_book.url }}" target="_blank" rel="noopener">{{ shop_book.url[:80] }}{{ '...' if shop_book.url|length > 80 else '' }}</a></td>
             </tr>
             <tr>
                 <th>First Seen</th>
-                <td class="text-muted">{{ listing.first_seen_at.strftime('%Y-%m-%d %H:%M') if listing.first_seen_at else '—' }}</td>
+                <td class="text-muted">{{ shop_book.first_seen_at.strftime('%Y-%m-%d %H:%M') if shop_book.first_seen_at else '—' }}</td>
             </tr>
             <tr>
                 <th>Last Seen</th>
-                <td class="text-muted">{{ listing.last_seen_at.strftime('%Y-%m-%d %H:%M') if listing.last_seen_at else '—' }}</td>
+                <td class="text-muted">{{ shop_book.last_seen_at.strftime('%Y-%m-%d %H:%M') if shop_book.last_seen_at else '—' }}</td>
             </tr>
         </tbody>
     </table>
 </div>
 
-{% if listing.description %}
+{% if shop_book.description %}
 <div class="card">
     <div class="card-title">Description</div>
-    <div class="rich-text">{{ listing.description|markdown }}</div>
+    <div class="rich-text">{{ shop_book.description|markdown }}</div>
 </div>
 {% endif %}
 
-{% if listing.categories %}
+{% if shop_book.categories %}
 <div class="card">
     <div class="card-title">Categories</div>
     <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
-        {% for cat in listing.categories[:-1] %}
-        <a href="/listings?category={{ cat|urlencode }}" class="badge badge-neutral">{{ cat }}</a>
+        {% for cat in shop_book.categories[:-1] %}
+        <a href="/shop-books?category={{ cat|urlencode }}" class="badge badge-neutral">{{ cat }}</a>
         {% endfor %}
     </div>
 </div>
 {% endif %}
 
-{% if listing.discovered_urls %}
+{% if shop_book.discovered_urls %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <div class="card-title" style="padding: 1rem 1.25rem 0;">
-        Discovered URLs <span class="text-muted">({{ listing.discovered_urls|length }})</span>
+        Discovered URLs <span class="text-muted">({{ shop_book.discovered_urls|length }})</span>
     </div>
     <table class="data-table">
         <thead>
@@ -156,7 +156,7 @@
             </tr>
         </thead>
         <tbody>
-            {% for du in listing.discovered_urls %}
+            {% for du in shop_book.discovered_urls %}
             <tr>
                 <td class="cell-truncate" title="{{ du.url }}">
                     <a href="{{ du.url }}" target="_blank" rel="noopener">{{ du.url[:80] }}{{ '...' if du.url|length > 80 else '' }}</a>
@@ -180,7 +180,7 @@
     'translator': 'Translator',
     'pages': 'Pages',
 } %}
-{% if listing.attributes %}
+{% if shop_book.attributes %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <div class="card-title" style="padding: 1rem 1.25rem 0;">Attributes</div>
     <table class="data-table">
@@ -191,12 +191,12 @@
             </tr>
         </thead>
         <tbody>
-            {% for attr in listing.attributes %}
+            {% for attr in shop_book.attributes %}
             <tr>
                 <td class="text-muted">{{ property_labels.get(attr.key, attr.key|replace('_', ' ')|title) }}</td>
                 <td>
                     {% if attr.key == 'cover_type' %}
-                        <a href="/listings?q={{ attr.value|urlencode }}">{{ attr.value }}</a>
+                        <a href="/shop-books?q={{ attr.value|urlencode }}">{{ attr.value }}</a>
                     {% else %}
                         {{ attr.value }}
                     {% endif %}
@@ -270,7 +270,7 @@
 </div>
 
 <script>
-fetch('/api/prices/{{ listing.id }}/chart')
+fetch('/api/prices/{{ shop_book.id }}/chart')
     .then(r => r.json())
     .then(data => {
         const style = getComputedStyle(document.documentElement);

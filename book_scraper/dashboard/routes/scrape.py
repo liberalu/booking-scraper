@@ -1,4 +1,4 @@
-"""POST /scrape/filtered — launch a scan on the currently filtered listings.
+"""POST /scrape/filtered — launch a scan on the currently filtered shop_books.
 
 The Scrapy scan spider already supports a single-URL mode via the
 `urls=` argument (comma-separated). We resolve the active filters to
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from book_scraper.dashboard.deps import get_db
-from book_scraper.dashboard.queries import get_listings_page, get_shop_by_name
+from book_scraper.dashboard.queries import get_shop_books_page, get_shop_by_name
 
 router = APIRouter()
 
@@ -38,9 +38,7 @@ MAX_FILTERED_URLS = 5000
 
 
 def _default_runner(cmd: list[str]) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(
-        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # Override in tests so we don't actually fork a scrapy process.
@@ -55,31 +53,31 @@ def set_subprocess_runner(
     _subprocess_runner = runner
 
 
-def _collect_listings(
+def _collect_shop_books(
     session: Session,
     shop_id: int | None,
     **filter_kwargs: str | bool,
 ) -> list[tuple[str, str]]:
     """Return every (shop_name, url) pair matching the filters.
 
-    Pages through get_listings_page's filter logic until MAX+1 so we
+    Pages through get_shop_books_page's filter logic until MAX+1 so we
     can detect over-cap cases without loading everything.
     """
     pairs: list[tuple[str, str]] = []
     page = 1
     per_page = 200
     while len(pairs) <= MAX_FILTERED_URLS:
-        listings, _total = get_listings_page(
+        shop_books, _total = get_shop_books_page(
             session,
             page=page,
             per_page=per_page,
             shop_id=shop_id,
             **filter_kwargs,  # type: ignore[arg-type]
         )
-        if not listings:
+        if not shop_books:
             break
-        pairs.extend((listing.shop.name, listing.url) for listing in listings)
-        if len(listings) < per_page:
+        pairs.extend((shop_book.shop.name, shop_book.url) for shop_book in shop_books)
+        if len(shop_books) < per_page:
             break
         page += 1
     return pairs
@@ -117,12 +115,10 @@ def scrape_filtered(
     if shop:
         shop_obj = get_shop_by_name(session, shop)
         if shop_obj is None:
-            raise HTTPException(
-                status_code=404, detail=f"Unknown shop: {shop}"
-            )
+            raise HTTPException(status_code=404, detail=f"Unknown shop: {shop}")
         shop_id = shop_obj.id
 
-    pairs = _collect_listings(
+    pairs = _collect_shop_books(
         session,
         shop_id,
         search=q,
@@ -136,14 +132,12 @@ def scrape_filtered(
     )
 
     if not pairs:
-        raise HTTPException(
-            status_code=404, detail="No listings matched the filters"
-        )
+        raise HTTPException(status_code=404, detail="No shop_books matched the filters")
     if len(pairs) > MAX_FILTERED_URLS:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Filter matches {len(pairs)}+ listings — over the "
+                f"Filter matches {len(pairs)}+ shop_books — over the "
                 f"{MAX_FILTERED_URLS} cap. Narrow the filter, pick a "
                 f"shop, or run `scrapy crawl scan` for a full pass."
             ),
@@ -170,8 +164,7 @@ def scrape_filtered(
         ]
         process = _subprocess_runner(cmd)
         summary = (
-            shlex.join(cmd[:6])
-            + f" -a shop={shop_name} -a urls=<{len(urls)} urls>"
+            shlex.join(cmd[:6]) + f" -a shop={shop_name} -a urls=<{len(urls)} urls>"
         )
         jobs.append(
             {
@@ -183,11 +176,11 @@ def scrape_filtered(
         )
 
     # Browsers submit this form and expect to navigate somewhere sane,
-    # not stare at a JSON payload. Redirect back to /listings with the
+    # not stare at a JSON payload. Redirect back to /shop-books with the
     # same filters plus a flash-style query param the template renders
     # as a toast. Clients that want structured output can still pass
     # `?output=json` to get the original response (using a custom param
-    # name to avoid colliding with the `format` listing filter).
+    # name to avoid colliding with the `format` shop_book filter).
     wants_json = request.query_params.get("output") == "json"
     if wants_json:
         return JSONResponse(
@@ -211,7 +204,7 @@ def scrape_filtered(
     }
     back_params["scrape_started"] = str(len(pairs))
     return RedirectResponse(
-        url=f"/listings?{urlencode(back_params)}",
+        url=f"/shop-books?{urlencode(back_params)}",
         status_code=303,
     )
 

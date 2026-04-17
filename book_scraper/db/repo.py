@@ -10,14 +10,14 @@ from sqlalchemy.orm import Session
 from book_scraper.db.models import (
     Category,
     DiscoveredUrl,
-    Listing,
-    ListingAttribute,
-    ListingAuthor,
-    ListingFieldUpdate,
     Price,
     ScrapeRun,
     Shop,
     ShopAuthor,
+    ShopBook,
+    ShopBookAttribute,
+    ShopBookAuthor,
+    ShopBookFieldUpdate,
     ValidationIssue,
 )
 from book_scraper.url_utils import normalize_url
@@ -45,10 +45,10 @@ def _normalize_author(name: str) -> str:
 
 def _sync_attribute_rows(
     session: Session,
-    listing: "Listing",
+    shop_book: "ShopBook",
     properties: dict[str, Any],
 ) -> None:
-    """Upsert (listing_id, key) rows in listing_attributes to match the
+    """Upsert (shop_book_id, key) rows in shop_book_attributes to match the
     provided dict.
 
     Missing keys leave existing rows alone so a partial scrape doesn't
@@ -59,36 +59,36 @@ def _sync_attribute_rows(
         return
     existing_rows = {
         row.key: row
-        for row in session.query(ListingAttribute).filter_by(listing_id=listing.id)
+        for row in session.query(ShopBookAttribute).filter_by(shop_book_id=shop_book.id)
     }
     for key, value in properties.items():
         str_value = None if value is None else str(value)
         row = existing_rows.get(key)
         if row is None:
             session.add(
-                ListingAttribute(listing_id=listing.id, key=key, value=str_value)
+                ShopBookAttribute(shop_book_id=shop_book.id, key=key, value=str_value)
             )
         elif row.value != str_value:
             row.value = str_value
     session.flush()
 
 
-def _sync_listing_authors(
+def _sync_shop_book_authors(
     session: Session,
-    listing_id: int,
+    shop_book_id: int,
     author_raw: str | None,
 ) -> None:
     """Split `author_raw` on multi-author separators and reconcile
-    rows in `shop_authors` + `listing_authors` so the listing points at
+    rows in `shop_authors` + `shop_book_authors` so the shop_book points at
     the right set of authors in the right order.
 
     Called only when the scrape actually supplies an author string
-    (conditional field in `upsert_listing`), so category scrapes that
+    (conditional field in `upsert_shop_book`), so category scrapes that
     don't parse an author don't blow away an established list.
     """
     parts = _split_author_string(author_raw)
     # Resolve/create author rows; keep only the first occurrence of any
-    # repeated name so (listing_id, author_id) stays unique.
+    # repeated name so (shop_book_id, author_id) stays unique.
     desired: list[tuple[int, int]] = []
     seen_ids: set[int] = set()
     position = 0
@@ -113,8 +113,8 @@ def _sync_listing_authors(
 
     existing = {
         row.author_id: row
-        for row in session.query(ListingAuthor).filter(
-            ListingAuthor.listing_id == listing_id
+        for row in session.query(ShopBookAuthor).filter(
+            ShopBookAuthor.shop_book_id == shop_book_id
         )
     }
     desired_ids = {aid for aid, _ in desired}
@@ -125,21 +125,19 @@ def _sync_listing_authors(
         row = existing.get(aid)
         if row is None:
             session.add(
-                ListingAuthor(
-                    listing_id=listing_id, author_id=aid, position=pos
-                )
+                ShopBookAuthor(shop_book_id=shop_book_id, author_id=aid, position=pos)
             )
         elif row.position != pos:
             row.position = pos
 
 
-def touch_listing_field_updates(
+def touch_shop_book_field_updates(
     session: Session,
-    listing_id: int,
+    shop_book_id: int,
     fields: list[str],
     when: datetime | None = None,
 ) -> None:
-    """Set updated_at=now for each (listing_id, field), inserting new
+    """Set updated_at=now for each (shop_book_id, field), inserting new
     rows when needed.
 
     `fields` should only contain fields that actually changed; callers
@@ -150,16 +148,16 @@ def touch_listing_field_updates(
     stamp = when or datetime.now(UTC)
     existing = {
         row.field: row
-        for row in session.query(ListingFieldUpdate)
-        .filter(ListingFieldUpdate.listing_id == listing_id)
-        .filter(ListingFieldUpdate.field.in_(fields))
+        for row in session.query(ShopBookFieldUpdate)
+        .filter(ShopBookFieldUpdate.shop_book_id == shop_book_id)
+        .filter(ShopBookFieldUpdate.field.in_(fields))
     }
     for field in fields:
         row = existing.get(field)
         if row is None:
             session.add(
-                ListingFieldUpdate(
-                    listing_id=listing_id, field=field, updated_at=stamp
+                ShopBookFieldUpdate(
+                    shop_book_id=shop_book_id, field=field, updated_at=stamp
                 )
             )
         else:
@@ -176,8 +174,8 @@ def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
     return shop
 
 
-def _infer_listing_type(format: str | None) -> str:
-    """Map a free-form `format` string to a listing_type enum value.
+def _infer_shop_book_type(format: str | None) -> str:
+    """Map a free-form `format` string to a shop_book_type enum value.
 
     Only audiobooks are currently marked as 'audio'. Ebook detection
     is deferred until the shops start emitting a recognisable ebook
@@ -188,7 +186,7 @@ def _infer_listing_type(format: str | None) -> str:
     return "book"
 
 
-def upsert_listing(
+def upsert_shop_book(
     session: Session,
     shop_id: int,
     url: str,
@@ -207,13 +205,13 @@ def upsert_listing(
     price_original: Decimal | None = None,
     in_stock: bool = True,
     run_id: int | None = None,
-) -> tuple[Listing, bool, Decimal | None, list[dict[str, Any]]]:
-    """Upsert a listing. Returns (listing, created, old_price, changes)."""
-    stmt = select(Listing).where(Listing.shop_id == shop_id, Listing.url == url)
-    listing = session.execute(stmt).scalar_one_or_none()
+) -> tuple[ShopBook, bool, Decimal | None, list[dict[str, Any]]]:
+    """Upsert a shop_book. Returns (shop_book, created, old_price, changes)."""
+    stmt = select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.url == url)
+    shop_book = session.execute(stmt).scalar_one_or_none()
     now = datetime.now(UTC)
-    if listing is None:
-        listing = Listing(
+    if shop_book is None:
+        shop_book = ShopBook(
             shop_id=shop_id,
             url=url,
             title=title,
@@ -223,7 +221,7 @@ def upsert_listing(
             publisher=publisher,
             year=year,
             format=format,
-            type=_infer_listing_type(format),
+            type=_infer_shop_book_type(format),
             description=description,
             image_url=image_url,
             categories=categories,
@@ -235,17 +233,17 @@ def upsert_listing(
             first_seen_at=now,
             last_seen_at=now,
         )
-        session.add(listing)
+        session.add(shop_book)
         session.flush()
         if properties:
-            _sync_attribute_rows(session, listing, properties)
+            _sync_attribute_rows(session, shop_book, properties)
         if author is not None:
-            _sync_listing_authors(session, listing.id, author)
-        return listing, True, None, []
+            _sync_shop_book_authors(session, shop_book.id, author)
+        return shop_book, True, None, []
     else:
-        old_price = listing.price
-        listing.last_run_id = run_id
-        listing.last_run_action = "updated"
+        old_price = shop_book.price
+        shop_book.last_run_id = run_id
+        shop_book.last_run_action = "updated"
 
         # Track field changes
         changes: list[dict[str, Any]] = []
@@ -268,7 +266,7 @@ def upsert_listing(
         }
 
         for field_name, new_val in tracked_fields.items():
-            old_val = getattr(listing, field_name)
+            old_val = getattr(shop_book, field_name)
             if old_val != new_val:
                 changes.append(
                     {
@@ -277,11 +275,11 @@ def upsert_listing(
                         "new": str(new_val) if new_val is not None else None,
                     }
                 )
-            setattr(listing, field_name, new_val)
+            setattr(shop_book, field_name, new_val)
 
         for cond_field, cond_val in conditional_fields.items():
             if cond_val is not None:
-                old_val = getattr(listing, cond_field)
+                old_val = getattr(shop_book, cond_field)
                 if old_val != cond_val:
                     changes.append(
                         {
@@ -290,43 +288,43 @@ def upsert_listing(
                             "new": str(cond_val) if cond_val is not None else None,
                         }
                     )
-                setattr(listing, cond_field, cond_val)
+                setattr(shop_book, cond_field, cond_val)
 
         # Re-derive type from the authoritative `format` string (only
         # when a format was supplied — a PriceItem won't touch it).
         if format is not None:
-            listing.type = _infer_listing_type(format)
+            shop_book.type = _infer_shop_book_type(format)
 
         if categories is not None:
-            listing.categories = categories
+            shop_book.categories = categories
         if properties is not None:
-            _sync_attribute_rows(session, listing, properties)
+            _sync_attribute_rows(session, shop_book, properties)
         if author is not None:
-            _sync_listing_authors(session, listing.id, author)
+            _sync_shop_book_authors(session, shop_book.id, author)
         if price is not None:
-            listing.price = price
+            shop_book.price = price
         if price_original is not None:
-            listing.price_original = price_original
-        listing.in_stock = in_stock
-        listing.last_seen_at = now
-        listing.is_active = True
-        # Clear the transition stamp when a previously-vanished listing
+            shop_book.price_original = price_original
+        shop_book.in_stock = in_stock
+        shop_book.last_seen_at = now
+        shop_book.is_active = True
+        # Clear the transition stamp when a previously-vanished shop_book
         # comes back; keeps the "inactive_since" semantics meaningful.
-        listing.inactive_since = None
+        shop_book.inactive_since = None
         session.flush()
-        return listing, False, old_price, changes
+        return shop_book, False, old_price, changes
 
 
 def insert_price(
     session: Session,
-    listing_id: int,
+    shop_book_id: int,
     price: Decimal,
     price_original: Decimal | None,
     in_stock: bool,
     run_id: int | None = None,
 ) -> Price:
     record = Price(
-        listing_id=listing_id,
+        shop_book_id=shop_book_id,
         price=price,
         price_original=price_original,
         in_stock=in_stock,
@@ -350,25 +348,25 @@ def upsert_category(
     return cat
 
 
-def mark_listings_inactive(
+def mark_shop_books_inactive(
     session: Session, shop_id: int, active_urls: set[str]
 ) -> int:
-    """Mark listings not in active_urls as inactive. Returns count of deactivated.
+    """Mark shop_books not in active_urls as inactive. Returns count of deactivated.
 
     Stamps `inactive_since` with the transition time so the dashboard
     can show "inactive since <date>" and so downstream jobs can prune
-    long-vanished listings.
+    long-vanished shop_books.
     """
-    stmt = select(Listing).where(
-        Listing.shop_id == shop_id, Listing.is_active.is_(True)
+    stmt = select(ShopBook).where(
+        ShopBook.shop_id == shop_id, ShopBook.is_active.is_(True)
     )
-    listings = session.execute(stmt).scalars().all()
+    shop_books = session.execute(stmt).scalars().all()
     now = datetime.now(UTC)
     count = 0
-    for listing in listings:
-        if listing.url not in active_urls:
-            listing.is_active = False
-            listing.inactive_since = now
+    for shop_book in shop_books:
+        if shop_book.url not in active_urls:
+            shop_book.is_active = False
+            shop_book.inactive_since = now
             count += 1
     session.flush()
     return count
@@ -383,13 +381,13 @@ def upsert_discovered_url(
     url: str,
     source: str,
     run_id: int | None = None,
-    listing_id: int | None = None,
+    shop_book_id: int | None = None,
 ) -> DiscoveredUrl:
     """Upsert (shop_id, normalized_url).
 
     New rows record `first_seen_at = last_seen_at = now`. Repeat hits
     refresh `last_seen_at`, update `last_seen_run_id` when `run_id` is
-    provided, and adopt a resolved `listing_id` when one is supplied.
+    provided, and adopt a resolved `shop_book_id` when one is supplied.
     The raw `url` on an existing row is left alone — the normalized
     URL is the canonical identifier.
     """
@@ -404,8 +402,8 @@ def upsert_discovered_url(
         existing.last_seen_at = now
         if run_id is not None:
             existing.last_seen_run_id = run_id
-        if listing_id is not None and existing.listing_id != listing_id:
-            existing.listing_id = listing_id
+        if shop_book_id is not None and existing.shop_book_id != shop_book_id:
+            existing.shop_book_id = shop_book_id
         session.flush()
         return existing
     record = DiscoveredUrl(
@@ -416,23 +414,23 @@ def upsert_discovered_url(
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
-        listing_id=listing_id,
+        shop_book_id=shop_book_id,
     )
     session.add(record)
     session.flush()
     return record
 
 
-def link_discovered_url_to_listing(
+def link_discovered_url_to_shop_book(
     session: Session,
     shop_id: int,
     url: str,
-    listing_id: int,
+    shop_book_id: int,
     run_id: int | None = None,
 ) -> DiscoveredUrl | None:
-    """Idempotently attach a listing to its discovered URL row.
+    """Idempotently attach a shop_book to its discovered URL row.
 
-    Returns the row (creating one if missing — useful when a listing
+    Returns the row (creating one if missing — useful when a shop_book
     is upserted via a path that didn't go through discovery yet).
     """
     normalized = normalize_url(url)
@@ -443,8 +441,8 @@ def link_discovered_url_to_listing(
     existing = session.execute(stmt).scalar_one_or_none()
     now = datetime.now(UTC)
     if existing is not None:
-        if existing.listing_id != listing_id:
-            existing.listing_id = listing_id
+        if existing.shop_book_id != shop_book_id:
+            existing.shop_book_id = shop_book_id
         existing.last_seen_at = now
         if run_id is not None:
             existing.last_seen_run_id = run_id
@@ -458,7 +456,7 @@ def link_discovered_url_to_listing(
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
-        listing_id=listing_id,
+        shop_book_id=shop_book_id,
     )
     session.add(record)
     session.flush()
@@ -696,10 +694,10 @@ def bulk_insert_validation_issues(
     issues: list[dict[str, str | int | None]],
     shop_id: int | None = None,
 ) -> None:
-    """Insert a batch of validation issues, resolving listing/discovered_url FKs.
+    """Insert a batch of validation issues, resolving shop_book/discovered_url FKs.
 
     When `shop_id` is provided, each issue's `url` is resolved to a
-    `listing_id` first; failing that, to a `discovered_url_id`. If the
+    `shop_book_id` first; failing that, to a `discovered_url_id`. If the
     caller already populated either FK on the dict it is left alone.
     """
     if not issues:
@@ -707,23 +705,21 @@ def bulk_insert_validation_issues(
 
     if shop_id is not None:
         urls = {issue["url"] for issue in issues if issue.get("url")}
-        listing_by_url: dict[str, int] = {}
+        shop_book_by_url: dict[str, int] = {}
         du_by_url: dict[str, int] = {}
         if urls:
             rows = session.execute(
-                select(Listing.url, Listing.id).where(
-                    Listing.shop_id == shop_id,
-                    Listing.url.in_(urls),
+                select(ShopBook.url, ShopBook.id).where(
+                    ShopBook.shop_id == shop_id,
+                    ShopBook.url.in_(urls),
                 )
             ).all()
-            for url, listing_id in rows:
-                listing_by_url[url] = listing_id
+            for url, shop_book_id in rows:
+                shop_book_by_url[url] = shop_book_id
             # Only look up discovered_urls for the leftover set.
-            leftover = urls - listing_by_url.keys()
+            leftover = urls - shop_book_by_url.keys()
             if leftover:
-                normalized_map = {
-                    url: normalize_url(str(url)) for url in leftover
-                }
+                normalized_map = {url: normalize_url(str(url)) for url in leftover}
                 rev = {v: k for k, v in normalized_map.items()}
                 du_rows = session.execute(
                     select(DiscoveredUrl.normalized_url, DiscoveredUrl.id).where(
@@ -737,11 +733,11 @@ def bulk_insert_validation_issues(
                         du_by_url[raw] = du_id
 
         for issue in issues:
-            if issue.get("listing_id") or issue.get("discovered_url_id"):
+            if issue.get("shop_book_id") or issue.get("discovered_url_id"):
                 continue
             url = issue.get("url")
-            if url and url in listing_by_url:
-                issue["listing_id"] = listing_by_url[url]
+            if url and url in shop_book_by_url:
+                issue["shop_book_id"] = shop_book_by_url[url]
             elif url and url in du_by_url:
                 issue["discovered_url_id"] = du_by_url[url]
 
@@ -765,39 +761,39 @@ def _assign_lifecycle_states(
     if not issues:
         return
 
-    listing_keys: set[tuple[int, str, str]] = set()
+    shop_book_keys: set[tuple[int, str, str]] = set()
     du_keys: set[tuple[int, str, str]] = set()
     url_keys: set[tuple[str, str, str]] = set()
     for issue in issues:
         field = str(issue.get("field") or "")
         issue_type = str(issue.get("issue") or "")
-        if issue.get("listing_id"):
-            listing_keys.add((int(issue["listing_id"]), field, issue_type))  # type: ignore[arg-type]
+        if issue.get("shop_book_id"):
+            shop_book_keys.add((int(issue["shop_book_id"]), field, issue_type))  # type: ignore[arg-type]
         elif issue.get("discovered_url_id"):
             du_keys.add((int(issue["discovered_url_id"]), field, issue_type))  # type: ignore[arg-type]
         else:
             url_keys.add((str(issue.get("url") or ""), field, issue_type))
 
-    seen_listing: set[tuple[int, str, str]] = set()
+    seen_shop_book: set[tuple[int, str, str]] = set()
     seen_du: set[tuple[int, str, str]] = set()
     seen_url: set[tuple[str, str, str]] = set()
 
     # Look up prior occurrences. We filter on unacknowledged rows only
     # so an acknowledged-then-reappearing issue comes back as `new`.
-    if listing_keys:
+    if shop_book_keys:
         rows = session.execute(
             select(
-                ValidationIssue.listing_id,
+                ValidationIssue.shop_book_id,
                 ValidationIssue.field,
                 ValidationIssue.issue,
             )
             .where(
-                ValidationIssue.listing_id.in_({k[0] for k in listing_keys}),
+                ValidationIssue.shop_book_id.in_({k[0] for k in shop_book_keys}),
                 ValidationIssue.acknowledged_at.is_(None),
             )
             .distinct()
         ).all()
-        seen_listing = {(r.listing_id, r.field, r.issue) for r in rows}
+        seen_shop_book = {(r.shop_book_id, r.field, r.issue) for r in rows}
     if du_keys:
         rows = session.execute(
             select(
@@ -820,7 +816,7 @@ def _assign_lifecycle_states(
                 ValidationIssue.issue,
             )
             .where(
-                ValidationIssue.listing_id.is_(None),
+                ValidationIssue.shop_book_id.is_(None),
                 ValidationIssue.discovered_url_id.is_(None),
                 ValidationIssue.url.in_({k[0] for k in url_keys}),
                 ValidationIssue.acknowledged_at.is_(None),
@@ -833,8 +829,8 @@ def _assign_lifecycle_states(
         field = str(issue.get("field") or "")
         issue_type = str(issue.get("issue") or "")
         state = "new"
-        if issue.get("listing_id"):
-            if (int(issue["listing_id"]), field, issue_type) in seen_listing:  # type: ignore[arg-type]
+        if issue.get("shop_book_id"):
+            if (int(issue["shop_book_id"]), field, issue_type) in seen_shop_book:  # type: ignore[arg-type]
                 state = "recurring"
         elif issue.get("discovered_url_id"):
             if (int(issue["discovered_url_id"]), field, issue_type) in seen_du:  # type: ignore[arg-type]

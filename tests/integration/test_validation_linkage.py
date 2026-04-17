@@ -3,9 +3,9 @@ import sqlalchemy.exc
 
 from book_scraper.db.models import (
     DiscoveredUrl,
-    Listing,
     ScrapeRun,
     Shop,
+    ShopBook,
     ValidationIssue,
 )
 from book_scraper.db.repo import bulk_insert_validation_issues
@@ -21,10 +21,10 @@ def _setup(db_session):
     return shop, run
 
 
-def test_bulk_insert_resolves_listing_fk(db_session):
+def test_bulk_insert_resolves_shop_book_fk(db_session):
     shop, run = _setup(db_session)
-    listing = Listing(shop_id=shop.id, url="https://vaga.lt/b", title="B")
-    db_session.add(listing)
+    shop_book = ShopBook(shop_id=shop.id, url="https://vaga.lt/b", title="B")
+    db_session.add(shop_book)
     db_session.flush()
 
     bulk_insert_validation_issues(
@@ -43,7 +43,7 @@ def test_bulk_insert_resolves_listing_fk(db_session):
     db_session.flush()
 
     issue = db_session.query(ValidationIssue).one()
-    assert issue.listing_id == listing.id
+    assert issue.shop_book_id == shop_book.id
     assert issue.discovered_url_id is None
 
 
@@ -74,13 +74,13 @@ def test_bulk_insert_falls_back_to_discovered_url_fk(db_session):
     db_session.flush()
 
     issue = db_session.query(ValidationIssue).one()
-    assert issue.listing_id is None
+    assert issue.shop_book_id is None
     assert issue.discovered_url_id == du.id
 
 
 def test_bulk_insert_leaves_both_null_when_no_match(db_session):
     """A sitemap-duplicate issue reports a shop-wide URL without a
-    corresponding listing or discovered_url row. Both FKs stay NULL."""
+    corresponding shop_book or discovered_url row. Both FKs stay NULL."""
     shop, run = _setup(db_session)
 
     bulk_insert_validation_issues(
@@ -99,20 +99,20 @@ def test_bulk_insert_leaves_both_null_when_no_match(db_session):
     db_session.flush()
 
     issue = db_session.query(ValidationIssue).one()
-    assert issue.listing_id is None
+    assert issue.shop_book_id is None
     assert issue.discovered_url_id is None
 
 
 def test_check_constraint_forbids_both_fks(db_session):
     shop, run = _setup(db_session)
-    listing = Listing(shop_id=shop.id, url="https://vaga.lt/x", title="X")
+    shop_book = ShopBook(shop_id=shop.id, url="https://vaga.lt/x", title="X")
     du = DiscoveredUrl(
         shop_id=shop.id,
         url="https://vaga.lt/x",
         normalized_url="https://vaga.lt/x",
         source="sitemap",
     )
-    db_session.add_all([listing, du])
+    db_session.add_all([shop_book, du])
     db_session.flush()
 
     db_session.add(
@@ -121,7 +121,7 @@ def test_check_constraint_forbids_both_fks(db_session):
             url="https://vaga.lt/x",
             field="title",
             issue="suspicious_title",
-            listing_id=listing.id,
+            shop_book_id=shop_book.id,
             discovered_url_id=du.id,
         )
     )
@@ -131,8 +131,8 @@ def test_check_constraint_forbids_both_fks(db_session):
 
 def test_relationships_load(db_session):
     shop, run = _setup(db_session)
-    listing = Listing(shop_id=shop.id, url="https://vaga.lt/y", title="Y")
-    db_session.add(listing)
+    shop_book = ShopBook(shop_id=shop.id, url="https://vaga.lt/y", title="Y")
+    db_session.add(shop_book)
     db_session.flush()
 
     bulk_insert_validation_issues(
@@ -151,6 +151,6 @@ def test_relationships_load(db_session):
     db_session.flush()
 
     issue = db_session.query(ValidationIssue).one()
-    assert issue.listing is not None
-    assert issue.listing.id == listing.id
+    assert issue.shop_book is not None
+    assert issue.shop_book.id == shop_book.id
     assert issue.discovered_url is None

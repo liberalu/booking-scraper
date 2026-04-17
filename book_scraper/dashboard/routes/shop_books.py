@@ -7,19 +7,19 @@ from book_scraper.dashboard.queries import (
     get_all_categories,
     get_all_formats,
     get_field_updates,
-    get_listing_changes,
-    get_listings_page,
     get_price_history,
+    get_shop_book_changes,
+    get_shop_books_page,
     get_shop_by_name,
 )
 from book_scraper.dashboard.routes.scrape import MAX_FILTERED_URLS
-from book_scraper.db.models import Listing
+from book_scraper.db.models import ShopBook
 
 router = APIRouter()
 
 
-@router.get("/listings")
-def listings_page(
+@router.get("/shop-books")
+def shop_books_page(
     request: Request,
     page: int = 1,
     q: str = "",
@@ -38,7 +38,7 @@ def listings_page(
 ):
     shop_obj = get_shop_by_name(session, shop) if shop else None
     shop_id = shop_obj.id if shop_obj else None
-    listings, total = get_listings_page(
+    shop_books, total = get_shop_books_page(
         session,
         page=page,
         search=q,
@@ -58,10 +58,10 @@ def listings_page(
     total_pages = (total + 49) // 50
     return templates.TemplateResponse(
         request,
-        "listings.html",
+        "shop_books.html",
         {
-            "active_page": "listings",
-            "listings": listings,
+            "active_page": "shop_books",
+            "shop_books": shop_books,
             "total": total,
             "page": page,
             "total_pages": total_pages,
@@ -84,24 +84,24 @@ def listings_page(
     )
 
 
-@router.get("/listings/{listing_id}")
-def listing_detail(
-    listing_id: int,
+@router.get("/shop-books/{shop_book_id}")
+def shop_book_detail(
+    shop_book_id: int,
     request: Request,
     session: Session = Depends(get_db),
 ):
-    listing = session.get(Listing, listing_id)
-    if listing is None:
-        return HTMLResponse("Listing not found", status_code=404)
-    prices = get_price_history(session, listing_id)
-    changes = get_listing_changes(session, listing_id)
-    field_updates = get_field_updates(session, listing_id)
+    shop_book = session.get(ShopBook, shop_book_id)
+    if shop_book is None:
+        return HTMLResponse("Shop book not found", status_code=404)
+    prices = get_price_history(session, shop_book_id)
+    changes = get_shop_book_changes(session, shop_book_id)
+    field_updates = get_field_updates(session, shop_book_id)
     return templates.TemplateResponse(
         request,
-        "listing_detail.html",
+        "shop_book_detail.html",
         {
-            "active_page": "listings",
-            "listing": listing,
+            "active_page": "shop_books",
+            "shop_book": shop_book,
             "prices": prices,
             "changes": changes,
             "field_updates": field_updates,

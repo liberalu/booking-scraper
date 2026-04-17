@@ -9,11 +9,11 @@ from markupsafe import Markup, escape
 
 from book_scraper.dashboard.deps import templates
 from book_scraper.dashboard.routes import (
-    listings,
     overview,
     prices,
     runs,
     scrape,
+    shop_books,
     shops,
     urls,
     validation,
@@ -26,7 +26,7 @@ _HTML_TAG_RE = re.compile(r"<[a-zA-Z/][^>]*>")
 
 
 def _render_description(text: str | None) -> Markup:
-    """Render a listing description for display.
+    """Render a shop_book description for display.
 
     - If the stored value contains real HTML tags, pass it through as-is
       (legacy rows scraped before the Markdown migration).
@@ -42,9 +42,7 @@ def _render_description(text: str | None) -> Markup:
     return Markup(html)
 
 
-def _diff_chunks(
-    old: str, new: str
-) -> list[tuple[str, str]]:
+def _diff_chunks(old: str, new: str) -> list[tuple[str, str]]:
     """Word-level diff returning [(kind, text), …] where kind is one of
     'equal' | 'del' | 'ins'. Empty chunks are dropped.
     """
@@ -93,9 +91,7 @@ def _summary_chunks(
     Returns (window, truncated_start, truncated_end) — truncated flags
     tell the caller whether to prepend/append "…".
     """
-    first = next(
-        (i for i, (k, _) in enumerate(chunks) if k != "equal"), None
-    )
+    first = next((i for i, (k, _) in enumerate(chunks) if k != "equal"), None)
     if first is None:
         return [], False, False
 
@@ -155,10 +151,8 @@ def _summary_chunks(
     return window, truncated_start, truncated_end
 
 
-def _change_diff(
-    old: str | None, new: str | None, limit: int = 200
-) -> Markup:
-    """Render a listing-change as a word-level inline diff.
+def _change_diff(old: str | None, new: str | None, limit: int = 200) -> Markup:
+    """Render a shop_book-change as a word-level inline diff.
 
     - Short changes (combined chars ≤ `limit`) render inline with
       <del>/<ins> markup.
@@ -207,7 +201,7 @@ app.mount(
 
 app.include_router(overview.router)
 app.include_router(shops.router)
-app.include_router(listings.router)
+app.include_router(shop_books.router)
 app.include_router(runs.router)
 app.include_router(urls.router)
 app.include_router(validation.router)

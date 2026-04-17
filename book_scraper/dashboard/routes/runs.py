@@ -13,7 +13,7 @@ from book_scraper.dashboard.queries import (
     get_run_detail,
     get_run_health,
     get_run_issue_summary,
-    get_run_listings,
+    get_run_shop_books,
     mark_stale_runs,
 )
 
@@ -78,7 +78,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
         return HTMLResponse("Run not found", status_code=404)
     health = get_run_health(run)
     issue_summary = get_run_issue_summary(session, run_id)
-    created, changed, unchanged = get_run_listings(session, run_id)
+    created, changed, unchanged = get_run_shop_books(session, run_id)
     return templates.TemplateResponse(
         request,
         "run_detail.html",

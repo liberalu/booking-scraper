@@ -1,4 +1,4 @@
-"""Backfill: html.unescape() existing listings' title/description/publisher.
+"""Backfill: html.unescape() existing shop_books' title/description/publisher.
 
 Fixes rows scraped before the parser was taught to decode HTML entities
 (e.g. "Scythe &amp; Sparrow" -> "Scythe & Sparrow").
@@ -16,7 +16,7 @@ import html
 import os
 import sys
 
-from book_scraper.db.models import Listing
+from book_scraper.db.models import ShopBook
 from book_scraper.db.session import get_session_factory
 
 FIELDS = ("title", "description", "publisher")
@@ -31,19 +31,19 @@ def main() -> int:
     session = get_session_factory(DATABASE_URL)()
     updated = dict.fromkeys(FIELDS, 0)
     try:
-        for listing in session.query(Listing).yield_per(500):
+        for shop_book in session.query(ShopBook).yield_per(500):
             changed = False
             for field in FIELDS:
-                raw = getattr(listing, field)
+                raw = getattr(shop_book, field)
                 if not isinstance(raw, str):
                     continue
                 decoded = html.unescape(raw)
                 if decoded != raw:
-                    setattr(listing, field, decoded)
+                    setattr(shop_book, field, decoded)
                     updated[field] += 1
                     changed = True
             if changed:
-                session.add(listing)
+                session.add(shop_book)
         session.commit()
     finally:
         session.close()

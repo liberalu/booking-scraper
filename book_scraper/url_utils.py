@@ -57,8 +57,11 @@ def normalize_url(url: str) -> str:
         path = path.rstrip("/")
 
     query = urlencode(
-        [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-         if not _is_tracking(k)]
+        [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if not _is_tracking(k)
+        ]
     )
 
     return urlunsplit((scheme, netloc, path, query, ""))

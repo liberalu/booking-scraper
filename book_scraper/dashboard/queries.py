@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.db.models import (
     DiscoveredUrl,
-    Listing,
-    ListingChange,
-    ListingFieldUpdate,
     Price,
     ScrapeRun,
     Shop,
+    ShopBook,
+    ShopBookChange,
+    ShopBookFieldUpdate,
     ValidationIssue,
 )
 
@@ -70,21 +70,23 @@ def mark_stale_runs(session: Session) -> int:
 
 
 def get_overview_stats(session: Session) -> dict:
-    total = session.query(func.count(Listing.id)).scalar() or 0
+    total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.is_active.is_(True))
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.is_active.is_(True))
         .scalar()
         or 0
     )
     with_isbn = (
-        session.query(func.count(Listing.id)).filter(Listing.isbn.isnot(None)).scalar()
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.isbn.isnot(None))
+        .scalar()
         or 0
     )
     total_prices = session.query(func.count(Price.id)).scalar() or 0
     return {
-        "total_listings": total,
-        "active_listings": active,
+        "total_shop_books": total,
+        "active_shop_books": active,
         "with_isbn": with_isbn,
         "total_prices": total_prices,
     }
@@ -104,9 +106,7 @@ def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
 
 
-def get_run_issue_summary(
-    session: Session, run_id: int
-) -> list[dict[str, Any]]:
+def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]:
     """Return validation issues for a run grouped by (field, issue) with counts."""
     rows = (
         session.query(
@@ -122,9 +122,7 @@ def get_run_issue_summary(
     return [{"field": r.field, "issue": r.issue, "count": r.count} for r in rows]
 
 
-def get_validation_summary(
-    session: Session, state: str | None = None
-) -> list[dict]:
+def get_validation_summary(session: Session, state: str | None = None) -> list[dict]:
     q = session.query(
         ValidationIssue.issue,
         func.count(ValidationIssue.id).label("count"),
@@ -149,7 +147,7 @@ def get_validation_issues_flat(
 ) -> tuple[list[dict], int]:
     """Return (rows, total) for a given lifecycle state, paginated.
 
-    Pulls the Listing title when a listing_id is set so the template
+    Pulls the ShopBook title when a shop_book_id is set so the template
     can show a meaningful link instead of the raw URL.
     """
     q = session.query(ValidationIssue)
@@ -165,12 +163,12 @@ def get_validation_issues_flat(
         .all()
     )
 
-    listing_ids = {i.listing_id for i in issues if i.listing_id}
+    shop_book_ids = {i.shop_book_id for i in issues if i.shop_book_id}
     titles: dict[int, str] = {}
-    if listing_ids:
+    if shop_book_ids:
         rows = (
-            session.query(Listing.id, Listing.title)
-            .filter(Listing.id.in_(listing_ids))
+            session.query(ShopBook.id, ShopBook.title)
+            .filter(ShopBook.id.in_(shop_book_ids))
             .all()
         )
         titles = {row.id: row.title for row in rows}
@@ -183,8 +181,8 @@ def get_validation_issues_flat(
             "issue": i.issue,
             "raw_value": i.raw_value,
             "scrape_run_id": i.scrape_run_id,
-            "listing_id": i.listing_id,
-            "listing_title": titles.get(i.listing_id) if i.listing_id else None,
+            "shop_book_id": i.shop_book_id,
+            "shop_book_title": titles.get(i.shop_book_id) if i.shop_book_id else None,
             "discovered_url_id": i.discovered_url_id,
             "lifecycle_state": i.lifecycle_state,
             "acknowledged_at": i.acknowledged_at,
@@ -217,7 +215,7 @@ def get_validation_by_type(
     state: str | None = None,
     run_id: int | None = None,
 ) -> list[dict]:
-    """Get validation issues with listing IDs resolved from URL."""
+    """Get validation issues with shop_book IDs resolved from URL."""
     q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
     if state in {"new", "recurring", "already_seen"}:
         q = q.filter(ValidationIssue.lifecycle_state == state)
@@ -226,20 +224,20 @@ def get_validation_by_type(
     if run_id is not None:
         q = q.filter(ValidationIssue.scrape_run_id == run_id)
     issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
-    # Resolve listing IDs by URL
+    # Resolve shop_book IDs by URL
     urls = {i.url for i in issues}
-    url_to_listing = {}
+    url_to_shop_book = {}
     if urls:
         rows = (
-            session.query(Listing.url, Listing.id, Listing.title)
-            .filter(Listing.url.in_(urls))
+            session.query(ShopBook.url, ShopBook.id, ShopBook.title)
+            .filter(ShopBook.url.in_(urls))
             .all()
         )
-        url_to_listing = {r.url: {"id": r.id, "title": r.title} for r in rows}
+        url_to_shop_book = {r.url: {"id": r.id, "title": r.title} for r in rows}
 
     result = []
     for issue in issues:
-        listing = url_to_listing.get(issue.url)
+        shop_book = url_to_shop_book.get(issue.url)
         result.append(
             {
                 "id": issue.id,
@@ -248,8 +246,8 @@ def get_validation_by_type(
                 "issue": issue.issue,
                 "raw_value": issue.raw_value,
                 "scrape_run_id": issue.scrape_run_id,
-                "listing_id": listing["id"] if listing else None,
-                "listing_title": listing["title"] if listing else None,
+                "shop_book_id": shop_book["id"] if shop_book else None,
+                "shop_book_title": shop_book["title"] if shop_book else None,
                 "lifecycle_state": issue.lifecycle_state,
                 "acknowledged_at": issue.acknowledged_at,
             }
@@ -257,30 +255,30 @@ def get_validation_by_type(
     return result
 
 
-def search_listings(session: Session, query: str, limit: int = 50) -> list[Listing]:
+def search_shop_books(session: Session, query: str, limit: int = 50) -> list[ShopBook]:
     return (
-        session.query(Listing)
-        .filter(Listing.title.ilike(f"%{query}%"))
-        .order_by(Listing.title)
+        session.query(ShopBook)
+        .filter(ShopBook.title.ilike(f"%{query}%"))
+        .order_by(ShopBook.title)
         .limit(limit)
         .all()
     )
 
 
-def get_field_updates(session: Session, listing_id: int) -> dict[str, datetime]:
-    """Return {field: updated_at} for a listing's tracked fields."""
+def get_field_updates(session: Session, shop_book_id: int) -> dict[str, datetime]:
+    """Return {field: updated_at} for a shop_book's tracked fields."""
     rows = (
-        session.query(ListingFieldUpdate)
-        .filter(ListingFieldUpdate.listing_id == listing_id)
+        session.query(ShopBookFieldUpdate)
+        .filter(ShopBookFieldUpdate.shop_book_id == shop_book_id)
         .all()
     )
     return {r.field: r.updated_at for r in rows}
 
 
-def get_price_history(session: Session, listing_id: int) -> list[Price]:
+def get_price_history(session: Session, shop_book_id: int) -> list[Price]:
     return (
         session.query(Price)
-        .filter(Price.listing_id == listing_id)
+        .filter(Price.shop_book_id == shop_book_id)
         .order_by(Price.scraped_at)
         .all()
     )
@@ -294,35 +292,35 @@ def get_price_changes(
     sql = text(f"""
         WITH ranked AS (
             SELECT
-                p.listing_id,
+                p.shop_book_id,
                 p.price,
                 p.scraped_at,
                 LAG(p.price) OVER (
-                    PARTITION BY p.listing_id ORDER BY p.scraped_at
+                    PARTITION BY p.shop_book_id ORDER BY p.scraped_at
                 ) AS prev_price
             FROM prices p
-            JOIN listings l ON l.id = p.listing_id
+            JOIN shop_books l ON l.id = p.shop_book_id
             WHERE p.scraped_at >= :cutoff
             {shop_filter}
         ),
         changes AS (
             SELECT
-                r.listing_id,
+                r.shop_book_id,
                 l.title,
                 r.prev_price,
                 r.price AS new_price,
                 r.price - r.prev_price AS change,
                 r.scraped_at,
                 ROW_NUMBER() OVER (
-                    PARTITION BY r.listing_id, r.prev_price, r.price
+                    PARTITION BY r.shop_book_id, r.prev_price, r.price
                     ORDER BY r.scraped_at DESC
                 ) AS rn
             FROM ranked r
-            JOIN listings l ON l.id = r.listing_id
+            JOIN shop_books l ON l.id = r.shop_book_id
             WHERE r.prev_price IS NOT NULL
               AND r.price != r.prev_price
         )
-        SELECT listing_id, title, prev_price, new_price, change,
+        SELECT shop_book_id, title, prev_price, new_price, change,
                scraped_at
         FROM changes
         WHERE rn = 1
@@ -337,41 +335,45 @@ def get_price_changes(
 
 
 def get_inventory_stats(session: Session) -> dict:
-    total = session.query(func.count(Listing.id)).scalar() or 0
+    total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.is_active.is_(True))
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.is_active.is_(True))
         .scalar()
         or 0
     )
     with_isbn = (
-        session.query(func.count(Listing.id)).filter(Listing.isbn.isnot(None)).scalar()
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.isbn.isnot(None))
+        .scalar()
         or 0
     )
     with_author = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.author.isnot(None))
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.author.isnot(None))
         .scalar()
         or 0
     )
     with_year = (
-        session.query(func.count(Listing.id)).filter(Listing.year.isnot(None)).scalar()
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.year.isnot(None))
+        .scalar()
         or 0
     )
     with_publisher = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.publisher.isnot(None))
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.publisher.isnot(None))
         .scalar()
         or 0
     )
 
     format_rows = (
         session.query(
-            func.coalesce(Listing.format, "unknown").label("fmt"),
-            func.count(Listing.id).label("count"),
+            func.coalesce(ShopBook.format, "unknown").label("fmt"),
+            func.count(ShopBook.id).label("count"),
         )
-        .group_by(func.coalesce(Listing.format, "unknown"))
-        .order_by(func.count(Listing.id).desc())
+        .group_by(func.coalesce(ShopBook.format, "unknown"))
+        .order_by(func.count(ShopBook.id).desc())
         .all()
     )
     by_format = [{"format": r.fmt, "count": r.count} for r in format_rows]
@@ -388,19 +390,19 @@ def get_inventory_stats(session: Session) -> dict:
 
 
 SORT_COLUMNS = {
-    "id": Listing.id,
-    "title": Listing.title,
-    "author": Listing.author,
-    "isbn": Listing.isbn,
-    "price": Listing.price,
-    "year": Listing.year,
-    "is_active": Listing.is_active,
-    "inactive_since": Listing.inactive_since,
-    "last_seen_at": Listing.last_seen_at,
+    "id": ShopBook.id,
+    "title": ShopBook.title,
+    "author": ShopBook.author,
+    "isbn": ShopBook.isbn,
+    "price": ShopBook.price,
+    "year": ShopBook.year,
+    "is_active": ShopBook.is_active,
+    "inactive_since": ShopBook.inactive_since,
+    "last_seen_at": ShopBook.last_seen_at,
 }
 
 
-def get_listings_page(
+def get_shop_books_page(
     session: Session,
     page: int = 1,
     per_page: int = 50,
@@ -415,58 +417,58 @@ def get_listings_page(
     has_isbn: bool = False,
     sort_by: str = "",
     sort_order: str = "asc",
-) -> tuple[list[Listing], int]:
-    """Return paginated listings with filters. Returns (listings, total_count)."""
-    query = session.query(Listing).options(joinedload(Listing.shop))
+) -> tuple[list[ShopBook], int]:
+    """Return paginated shop_books with filters. Returns (shop_books, total_count)."""
+    query = session.query(ShopBook).options(joinedload(ShopBook.shop))
 
     if shop_id:
-        query = query.filter(Listing.shop_id == shop_id)
+        query = query.filter(ShopBook.shop_id == shop_id)
     if search:
-        query = query.filter(Listing.title.ilike(f"%{search}%"))
+        query = query.filter(ShopBook.title.ilike(f"%{search}%"))
     if author:
-        query = query.filter(Listing.author.ilike(f"%{author}%"))
+        query = query.filter(ShopBook.author.ilike(f"%{author}%"))
     if publisher:
-        query = query.filter(Listing.publisher.ilike(f"%{publisher}%"))
+        query = query.filter(ShopBook.publisher.ilike(f"%{publisher}%"))
     if category:
-        query = query.filter(Listing.categories.any(category))
+        query = query.filter(ShopBook.categories.any(category))
     if format_filter:
         if format_filter == "none":
-            query = query.filter(Listing.format.is_(None))
+            query = query.filter(ShopBook.format.is_(None))
         else:
-            query = query.filter(Listing.format == format_filter)
+            query = query.filter(ShopBook.format == format_filter)
     if missing_field:
         if missing_field == "any":
             from sqlalchemy import or_
 
             query = query.filter(
                 or_(
-                    Listing.author.is_(None),
-                    Listing.isbn.is_(None),
-                    Listing.year.is_(None),
-                    Listing.publisher.is_(None),
-                    Listing.format.is_(None),
+                    ShopBook.author.is_(None),
+                    ShopBook.isbn.is_(None),
+                    ShopBook.year.is_(None),
+                    ShopBook.publisher.is_(None),
+                    ShopBook.format.is_(None),
                 )
             )
         else:
-            col = getattr(Listing, missing_field, None)
+            col = getattr(ShopBook, missing_field, None)
             if col is not None:
                 query = query.filter(col.is_(None))
     if active_filter == "true":
-        query = query.filter(Listing.is_active.is_(True))
+        query = query.filter(ShopBook.is_active.is_(True))
     elif active_filter == "false":
-        query = query.filter(Listing.is_active.is_(False))
+        query = query.filter(ShopBook.is_active.is_(False))
     # "all" or "" — no active/inactive filter applied
     if has_isbn:
-        query = query.filter(Listing.isbn.isnot(None))
+        query = query.filter(ShopBook.isbn.isnot(None))
 
     total = query.count()
-    order_col = SORT_COLUMNS.get(sort_by, Listing.last_seen_at)
+    order_col = SORT_COLUMNS.get(sort_by, ShopBook.last_seen_at)
     if sort_order == "asc":
         query = query.order_by(order_col.asc().nulls_last())
     else:
         query = query.order_by(order_col.desc().nulls_last())
-    listings = query.offset((page - 1) * per_page).limit(per_page).all()
-    return listings, total
+    shop_books = query.offset((page - 1) * per_page).limit(per_page).all()
+    return shop_books, total
 
 
 def get_all_categories(session: Session, limit: int = 200) -> list[str]:
@@ -475,7 +477,7 @@ def get_all_categories(session: Session, limit: int = 200) -> list[str]:
         SELECT DISTINCT cat, count(*) as cnt
         FROM (
             SELECT unnest(categories[1:array_length(categories,1)-1]) as cat
-            FROM listings
+            FROM shop_books
             WHERE categories IS NOT NULL AND array_length(categories,1) > 1
         ) sub
         GROUP BY cat
@@ -489,10 +491,10 @@ def get_all_categories(session: Session, limit: int = 200) -> list[str]:
 def get_all_formats(session: Session) -> list[str]:
     """Get distinct format values."""
     rows = (
-        session.query(Listing.format)
-        .filter(Listing.format.isnot(None))
+        session.query(ShopBook.format)
+        .filter(ShopBook.format.isnot(None))
         .distinct()
-        .order_by(Listing.format)
+        .order_by(ShopBook.format)
         .all()
     )
     return [r[0] for r in rows]
@@ -507,15 +509,15 @@ def get_shop_by_name(session: Session, name: str) -> Shop | None:
 
 
 def get_shop_stats(session: Session, shop_id: int) -> dict:
-    listings = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.shop_id == shop_id)
+    shop_books = (
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.shop_id == shop_id)
         .scalar()
         or 0
     )
     active = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.shop_id == shop_id, Listing.is_active.is_(True))
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.shop_id == shop_id, ShopBook.is_active.is_(True))
         .scalar()
         or 0
     )
@@ -527,13 +529,13 @@ def get_shop_stats(session: Session, shop_id: int) -> dict:
     )
     prices = (
         session.query(func.count(Price.id))
-        .join(Listing)
-        .filter(Listing.shop_id == shop_id)
+        .join(ShopBook)
+        .filter(ShopBook.shop_id == shop_id)
         .scalar()
         or 0
     )
     return {
-        "listings": listings,
+        "shop_books": shop_books,
         "active": active,
         "discovered_urls": discovered,
         "prices": prices,
@@ -550,86 +552,89 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
     )
 
 
-def get_run_listings(
+def get_run_shop_books(
     session: Session, run_id: int
-) -> tuple[list[Listing], list[Listing], list[Listing]]:
-    """Get listings created, changed, and unchanged in a specific run.
+) -> tuple[list[ShopBook], list[ShopBook], list[ShopBook]]:
+    """Get shop_books created, changed, and unchanged in a specific run.
 
     Uses the prices table (append-only, keyed by scrape_run_id) to find
-    listings touched by the run.  A listing whose first_seen_at falls within
+    shop_books touched by the run.  A shop_book whose first_seen_at falls within
     the run window *and* whose earliest price row belongs to this run is
-    counted as "created".  Among existing listings, those with field changes
-    (in listing_changes) or price changes are "changed"; the rest are
+    counted as "created".  Among existing shop_books, those with field changes
+    (in shop_book_changes) or price changes are "changed"; the rest are
     "unchanged".
 
     Falls back to the legacy last_run_id column when no price rows reference
     the run (e.g. discover-only runs that don't insert prices).
     """
-    # All listing IDs that have a price row for this run
-    price_listing_ids = (
-        session.query(Price.listing_id)
+    # All shop_book IDs that have a price row for this run
+    price_shop_book_ids = (
+        session.query(Price.shop_book_id)
         .filter(Price.scrape_run_id == run_id)
         .distinct()
         .subquery()
     )
 
-    listings_in_run = (
-        session.query(Listing)
-        .filter(Listing.id.in_(session.query(price_listing_ids.c.listing_id)))
-        .order_by(Listing.title)
+    shop_books_in_run = (
+        session.query(ShopBook)
+        .filter(ShopBook.id.in_(session.query(price_shop_book_ids.c.shop_book_id)))
+        .order_by(ShopBook.title)
         .all()
     )
 
-    if not listings_in_run:
+    if not shop_books_in_run:
         # Fallback: legacy last_run_id (works for the most recent run only)
         created = (
-            session.query(Listing)
+            session.query(ShopBook)
             .filter(
-                Listing.last_run_id == run_id,
-                Listing.last_run_action == "created",
+                ShopBook.last_run_id == run_id,
+                ShopBook.last_run_action == "created",
             )
-            .order_by(Listing.title)
+            .order_by(ShopBook.title)
             .all()
         )
         rest = (
-            session.query(Listing)
+            session.query(ShopBook)
             .filter(
-                Listing.last_run_id == run_id,
-                Listing.last_run_action == "updated",
+                ShopBook.last_run_id == run_id,
+                ShopBook.last_run_action == "updated",
             )
-            .order_by(Listing.title)
+            .order_by(ShopBook.title)
             .all()
         )
-        listings_in_run = created + rest
+        shop_books_in_run = created + rest
     else:
         created = [
-            listing
-            for listing in listings_in_run
-            if listing.last_run_id == run_id and listing.last_run_action == "created"
+            shop_book
+            for shop_book in shop_books_in_run
+            if shop_book.last_run_id == run_id
+            and shop_book.last_run_action == "created"
         ]
-        rest = [listing for listing in listings_in_run if listing not in created]
+        rest = [
+            shop_book for shop_book in shop_books_in_run if shop_book not in created
+        ]
 
     if not rest:
         return created, [], []
 
-    # IDs of listings with field-level changes in this run
+    # IDs of shop_books with field-level changes in this run
     changed_ids = set(
         row[0]
-        for row in session.query(ListingChange.listing_id)
-        .filter(ListingChange.scrape_run_id == run_id)
+        for row in session.query(ShopBookChange.shop_book_id)
+        .filter(ShopBookChange.scrape_run_id == run_id)
         .distinct()
         .all()
     )
 
-    # IDs of listings with price changes in this run
-    rest_ids = [listing.id for listing in rest]
+    # IDs of shop_books with price changes in this run
+    rest_ids = [shop_book.id for shop_book in rest]
     if rest_ids:
         # Current run prices
         cur = (
-            session.query(Price.listing_id, Price.price, Price.in_stock)
+            session.query(Price.shop_book_id, Price.price, Price.in_stock)
             .filter(
                 Price.scrape_run_id == run_id,
-                Price.listing_id.in_(rest_ids),
+                Price.shop_book_id.in_(rest_ids),
             )
             .subquery()
         )
@@ -640,44 +645,44 @@ def get_run_listings(
         )
         prev = (
             session.query(
-                Price.listing_id,
+                Price.shop_book_id,
                 Price.price,
                 Price.in_stock,
             )
             .filter(
-                Price.listing_id.in_(rest_ids),
+                Price.shop_book_id.in_(rest_ids),
                 Price.scrape_run_id != run_id,
                 Price.scraped_at
                 < (
                     session.query(func.min(run_prices.c.scraped_at))
                     .filter(
-                        run_prices.c.listing_id == Price.listing_id,
+                        run_prices.c.shop_book_id == Price.shop_book_id,
                     )
                     .correlate(Price)
                     .scalar_subquery()
                 ),
             )
-            .distinct(Price.listing_id)
-            .order_by(Price.listing_id, Price.scraped_at.desc())
+            .distinct(Price.shop_book_id)
+            .order_by(Price.shop_book_id, Price.scraped_at.desc())
             .subquery()
         )
 
-        # Find listings where price or in_stock differs
+        # Find shop_books where price or in_stock differs
         price_changed_rows = (
-            session.query(cur.c.listing_id)
-            .outerjoin(prev, cur.c.listing_id == prev.c.listing_id)
+            session.query(cur.c.shop_book_id)
+            .outerjoin(prev, cur.c.shop_book_id == prev.c.shop_book_id)
             .filter(
-                (prev.c.listing_id.is_(None))  # first re-scrape (no prev)
+                (prev.c.shop_book_id.is_(None))  # first re-scrape (no prev)
                 | (cur.c.price != prev.c.price)
                 | (cur.c.in_stock != prev.c.in_stock)
             )
             .all()
         )
         # Only count as price-changed if there WAS a previous price
-        # (no prev = first scrape of existing listing, not a "change")
+        # (no prev = first scrape of existing shop_book, not a "change")
         price_changed_rows = (
-            session.query(cur.c.listing_id)
-            .join(prev, cur.c.listing_id == prev.c.listing_id)
+            session.query(cur.c.shop_book_id)
+            .join(prev, cur.c.shop_book_id == prev.c.shop_book_id)
             .filter((cur.c.price != prev.c.price) | (cur.c.in_stock != prev.c.in_stock))
             .all()
         )
@@ -686,8 +691,8 @@ def get_run_listings(
         price_changed_ids = set()
 
     all_changed_ids = changed_ids | price_changed_ids
-    changed = [listing for listing in rest if listing.id in all_changed_ids]
-    unchanged = [listing for listing in rest if listing.id not in all_changed_ids]
+    changed = [shop_book for shop_book in rest if shop_book.id in all_changed_ids]
+    unchanged = [shop_book for shop_book in rest if shop_book.id not in all_changed_ids]
 
     return created, changed, unchanged
 
@@ -695,8 +700,8 @@ def get_run_listings(
 def get_shop_field_stats(session: Session, shop_id: int) -> dict:
     """Get per-field completeness stats for a shop."""
     total = (
-        session.query(func.count(Listing.id))
-        .filter(Listing.shop_id == shop_id)
+        session.query(func.count(ShopBook.id))
+        .filter(ShopBook.shop_id == shop_id)
         .scalar()
         or 0
     )
@@ -710,10 +715,10 @@ def get_shop_field_stats(session: Session, shop_id: int) -> dict:
         "description",
         "image_url",
     ):
-        col = getattr(Listing, field_name)
+        col = getattr(ShopBook, field_name)
         missing = (
-            session.query(func.count(Listing.id))
-            .filter(Listing.shop_id == shop_id, col.is_(None))
+            session.query(func.count(ShopBook.id))
+            .filter(ShopBook.shop_id == shop_id, col.is_(None))
             .scalar()
             or 0
         )
@@ -721,13 +726,13 @@ def get_shop_field_stats(session: Session, shop_id: int) -> dict:
     return {"total": total, "fields": fields}
 
 
-def get_listing_changes(
-    session: Session, listing_id: int, limit: int = 100
-) -> list[ListingChange]:
+def get_shop_book_changes(
+    session: Session, shop_book_id: int, limit: int = 100
+) -> list[ShopBookChange]:
     return (
-        session.query(ListingChange)
-        .filter(ListingChange.listing_id == listing_id)
-        .order_by(ListingChange.changed_at.desc())
+        session.query(ShopBookChange)
+        .filter(ShopBookChange.shop_book_id == shop_book_id)
+        .order_by(ShopBookChange.changed_at.desc())
         .limit(limit)
         .all()
     )
@@ -735,15 +740,15 @@ def get_listing_changes(
 
 def get_data_completeness(session: Session) -> list[dict]:
     """Get field completeness percentages for the overview page."""
-    total = session.query(func.count(Listing.id)).scalar() or 0
+    total = session.query(func.count(ShopBook.id)).scalar() or 0
     if total == 0:
         return []
     fields = ["author", "isbn", "publisher", "year", "format"]
     result = []
     for field_name in fields:
-        col = getattr(Listing, field_name)
+        col = getattr(ShopBook, field_name)
         present = (
-            session.query(func.count(Listing.id)).filter(col.isnot(None)).scalar() or 0
+            session.query(func.count(ShopBook.id)).filter(col.isnot(None)).scalar() or 0
         )
         pct = round(present / total * 100, 1) if total > 0 else 0
         result.append(
@@ -758,13 +763,13 @@ def get_data_completeness(session: Session) -> list[dict]:
 
 
 def get_not_listed_count(session: Session, shop_id: int) -> int:
-    """Count discovered URLs that have no matching listing."""
+    """Count discovered URLs that have no matching shop_book."""
     sql = text("""
         SELECT COUNT(*)
         FROM discovered_urls du
         WHERE du.shop_id = :shop_id
           AND NOT EXISTS (
-              SELECT 1 FROM listings l
+              SELECT 1 FROM shop_books l
               WHERE l.shop_id = du.shop_id AND l.url = du.url
           )
     """)
@@ -779,13 +784,13 @@ def get_not_listed_urls(
     sort_by: str = "",
     sort_order: str = "desc",
 ) -> tuple[list[dict[str, Any]], int]:
-    """Get discovered URLs that have no matching listing, paginated."""
+    """Get discovered URLs that have no matching shop_book, paginated."""
     count_sql = text("""
         SELECT COUNT(*)
         FROM discovered_urls du
         WHERE du.shop_id = :shop_id
           AND NOT EXISTS (
-              SELECT 1 FROM listings l
+              SELECT 1 FROM shop_books l
               WHERE l.shop_id = du.shop_id AND l.url = du.url
           )
     """)
@@ -801,7 +806,7 @@ def get_not_listed_urls(
         FROM discovered_urls du
         WHERE du.shop_id = :shop_id
           AND NOT EXISTS (
-              SELECT 1 FROM listings l
+              SELECT 1 FROM shop_books l
               WHERE l.shop_id = du.shop_id AND l.url = du.url
           )
         ORDER BY {sort_col} {direction}
@@ -835,16 +840,17 @@ def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> d
     if shop_id:
         base = base.filter(DiscoveredUrl.shop_id == shop_id)
     total = base.count()
-    in_listings = base.join(
-        Listing,
-        (Listing.shop_id == DiscoveredUrl.shop_id) & (Listing.url == DiscoveredUrl.url),
+    in_shop_books = base.join(
+        ShopBook,
+        (ShopBook.shop_id == DiscoveredUrl.shop_id)
+        & (ShopBook.url == DiscoveredUrl.url),
     ).count()
-    not_in_listings = total - in_listings
+    not_in_shop_books = total - in_shop_books
     failed = base.filter(DiscoveredUrl.fail_count >= 3).count()
     return {
         "total": total,
-        "in_listings": in_listings,
-        "not_in_listings": not_in_listings,
+        "in_shop_books": in_shop_books,
+        "not_in_shop_books": not_in_shop_books,
         "failed": failed,
     }
 
@@ -868,12 +874,12 @@ def get_discovered_urls_page(
         query = query.filter(DiscoveredUrl.source == source)
     if search:
         query = query.filter(DiscoveredUrl.url.ilike(f"%{search}%"))
-    if status == "not_in_listings":
+    if status == "not_in_shop_books":
         query = query.outerjoin(
-            Listing,
-            (Listing.shop_id == DiscoveredUrl.shop_id)
-            & (Listing.url == DiscoveredUrl.url),
-        ).filter(Listing.id.is_(None))
+            ShopBook,
+            (ShopBook.shop_id == DiscoveredUrl.shop_id)
+            & (ShopBook.url == DiscoveredUrl.url),
+        ).filter(ShopBook.id.is_(None))
     elif status == "failed":
         query = query.filter(DiscoveredUrl.fail_count >= 3)
     elif status in ("unknown", "product", "non_product"):

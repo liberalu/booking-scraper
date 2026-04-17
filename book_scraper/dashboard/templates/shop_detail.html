@@ -12,11 +12,11 @@
         <div class="stat-label">Discovered URLs</div>
         <div class="stat-value">{{ "{:,}".format(stats.discovered_urls) }}</div>
     </a>
-    <a href="/listings?shop={{ shop.name }}" class="stat-card">
-        <div class="stat-label">Listings</div>
-        <div class="stat-value">{{ "{:,}".format(stats.listings) }}</div>
+    <a href="/shop-books?shop={{ shop.name }}" class="stat-card">
+        <div class="stat-label">Shop Books</div>
+        <div class="stat-value">{{ "{:,}".format(stats.shop_books) }}</div>
     </a>
-    <a href="/listings?shop={{ shop.name }}&active=true" class="stat-card">
+    <a href="/shop-books?shop={{ shop.name }}&active=true" class="stat-card">
         <div class="stat-label">Active</div>
         <div class="stat-value">{{ "{:,}".format(stats.active) }}</div>
     </a>
@@ -45,7 +45,7 @@
                 <td class="text-right">{{ "{:,}".format(counts.present) }}</td>
                 <td class="text-right">
                     {% if counts.missing > 0 %}
-                    <a href="/listings?missing={{ field_name }}">{{ "{:,}".format(counts.missing) }}</a>
+                    <a href="/shop-books?missing={{ field_name }}">{{ "{:,}".format(counts.missing) }}</a>
                     {% else %}
                     0
                     {% endif %}

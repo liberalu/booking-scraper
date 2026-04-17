@@ -103,12 +103,12 @@
             </tr>
         </thead>
         <tbody>
-            {% for l in created %}
+            {% for sb in created %}
             <tr>
-                <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
-                <td>{{ l.author or '-' }}</td>
-                <td>{{ l.isbn or '-' }}</td>
-                <td>{{ l.price or '-' }}</td>
+                <td><a href="/shop-books/{{ sb.id }}">{{ sb.title[:60] }}{{ '...' if sb.title|length > 60 else '' }}</a></td>
+                <td>{{ sb.author or '-' }}</td>
+                <td>{{ sb.isbn or '-' }}</td>
+                <td>{{ sb.price or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -129,12 +129,12 @@
             </tr>
         </thead>
         <tbody>
-            {% for l in changed %}
+            {% for sb in changed %}
             <tr>
-                <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
-                <td>{{ l.author or '-' }}</td>
-                <td>{{ l.isbn or '-' }}</td>
-                <td>{{ l.price or '-' }}</td>
+                <td><a href="/shop-books/{{ sb.id }}">{{ sb.title[:60] }}{{ '...' if sb.title|length > 60 else '' }}</a></td>
+                <td>{{ sb.author or '-' }}</td>
+                <td>{{ sb.isbn or '-' }}</td>
+                <td>{{ sb.price or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -155,12 +155,12 @@
             </tr>
         </thead>
         <tbody>
-            {% for l in unchanged %}
+            {% for sb in unchanged %}
             <tr>
-                <td><a href="/listings/{{ l.id }}">{{ l.title[:60] }}{{ '...' if l.title|length > 60 else '' }}</a></td>
-                <td>{{ l.author or '-' }}</td>
-                <td>{{ l.isbn or '-' }}</td>
-                <td>{{ l.price or '-' }}</td>
+                <td><a href="/shop-books/{{ sb.id }}">{{ sb.title[:60] }}{{ '...' if sb.title|length > 60 else '' }}</a></td>
+                <td>{{ sb.author or '-' }}</td>
+                <td>{{ sb.isbn or '-' }}</td>
+                <td>{{ sb.price or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>

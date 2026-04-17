@@ -2,7 +2,7 @@ import pytest
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
 
-from book_scraper.items import ListingItem, PriceItem
+from book_scraper.items import PriceItem, ShopBookItem
 from book_scraper.pipelines import ValidationPipeline
 
 
@@ -11,8 +11,8 @@ def pipeline():
     return ValidationPipeline()
 
 
-def test_valid_listing_item_passes(pipeline):
-    item = ListingItem(
+def test_valid_shop_book_item_passes(pipeline):
+    item = ShopBookItem(
         url="https://vaga.lt/book",
         shop_name="vaga",
         title="Test Book",
@@ -22,8 +22,8 @@ def test_valid_listing_item_passes(pipeline):
     assert ItemAdapter(result)["price"] == "9.99"
 
 
-def test_listing_item_without_title_dropped(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga")
+def test_shop_book_item_without_title_dropped(pipeline):
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga")
     with pytest.raises(DropItem, match="Missing title"):
         pipeline.process_item(item)
 

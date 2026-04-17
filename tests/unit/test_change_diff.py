@@ -88,9 +88,7 @@ def test_summary_chunks_includes_first_change_plus_context():
         ("ins", "NEW"),
         ("equal", "six seven eight nine ten"),
     ]
-    window, trunc_start, trunc_end = _summary_chunks(
-        chunks, limit=200, context_words=2
-    )
+    window, trunc_start, trunc_end = _summary_chunks(chunks, limit=200, context_words=2)
     # Should include trailing 2 words of the prefix, the del+ins, and
     # leading 2 words of the suffix.
     kinds = [k for k, _ in window]

@@ -1,8 +1,8 @@
-"""One-off backfill: convert every existing HTML listing description
+"""One-off backfill: convert every existing HTML shop_book description
 to Markdown in place.
 
-Snapshots the original HTML into `listings_description_backup` before
-touching `listings.description`. Idempotent — re-running converts only
+Snapshots the original HTML into `shop_books_description_backup` before
+touching `shop_books.description`. Idempotent — re-running converts only
 rows whose current description still looks like HTML.
 
 Usage:
@@ -35,32 +35,29 @@ def main() -> int:
     try:
         session.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS listings_description_backup ("
+                "CREATE TABLE IF NOT EXISTS shop_books_description_backup ("
                 "id INTEGER PRIMARY KEY, description TEXT)"
             )
         )
         session.execute(
             text(
-                "INSERT INTO listings_description_backup (id, description) "
-                "SELECT id, description FROM listings "
+                "INSERT INTO shop_books_description_backup (id, description) "
+                "SELECT id, description FROM shop_books "
                 "WHERE description IS NOT NULL "
                 "ON CONFLICT (id) DO NOTHING"
             )
         )
         rows = session.execute(
-            text(
-                "SELECT id, description FROM listings "
-                "WHERE description IS NOT NULL"
-            )
+            text("SELECT id, description FROM shop_books WHERE description IS NOT NULL")
         ).fetchall()
         converted = 0
-        for listing_id, description in rows:
+        for shop_book_id, description in rows:
             if not isinstance(description, str) or not _looks_like_html(description):
                 continue
             md = html_to_markdown(description, heading_style="ATX").strip()
             session.execute(
-                text("UPDATE listings SET description = :d WHERE id = :id"),
-                {"d": md or None, "id": listing_id},
+                text("UPDATE shop_books SET description = :d WHERE id = :id"),
+                {"d": md or None, "id": shop_book_id},
             )
             converted += 1
         session.commit()

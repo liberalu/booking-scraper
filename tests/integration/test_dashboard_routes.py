@@ -44,16 +44,16 @@ ROUTES = [
     "/shops/vaga/not-listed",
     "/runs",
     "/validation",
-    "/listings",
+    "/shop-books",
     # Filter combinations
-    "/listings?active=true",
-    "/listings?has_isbn=true",
-    "/listings?shop=vaga",
+    "/shop-books?active=true",
+    "/shop-books?has_isbn=true",
+    "/shop-books?shop=vaga",
     # Sorting
     "/runs?sort=started_at&order=desc",
     "/runs?sort=id&order=asc",
-    "/listings?sort=title&order=asc",
-    "/listings?sort=price&order=desc",
+    "/shop-books?sort=title&order=asc",
+    "/shop-books?sort=price&order=desc",
     "/shops/vaga?sort=started_at&order=desc",
 ]
 

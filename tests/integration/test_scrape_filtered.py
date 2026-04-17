@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
 from book_scraper.dashboard.routes import scrape as scrape_route
-from book_scraper.db.models import Listing, Shop
+from book_scraper.db.models import Shop, ShopBook
 
 
 class _FakeProcess:
@@ -52,7 +52,7 @@ def _seed(db_session: Session) -> None:
     db_session.flush()
     db_session.add_all(
         [
-            Listing(
+            ShopBook(
                 shop_id=shop.id,
                 url=f"https://vaga.lt/a-{i}",
                 title=f"Title {i}",
@@ -62,7 +62,7 @@ def _seed(db_session: Session) -> None:
         ]
     )
     db_session.add(
-        Listing(
+        ShopBook(
             shop_id=shop.id,
             url="https://vaga.lt/other",
             title="Other",
@@ -83,9 +83,7 @@ def test_scrape_filtered_rejects_unfiltered_request(
 def test_scrape_filtered_404_when_no_matches(
     client: TestClient, captured_cmd: list[list[str]]
 ) -> None:
-    resp = client.post(
-        "/scrape/filtered?shop=vaga&author=DoesNotExist"
-    )
+    resp = client.post("/scrape/filtered?shop=vaga&author=DoesNotExist")
     assert resp.status_code == 404
     assert captured_cmd == []
 
@@ -93,10 +91,10 @@ def test_scrape_filtered_404_when_no_matches(
 def test_scrape_filtered_spawns_with_correct_urls(
     client: TestClient, captured_cmd: list[list[str]]
 ) -> None:
-    """Default POST redirects back to listings with a flash flag."""
+    """Default POST redirects back to shop_books with a flash flag."""
     resp = client.post("/scrape/filtered?shop=vaga&author=Alice")
     assert resp.status_code == 303
-    assert "/listings?" in resp.headers["location"]
+    assert "/shop-books?" in resp.headers["location"]
     assert "scrape_started=3" in resp.headers["location"]
 
     assert len(captured_cmd) == 1

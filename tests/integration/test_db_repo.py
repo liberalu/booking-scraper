@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from book_scraper.db.repo import insert_price, upsert_listing, upsert_shop
+from book_scraper.db.repo import insert_price, upsert_shop, upsert_shop_book
 
 
 def test_upsert_shop_creates_new(db_session):
@@ -16,9 +16,9 @@ def test_upsert_shop_returns_existing(db_session):
     assert shop1.id == shop2.id
 
 
-def test_upsert_listing_creates_new(db_session):
+def test_upsert_shop_book_creates_new(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing, *_ = upsert_listing(
+    shop_book, *_ = upsert_shop_book(
         db_session,
         shop_id=shop.id,
         url="https://vaga.lt/test-book",
@@ -26,32 +26,32 @@ def test_upsert_listing_creates_new(db_session):
         author="Author",
         isbn="9781234567890",
     )
-    assert listing.id is not None
-    assert listing.title == "Test Book"
-    assert listing.match_status == "unmatched"
-    assert listing.is_active is True
+    assert shop_book.id is not None
+    assert shop_book.title == "Test Book"
+    assert shop_book.match_status == "unmatched"
+    assert shop_book.is_active is True
 
 
-def test_upsert_listing_updates_existing(db_session):
+def test_upsert_shop_book_updates_existing(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing1, *_ = upsert_listing(
+    shop_book1, *_ = upsert_shop_book(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Old"
     )
-    listing2, *_ = upsert_listing(
+    shop_book2, *_ = upsert_shop_book(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="New"
     )
-    assert listing1.id == listing2.id
-    assert listing2.title == "New"
+    assert shop_book1.id == shop_book2.id
+    assert shop_book2.title == "New"
 
 
 def test_insert_price(db_session):
     shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
-    listing, *_ = upsert_listing(
+    shop_book, *_ = upsert_shop_book(
         db_session, shop_id=shop.id, url="https://vaga.lt/book", title="Book"
     )
     price = insert_price(
         db_session,
-        listing_id=listing.id,
+        shop_book_id=shop_book.id,
         price=Decimal("9.99"),
         price_original=Decimal("14.99"),
         in_stock=True,

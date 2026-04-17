@@ -45,7 +45,7 @@ uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after 
 
 1. **Discover** (`discover` spider) — find URLs via sitemap, categories, or full crawl. Category discovery also extracts prices.
 2. **Scan** (`scan` spider) — scrape full product pages for discovered URLs. Resumable after crashes.
-3. **Match** — not yet implemented (link listings to canonical books)
+3. **Match** — not yet implemented (link shop_books to canonical books)
 
 Spiders are generic — shop is passed as argument: `scrapy crawl discover -a shop=vaga -a strategy=sitemap`
 
@@ -54,8 +54,8 @@ Spiders are generic — shop is passed as argument: `scrapy crawl discover -a sh
 - Generic spiders (`discover`, `scan`) — shop-specific logic lives in `spiders/<shop>/parsers.py`, loaded dynamically via `spiders/registry.py`
 - `discovered_urls` table tracks all found URLs per shop (accumulate-only, never deleted)
 - `scrape_runs` table logs each run's phase/status for crash detection and resume
-- `listings` table stores full product metadata (title, author, ISBN, publisher, year, pages, etc.)
-- `prices` table is append-only (one row per scrape per listing)
+- `shop_books` table stores full product metadata (title, author, ISBN, publisher, year, pages, etc.) — one row per book-as-it-appears-in-a-shop
+- `prices` table is append-only (one row per scrape per shop_book)
 - `books` table is for canonical records (shop-independent) — populated by match phase
 - Per-shop settings in `config/shops/<shop>.toml`, loaded at spider init time
 

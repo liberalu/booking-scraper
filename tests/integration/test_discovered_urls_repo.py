@@ -1,9 +1,9 @@
 import pytest
 
-from book_scraper.db.models import DiscoveredUrl, Listing, ScrapeRun, Shop
+from book_scraper.db.models import DiscoveredUrl, ScrapeRun, Shop, ShopBook
 from book_scraper.db.repo import (
     get_pending_scan_urls,
-    link_discovered_url_to_listing,
+    link_discovered_url_to_shop_book,
     update_discovered_url_status,
     upsert_discovered_url,
 )
@@ -167,44 +167,47 @@ def test_upsert_discovered_url_updates_last_seen_and_run(db_session):
     assert second.last_seen_at >= first_last_seen
 
 
-def test_link_discovered_url_to_listing_attaches_fk(db_session):
+def test_link_discovered_url_to_shop_book_attaches_fk(db_session):
     shop = _make_shop(db_session)
     upsert_discovered_url(
         db_session, shop_id=shop.id, url="https://test.lt/b", source="sitemap"
     )
-    listing = Listing(
+    shop_book = ShopBook(
         shop_id=shop.id, url="https://test.lt/b", title="Book", is_active=True
     )
-    db_session.add(listing)
+    db_session.add(shop_book)
     db_session.flush()
 
-    row = link_discovered_url_to_listing(
-        db_session, shop_id=shop.id, url="https://test.lt/b", listing_id=listing.id
+    row = link_discovered_url_to_shop_book(
+        db_session, shop_id=shop.id, url="https://test.lt/b", shop_book_id=shop_book.id
     )
     assert row is not None
-    assert row.listing_id == listing.id
+    assert row.shop_book_id == shop_book.id
 
     # And the reverse relation loads the discovered row.
-    db_session.refresh(listing)
-    assert any(d.listing_id == listing.id for d in listing.discovered_urls)
+    db_session.refresh(shop_book)
+    assert any(d.shop_book_id == shop_book.id for d in shop_book.discovered_urls)
 
 
 def test_link_discovered_url_creates_row_when_missing(db_session):
-    """A listing upserted without a matching discovered_url row (e.g.
+    """A shop_book upserted without a matching discovered_url row (e.g.
     price-only category scrape before any sitemap run) still gets a
     backing discovered_url row for the relation."""
     shop = _make_shop(db_session)
-    listing = Listing(
+    shop_book = ShopBook(
         shop_id=shop.id, url="https://test.lt/new", title="New", is_active=True
     )
-    db_session.add(listing)
+    db_session.add(shop_book)
     db_session.flush()
 
-    row = link_discovered_url_to_listing(
-        db_session, shop_id=shop.id, url="https://test.lt/new", listing_id=listing.id
+    row = link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/new",
+        shop_book_id=shop_book.id,
     )
     assert row is not None
-    assert row.listing_id == listing.id
+    assert row.shop_book_id == shop_book.id
     assert row.normalized_url == "https://test.lt/new"
 
 

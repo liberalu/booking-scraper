@@ -54,7 +54,7 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
 
 
 def parse_category_page(html: str) -> list[dict[str, str | None]]:
-    """Parse product cards from a vaga.lt category listing page.
+    """Parse product cards from a vaga.lt category page.
 
     Returns list of dicts with keys: url, title, price, price_original, image_url.
     Prices are in Lithuanian format: '16,32€' -> '16.32'.
@@ -250,9 +250,7 @@ def parse_product_page(html: str) -> dict[str, object]:
     # the field on regular books with "0 val. 00 min." which would
     # otherwise misclassify textbooks as audiobooks.
     trukme = prop_map.get("Trukmė", "").strip()
-    has_real_duration = bool(
-        trukme and re.search(r"[1-9]", trukme)
-    )
+    has_real_duration = bool(trukme and re.search(r"[1-9]", trukme))
     if has_real_duration:
         data["format"] = "audiobook"
     elif "Viršelis" in prop_map:

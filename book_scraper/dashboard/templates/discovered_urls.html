@@ -9,15 +9,15 @@
         <div class="stat-label">Total URLs</div>
         <div class="stat-value">{{ "{:,}".format(stats.total) }}</div>
     </a>
-    <a href="/urls?status=in_listings{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
-        <div class="stat-label">In Listings</div>
-        <div class="stat-value">{{ "{:,}".format(stats.in_listings) }}</div>
-        <div class="stat-sub">{{ "%.1f"|format(stats.in_listings / stats.total * 100) if stats.total else 0 }}%</div>
+    <a href="/urls?status=in_shop_books{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
+        <div class="stat-label">In Shop Books</div>
+        <div class="stat-value">{{ "{:,}".format(stats.in_shop_books) }}</div>
+        <div class="stat-sub">{{ "%.1f"|format(stats.in_shop_books / stats.total * 100) if stats.total else 0 }}%</div>
     </a>
-    <a href="/urls?status=not_in_listings{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
-        <div class="stat-label">Not in Listings</div>
-        <div class="stat-value" style="color: var(--badge-warning-fg);">{{ "{:,}".format(stats.not_in_listings) }}</div>
-        <div class="stat-sub">{{ "%.1f"|format(stats.not_in_listings / stats.total * 100) if stats.total else 0 }}%</div>
+    <a href="/urls?status=not_in_shop_books{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
+        <div class="stat-label">Not in Shop Books</div>
+        <div class="stat-value" style="color: var(--badge-warning-fg);">{{ "{:,}".format(stats.not_in_shop_books) }}</div>
+        <div class="stat-sub">{{ "%.1f"|format(stats.not_in_shop_books / stats.total * 100) if stats.total else 0 }}%</div>
     </a>
     <a href="/urls?status=failed{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
         <div class="stat-label">Failed 3+</div>
@@ -41,7 +41,7 @@
         </select>
         <select name="status">
             <option value="">All statuses</option>
-            <option value="not_in_listings" {{ 'selected' if status_filter == 'not_in_listings' else '' }}>Not in listings</option>
+            <option value="not_in_shop_books" {{ 'selected' if status_filter == 'not_in_shop_books' else '' }}>Not in shop books</option>
             <option value="failed" {{ 'selected' if status_filter == 'failed' else '' }}>Failed 3+</option>
             <option value="unknown" {{ 'selected' if status_filter == 'unknown' else '' }}>Type: unknown</option>
             <option value="product" {{ 'selected' if status_filter == 'product' else '' }}>Type: product</option>
@@ -82,7 +82,7 @@
             <tr>
                 <th>{{ sort_header('url', 'URL', sort, order, filter_params) }}</th>
                 <th>Shop</th>
-                <th>Listing</th>
+                <th>Shop Book</th>
                 <th>Source</th>
                 <th>Type</th>
                 <th class="text-right">{{ sort_header('fails', 'Fails', sort, order, filter_params) }}</th>
@@ -98,8 +98,8 @@
                 </td>
                 <td class="text-muted">{{ u.shop.name if u.shop else '—' }}</td>
                 <td>
-                    {% if u.listing_id %}
-                    <a href="/listings/{{ u.listing_id }}">#{{ u.listing_id }}</a>
+                    {% if u.shop_book_id %}
+                    <a href="/shop-books/{{ u.shop_book_id }}">#{{ u.shop_book_id }}</a>
                     {% else %}
                     <span class="text-muted">—</span>
                     {% endif %}

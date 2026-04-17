@@ -10,7 +10,7 @@ from book_scraper.db.models import DiscoveredUrl
 from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
-    mark_listings_inactive,
+    mark_shop_books_inactive,
     mark_stale_runs_failed,
     update_scrape_run_progress,
     upsert_shop,
@@ -249,9 +249,7 @@ class DiscoverSpider(scrapy.Spider):
         # runs don't always exhaust the whole catalog.
         page = response.meta["page"] + 1
         if self._max_pages and page > self._max_pages:
-            self.logger.info(
-                "max_pages cap: stopping at page %d", self._max_pages
-            )
+            self.logger.info("max_pages cap: stopping at page %d", self._max_pages)
             return
         next_url = self.strategy_conf.url.format(page=page)
         yield scrapy.Request(
@@ -311,21 +309,21 @@ class DiscoverSpider(scrapy.Spider):
         try:
             status = "completed" if reason == "finished" else "failed"
             # Only the sitemap strategy enumerates every live URL in the
-            # shop, so only it can reliably mark vanished listings inactive.
+            # shop, so only it can reliably mark vanished shop_books inactive.
             if (
                 status == "completed"
                 and self.strategy == "sitemap"
                 and self._sitemap_urls
                 and self._shop_id is not None
             ):
-                deactivated = mark_listings_inactive(
+                deactivated = mark_shop_books_inactive(
                     self._run_session,
                     shop_id=self._shop_id,
                     active_urls=self._sitemap_urls,
                 )
                 if deactivated:
                     self.logger.info(
-                        "Change detection: marked %d listing(s) inactive",
+                        "Change detection: marked %d shop_book(s) inactive",
                         deactivated,
                     )
             # Record final urls_processed — the pipeline only flushes

@@ -14,11 +14,11 @@ def prices_page() -> RedirectResponse:
     return RedirectResponse(url="/validation", status_code=301)
 
 
-@router.get("/api/prices/{listing_id}/chart")
+@router.get("/api/prices/{shop_book_id}/chart")
 def price_chart_data(
-    listing_id: int, session: Session = Depends(get_db)
+    shop_book_id: int, session: Session = Depends(get_db)
 ) -> JSONResponse:
-    history = get_price_history(session, listing_id)
+    history = get_price_history(session, shop_book_id)
     labels = [p.scraped_at.isoformat() for p in history]
     prices = [float(p.price) for p in history]
     original = [float(p.price_original) if p.price_original else None for p in history]

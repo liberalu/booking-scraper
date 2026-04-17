@@ -18,7 +18,7 @@ class AttributeRule(BaseModel):
 class AttributesConfig(BaseModel):
     """Per-shop attribute schema.
 
-    When present, every attribute key scraped from a listing must be in
+    When present, every attribute key scraped from a shop_book must be in
     `allowed_keys`; unknown keys fire a validation issue. Individual
     keys can further restrict their values with `enum` or `pattern`.
     When the whole section is omitted the feature is opt-out — all

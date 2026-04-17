@@ -29,7 +29,7 @@
             <tr>
                 <th>ID</th>
                 <th>State</th>
-                <th>Listing</th>
+                <th>Shop Book</th>
                 <th>Field</th>
                 <th>Raw Value</th>
                 <th>Run</th>
@@ -50,8 +50,8 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if issue.listing_id %}
-                        <a href="/listings/{{ issue.listing_id }}">{{ issue.listing_title[:50] }}{{ '...' if issue.listing_title|length > 50 }}</a>
+                    {% if issue.shop_book_id %}
+                        <a href="/shop-books/{{ issue.shop_book_id }}">{{ issue.shop_book_title[:50] }}{{ '...' if issue.shop_book_title|length > 50 }}</a>
                     {% else %}
                         <a href="{{ issue.url }}" target="_blank" class="cell-truncate" style="display:inline-block;">{{ issue.url }}</a>
                     {% endif %}

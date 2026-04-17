@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from book_scraper.db.repo import upsert_listing, upsert_shop
+from book_scraper.db.repo import upsert_shop, upsert_shop_book
 from scripts import backfill_authors
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "vaga_category_page.html"
@@ -59,7 +59,7 @@ class TestBackfillAuthors:
     def test_fills_null_authors_from_category_page(
         self, db_session, patched_client, monkeypatch
     ):
-        """Listings that match a URL parsed from the category fixture
+        """Shop books that match a URL parsed from the category fixture
         and currently have NULL author should get the author set."""
         monkeypatch.setattr(
             backfill_authors, "get_session_factory", lambda _: lambda: db_session
@@ -70,7 +70,7 @@ class TestBackfillAuthors:
 
         shop = upsert_shop(db_session, name="vaga", base_url="https://vaga.lt")
 
-        # Sample some URLs and authors from the fixture to seed listings.
+        # Sample some URLs and authors from the fixture to seed shop_books.
         from book_scraper.spiders.vaga.parsers import parse_category_page
 
         products = parse_category_page(FIXTURE.read_text())
@@ -81,7 +81,7 @@ class TestBackfillAuthors:
         for product in with_author:
             raw_url = product["url"]
             url = raw_url if raw_url.startswith("http") else f"https://vaga.lt{raw_url}"
-            upsert_listing(
+            upsert_shop_book(
                 db_session,
                 shop_id=shop.id,
                 url=url,
@@ -94,18 +94,18 @@ class TestBackfillAuthors:
         updated = backfill_authors.backfill("vaga", max_pages=1)
         assert updated >= len(seeded_urls)
 
-        from book_scraper.db.models import Listing
+        from book_scraper.db.models import ShopBook
 
         for url, expected_author in seeded_urls:
-            listing = (
-                db_session.query(Listing).filter_by(shop_id=shop.id, url=url).one()
+            shop_book = (
+                db_session.query(ShopBook).filter_by(shop_id=shop.id, url=url).one()
             )
-            assert listing.author == expected_author
+            assert shop_book.author == expected_author
 
     def test_idempotent_never_clobbers_existing_author(
         self, db_session, patched_client, monkeypatch
     ):
-        """Listings that already have an author must not be changed,
+        """Shop books that already have an author must not be changed,
         even if the category page contains a different value for the
         same URL (shouldn't happen in practice, but the filter protects
         against it)."""
@@ -126,7 +126,7 @@ class TestBackfillAuthors:
             if first["url"].startswith("http")
             else f"https://vaga.lt{first['url']}"
         )
-        listing, *_ = upsert_listing(
+        shop_book, *_ = upsert_shop_book(
             db_session,
             shop_id=shop.id,
             url=url,
@@ -137,5 +137,5 @@ class TestBackfillAuthors:
 
         backfill_authors.backfill("vaga", max_pages=1)
 
-        db_session.refresh(listing)
-        assert listing.author == "Keep Me"
+        db_session.refresh(shop_book)
+        assert shop_book.author == "Keep Me"

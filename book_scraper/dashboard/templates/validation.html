@@ -23,7 +23,7 @@
                 <th>ID</th>
                 <th>Issue</th>
                 <th>Field</th>
-                <th>Listing / URL</th>
+                <th>Shop Book / URL</th>
                 <th>Raw Value</th>
                 <th>Run</th>
                 <th></th>
@@ -36,8 +36,8 @@
                 <td><a href="/validation/{{ i.issue }}?state={{ state }}">{{ i.issue }}</a></td>
                 <td>{{ i.field }}</td>
                 <td>
-                    {% if i.listing_id %}
-                    <a href="/listings/{{ i.listing_id }}">{{ i.listing_title[:50] if i.listing_title else i.url }}{{ '...' if i.listing_title and i.listing_title|length > 50 else '' }}</a>
+                    {% if i.shop_book_id %}
+                    <a href="/shop-books/{{ i.shop_book_id }}">{{ i.shop_book_title[:50] if i.shop_book_title else i.url }}{{ '...' if i.shop_book_title and i.shop_book_title|length > 50 else '' }}</a>
                     {% else %}
                     <a href="{{ i.url }}" target="_blank" class="cell-truncate" style="display:inline-block;">{{ i.url }}</a>
                     {% endif %}
@@ -113,7 +113,7 @@
         <tbody>
             {% for c in price_changes %}
             <tr>
-                <td><a href="/listings/{{ c.listing_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
+                <td><a href="/shop-books/{{ c.shop_book_id }}">{{ c.title[:60] }}{{ '...' if c.title|length > 60 }}</a></td>
                 <td class="text-right">{{ c.prev_price }}</td>
                 <td class="text-right">{{ c.new_price }}</td>
                 <td class="text-right {{ 'price-down' if c.change < 0 else 'price-up' }}">

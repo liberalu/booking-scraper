@@ -4,25 +4,25 @@
 <h1 class="page-title">Overview</h1>
 
 <div class="stat-grid">
-    <a href="/listings" class="stat-card">
-        <div class="stat-label">Total Listings</div>
-        <div class="stat-value">{{ "{:,}".format(stats.total_listings) }}</div>
+    <a href="/shop-books" class="stat-card">
+        <div class="stat-label">Total Shop Books</div>
+        <div class="stat-value">{{ "{:,}".format(stats.total_shop_books) }}</div>
     </a>
-    <a href="/listings?active=true" class="stat-card">
+    <a href="/shop-books?active=true" class="stat-card">
         <div class="stat-label">Active</div>
-        <div class="stat-value">{{ "{:,}".format(stats.active_listings) }}</div>
+        <div class="stat-value">{{ "{:,}".format(stats.active_shop_books) }}</div>
         <div class="stat-sub">
-            {% if stats.total_listings > 0 %}
-            {{ "%.1f"|format(stats.active_listings / stats.total_listings * 100) }}% of total
+            {% if stats.total_shop_books > 0 %}
+            {{ "%.1f"|format(stats.active_shop_books / stats.total_shop_books * 100) }}% of total
             {% else %}—{% endif %}
         </div>
     </a>
-    <a href="/listings?has_isbn=true" class="stat-card">
+    <a href="/shop-books?has_isbn=true" class="stat-card">
         <div class="stat-label">With ISBN</div>
         <div class="stat-value">{{ "{:,}".format(stats.with_isbn) }}</div>
         <div class="stat-sub">
-            {% if stats.total_listings > 0 %}
-            {{ "%.1f"|format(stats.with_isbn / stats.total_listings * 100) }}% of total
+            {% if stats.total_shop_books > 0 %}
+            {{ "%.1f"|format(stats.with_isbn / stats.total_shop_books * 100) }}% of total
             {% else %}—{% endif %}
         </div>
     </a>
@@ -44,7 +44,7 @@
         </div>
         {% endfor %}
         {% if not completeness %}
-        <p class="text-muted">No listings yet.</p>
+        <p class="text-muted">No shop books yet.</p>
         {% endif %}
     </div>
 

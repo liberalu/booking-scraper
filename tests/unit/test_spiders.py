@@ -7,7 +7,7 @@ import pytest
 from scrapy import Request
 from scrapy.http import HtmlResponse, TextResponse
 
-from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
+from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
 from book_scraper.spiders.discover import DiscoverSpider
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -174,7 +174,7 @@ class TestScanSpider:
         assert spider._max_urls == 2
         assert len(spider._single_urls) == 3  # pre-cap parse
 
-    def test_parse_product_yields_listing_item(self):
+    def test_parse_product_yields_shop_book_item(self):
         from book_scraper.spiders.scan import ScanSpider
 
         spider = ScanSpider(shop="vaga")
@@ -183,9 +183,9 @@ class TestScanSpider:
             "https://vaga.lt/test-book", html, meta={"discovered_url_id": 1}
         )
         items = list(spider.parse_product(response))
-        listing_items = [i for i in items if isinstance(i, ListingItem)]
-        assert len(listing_items) == 1
-        item = listing_items[0]
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert len(shop_book_items) == 1
+        item = shop_book_items[0]
         assert item["title"]
         assert item["url"] == "https://vaga.lt/test-book"
         assert item["shop_name"] == "vaga"
@@ -199,5 +199,5 @@ class TestScanSpider:
             "https://vaga.lt/empty", html, meta={"discovered_url_id": 2}
         )
         items = list(spider.parse_product(response))
-        listing_items = [i for i in items if isinstance(i, ListingItem)]
-        assert listing_items == []
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert shop_book_items == []

@@ -2,8 +2,8 @@
 
 import pytest
 
-from book_scraper.db.models import Listing, Price
-from book_scraper.items import DiscoveredUrlItem, ListingItem, PriceItem
+from book_scraper.db.models import Price, ShopBook
+from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
 from book_scraper.pipelines import PostgresPipeline
 
 TEST_DATABASE_URL = (
@@ -20,9 +20,11 @@ def pipeline(engine, db_session):
 
 
 @pytest.mark.integration
-class TestPostgresPipelineListings:
-    def test_process_listing_item_creates_listing_and_price(self, pipeline, db_session):
-        item = ListingItem(
+class TestPostgresPipelineShopBooks:
+    def test_process_shop_book_item_creates_shop_book_and_price(
+        self, pipeline, db_session
+    ):
+        item = ShopBookItem(
             url="https://vaga.lt/test-book",
             shop_name="vaga",
             title="Test Book",
@@ -35,38 +37,40 @@ class TestPostgresPipelineListings:
         result = pipeline.process_item(item)
         assert result is item
 
-        listing = (
-            db_session.query(Listing).filter_by(url="https://vaga.lt/test-book").first()
+        shop_book = (
+            db_session.query(ShopBook)
+            .filter_by(url="https://vaga.lt/test-book")
+            .first()
         )
-        assert listing is not None
-        assert listing.title == "Test Book"
+        assert shop_book is not None
+        assert shop_book.title == "Test Book"
 
-        prices = db_session.query(Price).filter_by(listing_id=listing.id).all()
+        prices = db_session.query(Price).filter_by(shop_book_id=shop_book.id).all()
         assert len(prices) == 1
         assert str(prices[0].price) == "12.99"
 
-    def test_process_listing_without_price_skips_price_insert(
+    def test_process_shop_book_without_price_skips_price_insert(
         self, pipeline, db_session
     ):
-        item = ListingItem(
+        item = ShopBookItem(
             url="https://vaga.lt/no-price-book",
             shop_name="vaga",
             title="No Price Book",
         )
         pipeline.process_item(item)
 
-        listing = (
-            db_session.query(Listing)
+        shop_book = (
+            db_session.query(ShopBook)
             .filter_by(url="https://vaga.lt/no-price-book")
             .first()
         )
-        assert listing is not None
+        assert shop_book is not None
 
-        prices = db_session.query(Price).filter_by(listing_id=listing.id).all()
+        prices = db_session.query(Price).filter_by(shop_book_id=shop_book.id).all()
         assert len(prices) == 0
 
     def test_year_conversion_valid(self, pipeline, db_session):
-        item = ListingItem(
+        item = ShopBookItem(
             url="https://vaga.lt/year-book",
             shop_name="vaga",
             title="Year Book",
@@ -74,13 +78,15 @@ class TestPostgresPipelineListings:
         )
         pipeline.process_item(item)
 
-        listing = (
-            db_session.query(Listing).filter_by(url="https://vaga.lt/year-book").first()
+        shop_book = (
+            db_session.query(ShopBook)
+            .filter_by(url="https://vaga.lt/year-book")
+            .first()
         )
-        assert listing.year == 2024
+        assert shop_book.year == 2024
 
     def test_year_conversion_invalid(self, pipeline, db_session):
-        item = ListingItem(
+        item = ShopBookItem(
             url="https://vaga.lt/bad-year",
             shop_name="vaga",
             title="Bad Year",
@@ -88,10 +94,10 @@ class TestPostgresPipelineListings:
         )
         pipeline.process_item(item)
 
-        listing = (
-            db_session.query(Listing).filter_by(url="https://vaga.lt/bad-year").first()
+        shop_book = (
+            db_session.query(ShopBook).filter_by(url="https://vaga.lt/bad-year").first()
         )
-        assert listing.year is None
+        assert shop_book.year is None
 
 
 @pytest.mark.integration
@@ -106,14 +112,14 @@ class TestPostgresPipelinePrices:
         )
         pipeline.process_item(item)
 
-        listing = (
-            db_session.query(Listing)
+        shop_book = (
+            db_session.query(ShopBook)
             .filter_by(url="https://vaga.lt/price-book")
             .first()
         )
-        assert listing is not None
+        assert shop_book is not None
 
-        prices = db_session.query(Price).filter_by(listing_id=listing.id).all()
+        prices = db_session.query(Price).filter_by(shop_book_id=shop_book.id).all()
         assert len(prices) == 1
         assert str(prices[0].price) == "8.50"
 

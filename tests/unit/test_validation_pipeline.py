@@ -2,7 +2,7 @@ import pytest
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
 
-from book_scraper.items import ListingItem, PriceItem
+from book_scraper.items import PriceItem, ShopBookItem
 from book_scraper.pipelines import ValidationPipeline, _is_valid_isbn
 
 
@@ -24,16 +24,16 @@ def pipeline(stats):
     return ValidationPipeline(stats=stats)
 
 
-def test_valid_listing_passes(pipeline):
-    item = ListingItem(
+def test_valid_shop_book_passes(pipeline):
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", price="9.99"
     )
     result = pipeline.process_item(item)
     assert ItemAdapter(result)["price"] == "9.99"
 
 
-def test_listing_without_title_dropped(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga")
+def test_shop_book_without_title_dropped(pipeline):
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga")
     with pytest.raises(DropItem, match="Missing title"):
         pipeline.process_item(item)
 
@@ -73,13 +73,13 @@ def test_invalid_price_original_set_to_none(pipeline):
 
 
 def test_none_price_passes_through(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
     result = pipeline.process_item(item)
     assert ItemAdapter(result).get("price") is None
 
 
 def test_none_price_original_left_alone(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", price="10.00"
     )
     result = pipeline.process_item(item)
@@ -118,8 +118,8 @@ def test_invalid_isbn(isbn):
     assert _is_valid_isbn(isbn) is False
 
 
-def test_ean_barcode_cleared_from_listing(pipeline):
-    item = ListingItem(
+def test_ean_barcode_cleared_from_shop_book(pipeline):
+    item = ShopBookItem(
         url="https://vaga.lt/product",
         shop_name="vaga",
         title="Board Game",
@@ -129,8 +129,8 @@ def test_ean_barcode_cleared_from_listing(pipeline):
     assert ItemAdapter(result).get("isbn") is None
 
 
-def test_valid_isbn_kept_in_listing(pipeline):
-    item = ListingItem(
+def test_valid_isbn_kept_in_shop_book(pipeline):
+    item = ShopBookItem(
         url="https://vaga.lt/book",
         shop_name="vaga",
         title="A Book",
@@ -141,7 +141,7 @@ def test_valid_isbn_kept_in_listing(pipeline):
 
 
 def test_none_isbn_left_alone(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
     result = pipeline.process_item(item)
     assert ItemAdapter(result).get("isbn") is None
 
@@ -150,7 +150,7 @@ def test_none_isbn_left_alone(pipeline):
 
 
 def test_valid_year_kept(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", year=2024
     )
     result = pipeline.process_item(item)
@@ -158,7 +158,7 @@ def test_valid_year_kept(pipeline):
 
 
 def test_year_out_of_range_cleared(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", year=20
     )
     result = pipeline.process_item(item)
@@ -166,7 +166,7 @@ def test_year_out_of_range_cleared(pipeline):
 
 
 def test_year_pages_swap(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book",
         shop_name="vaga",
         title="Book",
@@ -180,7 +180,7 @@ def test_year_pages_swap(pipeline):
 
 
 def test_year_pages_no_swap_when_pages_not_year(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book",
         shop_name="vaga",
         title="Book",
@@ -194,13 +194,13 @@ def test_year_pages_no_swap_when_pages_not_year(pipeline):
 
 
 def test_none_year_left_alone(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga", title="Book")
     result = pipeline.process_item(item)
     assert ItemAdapter(result).get("year") is None
 
 
 def test_future_year_cleared(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", year=2099
     )
     result = pipeline.process_item(item)
@@ -211,13 +211,13 @@ def test_future_year_cleared(pipeline):
 
 
 def test_title_stripped(pipeline):
-    item = ListingItem(url="https://vaga.lt/book", shop_name="vaga", title="  Book  ")
+    item = ShopBookItem(url="https://vaga.lt/book", shop_name="vaga", title="  Book  ")
     result = pipeline.process_item(item)
     assert ItemAdapter(result)["title"] == "Book"
 
 
 def test_author_whitespace_only_becomes_none(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/book", shop_name="vaga", title="Book", author="   "
     )
     result = pipeline.process_item(item)
@@ -228,13 +228,13 @@ def test_author_whitespace_only_becomes_none(pipeline):
 
 
 def test_invalid_url_dropped(pipeline):
-    item = ListingItem(url="not-a-url", shop_name="vaga", title="Book")
+    item = ShopBookItem(url="not-a-url", shop_name="vaga", title="Book")
     with pytest.raises(DropItem, match="Invalid URL"):
         pipeline.process_item(item)
 
 
 def test_missing_url_dropped(pipeline):
-    item = ListingItem(shop_name="vaga", title="Book")
+    item = ShopBookItem(shop_name="vaga", title="Book")
     with pytest.raises(DropItem, match="Invalid URL"):
         pipeline.process_item(item)
 
@@ -243,7 +243,7 @@ def test_missing_url_dropped(pipeline):
 
 
 def test_invalid_isbn_increments_stat(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p", shop_name="vaga", title="X", isbn="4779054890696"
     )
     pipeline.process_item(item)
@@ -251,13 +251,13 @@ def test_invalid_isbn_increments_stat(pipeline, stats):
 
 
 def test_invalid_year_increments_stat(pipeline, stats):
-    item = ListingItem(url="https://vaga.lt/p", shop_name="vaga", title="X", year=20)
+    item = ShopBookItem(url="https://vaga.lt/p", shop_name="vaga", title="X", year=20)
     pipeline.process_item(item)
     assert stats.values["validation/invalid_year"] == 1
 
 
 def test_year_swap_increments_stat(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="X",
@@ -269,7 +269,7 @@ def test_year_swap_increments_stat(pipeline, stats):
 
 
 def test_valid_data_no_stats(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -285,7 +285,7 @@ def test_valid_data_no_stats(pipeline, stats):
 
 
 def test_issues_buffered_with_details(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Good Title",
@@ -302,7 +302,7 @@ def test_issues_buffered_with_details(pipeline):
 
 
 def test_drain_issues_clears_buffer(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Good Title",
@@ -316,7 +316,7 @@ def test_drain_issues_clears_buffer(pipeline):
 
 
 def test_valid_item_no_issues(pipeline):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -331,7 +331,7 @@ def test_valid_item_no_issues(pipeline):
 
 
 def test_zero_price_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p", shop_name="vaga", title="Book", price="0.00"
     )
     pipeline.process_item(item)
@@ -339,13 +339,13 @@ def test_zero_price_flagged(pipeline, stats):
 
 
 def test_missing_price_flagged(pipeline, stats):
-    item = ListingItem(url="https://vaga.lt/p", shop_name="vaga", title="Book")
+    item = ShopBookItem(url="https://vaga.lt/p", shop_name="vaga", title="Book")
     pipeline.process_item(item)
     assert stats.values.get("validation/missing_price") == 1
 
 
 def test_price_higher_than_original_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -357,7 +357,7 @@ def test_price_higher_than_original_flagged(pipeline, stats):
 
 
 def test_normal_discount_not_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -372,7 +372,7 @@ def test_normal_discount_not_flagged(pipeline, stats):
 
 
 def test_html_in_title_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book <b>Title</b>",
@@ -385,7 +385,7 @@ def test_html_in_title_flagged(pipeline, stats):
 def test_html_in_description_allowed(pipeline, stats):
     # description intentionally stores sanitised rich HTML, so the
     # html_in_text check must not flag <p>...</p> there.
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -397,7 +397,7 @@ def test_html_in_description_allowed(pipeline, stats):
 
 
 def test_html_in_author_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -422,9 +422,9 @@ def test_html_in_author_flagged(pipeline, stats):
 )
 def test_multi_author_no_longer_flagged(pipeline, stats, author):
     """multi_author validation was dropped in favour of the split in
-    upsert_listing (shop_authors + listing_authors). The raw string no
+    upsert_shop_book (shop_authors + shop_book_authors). The raw string no
     longer produces a validation issue regardless of separator count."""
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -436,7 +436,7 @@ def test_multi_author_no_longer_flagged(pipeline, stats, author):
 
 
 def test_suspicious_title_too_short(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="X",
@@ -447,7 +447,7 @@ def test_suspicious_title_too_short(pipeline, stats):
 
 
 def test_suspicious_title_too_long(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="A" * 301,
@@ -458,7 +458,7 @@ def test_suspicious_title_too_long(pipeline, stats):
 
 
 def test_normal_title_not_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Normal Book Title",
@@ -472,7 +472,7 @@ def test_normal_title_not_flagged(pipeline, stats):
 
 
 def test_audiobook_with_pages_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -485,7 +485,7 @@ def test_audiobook_with_pages_flagged(pipeline, stats):
 
 
 def test_book_with_duration_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -498,7 +498,7 @@ def test_book_with_duration_flagged(pipeline, stats):
 
 
 def test_audiobook_with_duration_not_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
@@ -511,7 +511,7 @@ def test_audiobook_with_duration_not_flagged(pipeline, stats):
 
 
 def test_book_with_pages_not_flagged(pipeline, stats):
-    item = ListingItem(
+    item = ShopBookItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",

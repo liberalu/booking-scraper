@@ -1,4 +1,4 @@
-"""Verify the /listings page composes filters and sort instead of resetting
+"""Verify the /shop-books page composes filters and sort instead of resetting
 one when the other changes."""
 
 from collections.abc import Generator
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
-from book_scraper.db.models import Listing, Shop
+from book_scraper.db.models import Shop, ShopBook
 
 
 @pytest.fixture()
@@ -29,10 +29,10 @@ def _seed(db_session: Session) -> None:
         shop = Shop(name="vaga", base_url="https://vaga.lt")
         db_session.add(shop)
         db_session.flush()
-    if db_session.query(Listing).filter_by(shop_id=shop.id).count() == 0:
+    if db_session.query(ShopBook).filter_by(shop_id=shop.id).count() == 0:
         db_session.add_all(
             [
-                Listing(
+                ShopBook(
                     shop_id=shop.id,
                     url=f"https://vaga.lt/t-{i}",
                     title=f"Title {i}",
@@ -47,7 +47,7 @@ def _seed(db_session: Session) -> None:
 def test_filter_form_preserves_active_sort(client: TestClient) -> None:
     """When a sort is active, the filter form must carry it as a hidden
     input so submitting the filter doesn't reset the sort."""
-    html = client.get("/listings?sort=title&order=asc").text
+    html = client.get("/shop-books?sort=title&order=asc").text
     assert 'name="sort" value="title"' in html
     assert 'name="order" value="asc"' in html
 
@@ -55,7 +55,7 @@ def test_filter_form_preserves_active_sort(client: TestClient) -> None:
 def test_sort_header_preserves_filters(client: TestClient) -> None:
     """Clicking a sort header must carry the filter query params so it
     doesn't clear the current filter."""
-    html = client.get("/listings?shop=vaga&active=true").text
+    html = client.get("/shop-books?shop=vaga&active=true").text
     # Any sort header anchor on the page should include shop= and active=
     # as part of base_params before sort=.
     assert "shop=vaga" in html
@@ -70,12 +70,8 @@ def test_filter_badge_remove_preserves_sort(client: TestClient) -> None:
 
     # active=all puts up the "All statuses" badge; shop=vaga puts up the
     # shop badge. Active=true is the default and renders no badge.
-    html = client.get(
-        "/listings?shop=vaga&active=all&sort=price&order=desc"
-    ).text
-    badge_hrefs = re.findall(
-        r'filter-badge[^<]*<a href="([^"]*)"', html, re.DOTALL
-    )
+    html = client.get("/shop-books?shop=vaga&active=all&sort=price&order=desc").text
+    badge_hrefs = re.findall(r'filter-badge[^<]*<a href="([^"]*)"', html, re.DOTALL)
     assert len(badge_hrefs) == 2, badge_hrefs
     for href in badge_hrefs:
         assert "sort=price" in href
@@ -86,9 +82,9 @@ def test_reset_preserves_sort(client: TestClient) -> None:
     """Reset clears filters but keeps the sort per task spec."""
     import re
 
-    html = client.get("/listings?shop=vaga&sort=price&order=desc").text
+    html = client.get("/shop-books?shop=vaga&sort=price&order=desc").text
     # Reset button is the secondary link with role="button" pointing
-    # back at /listings — must carry the active sort.
+    # back at /shop-books — must carry the active sort.
     reset_hrefs = re.findall(
         r'href="([^"]*)"[^>]*role="button" class="secondary"', html
     )
@@ -99,7 +95,5 @@ def test_reset_preserves_sort(client: TestClient) -> None:
 
 def test_both_applied_together(client: TestClient) -> None:
     """Sanity: the server does filter+sort in one request without error."""
-    resp = client.get(
-        "/listings?shop=vaga&active=true&sort=price&order=desc"
-    )
+    resp = client.get("/shop-books?shop=vaga&active=true&sort=price&order=desc")
     assert resp.status_code == 200

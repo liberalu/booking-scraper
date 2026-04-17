@@ -1,10 +1,10 @@
-"""Backfill: fill in `listings.author` for rows missing it by re-reading
+"""Backfill: fill in `shop_books.author` for rows missing it by re-reading
 the shop's category pages.
 
 The normal category-discovery crawl already refreshes authors on every
 run, but that's coupled to a full re-discovery. This script runs the
 narrower pass: fetch category pages, parse out (url, author) pairs, and
-update only the listings whose `author` is currently NULL.
+update only the shop_books whose `author` is currently NULL.
 
 Idempotent:
   - Running after every author is filled is a no-op (UPDATE matches
@@ -31,7 +31,7 @@ import time
 import httpx
 
 from book_scraper.config import load_shop_config
-from book_scraper.db.models import Listing, Shop
+from book_scraper.db.models import Shop, ShopBook
 from book_scraper.db.session import get_session_factory
 from book_scraper.spiders.registry import load_parsers
 
@@ -104,12 +104,12 @@ def backfill(
             return 0
 
         missing_count = (
-            session.query(Listing)
-            .filter(Listing.shop_id == shop.id, Listing.author.is_(None))
+            session.query(ShopBook)
+            .filter(ShopBook.shop_id == shop.id, ShopBook.author.is_(None))
             .count()
         )
         log.info(
-            "%s: %d listing(s) currently have NULL author",
+            "%s: %d shop_book(s) currently have NULL author",
             shop_name,
             missing_count,
         )
@@ -135,27 +135,27 @@ def backfill(
                 if not url.startswith("http"):
                     url = conf.shop.base_url + url
                 # WHERE author IS NULL makes this idempotent: once a
-                # listing has an author we never clobber it.
+                # shop_book has an author we never clobber it.
                 result = (
-                    session.query(Listing)
+                    session.query(ShopBook)
                     .filter(
-                        Listing.shop_id == shop.id,
-                        Listing.url == url,
-                        Listing.author.is_(None),
+                        ShopBook.shop_id == shop.id,
+                        ShopBook.url == url,
+                        ShopBook.author.is_(None),
                     )
                     .update({"author": author}, synchronize_session=False)
                 )
                 updated += result
         if dry_run:
             log.info(
-                "%s: DRY RUN — would update %d listing(s)",
+                "%s: DRY RUN — would update %d shop_book(s)",
                 shop_name,
                 updated,
             )
             session.rollback()
         else:
             session.commit()
-            log.info("%s: updated author on %d listing(s)", shop_name, updated)
+            log.info("%s: updated author on %d shop_book(s)", shop_name, updated)
         return updated
     finally:
         session.close()

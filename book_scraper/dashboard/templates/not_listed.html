@@ -4,7 +4,7 @@
 {% block content %}
 <h1>Not Listed URLs <small>{{ shop.name }}</small></h1>
 <p><a href="/shops/{{ shop.name }}">← Back to {{ shop.name }}</a></p>
-<p><strong>{{ total }}</strong> discovered URLs with no matching listing (non-book pages).</p>
+<p><strong>{{ total }}</strong> discovered URLs with no matching shop book (non-book pages).</p>
 
 {% if urls %}
 <table>
@@ -51,6 +51,6 @@
 {% endif %}
 
 {% else %}
-<p>All discovered URLs have matching listings.</p>
+<p>All discovered URLs have matching shop books.</p>
 {% endif %}
 {% endblock %}
