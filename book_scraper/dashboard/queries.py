@@ -248,17 +248,35 @@ def get_validation_issues_flat(
 
 
 def get_validation_lifecycle_counts(
-    session: Session, shop_id: int | None = None
+    session: Session,
+    shop_id: int | None = None,
+    issue_type: str = "",
+    run_id: int | None = None,
+    q: str = "",
 ) -> dict[str, int]:
-    q = session.query(
+    from sqlalchemy import or_
+
+    query = session.query(
         ValidationIssue.lifecycle_state,
         func.count(ValidationIssue.id).label("count"),
     )
-    if shop_id:
-        q = q.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id).filter(
-            ScrapeRun.shop_id == shop_id
+    if shop_id is not None or q:
+        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+    if shop_id is not None:
+        query = query.filter(ScrapeRun.shop_id == shop_id)
+    if issue_type:
+        query = query.filter(ValidationIssue.issue == issue_type)
+    if run_id is not None:
+        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+    if q:
+        pattern = f"%{q}%"
+        query = query.outerjoin(
+            ShopBook, ValidationIssue.shop_book_id == ShopBook.id
+        ).filter(
+            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
         )
-    rows = q.group_by(ValidationIssue.lifecycle_state).all()
+
+    rows = query.group_by(ValidationIssue.lifecycle_state).all()
     counts = {"new": 0, "recurring": 0, "already_seen": 0}
     for r in rows:
         counts[r.lifecycle_state] = r.count

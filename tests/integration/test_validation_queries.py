@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.orm import Session
 
-from book_scraper.dashboard.queries import get_issues_page
+from book_scraper.dashboard.queries import (
+    get_issues_page,
+    get_validation_lifecycle_counts,
+)
 from book_scraper.db.models import ScrapeRun, Shop, ShopBook, ValidationIssue
 
 
@@ -126,3 +129,16 @@ def test_get_issues_page_sort_order(db_session: Session) -> None:
     )
     # Both return same set, but reversed
     assert [r["id"] for r in rows_desc] == list(reversed([r["id"] for r in rows_asc]))
+
+
+@pytest.mark.integration
+def test_lifecycle_counts_filters_by_issue_type_and_run(db_session: Session) -> None:
+    _, run_id = _seed(db_session)
+    counts = get_validation_lifecycle_counts(
+        db_session,
+        issue_type="missing_price",
+        run_id=run_id,
+    )
+    assert counts["recurring"] == 1
+    assert counts["new"] == 0
+    assert counts["open"] == 1
