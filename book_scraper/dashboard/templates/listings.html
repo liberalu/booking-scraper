@@ -38,25 +38,32 @@
         </select>
         {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
         {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
+        {# Carry sort + order through the filter form so applying a filter
+           never wipes out the active sort. #}
+        {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+        {% if order %}<input type="hidden" name="order" value="{{ order }}">{% endif %}
         <button type="submit">Filter</button>
         {% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter or shop_filter or has_isbn %}
-        <a href="/listings" role="button" class="secondary">Reset</a>
+        {# Reset keeps the sort by carrying it through. #}
+        <a href="/listings?{{ 'sort=' ~ sort ~ '&order=' ~ order if sort else '' }}" role="button" class="secondary">Reset</a>
         {% endif %}
     </div>
 </form>
 
 {% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
+{% set sort_params = ("sort=" ~ sort ~ "&order=" ~ order) if sort else "" %}
+{% set filter_and_sort = filter_params ~ ("&" ~ sort_params if sort_params else "") %}
 
 {% if shop_filter or has_isbn or active_filter %}
 <div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
     {% if shop_filter %}
-    <span class="filter-badge">Shop: {{ shop_filter }} <a href="/listings?{{ filter_params|replace('&shop=' ~ shop_filter|urlencode, '') }}">✕</a></span>
+    <span class="filter-badge">Shop: {{ shop_filter }} <a href="/listings?{{ filter_and_sort|replace('&shop=' ~ shop_filter|urlencode, '') }}">✕</a></span>
     {% endif %}
     {% if has_isbn %}
-    <span class="filter-badge">Has ISBN <a href="/listings?{{ filter_params|replace('&has_isbn=true', '') }}">✕</a></span>
+    <span class="filter-badge">Has ISBN <a href="/listings?{{ filter_and_sort|replace('&has_isbn=true', '') }}">✕</a></span>
     {% endif %}
     {% if active_filter %}
-    <span class="filter-badge">{{ 'Active' if active_filter == 'true' else 'Not Active' }} <a href="/listings?{{ filter_params|replace('&active=' ~ active_filter|urlencode, '') }}">✕</a></span>
+    <span class="filter-badge">{{ 'Active' if active_filter == 'true' else 'Not Active' }} <a href="/listings?{{ filter_and_sort|replace('&active=' ~ active_filter|urlencode, '') }}">✕</a></span>
     {% endif %}
 </div>
 {% endif %}
