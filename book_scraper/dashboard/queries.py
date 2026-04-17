@@ -192,59 +192,6 @@ def get_validation_summary(session: Session, state: str | None = None) -> list[d
     return [{"issue_type": r.issue, "count": r.count} for r in rows]
 
 
-def get_validation_issues_flat(
-    session: Session,
-    state: str | None = None,
-    page: int = 1,
-    per_page: int = 100,
-) -> tuple[list[dict], int]:
-    """Return (rows, total) for a given lifecycle state, paginated.
-
-    Pulls the ShopBook title when a shop_book_id is set so the template
-    can show a meaningful link instead of the raw URL.
-    """
-    q = session.query(ValidationIssue)
-    if state in {"new", "recurring", "already_seen"}:
-        q = q.filter(ValidationIssue.lifecycle_state == state)
-    elif state == "open":
-        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
-    total = q.count()
-    issues = (
-        q.order_by(ValidationIssue.id.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    shop_book_ids = {i.shop_book_id for i in issues if i.shop_book_id}
-    titles: dict[int, str] = {}
-    if shop_book_ids:
-        title_rows = (
-            session.query(ShopBook.id, ShopBook.title)
-            .filter(ShopBook.id.in_(shop_book_ids))
-            .all()
-        )
-        titles = {r.id: r.title for r in title_rows}
-
-    result: list[dict[str, Any]] = [
-        {
-            "id": i.id,
-            "url": i.url,
-            "field": i.field,
-            "issue": i.issue,
-            "raw_value": i.raw_value,
-            "scrape_run_id": i.scrape_run_id,
-            "shop_book_id": i.shop_book_id,
-            "shop_book_title": titles.get(i.shop_book_id) if i.shop_book_id else None,
-            "discovered_url_id": i.discovered_url_id,
-            "lifecycle_state": i.lifecycle_state,
-            "acknowledged_at": i.acknowledged_at,
-        }
-        for i in issues
-    ]
-    return result, total
-
-
 def get_validation_lifecycle_counts(
     session: Session,
     shop_id: int | None = None,
