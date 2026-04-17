@@ -85,8 +85,11 @@ Tests are split into `tests/unit/` (fast, no DB) and `tests/integration/` (real 
 
 After completing any task that changes code, suggest to the user:
 
-1. `docker compose build dashboard && docker compose up -d dashboard` — rebuild and restart
-2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes
+1. **Rebuild + restart containers**:
+   - Dashboard-only changes (routes, templates, queries): `docker compose build dashboard && docker compose up -d dashboard`
+   - **Schema changes (Alembic migration that drops/renames a column or type), model changes, repo/pipeline/spider changes**: rebuild *both* — `docker compose build dashboard scraper && docker compose up -d dashboard scraper`. Skipping the scraper rebuild leaves it running old code that queries dropped columns and every crawl crashes on startup (see commit f740448).
+2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes.
+3. After schema migrations, trigger a short scan (`scrapy crawl scan -a shop=vaga -a urls=<one-url>`) to confirm the scraper container picked up the new models.
 
 ## Code Conventions
 
