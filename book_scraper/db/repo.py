@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -11,13 +12,35 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Listing,
     ListingAttribute,
+    ListingAuthor,
     ListingFieldUpdate,
     Price,
     ScrapeRun,
     Shop,
+    ShopAuthor,
     ValidationIssue,
 )
 from book_scraper.url_utils import normalize_url
+
+_MULTI_AUTHOR_RE = re.compile(
+    r"(?:,\s|;|\s&\s|\s/\s|\s+and\s+|\s+ir\s+)", re.IGNORECASE
+)
+
+
+def _split_author_string(raw: str | None) -> list[str]:
+    """Split a raw author string on known separators and trim each part.
+
+    Returns a list preserving order. Empty/None yields []. Single-author
+    strings become a 1-item list so the caller can always iterate.
+    """
+    if not raw:
+        return []
+    parts = [p.strip() for p in _MULTI_AUTHOR_RE.split(raw) if p and p.strip()]
+    return parts or [raw.strip()]
+
+
+def _normalize_author(name: str) -> str:
+    return re.sub(r"\s+", " ", name.strip().lower())
 
 
 def _sync_attribute_rows(
@@ -48,6 +71,59 @@ def _sync_attribute_rows(
         elif row.value != str_value:
             row.value = str_value
     session.flush()
+
+
+def _sync_listing_authors(
+    session: Session,
+    listing_id: int,
+    author_raw: str | None,
+) -> None:
+    """Split `author_raw` on multi-author separators and reconcile
+    rows in `shop_authors` + `listing_authors` so the listing points at
+    the right set of authors in the right order.
+
+    Called only when the scrape actually supplies an author string
+    (conditional field in `upsert_listing`), so category scrapes that
+    don't parse an author don't blow away an established list.
+    """
+    parts = _split_author_string(author_raw)
+    # Resolve/create author rows; build ordered (author_id, position) list.
+    desired: list[tuple[int, int]] = []
+    for idx, name in enumerate(parts):
+        norm = _normalize_author(name)
+        if not norm:
+            continue
+        author = (
+            session.query(ShopAuthor)
+            .filter(ShopAuthor.normalized_name == norm)
+            .one_or_none()
+        )
+        if author is None:
+            author = ShopAuthor(name=name, normalized_name=norm)
+            session.add(author)
+            session.flush()
+        desired.append((author.id, idx))
+
+    existing = {
+        row.author_id: row
+        for row in session.query(ListingAuthor).filter(
+            ListingAuthor.listing_id == listing_id
+        )
+    }
+    desired_ids = {aid for aid, _ in desired}
+    for aid, row in existing.items():
+        if aid not in desired_ids:
+            session.delete(row)
+    for aid, pos in desired:
+        row = existing.get(aid)
+        if row is None:
+            session.add(
+                ListingAuthor(
+                    listing_id=listing_id, author_id=aid, position=pos
+                )
+            )
+        elif row.position != pos:
+            row.position = pos
 
 
 def touch_listing_field_updates(
@@ -156,6 +232,8 @@ def upsert_listing(
         session.flush()
         if properties:
             _sync_attribute_rows(session, listing, properties)
+        if author is not None:
+            _sync_listing_authors(session, listing.id, author)
         return listing, True, None, []
     else:
         old_price = listing.price
@@ -216,6 +294,8 @@ def upsert_listing(
             listing.categories = categories
         if properties is not None:
             _sync_attribute_rows(session, listing, properties)
+        if author is not None:
+            _sync_listing_authors(session, listing.id, author)
         if price is not None:
             listing.price = price
         if price_original is not None:

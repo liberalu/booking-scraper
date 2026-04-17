@@ -37,7 +37,9 @@
             <tr>
                 <th style="width: 140px;">Author</th>
                 <td>
-                    {% if listing.author %}
+                    {% if listing.authors %}
+                        {% for a in listing.authors %}<a href="/listings?author={{ a.name|urlencode }}">{{ a.name }}</a>{{ ", " if not loop.last }}{% endfor %}
+                    {% elif listing.author %}
                         <a href="/listings?author={{ listing.author|urlencode }}">{{ listing.author }}</a>
                     {% else %}
                         <a href="/listings?missing=author" class="text-muted">—</a>

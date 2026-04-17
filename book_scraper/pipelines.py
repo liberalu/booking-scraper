@@ -27,11 +27,6 @@ logger = logging.getLogger(__name__)
 _ISBN_13_RE = re.compile(r"^97[89]\d{10}$")
 _ISBN_10_RE = re.compile(r"^\d{9}[\dXx]$")
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z/][^>]*>")
-# Separator characters that typically glue multiple authors into one
-# string. The ' ir ' (Lithuanian "and") is intentional — vaga.lt uses
-# it. Matches ", ", ";", "&", "/", " and ", " ir ".
-_MULTI_AUTHOR_RE = re.compile(r"(,\s|;|\s&\s|\s/\s|\s+and\s+|\s+ir\s+)", re.IGNORECASE)
-
 _MIN_YEAR = 1800
 _MAX_YEAR = 2030
 
@@ -158,13 +153,9 @@ class ValidationPipeline:
                     url,
                     f"len={len(title)}",
                 )
-        # Multi-author detection: shops deliver the full author list as
-        # a single comma/ampersand-separated string, so a lone Listing.
-        # author row effectively loses structure. Surface it so we can
-        # decide whether to split on ingest later.
-        author = adapter.get("author")
-        if isinstance(author, str) and _MULTI_AUTHOR_RE.search(author):
-            self._warn("multi_author", "author", url, author[:200])
+        # (Multi-author detection removed — upsert_listing now splits
+        # the raw author string into shop_authors + listing_authors, so
+        # flagging a raw multi-author string is redundant noise.)
 
     def _check_attributes(self, adapter: ItemAdapter, url: str) -> None:
         """Validate `properties` against the per-shop schema, if any.

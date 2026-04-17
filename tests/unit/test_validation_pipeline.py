@@ -417,26 +417,18 @@ def test_html_in_author_flagged(pipeline, stats):
         "Foo / Bar",
         "A and B",
         "A ir B",
+        "Jane Smith",
     ],
 )
-def test_multi_author_flagged(pipeline, stats, author):
+def test_multi_author_no_longer_flagged(pipeline, stats, author):
+    """multi_author validation was dropped in favour of the split in
+    upsert_listing (shop_authors + listing_authors). The raw string no
+    longer produces a validation issue regardless of separator count."""
     item = ListingItem(
         url="https://vaga.lt/p",
         shop_name="vaga",
         title="Book",
         author=author,
-        price="5.00",
-    )
-    pipeline.process_item(item)
-    assert stats.values.get("validation/multi_author") == 1
-
-
-def test_single_author_not_flagged(pipeline, stats):
-    item = ListingItem(
-        url="https://vaga.lt/p",
-        shop_name="vaga",
-        title="Book",
-        author="Jane Smith",
         price="5.00",
     )
     pipeline.process_item(item)

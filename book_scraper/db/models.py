@@ -126,6 +126,46 @@ class Listing(Base):
     discovered_urls: Mapped[list["DiscoveredUrl"]] = relationship(
         back_populates="listing"
     )
+    authors: Mapped[list["ShopAuthor"]] = relationship(
+        secondary="listing_authors",
+        order_by="ListingAuthor.position",
+        viewonly=True,
+    )
+
+
+class ShopAuthor(Base):
+    """Deduplicated author catalogue across shops.
+
+    Matched by `normalized_name` (lower-cased, whitespace-collapsed)
+    so "L. Šernienė" and " l. šernienė " resolve to the same row.
+    """
+
+    __tablename__ = "shop_authors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ListingAuthor(Base):
+    """Join between listings and shop_authors with ordering preserved."""
+
+    __tablename__ = "listing_authors"
+
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), primary_key=True
+    )
+    author_id: Mapped[int] = mapped_column(
+        ForeignKey("shop_authors.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class ListingAttribute(Base):
