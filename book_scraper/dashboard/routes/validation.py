@@ -69,12 +69,13 @@ def validation_detail(
     issue_type: str,
     request: Request,
     state: str = "open",
+    run_id: int | None = None,
     session: Session = Depends(get_db),
 ) -> Response:
     state = _normalize_state(state)
     detail_state = None if state == "all" else state
     issues = get_validation_by_type(
-        session, issue_type, limit=100, state=detail_state
+        session, issue_type, limit=100, state=detail_state, run_id=run_id
     )
     counts = get_validation_lifecycle_counts(session)
     return templates.TemplateResponse(
@@ -86,6 +87,7 @@ def validation_detail(
             "issues": issues,
             "lifecycle_state": state,
             "lifecycle_counts": counts,
+            "run_id_filter": run_id,
         },
     )
 

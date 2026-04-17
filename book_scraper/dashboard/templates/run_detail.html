@@ -61,39 +61,38 @@
 
 <p class="text-muted"><small>Run commands available on the <a href="/shops/{{ run.shop.name }}">{{ run.shop.name }} shop page</a>.</small></p>
 
-{% if issues %}
-<div class="card" style="padding: 0; overflow: hidden;">
-    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Validation Issues ({{ issues|length }})</p>
+{% set total_issues = issue_summary | sum(attribute='count') %}
+{% if issue_summary %}
+<details class="card" style="padding: 0; overflow: hidden;">
+    <summary class="card-title" style="padding: 0.75rem 1rem; margin: 0; cursor: pointer; border-bottom: 1px solid var(--border);">Validation Issues ({{ total_issues }})</summary>
     <table class="data-table">
         <thead>
             <tr>
-                <th>URL</th>
                 <th>Field</th>
                 <th>Issue</th>
-                <th>Raw Value</th>
+                <th>Count</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
-            {% for issue in issues %}
+            {% for s in issue_summary %}
             <tr>
-                <td class="cell-truncate">
-                    <a href="{{ issue.url }}" target="_blank">{{ issue.url }}</a>
-                </td>
-                <td>{{ issue.field }}</td>
-                <td>{{ issue.issue }}</td>
-                <td>{{ issue.raw_value or '-' }}</td>
+                <td>{{ s.field }}</td>
+                <td>{{ s.issue }}</td>
+                <td>{{ s.count }}</td>
+                <td><a href="/validation/{{ s.issue | urlencode }}?run_id={{ run.id }}">View all &rarr;</a></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-</div>
+</details>
 {% else %}
 <p class="text-muted"><small>No validation issues for this run.</small></p>
 {% endif %}
 
 {% if created %}
-<div class="card" style="padding: 0; overflow: hidden;">
-    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Created ({{ created|length }})</p>
+<details class="card" style="padding: 0; overflow: hidden;">
+    <summary class="card-title" style="padding: 0.75rem 1rem; margin: 0; cursor: pointer; border-bottom: 1px solid var(--border);">Created ({{ created|length }})</summary>
     <table class="data-table">
         <thead>
             <tr>
@@ -114,12 +113,12 @@
             {% endfor %}
         </tbody>
     </table>
-</div>
+</details>
 {% endif %}
 
 {% if changed %}
-<div class="card" style="padding: 0; overflow: hidden;">
-    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Changed ({{ changed|length }})</p>
+<details class="card" style="padding: 0; overflow: hidden;">
+    <summary class="card-title" style="padding: 0.75rem 1rem; margin: 0; cursor: pointer; border-bottom: 1px solid var(--border);">Changed ({{ changed|length }})</summary>
     <table class="data-table">
         <thead>
             <tr>
@@ -140,7 +139,7 @@
             {% endfor %}
         </tbody>
     </table>
-</div>
+</details>
 {% endif %}
 
 {% if unchanged %}

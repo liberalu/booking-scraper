@@ -12,6 +12,7 @@ from book_scraper.dashboard.queries import (
     get_recent_runs,
     get_run_detail,
     get_run_health,
+    get_run_issue_summary,
     get_run_listings,
     mark_stale_runs,
 )
@@ -72,10 +73,11 @@ def runs_list(request: Request, session: Session = Depends(get_db)):
 
 @router.get("/runs/{run_id}")
 def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)):
-    run, issues = get_run_detail(session, run_id)
+    run = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
     health = get_run_health(run)
+    issue_summary = get_run_issue_summary(session, run_id)
     created, changed, unchanged = get_run_listings(session, run_id)
     return templates.TemplateResponse(
         request,
@@ -83,7 +85,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
         {
             "active_page": "runs",
             "run": run,
-            "issues": issues,
+            "issue_summary": issue_summary,
             "health": health,
             "created": created,
             "changed": changed,
@@ -95,7 +97,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
 @router.get("/api/runs/{run_id}/status")
 def run_status(run_id: int, session: Session = Depends(get_db)):
     """Live status check for a run — used by HTMX polling."""
-    run, _ = get_run_detail(session, run_id)
+    run = get_run_detail(session, run_id)
     if run is None:
         return JSONResponse({"error": "not found"}, status_code=404)
 
@@ -169,7 +171,7 @@ def trigger_run(request: Request, phase: str = "scan"):
 
 @router.post("/runs/{run_id}/kill")
 def kill_run(run_id: int, session: Session = Depends(get_db)):
-    run, _ = get_run_detail(session, run_id)
+    run = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
     if run.status != "running":

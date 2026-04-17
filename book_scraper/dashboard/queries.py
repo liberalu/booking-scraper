@@ -99,18 +99,26 @@ def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
     )
 
 
-def get_run_detail(
+def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
+    return session.get(ScrapeRun, run_id)
+
+
+def get_run_issue_summary(
     session: Session, run_id: int
-) -> tuple[ScrapeRun | None, list[ValidationIssue]]:
-    run = session.get(ScrapeRun, run_id)
-    if run is None:
-        return None, []
-    issues = (
-        session.query(ValidationIssue)
+) -> list[dict[str, Any]]:
+    """Return validation issues for a run grouped by (field, issue) with counts."""
+    rows = (
+        session.query(
+            ValidationIssue.field,
+            ValidationIssue.issue,
+            func.count(ValidationIssue.id).label("count"),
+        )
         .filter(ValidationIssue.scrape_run_id == run_id)
+        .group_by(ValidationIssue.field, ValidationIssue.issue)
+        .order_by(func.count(ValidationIssue.id).desc())
         .all()
     )
-    return run, issues
+    return [{"field": r.field, "issue": r.issue, "count": r.count} for r in rows]
 
 
 def get_validation_summary(
@@ -206,6 +214,7 @@ def get_validation_by_type(
     issue_type: str,
     limit: int = 100,
     state: str | None = None,
+    run_id: int | None = None,
 ) -> list[dict]:
     """Get validation issues with listing IDs resolved from URL."""
     q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
@@ -213,6 +222,8 @@ def get_validation_by_type(
         q = q.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
         q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+    if run_id is not None:
+        q = q.filter(ValidationIssue.scrape_run_id == run_id)
     issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
     # Resolve listing IDs by URL
     urls = {i.url for i in issues}

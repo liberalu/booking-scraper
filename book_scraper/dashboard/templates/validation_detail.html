@@ -4,13 +4,22 @@
 <h1 class="page-title">Validation: {{ issue_type }} <span class="badge badge-warning">{{ issues|length }}</span></h1>
 <p><a href="/validation?state={{ lifecycle_state }}">&larr; Back to summary</a></p>
 
+{% if run_id_filter %}
+<p class="badge badge-warning" style="margin-bottom: 1rem;">
+    Filtered to <a href="/runs/{{ run_id_filter }}">run #{{ run_id_filter }}</a>
+    &nbsp;&mdash;&nbsp;
+    <a href="/validation/{{ issue_type }}?state={{ lifecycle_state }}">clear filter</a>
+</p>
+{% endif %}
+
 {% set state = lifecycle_state or 'open' %}
+{% set run_q = ('&run_id=' ~ run_id_filter) if run_id_filter else '' %}
 <div class="tab-bar" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-    <a href="/validation/{{ issue_type }}?state=open" class="badge {{ 'badge-warning' if state == 'open' else '' }}">Open ({{ lifecycle_counts.open }})</a>
-    <a href="/validation/{{ issue_type }}?state=new" class="badge {{ 'badge-warning' if state == 'new' else '' }}">New ({{ lifecycle_counts.new }})</a>
-    <a href="/validation/{{ issue_type }}?state=recurring" class="badge {{ 'badge-warning' if state == 'recurring' else '' }}">Recurring ({{ lifecycle_counts.recurring }})</a>
-    <a href="/validation/{{ issue_type }}?state=already_seen" class="badge {{ 'badge-warning' if state == 'already_seen' else '' }}">Already seen ({{ lifecycle_counts.already_seen }})</a>
-    <a href="/validation/{{ issue_type }}?state=all" class="badge {{ 'badge-warning' if state == 'all' else '' }}">All</a>
+    <a href="/validation/{{ issue_type }}?state=open{{ run_q }}" class="badge {{ 'badge-warning' if state == 'open' else '' }}">Open ({{ lifecycle_counts.open }})</a>
+    <a href="/validation/{{ issue_type }}?state=new{{ run_q }}" class="badge {{ 'badge-warning' if state == 'new' else '' }}">New ({{ lifecycle_counts.new }})</a>
+    <a href="/validation/{{ issue_type }}?state=recurring{{ run_q }}" class="badge {{ 'badge-warning' if state == 'recurring' else '' }}">Recurring ({{ lifecycle_counts.recurring }})</a>
+    <a href="/validation/{{ issue_type }}?state=already_seen{{ run_q }}" class="badge {{ 'badge-warning' if state == 'already_seen' else '' }}">Already seen ({{ lifecycle_counts.already_seen }})</a>
+    <a href="/validation/{{ issue_type }}?state=all{{ run_q }}" class="badge {{ 'badge-warning' if state == 'all' else '' }}">All</a>
 </div>
 
 {% if issues %}
