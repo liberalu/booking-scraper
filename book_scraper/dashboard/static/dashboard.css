@@ -712,3 +712,48 @@ a.stat-card:hover {
     margin: 0;
     font-size: 1.5rem;
 }
+
+/* ── Change-history diff ──────────────────────────────────── */
+
+.change-diff-cell {
+    max-width: 640px;
+}
+
+.change-diff-cell del {
+    background: var(--badge-error-bg);
+    color: var(--badge-error-fg);
+    text-decoration: line-through;
+    padding: 0 0.15em;
+    border-radius: 2px;
+}
+
+.change-diff-cell ins {
+    background: var(--badge-success-bg);
+    color: var(--badge-success-fg);
+    text-decoration: none;
+    padding: 0 0.15em;
+    border-radius: 2px;
+}
+
+details.change-diff > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    list-style: none;
+}
+
+details.change-diff > summary::before {
+    content: "▸ ";
+    color: var(--text-secondary);
+}
+
+details.change-diff[open] > summary::before {
+    content: "▾ ";
+}
+
+.change-diff-body {
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-word;
+}

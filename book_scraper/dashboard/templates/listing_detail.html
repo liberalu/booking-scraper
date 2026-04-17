@@ -255,8 +255,7 @@
             <tr>
                 <th>Date</th>
                 <th>Field</th>
-                <th>Old Value</th>
-                <th>New Value</th>
+                <th>Change</th>
                 <th>Run</th>
             </tr>
         </thead>
@@ -265,8 +264,7 @@
             <tr>
                 <td class="text-muted">{{ c.changed_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td>{{ c.field }}</td>
-                <td style="color: var(--price-up);">{{ c.old_value or '—' }}</td>
-                <td style="color: var(--price-down);">{{ c.new_value or '—' }}</td>
+                <td class="change-diff-cell">{{ change_diff(c.old_value, c.new_value, 200) }}</td>
                 <td>{% if c.scrape_run_id %}<a href="/runs/{{ c.scrape_run_id }}">Run #{{ c.scrape_run_id }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
