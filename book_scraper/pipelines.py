@@ -305,7 +305,12 @@ class PostgresPipeline:
         issues = vp.drain_issues()
         for issue in issues:
             issue["scrape_run_id"] = run_id
-        bulk_insert_validation_issues(self.session, issues)
+        # The shop is the same for every item in a run, so the first
+        # cached shop id is always correct.
+        shop_id: int | None = None
+        if self.shop_cache:
+            shop_id = next(iter(self.shop_cache.values()))
+        bulk_insert_validation_issues(self.session, issues, shop_id=shop_id)
 
     _SPIKE_THRESHOLD = Decimal("0.5")  # 50%
 

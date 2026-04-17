@@ -542,10 +542,57 @@ def check_discover_freshness(
 def bulk_insert_validation_issues(
     session: Session,
     issues: list[dict[str, str | int | None]],
+    shop_id: int | None = None,
 ) -> None:
-    """Insert a batch of validation issues."""
+    """Insert a batch of validation issues, resolving listing/discovered_url FKs.
+
+    When `shop_id` is provided, each issue's `url` is resolved to a
+    `listing_id` first; failing that, to a `discovered_url_id`. If the
+    caller already populated either FK on the dict it is left alone.
+    """
     if not issues:
         return
+
+    if shop_id is not None:
+        urls = {issue["url"] for issue in issues if issue.get("url")}
+        listing_by_url: dict[str, int] = {}
+        du_by_url: dict[str, int] = {}
+        if urls:
+            rows = session.execute(
+                select(Listing.url, Listing.id).where(
+                    Listing.shop_id == shop_id,
+                    Listing.url.in_(urls),
+                )
+            ).all()
+            for url, listing_id in rows:
+                listing_by_url[url] = listing_id
+            # Only look up discovered_urls for the leftover set.
+            leftover = urls - listing_by_url.keys()
+            if leftover:
+                normalized_map = {
+                    url: normalize_url(str(url)) for url in leftover
+                }
+                rev = {v: k for k, v in normalized_map.items()}
+                du_rows = session.execute(
+                    select(DiscoveredUrl.normalized_url, DiscoveredUrl.id).where(
+                        DiscoveredUrl.shop_id == shop_id,
+                        DiscoveredUrl.normalized_url.in_(normalized_map.values()),
+                    )
+                ).all()
+                for normalized, du_id in du_rows:
+                    raw = rev.get(normalized)
+                    if raw is not None:
+                        du_by_url[raw] = du_id
+
+        for issue in issues:
+            if issue.get("listing_id") or issue.get("discovered_url_id"):
+                continue
+            url = issue.get("url")
+            if url and url in listing_by_url:
+                issue["listing_id"] = listing_by_url[url]
+            elif url and url in du_by_url:
+                issue["discovered_url_id"] = du_by_url[url]
+
     session.add_all([ValidationIssue(**issue) for issue in issues])
 
 

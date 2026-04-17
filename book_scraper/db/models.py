@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     DateTime,
     Enum,
@@ -303,5 +304,20 @@ class ValidationIssue(Base):
     field: Mapped[str] = mapped_column(String, nullable=False)
     issue: Mapped[str] = mapped_column(String, nullable=False)
     raw_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listings.id"), nullable=True, index=True
+    )
+    discovered_url_id: Mapped[int | None] = mapped_column(
+        ForeignKey("discovered_urls.id"), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "NOT (listing_id IS NOT NULL AND discovered_url_id IS NOT NULL)",
+            name="ck_validation_issues_single_entity",
+        ),
+    )
 
     scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")
+    listing: Mapped["Listing | None"] = relationship()
+    discovered_url: Mapped["DiscoveredUrl | None"] = relationship()
