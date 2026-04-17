@@ -1,5 +1,3 @@
-from scrapy.utils.project import get_project_settings
-from book_scraper.items import ShopBookItem
 from book_scraper.pipelines import ValidationPipeline
 
 
