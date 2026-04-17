@@ -69,3 +69,62 @@ def test_route_returns_200(client: TestClient, route: str) -> None:
 def test_nonexistent_shop_returns_404(client: TestClient) -> None:
     response = client.get("/shops/nonexistent")
     assert response.status_code == 404
+
+
+VALIDATION_ROUTES = [
+    "/validation",
+    "/validation?state=open",
+    "/validation?state=new",
+    "/validation?state=recurring",
+    "/validation?state=already_seen",
+    "/validation?state=all",
+    "/validation?shop=vaga",
+    "/validation?issue_type=missing_price",
+    "/validation?run_id=1",
+    "/validation?q=test",
+    "/validation?shop=vaga&issue_type=missing_price&run_id=1&q=a",
+    "/validation?order=asc",
+    "/validation?page=2",
+    "/validation?page=9999",  # out-of-range page clamps silently
+]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("route", VALIDATION_ROUTES)
+def test_validation_routes_return_200(client: TestClient, route: str) -> None:
+    response = client.get(route)
+    assert response.status_code == 200, f"{route} returned {response.status_code}"
+
+
+@pytest.mark.integration
+def test_legacy_validation_detail_route_is_gone(client: TestClient) -> None:
+    response = client.get("/validation/missing_price")
+    assert response.status_code == 404
+
+
+@pytest.mark.integration
+def test_acknowledge_all_accepts_full_filter_set(client: TestClient) -> None:
+    response = client.post(
+        "/validation-issues/acknowledge-all",
+        data={
+            "issue_type": "missing_price",
+            "state": "open",
+            "shop": "",
+            "run_id": "",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+@pytest.mark.integration
+def test_delete_matching_requires_filter(client: TestClient) -> None:
+    # state='all' + every other filter empty = truly unfiltered;
+    # repo raises, route returns 400
+    response = client.post(
+        "/validation-issues/delete-matching",
+        data={"issue_type": "", "state": "all", "shop": "", "run_id": "", "q": ""},
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
