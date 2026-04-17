@@ -16,6 +16,7 @@ from book_scraper.db.models import (
     Shop,
     ValidationIssue,
 )
+from book_scraper.url_utils import normalize_url
 
 
 def _sync_attribute_rows(
@@ -242,14 +243,84 @@ def upsert_discovered_url(
     shop_id: int,
     url: str,
     source: str,
+    run_id: int | None = None,
+    listing_id: int | None = None,
 ) -> DiscoveredUrl:
+    """Upsert (shop_id, normalized_url).
+
+    New rows record `first_seen_at = last_seen_at = now`. Repeat hits
+    refresh `last_seen_at`, update `last_seen_run_id` when `run_id` is
+    provided, and adopt a resolved `listing_id` when one is supplied.
+    The raw `url` on an existing row is left alone — the normalized
+    URL is the canonical identifier.
+    """
+    normalized = normalize_url(url)
+    now = datetime.now(UTC)
     stmt = select(DiscoveredUrl).where(
-        DiscoveredUrl.shop_id == shop_id, DiscoveredUrl.url == url
+        DiscoveredUrl.shop_id == shop_id,
+        DiscoveredUrl.normalized_url == normalized,
     )
     existing = session.execute(stmt).scalar_one_or_none()
     if existing is not None:
+        existing.last_seen_at = now
+        if run_id is not None:
+            existing.last_seen_run_id = run_id
+        if listing_id is not None and existing.listing_id != listing_id:
+            existing.listing_id = listing_id
+        session.flush()
         return existing
-    record = DiscoveredUrl(shop_id=shop_id, url=url, source=source)
+    record = DiscoveredUrl(
+        shop_id=shop_id,
+        url=url,
+        normalized_url=normalized,
+        source=source,
+        first_seen_at=now,
+        last_seen_at=now,
+        last_seen_run_id=run_id,
+        listing_id=listing_id,
+    )
+    session.add(record)
+    session.flush()
+    return record
+
+
+def link_discovered_url_to_listing(
+    session: Session,
+    shop_id: int,
+    url: str,
+    listing_id: int,
+    run_id: int | None = None,
+) -> DiscoveredUrl | None:
+    """Idempotently attach a listing to its discovered URL row.
+
+    Returns the row (creating one if missing — useful when a listing
+    is upserted via a path that didn't go through discovery yet).
+    """
+    normalized = normalize_url(url)
+    stmt = select(DiscoveredUrl).where(
+        DiscoveredUrl.shop_id == shop_id,
+        DiscoveredUrl.normalized_url == normalized,
+    )
+    existing = session.execute(stmt).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if existing is not None:
+        if existing.listing_id != listing_id:
+            existing.listing_id = listing_id
+        existing.last_seen_at = now
+        if run_id is not None:
+            existing.last_seen_run_id = run_id
+        session.flush()
+        return existing
+    record = DiscoveredUrl(
+        shop_id=shop_id,
+        url=url,
+        normalized_url=normalized,
+        source="category",
+        first_seen_at=now,
+        last_seen_at=now,
+        last_seen_run_id=run_id,
+        listing_id=listing_id,
+    )
     session.add(record)
     session.flush()
     return record

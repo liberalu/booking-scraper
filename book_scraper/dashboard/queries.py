@@ -689,13 +689,13 @@ def get_not_listed_urls(
     """)
     total = session.execute(count_sql, {"shop_id": shop_id}).scalar() or 0
 
-    sort_col = "du.discovered_at"
+    sort_col = "du.first_seen_at"
     if sort_by == "url":
         sort_col = "du.url"
     direction = "ASC" if sort_order == "asc" else "DESC"
 
     data_sql = text(f"""
-        SELECT du.url, du.discovered_at, du.source, du.url_type
+        SELECT du.url, du.first_seen_at AS discovered_at, du.source, du.url_type
         FROM discovered_urls du
         WHERE du.shop_id = :shop_id
           AND NOT EXISTS (
@@ -723,7 +723,7 @@ def get_not_listed_urls(
 DISCOVERED_URL_SORT_COLUMNS = {
     "url": DiscoveredUrl.url,
     "fails": DiscoveredUrl.fail_count,
-    "discovered": DiscoveredUrl.discovered_at,
+    "discovered": DiscoveredUrl.first_seen_at,
 }
 
 
@@ -777,7 +777,7 @@ def get_discovered_urls_page(
     elif status in ("unknown", "product", "non_product"):
         query = query.filter(DiscoveredUrl.url_type == status)
     total = query.count()
-    order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.discovered_at)
+    order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.first_seen_at)
     if sort_order == "asc":
         query = query.order_by(order_col.asc().nulls_last())
     else:

@@ -12,6 +12,7 @@ from book_scraper.db.repo import (
     bulk_insert_validation_issues,
     increment_scrape_run_stats,
     insert_price,
+    link_discovered_url_to_listing,
     update_scrape_run_progress,
     upsert_discovered_url,
     upsert_listing,
@@ -530,6 +531,13 @@ class PostgresPipeline:
                     in_stock=adapter.get("in_stock", True),
                     run_id=self._run_id,
                 )
+            link_discovered_url_to_listing(
+                self.session,
+                shop_id=shop_id,
+                url=adapter["url"],
+                listing_id=listing.id,
+                run_id=self._run_id,
+            )
 
         elif isinstance(item, PriceItem):
             shop_id = self._get_shop_id(shop_name)
@@ -568,6 +576,13 @@ class PostgresPipeline:
                 in_stock=adapter.get("in_stock", True),
                 run_id=self._run_id,
             )
+            link_discovered_url_to_listing(
+                self.session,
+                shop_id=shop_id,
+                url=adapter["url"],
+                listing_id=listing.id,
+                run_id=self._run_id,
+            )
 
         elif isinstance(item, DiscoveredUrlItem):
             shop_id = self._get_shop_id(shop_name)
@@ -576,6 +591,7 @@ class PostgresPipeline:
                 shop_id=shop_id,
                 url=item["url"],
                 source=item["source"],
+                run_id=self._run_id,
             )
 
         # Commit every 100 items

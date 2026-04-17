@@ -121,8 +121,8 @@
                     {% endif %}
                 </td>
                 <td class="text-muted">
-                    {% if u.discovered_at %}
-                    {{ u.discovered_at.strftime('%b %-d') }}
+                    {% if u.first_seen_at %}
+                    {{ u.first_seen_at.strftime('%b %-d') }}
                     {% else %}—{% endif %}
                 </td>
             </tr>

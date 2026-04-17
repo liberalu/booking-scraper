@@ -1,6 +1,9 @@
-from book_scraper.db.models import Shop
+import pytest
+
+from book_scraper.db.models import DiscoveredUrl, Listing, ScrapeRun, Shop
 from book_scraper.db.repo import (
     get_pending_scan_urls,
+    link_discovered_url_to_listing,
     update_discovered_url_status,
     upsert_discovered_url,
 )
@@ -106,3 +109,126 @@ def test_get_pending_scan_urls_filters_high_fail_count(db_session):
     pending = get_pending_scan_urls(db_session, shop_id=shop.id)
     urls = [u.url for u in pending]
     assert "https://test.lt/dead" not in urls
+
+
+def _make_shop(db_session, name: str = "test_shop") -> Shop:
+    shop = Shop(name=name, base_url=f"https://{name}.lt")
+    db_session.add(shop)
+    db_session.flush()
+    return shop
+
+
+def _make_run(db_session, shop_id: int) -> ScrapeRun:
+    run = ScrapeRun(shop_id=shop_id, phase="scan", status="running")
+    db_session.add(run)
+    db_session.flush()
+    return run
+
+
+def test_upsert_discovered_url_dedupes_by_normalized_url(db_session):
+    """Raw URLs differing only by tracking params / case / trailing slash
+    collapse to one row keyed by (shop_id, normalized_url)."""
+    shop = _make_shop(db_session)
+    first = upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/Book", source="sitemap"
+    )
+    second = upsert_discovered_url(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/Book/?utm_source=newsletter",
+        source="category",
+    )
+    assert first.id == second.id
+    assert second.normalized_url == "https://test.lt/Book"
+
+
+def test_upsert_discovered_url_updates_last_seen_and_run(db_session):
+    shop = _make_shop(db_session)
+    run1 = _make_run(db_session, shop.id)
+    first = upsert_discovered_url(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/book-1",
+        source="sitemap",
+        run_id=run1.id,
+    )
+    first_last_seen = first.last_seen_at
+
+    run2 = _make_run(db_session, shop.id)
+    second = upsert_discovered_url(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/book-1",
+        source="category",
+        run_id=run2.id,
+    )
+    assert first.id == second.id
+    assert second.last_seen_run_id == run2.id
+    assert second.last_seen_at >= first_last_seen
+
+
+def test_link_discovered_url_to_listing_attaches_fk(db_session):
+    shop = _make_shop(db_session)
+    upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/b", source="sitemap"
+    )
+    listing = Listing(
+        shop_id=shop.id, url="https://test.lt/b", title="Book", is_active=True
+    )
+    db_session.add(listing)
+    db_session.flush()
+
+    row = link_discovered_url_to_listing(
+        db_session, shop_id=shop.id, url="https://test.lt/b", listing_id=listing.id
+    )
+    assert row is not None
+    assert row.listing_id == listing.id
+
+    # And the reverse relation loads the discovered row.
+    db_session.refresh(listing)
+    assert any(d.listing_id == listing.id for d in listing.discovered_urls)
+
+
+def test_link_discovered_url_creates_row_when_missing(db_session):
+    """A listing upserted without a matching discovered_url row (e.g.
+    price-only category scrape before any sitemap run) still gets a
+    backing discovered_url row for the relation."""
+    shop = _make_shop(db_session)
+    listing = Listing(
+        shop_id=shop.id, url="https://test.lt/new", title="New", is_active=True
+    )
+    db_session.add(listing)
+    db_session.flush()
+
+    row = link_discovered_url_to_listing(
+        db_session, shop_id=shop.id, url="https://test.lt/new", listing_id=listing.id
+    )
+    assert row is not None
+    assert row.listing_id == listing.id
+    assert row.normalized_url == "https://test.lt/new"
+
+
+def test_unique_constraint_enforced_on_normalized_url(db_session):
+    """Two raw URLs with the same normalization must not coexist."""
+    import sqlalchemy.exc
+
+    shop = _make_shop(db_session)
+    db_session.add(
+        DiscoveredUrl(
+            shop_id=shop.id,
+            url="https://test.lt/dup",
+            normalized_url="https://test.lt/dup",
+            source="sitemap",
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        DiscoveredUrl(
+            shop_id=shop.id,
+            url="https://test.lt/dup?utm_source=x",
+            normalized_url="https://test.lt/dup",
+            source="category",
+        )
+    )
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        db_session.flush()

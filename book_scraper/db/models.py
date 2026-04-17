@@ -115,6 +115,9 @@ class Listing(Base):
         back_populates="listing",
         cascade="all, delete-orphan",
     )
+    discovered_urls: Mapped[list["DiscoveredUrl"]] = relationship(
+        back_populates="listing"
+    )
 
 
 class ListingAttribute(Base):
@@ -221,6 +224,7 @@ class DiscoveredUrl(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_url: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(discovery_source_enum, nullable=False)
     url_type: Mapped[str] = mapped_column(
         url_type_enum, nullable=False, server_default="unknown"
@@ -230,15 +234,30 @@ class DiscoveredUrl(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    discovered_at: Mapped[datetime] = mapped_column(
+    first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    last_seen_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
+    )
+    listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listings.id"), nullable=True
     )
 
     shop: Mapped["Shop"] = relationship()
+    listing: Mapped["Listing | None"] = relationship(back_populates="discovered_urls")
+    last_seen_run: Mapped["ScrapeRun | None"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("shop_id", "url", name="uq_discovered_urls_shop_url"),
+        UniqueConstraint(
+            "shop_id", "normalized_url", name="uq_discovered_urls_shop_normalized"
+        ),
         Index("ix_discovered_urls_shop_type_fail", "shop_id", "url_type", "fail_count"),
+        Index("ix_discovered_urls_listing_id", "listing_id"),
+        Index("ix_discovered_urls_last_seen_run_id", "last_seen_run_id"),
     )
 
 
