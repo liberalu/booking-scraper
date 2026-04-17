@@ -19,6 +19,61 @@ from book_scraper.db.models import (
 STALE_HEARTBEAT_MINUTES = 5
 DEAD_RUN_HOURS = 2
 
+ISSUE_DESCRIPTIONS: dict[str, str] = {
+    "missing_price": (
+        "No price scraped. Parser likely hit a broken or restructured product page."
+    ),
+    "zero_price": (
+        "Price parsed as 0.00. Parser probably matched an empty or wrong element."
+    ),
+    "price_higher_than_original": (
+        "Sale price exceeds the original. Likely a data inversion"
+        " — original and current fields may be swapped."
+    ),
+    "invalid_price": "Price couldn't be parsed as a number. Item was dropped.",
+    "invalid_price_original": "Original price couldn't be parsed. Stored as null.",
+    "missing_title": "No title scraped. Item was dropped.",
+    "suspicious_title": (
+        "Title shorter than 2 chars or longer than 300."
+        " Parser may be selecting the wrong element."
+    ),
+    "html_in_text": (
+        "HTML tags found in title or author. Raw markup leaked into a text field."
+    ),
+    "invalid_isbn": (
+        "ISBN fails checksum (ISBN-10 or ISBN-13)."
+        " Parser may be selecting a barcode or wrong field."
+    ),
+    "format_mismatch": (
+        "Format inconsistent with metadata"
+        " — e.g. audiobook has pages, hardcover has duration."
+    ),
+    "attribute_unknown_key": (
+        "A property key not in the shop's allowed attribute list."
+        " Add to config or fix the parser."
+    ),
+    "attribute_invalid_value": (
+        "A property value doesn't match the allowed enum or regex in the shop config."
+    ),
+}
+
+ISSUE_SEVERITY: dict[str, str] = {
+    "missing_price": "critical",
+    "zero_price": "critical",
+    "price_higher_than_original": "critical",
+    "invalid_price": "critical",
+    "invalid_price_original": "critical",
+    "missing_title": "critical",
+    "suspicious_title": "warning",
+    "html_in_text": "warning",
+    "invalid_isbn": "warning",
+    "format_mismatch": "warning",
+    "attribute_unknown_key": "warning",
+    "attribute_invalid_value": "warning",
+}
+
+_SEVERITY_ORDER: dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
+
 
 def _pid_alive(pid: int | None) -> bool | None:
     """Check if a process is alive. Returns None if PID not recorded."""
@@ -166,14 +221,14 @@ def get_validation_issues_flat(
     shop_book_ids = {i.shop_book_id for i in issues if i.shop_book_id}
     titles: dict[int, str] = {}
     if shop_book_ids:
-        rows = (
+        title_rows = (
             session.query(ShopBook.id, ShopBook.title)
             .filter(ShopBook.id.in_(shop_book_ids))
             .all()
         )
-        titles = {row.id: row.title for row in rows}
+        titles = {r.id: r.title for r in title_rows}
 
-    rows = [
+    result: list[dict[str, Any]] = [
         {
             "id": i.id,
             "url": i.url,
@@ -189,23 +244,108 @@ def get_validation_issues_flat(
         }
         for i in issues
     ]
-    return rows, total
+    return result, total
 
 
-def get_validation_lifecycle_counts(session: Session) -> dict[str, int]:
-    rows = (
-        session.query(
-            ValidationIssue.lifecycle_state,
-            func.count(ValidationIssue.id).label("count"),
-        )
-        .group_by(ValidationIssue.lifecycle_state)
-        .all()
+def get_validation_lifecycle_counts(
+    session: Session, shop_id: int | None = None
+) -> dict[str, int]:
+    q = session.query(
+        ValidationIssue.lifecycle_state,
+        func.count(ValidationIssue.id).label("count"),
     )
+    if shop_id:
+        q = q.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id).filter(
+            ScrapeRun.shop_id == shop_id
+        )
+    rows = q.group_by(ValidationIssue.lifecycle_state).all()
     counts = {"new": 0, "recurring": 0, "already_seen": 0}
     for r in rows:
         counts[r.lifecycle_state] = r.count
     counts["open"] = counts["new"] + counts["recurring"]
     return counts
+
+
+def get_validation_groups(
+    session: Session,
+    state: str | None = None,
+    shop_id: int | None = None,
+) -> list[dict]:
+    """Return all issue types with counts, severity, and description."""
+    q = session.query(
+        ValidationIssue.issue,
+        func.count(ValidationIssue.id).label("count"),
+    )
+    if shop_id:
+        q = q.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id).filter(
+            ScrapeRun.shop_id == shop_id
+        )
+    if state in {"new", "recurring", "already_seen"}:
+        q = q.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+    rows = q.group_by(ValidationIssue.issue).all()
+    groups = [
+        {
+            "issue_type": r.issue,
+            "count": r.count,
+            "severity": ISSUE_SEVERITY.get(r.issue, "warning"),
+            "description": ISSUE_DESCRIPTIONS.get(r.issue, ""),
+        }
+        for r in rows
+    ]
+    groups.sort(key=lambda g: (_SEVERITY_ORDER.get(g["severity"], 99), -g["count"]))
+    return groups
+
+
+def get_validation_issues_for_group(
+    session: Session,
+    issue_type: str,
+    state: str | None = None,
+    shop_id: int | None = None,
+    page: int = 1,
+    per_page: int = 5,
+) -> tuple[list[dict], int]:
+    """Return paginated issues for a single group (used by HTMX rows endpoint)."""
+    q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
+    if shop_id:
+        q = q.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id).filter(
+            ScrapeRun.shop_id == shop_id
+        )
+    if state in {"new", "recurring", "already_seen"}:
+        q = q.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+    total = q.count()
+    issues = (
+        q.order_by(ValidationIssue.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    shop_book_ids = {i.shop_book_id for i in issues if i.shop_book_id}
+    titles: dict[int, str] = {}
+    if shop_book_ids:
+        title_rows = (
+            session.query(ShopBook.id, ShopBook.title)
+            .filter(ShopBook.id.in_(shop_book_ids))
+            .all()
+        )
+        titles = {r.id: r.title for r in title_rows}
+    return [
+        {
+            "id": i.id,
+            "url": i.url,
+            "field": i.field,
+            "issue": i.issue,
+            "raw_value": i.raw_value,
+            "scrape_run_id": i.scrape_run_id,
+            "shop_book_id": i.shop_book_id,
+            "shop_book_title": titles.get(i.shop_book_id) if i.shop_book_id else None,
+            "lifecycle_state": i.lifecycle_state,
+        }
+        for i in issues
+    ], total
 
 
 def get_validation_by_type(
