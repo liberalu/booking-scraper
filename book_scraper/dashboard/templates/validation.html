@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "macros.html" import sort_header %}
 {% block title %}Issues{% endblock %}
 {% block content %}
 <h1 class="page-title">Issues</h1>
@@ -38,7 +37,7 @@
         <select name="shop">
             <option value="">All shops</option>
             {% for s in shops %}
-            <option value="{{ s.name }}" {{ 'selected' if s.name == selected_shop }}>{{ s.name }}</option>
+            <option value="{{ s.name }}" {% if s.name == selected_shop %}selected{% endif %}>{{ s.name }}</option>
             {% endfor %}
         </select>
 
@@ -47,12 +46,12 @@
             <option value="">All types</option>
             <optgroup label="Critical">
                 {% for t in critical_types %}
-                <option value="{{ t }}" {{ 'selected' if t == selected_issue_type }}>{{ t }}</option>
+                <option value="{{ t }}" {% if t == selected_issue_type %}selected{% endif %}>{{ t }}</option>
                 {% endfor %}
             </optgroup>
             <optgroup label="Warning">
                 {% for t in warning_types %}
-                <option value="{{ t }}" {{ 'selected' if t == selected_issue_type }}>{{ t }}</option>
+                <option value="{{ t }}" {% if t == selected_issue_type %}selected{% endif %}>{{ t }}</option>
                 {% endfor %}
             </optgroup>
         </select>
@@ -107,13 +106,13 @@
 
 {# ── Table ──────────────────────────────────────────────────── #}
 {% if rows %}
-<div class="card" style="padding:0; overflow:hidden;">
+<div class="card" style="padding:0; overflow-x:auto;">
 <table class="data-table">
     <thead>
         <tr>
             <th style="width:28px"><input type="checkbox" disabled title="Row selection coming in v2"></th>
             <th>
-                <a href="/validation?state={{ state }}&shop={{ selected_shop }}&issue_type={{ selected_issue_type }}&run_id={{ selected_run_id or '' }}&q={{ q }}&order={{ 'asc' if order == 'desc' else 'desc' }}">
+                <a href="/validation?state={{ state }}&shop={{ selected_shop|urlencode }}&issue_type={{ selected_issue_type|urlencode }}&run_id={{ selected_run_id or '' }}&q={{ q|urlencode }}&order={{ 'asc' if order == 'desc' else 'desc' }}">
                     Added <span class="sort-arrow">{{ '▼' if order == 'desc' else '▲' }}</span>
                 </a>
             </th>
