@@ -124,13 +124,7 @@
 {% if listing.description %}
 <div class="card">
     <div class="card-title">Description</div>
-    <div class="rich-text">
-        {%- if '<' in listing.description and '>' in listing.description -%}
-            {{ listing.description|safe }}
-        {%- else -%}
-            {{ listing.description|markdown }}
-        {%- endif -%}
-    </div>
+    <div class="rich-text">{{ listing.description|markdown }}</div>
 </div>
 {% endif %}
 

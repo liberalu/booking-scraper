@@ -1,7 +1,7 @@
 import scrapy
 
 
-class ListingItem(scrapy.Item):
+class ShopBookItem(scrapy.Item):
     """Full product data from a shop."""
 
     url = scrapy.Field()

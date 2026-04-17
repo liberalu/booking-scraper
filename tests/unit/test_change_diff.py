@@ -1,7 +1,11 @@
-from book_scraper.dashboard.app import _change_diff
+from book_scraper.dashboard.app import (
+    _change_diff,
+    _git_style_diff,
+    _render_description,
+)
 
 
-def test_short_change_renders_inline_with_del_ins():
+def test_short_singleline_renders_inline_with_del_ins():
     html = str(_change_diff("Alice Smith", "Bob Smith", limit=200))
     assert "<del>Alice</del>" in html
     assert "<ins>Bob</ins>" in html
@@ -26,33 +30,63 @@ def test_both_none_yields_dash():
     assert "—" in html
 
 
-def test_long_change_collapses_into_details():
-    old = "alpha " * 60
-    new = "beta " * 60
-    html = str(_change_diff(old, new, limit=200))
+def test_multiline_uses_git_style_details():
+    old = "line 1\nline 2\nline 3"
+    new = "line 1\nchanged\nline 3"
+    html = str(_change_diff(old, new, limit=500))
     assert "<details" in html
-    assert "<summary>" in html
     assert "change-diff-body" in html
+    assert "diff-line-del" in html
+    assert "diff-line-add" in html
+    # Deleted line has "- " prefix, added has "+ "
+    assert "- line 2" in html
+    assert "+ changed" in html
 
 
-def test_long_change_summary_is_truncated():
-    old = "word " * 100
-    new = "different " * 100
+def test_long_singleline_uses_details_with_summary_truncated():
+    old = "word " * 80
+    new = "different " * 80
     html = str(_change_diff(old, new, limit=80))
+    assert "<details" in html
     start = html.index("<summary>") + len("<summary>")
     end = html.index("</summary>")
     summary = html[start:end]
+    # Summary is escaped plain text starting with "-" or "+"
     assert summary.endswith("…")
-    # Summary should be plaintext (no raw <del>/<ins>) and under the limit.
-    assert "<del>" not in summary
-    assert "<ins>" not in summary
-    # +1 for the trailing ellipsis char.
-    assert len(summary) <= 80 + 1
 
 
-def test_html_in_values_is_escaped():
-    html = str(
-        _change_diff("<script>", "<b>safe</b>", limit=500)
-    )
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
+def test_git_style_diff_shows_context_around_change():
+    old = "a\nb\nc\nd\ne"
+    new = "a\nb\nX\nd\ne"
+    body = _git_style_diff(old, new)
+    # The unchanged "b" and "d" lines become context (1 line each side).
+    assert "diff-line-ctx" in body
+    assert "- c" in body
+    assert "+ X" in body
+
+
+def test_git_style_diff_escapes_html_in_values():
+    body = _git_style_diff("<script>", "<b>safe</b>")
+    assert "<script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+def test_render_description_markdown_text_becomes_html():
+    html = str(_render_description("**Bold** text"))
+    assert "<strong>Bold</strong>" in html
+
+
+def test_render_description_existing_html_passes_through():
+    html = str(_render_description("<p>Already HTML</p>"))
+    assert html == "<p>Already HTML</p>"
+
+
+def test_render_description_angle_brackets_are_not_html():
+    # Lithuanian "<...>" elision shouldn't disable markdown rendering.
+    html = str(_render_description("**Hello** <...> world"))
+    assert "<strong>Hello</strong>" in html
+
+
+def test_render_description_none_returns_empty():
+    assert str(_render_description(None)) == ""
+    assert str(_render_description("")) == ""

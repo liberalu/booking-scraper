@@ -739,6 +739,11 @@ details.change-diff > summary {
     cursor: pointer;
     color: var(--text-secondary);
     list-style: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 details.change-diff > summary::before {
@@ -751,9 +756,38 @@ details.change-diff[open] > summary::before {
 }
 
 .change-diff-body {
-    margin-top: 0.4rem;
-    padding-top: 0.4rem;
+    margin: 0.4rem 0 0;
+    padding: 0.4rem 0;
     border-top: 1px solid var(--border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    white-space: normal;
+    background: transparent;
+}
+
+.diff-line {
+    padding: 0 0.5rem;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.diff-line-del {
+    background: var(--badge-error-bg);
+    color: var(--badge-error-fg);
+}
+
+.diff-line-add {
+    background: var(--badge-success-bg);
+    color: var(--badge-success-fg);
+}
+
+.diff-line-ctx {
+    color: var(--text-secondary);
+}
+
+.diff-hunk-sep {
+    color: var(--text-secondary);
+    padding: 0.1rem 0.5rem;
+    font-style: italic;
 }
