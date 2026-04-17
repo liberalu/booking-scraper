@@ -266,6 +266,81 @@ def get_validation_lifecycle_counts(
     return counts
 
 
+def get_issues_page(
+    session: Session,
+    state: str | None = "open",
+    shop_id: int | None = None,
+    issue_type: str = "",
+    run_id: int | None = None,
+    q: str = "",
+    order: str = "desc",
+    page: int = 1,
+    per_page: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return paginated flat list of validation issues with filters.
+
+    Rows are sorted by scrape_runs.started_at (then ValidationIssue.id) to
+    approximate per-issue creation time without adding a column.
+
+    Returns (rows, total).
+    """
+    from sqlalchemy import or_
+
+    query = (
+        session.query(ValidationIssue, ScrapeRun, ShopBook)
+        .join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
+    )
+
+    if state in {"new", "recurring", "already_seen"}:
+        query = query.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        query = query.filter(ValidationIssue.lifecycle_state != "already_seen")
+
+    if shop_id is not None:
+        query = query.filter(ScrapeRun.shop_id == shop_id)
+    if issue_type:
+        query = query.filter(ValidationIssue.issue == issue_type)
+    if run_id is not None:
+        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(
+            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
+        )
+
+    total = query.count()
+
+    if order == "asc":
+        query = query.order_by(
+            ScrapeRun.started_at.asc().nulls_last(), ValidationIssue.id.asc()
+        )
+    else:
+        query = query.order_by(
+            ScrapeRun.started_at.desc().nulls_last(), ValidationIssue.id.desc()
+        )
+
+    rows = query.offset((page - 1) * per_page).limit(per_page).all()
+    result: list[dict[str, Any]] = []
+    for issue, run, shop_book in rows:
+        result.append(
+            {
+                "id": issue.id,
+                "url": issue.url,
+                "field": issue.field,
+                "issue": issue.issue,
+                "raw_value": issue.raw_value,
+                "scrape_run_id": issue.scrape_run_id,
+                "shop_book_id": issue.shop_book_id,
+                "shop_book_title": shop_book.title if shop_book else None,
+                "lifecycle_state": issue.lifecycle_state,
+                "added_at": run.started_at,
+                "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
+            }
+        )
+    return result, total
+
+
 def get_validation_groups(
     session: Session,
     state: str | None = None,
