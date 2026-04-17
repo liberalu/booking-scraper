@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from itemadapter import ItemAdapter
+from markdownify import markdownify as _html_to_markdown
 from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
 from sqlalchemy.orm import Session, sessionmaker
@@ -260,6 +261,15 @@ class ValidationPipeline:
             self._check_price_anomalies(adapter, url)
 
         if isinstance(item, ListingItem):
+            # Convert any inbound HTML description to Markdown at the
+            # boundary. Shops vary in their source markup; keeping the
+            # stored form as Markdown is portable, diff-friendly, and
+            # safe to re-render as HTML via the dashboard Jinja filter.
+            desc = adapter.get("description")
+            if isinstance(desc, str) and "<" in desc and ">" in desc:
+                converted = _html_to_markdown(desc, heading_style="ATX").strip()
+                adapter["description"] = converted or None
+
             if not adapter.get("title"):
                 self._warn("missing_title", "title", url)
                 raise DropItem("Missing title")

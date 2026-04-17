@@ -12,6 +12,8 @@ dependencies = [
     "alembic>=1.15",
     "psycopg2-binary>=2.9",
     "httpx>=0.28.1",
+    "markdownify>=1.1",
+    "markdown>=3.7",
 ]
 
 [project.optional-dependencies]
