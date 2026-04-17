@@ -12,6 +12,49 @@
     <a href="/validation?state=all" class="badge {{ 'badge-warning' if state == 'all' else '' }}">All</a>
 </div>
 
+{% if flat_issues is defined and flat_issues %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Issues ({{ flat_issues|length }})</p>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Issue</th>
+                <th>Field</th>
+                <th>Listing / URL</th>
+                <th>Raw Value</th>
+                <th>Run</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in flat_issues %}
+            <tr>
+                <td>{{ i.id }}</td>
+                <td><a href="/validation/{{ i.issue }}?state={{ state }}">{{ i.issue }}</a></td>
+                <td>{{ i.field }}</td>
+                <td>
+                    {% if i.listing_id %}
+                    <a href="/listings/{{ i.listing_id }}">{{ i.listing_title[:50] if i.listing_title else i.url }}{{ '...' if i.listing_title and i.listing_title|length > 50 else '' }}</a>
+                    {% else %}
+                    <a href="{{ i.url }}" target="_blank" class="cell-truncate" style="display:inline-block;">{{ i.url }}</a>
+                    {% endif %}
+                </td>
+                <td class="text-muted">{{ i.raw_value or '—' }}</td>
+                <td><a href="/runs/{{ i.scrape_run_id }}">#{{ i.scrape_run_id }}</a></td>
+                <td>
+                    {% if i.lifecycle_state != 'already_seen' %}
+                    <form method="post" action="/validation-issues/{{ i.id }}/acknowledge" style="display:inline;">
+                        <button type="submit" class="badge">Acknowledge</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Validation Issues</p>
     {% if summary %}
@@ -35,6 +78,7 @@
     <p style="padding: 1rem;">No validation issues in this bucket.</p>
     {% endif %}
 </div>
+{% endif %}
 
 <div class="card" style="padding: 0; overflow: hidden; margin-top: 1rem;">
     <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Recent Price Changes (7 days)</p>

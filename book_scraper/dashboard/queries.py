@@ -132,6 +132,49 @@ def get_validation_summary(
     return [{"issue_type": r.issue, "count": r.count} for r in rows]
 
 
+def get_validation_issues_flat(
+    session: Session, state: str | None = None, limit: int = 200
+) -> list[dict]:
+    """Return a flat, per-issue view for a given lifecycle state.
+
+    Pulls the Listing title when a listing_id is set so the template
+    can show a meaningful link instead of the raw URL.
+    """
+    q = session.query(ValidationIssue)
+    if state in {"new", "recurring", "already_seen"}:
+        q = q.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+    issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
+
+    listing_ids = {i.listing_id for i in issues if i.listing_id}
+    titles: dict[int, str] = {}
+    if listing_ids:
+        rows = (
+            session.query(Listing.id, Listing.title)
+            .filter(Listing.id.in_(listing_ids))
+            .all()
+        )
+        titles = {row.id: row.title for row in rows}
+
+    return [
+        {
+            "id": i.id,
+            "url": i.url,
+            "field": i.field,
+            "issue": i.issue,
+            "raw_value": i.raw_value,
+            "scrape_run_id": i.scrape_run_id,
+            "listing_id": i.listing_id,
+            "listing_title": titles.get(i.listing_id) if i.listing_id else None,
+            "discovered_url_id": i.discovered_url_id,
+            "lifecycle_state": i.lifecycle_state,
+            "acknowledged_at": i.acknowledged_at,
+        }
+        for i in issues
+    ]
+
+
 def get_validation_lifecycle_counts(session: Session) -> dict[str, int]:
     rows = (
         session.query(

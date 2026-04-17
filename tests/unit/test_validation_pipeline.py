@@ -408,6 +408,41 @@ def test_html_in_author_flagged(pipeline, stats):
     assert stats.values.get("validation/html_in_text") == 1
 
 
+@pytest.mark.parametrize(
+    "author",
+    [
+        "L. Šernienė, M. Puzaitė",
+        "Jane Smith; John Doe",
+        "Alice & Bob",
+        "Foo / Bar",
+        "A and B",
+        "A ir B",
+    ],
+)
+def test_multi_author_flagged(pipeline, stats, author):
+    item = ListingItem(
+        url="https://vaga.lt/p",
+        shop_name="vaga",
+        title="Book",
+        author=author,
+        price="5.00",
+    )
+    pipeline.process_item(item)
+    assert stats.values.get("validation/multi_author") == 1
+
+
+def test_single_author_not_flagged(pipeline, stats):
+    item = ListingItem(
+        url="https://vaga.lt/p",
+        shop_name="vaga",
+        title="Book",
+        author="Jane Smith",
+        price="5.00",
+    )
+    pipeline.process_item(item)
+    assert stats.values.get("validation/multi_author") is None
+
+
 def test_suspicious_title_too_short(pipeline, stats):
     item = ListingItem(
         url="https://vaga.lt/p",

@@ -71,6 +71,12 @@
                 </td>
             </tr>
             <tr>
+                <th>Type</th>
+                <td>
+                    <span class="badge {{ 'badge-warning' if listing.type == 'audio' else 'badge-neutral' }}">{{ listing.type }}</span>
+                </td>
+            </tr>
+            <tr>
                 <th>Format</th>
                 <td>
                     {% if listing.format %}
@@ -119,6 +125,40 @@
         <a href="/listings?category={{ cat|urlencode }}" class="badge badge-neutral">{{ cat }}</a>
         {% endfor %}
     </div>
+</div>
+{% endif %}
+
+{% if listing.discovered_urls %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div class="card-title" style="padding: 1rem 1.25rem 0;">
+        Discovered URLs <span class="text-muted">({{ listing.discovered_urls|length }})</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Source</th>
+                <th>Type</th>
+                <th>First Seen</th>
+                <th>Last Seen</th>
+                <th class="text-right">Fails</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for du in listing.discovered_urls %}
+            <tr>
+                <td class="cell-truncate" title="{{ du.url }}">
+                    <a href="{{ du.url }}" target="_blank" rel="noopener">{{ du.url[:80] }}{{ '...' if du.url|length > 80 else '' }}</a>
+                </td>
+                <td>{{ du.source }}</td>
+                <td>{{ du.url_type }}</td>
+                <td class="text-muted">{{ du.first_seen_at.strftime('%Y-%m-%d') if du.first_seen_at else '—' }}</td>
+                <td class="text-muted">{{ du.last_seen_at.strftime('%Y-%m-%d') if du.last_seen_at else '—' }}</td>
+                <td class="text-right {{ 'text-muted' if du.fail_count == 0 else '' }}">{{ du.fail_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endif %}
 

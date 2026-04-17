@@ -6,6 +6,7 @@ from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
     get_price_changes,
     get_validation_by_type,
+    get_validation_issues_flat,
     get_validation_lifecycle_counts,
     get_validation_summary,
 )
@@ -33,6 +34,13 @@ def validation_list(
     summary = get_validation_summary(session, state=summary_state)
     price_changes = get_price_changes(session, days=7)
     counts = get_validation_lifecycle_counts(session)
+    # For the lifecycle-specific tabs the user expects to see the
+    # actual issues, not just a grouped type count. Load a flat list
+    # for new/recurring/already_seen; keep the grouped view as the
+    # default "Open" and "All" overviews.
+    flat_issues: list[dict] = []
+    if state in {"new", "recurring", "already_seen"}:
+        flat_issues = get_validation_issues_flat(session, state=state, limit=200)
     return templates.TemplateResponse(
         request,
         "validation.html",
@@ -42,6 +50,7 @@ def validation_list(
             "price_changes": price_changes,
             "lifecycle_state": state,
             "lifecycle_counts": counts,
+            "flat_issues": flat_issues,
         },
     )
 

@@ -50,6 +50,10 @@
     </div>
 </form>
 
+{% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
+{% set sort_params = ("sort=" ~ sort ~ "&order=" ~ order) if sort else "" %}
+{% set filter_and_sort = filter_params ~ ("&" ~ sort_params if sort_params else "") %}
+
 {# Show the filtered-scrape button whenever any narrowing filter is
    active. The endpoint handles cross-shop filters by spawning one
    subprocess per shop; the URL cap is the real safety net. When the
@@ -70,10 +74,6 @@
     {% endif %}
 </div>
 {% endif %}
-
-{% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
-{% set sort_params = ("sort=" ~ sort ~ "&order=" ~ order) if sort else "" %}
-{% set filter_and_sort = filter_params ~ ("&" ~ sort_params if sort_params else "") %}
 
 {% if shop_filter or has_isbn or active_filter %}
 <div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
