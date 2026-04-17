@@ -23,13 +23,21 @@ class DiscoverSpider(scrapy.Spider):
     name = "discover"
 
     def __init__(
-        self, shop: str | None = None, strategy: str = "sitemap", **kwargs: Any
+        self,
+        shop: str | None = None,
+        strategy: str = "sitemap",
+        max_pages: str | int = "",
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
         if not shop:
             raise ValueError("Missing required argument: shop (e.g., -a shop=vaga)")
         self.shop_name = shop
         self.strategy = strategy
+        # 0 / empty → no cap. Applies to `categories` (page count) and
+        # `full_crawl` (per-host link follow count). Sitemap is a single
+        # request so the cap is a no-op there.
+        self._max_pages: int = int(max_pages) if str(max_pages).strip() else 0
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -230,11 +238,20 @@ class DiscoverSpider(scrapy.Spider):
             else:
                 self._urls_filtered += 1
 
-        # Paginate
+        # Paginate. Respect max_pages when the user set a cap so dev
+        # runs don't always exhaust the whole catalog.
         page = response.meta["page"] + 1
+        if self._max_pages and page > self._max_pages:
+            self.logger.info(
+                "max_pages cap: stopping at page %d", self._max_pages
+            )
+            return
         next_url = self.strategy_conf.url.format(page=page)
         yield scrapy.Request(
-            next_url, callback=self.parse_categories, meta={"page": page}
+            next_url,
+            callback=self.parse_categories,
+            errback=self.handle_start_error,
+            meta={"page": page},
         )
 
     def parse_full_crawl(
@@ -244,6 +261,8 @@ class DiscoverSpider(scrapy.Spider):
         base_url: str = self.conf.shop.base_url
         seen: set[str] = getattr(self, "_seen_urls", set())
         self._seen_urls = seen
+        if self._max_pages and len(seen) >= self._max_pages:
+            return
 
         for link in response.css("a::attr(href)").getall():
             if not link.startswith("http"):

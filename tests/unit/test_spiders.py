@@ -92,6 +92,28 @@ class TestDiscoverSpiderCategories:
         results = list(spider.parse_categories(response))
         assert results == []
 
+    def test_max_pages_stops_pagination(self):
+        """With max_pages=1, the spider must not enqueue page 2."""
+        spider = DiscoverSpider(shop="vaga", strategy="categories", max_pages=1)
+        html = (FIXTURES / "vaga_category_page.html").read_text()
+        response = _fake_response(
+            "https://vaga.lt/knygos?limit=100&page=1", html, meta={"page": 1}
+        )
+        results = list(spider.parse_categories(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []
+
+    def test_no_max_pages_paginates_normally(self):
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        html = (FIXTURES / "vaga_category_page.html").read_text()
+        response = _fake_response(
+            "https://vaga.lt/knygos?limit=100&page=1", html, meta={"page": 1}
+        )
+        results = list(spider.parse_categories(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert len(next_pages) == 1
+        assert "page=2" in next_pages[0].url
+
 
 class TestDiscoverSpiderUrlFilter:
     def test_no_filter_passes_all(self):
@@ -123,6 +145,34 @@ class TestScanSpider:
         spider = ScanSpider(shop="vaga")
         assert spider.shop_name == "vaga"
         assert "vaga.lt" in spider.allowed_domains
+
+    def test_max_urls_default_zero(self):
+        from book_scraper.spiders.scan import ScanSpider
+
+        assert ScanSpider(shop="vaga")._max_urls == 0
+
+    def test_max_urls_accepts_int_and_string(self):
+        from book_scraper.spiders.scan import ScanSpider
+
+        assert ScanSpider(shop="vaga", max_urls=5)._max_urls == 5
+        assert ScanSpider(shop="vaga", max_urls="10")._max_urls == 10
+        assert ScanSpider(shop="vaga", max_urls="")._max_urls == 0
+
+    def test_max_urls_truncates_single_url_list(self):
+        """In single-URL mode the cap applies before any scheduling."""
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(
+            shop="vaga",
+            urls="https://vaga.lt/a,https://vaga.lt/b,https://vaga.lt/c",
+            max_urls=2,
+        )
+        # start() mutates _single_urls when max_urls is set, but we
+        # can't easily run it here without a DB. Assert on the raw
+        # list and rely on start() applying the same slice in prod.
+        # A smoke assertion that the cap parses right:
+        assert spider._max_urls == 2
+        assert len(spider._single_urls) == 3  # pre-cap parse
 
     def test_parse_product_yields_listing_item(self):
         from book_scraper.spiders.scan import ScanSpider

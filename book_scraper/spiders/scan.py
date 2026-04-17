@@ -20,6 +20,7 @@ class ScanSpider(scrapy.Spider):
         shop: str | None = None,
         rescrape: str = "false",
         urls: str = "",
+        max_urls: str | int = "",
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
@@ -28,6 +29,8 @@ class ScanSpider(scrapy.Spider):
         self.shop_name = shop
         self._rescrape = rescrape.lower() in ("true", "1", "yes")
         self._single_urls = [u.strip() for u in urls.split(",") if u.strip()]
+        # Hard cap for dev / sanity runs. 0 or empty means "no cap".
+        self._max_urls: int = int(max_urls) if str(max_urls).strip() else 0
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -47,6 +50,10 @@ class ScanSpider(scrapy.Spider):
         self._error_count: int = 0
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
+        # Apply max_urls cap to single-URL mode too — keeps the flag
+        # consistent regardless of how URLs are supplied.
+        if self._max_urls and self._single_urls:
+            self._single_urls = self._single_urls[: self._max_urls]
         # Single-URL mode: create a run but skip full scan plan
         if self._single_urls:
             database_url = self.settings.get("DATABASE_URL")
@@ -98,7 +105,15 @@ class ScanSpider(scrapy.Spider):
             for warning in plan.freshness_warnings:
                 self.logger.warning(warning)
 
-            total = len(plan.urls_to_scrape)
+            urls_to_scrape = plan.urls_to_scrape
+            if self._max_urls and len(urls_to_scrape) > self._max_urls:
+                self.logger.info(
+                    "max_urls cap: scraping %d of %d planned URLs",
+                    self._max_urls,
+                    len(urls_to_scrape),
+                )
+                urls_to_scrape = urls_to_scrape[: self._max_urls]
+            total = len(urls_to_scrape)
             self.logger.info(
                 "Scan starting: %d URLs (%d skipped). Pacing via Scrapy "
                 "CONCURRENT_REQUESTS_PER_DOMAIN + DOWNLOAD_DELAY + AUTOTHROTTLE.",
@@ -112,7 +127,7 @@ class ScanSpider(scrapy.Spider):
             # could hang forever if the _urls_responded counter fell
             # short of the batch boundary (e.g. a dupefilter drop or a
             # middleware skip produced no status-update callback).
-            for url_record in plan.urls_to_scrape:
+            for url_record in urls_to_scrape:
                 yield scrapy.Request(
                     url_record.url,
                     callback=self.parse_product,

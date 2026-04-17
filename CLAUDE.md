@@ -15,6 +15,8 @@ uv run scrapy crawl discover -a shop=vaga -a strategy=categories   # Discover UR
 uv run scrapy crawl discover -a shop=vaga -a strategy=full_crawl   # Discover all internal links
 uv run scrapy crawl scan -a shop=vaga                              # Full product scan (resumable)
 uv run scrapy crawl scan -a shop=vaga -a rescrape=true             # Re-scrape all known product URLs
+uv run scrapy crawl scan -a shop=vaga -a max_urls=20               # Cap scan to 20 URLs (dev / smoke)
+uv run scrapy crawl discover -a shop=vaga -a strategy=categories -a max_pages=3  # Cap discovery to 3 category pages
 uv run pytest -v                              # Run tests
 uv run pytest tests/unit/ -v                  # Unit tests only (no DB)
 uv run pytest tests/integration/ -v           # Integration tests only
