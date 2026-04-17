@@ -719,7 +719,12 @@ a.stat-card:hover {
     max-width: 640px;
 }
 
-.change-diff-cell del {
+/* Word-level diff markers used both in the collapsed summary and the
+   expanded body. Summary gets them so the user can see what changed
+   before clicking; body shows the full diff. */
+
+.change-diff-cell del,
+details.change-diff del {
     background: var(--badge-error-bg);
     color: var(--badge-error-fg);
     text-decoration: line-through;
@@ -727,7 +732,8 @@ a.stat-card:hover {
     border-radius: 2px;
 }
 
-.change-diff-cell ins {
+.change-diff-cell ins,
+details.change-diff ins {
     background: var(--badge-success-bg);
     color: var(--badge-success-fg);
     text-decoration: none;
@@ -737,13 +743,11 @@ a.stat-card:hover {
 
 details.change-diff > summary {
     cursor: pointer;
-    color: var(--text-secondary);
     list-style: none;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.85rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-primary);
 }
 
 details.change-diff > summary::before {
@@ -755,39 +759,16 @@ details.change-diff[open] > summary::before {
     content: "▾ ";
 }
 
-.change-diff-body {
-    margin: 0.4rem 0 0;
-    padding: 0.4rem 0;
-    border-top: 1px solid var(--border);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.8rem;
-    line-height: 1.45;
+details.change-diff[open] > summary {
     white-space: normal;
-    background: transparent;
+    color: var(--text-secondary);
 }
 
-.diff-line {
-    padding: 0 0.5rem;
-    white-space: pre-wrap;
+.change-diff-body {
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+    white-space: normal;
     word-break: break-word;
-}
-
-.diff-line-del {
-    background: var(--badge-error-bg);
-    color: var(--badge-error-fg);
-}
-
-.diff-line-add {
-    background: var(--badge-success-bg);
-    color: var(--badge-success-fg);
-}
-
-.diff-line-ctx {
-    color: var(--text-secondary);
-}
-
-.diff-hunk-sep {
-    color: var(--text-secondary);
-    padding: 0.1rem 0.5rem;
-    font-style: italic;
+    line-height: 1.5;
 }

@@ -44,7 +44,7 @@ class Shop(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     base_url: Mapped[str] = mapped_column(String, nullable=False)
 
-    shop_books: Mapped[list["ShopBook"]] = relationship(back_populates="shop")
+    listings: Mapped[list["Listing"]] = relationship(back_populates="shop")
 
 
 match_status_enum = Enum(
@@ -54,13 +54,13 @@ match_method_enum = Enum(
     "isbn", "fuzzy", "manual", name="match_method", create_type=True
 )
 
-shop_book_type_enum = Enum(
-    "book", "audio", "ebook", name="shop_book_type", create_type=False
+listing_type_enum = Enum(
+    "book", "audio", "ebook", name="listing_type", create_type=False
 )
 
 
-class ShopBook(Base):
-    __tablename__ = "shop_books"
+class Listing(Base):
+    __tablename__ = "listings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
@@ -77,7 +77,7 @@ class ShopBook(Base):
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str | None] = mapped_column(String, nullable=True)
     type: Mapped[str] = mapped_column(
-        shop_book_type_enum, nullable=False, server_default="book"
+        listing_type_enum, nullable=False, server_default="book"
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -114,23 +114,21 @@ class ShopBook(Base):
         DateTime(timezone=True), default=datetime.utcnow
     )
 
-    __table_args__ = (
-        UniqueConstraint("shop_id", "url", name="uq_shop_book_shop_url"),
-    )
+    __table_args__ = (UniqueConstraint("shop_id", "url", name="uq_listing_shop_url"),)
 
-    shop: Mapped["Shop"] = relationship(back_populates="shop_books")
-    prices: Mapped[list["Price"]] = relationship(back_populates="shop_book")
-    changes: Mapped[list["ShopBookChange"]] = relationship(back_populates="shop_book")
-    attributes: Mapped[list["ShopBookAttribute"]] = relationship(
-        back_populates="shop_book",
+    shop: Mapped["Shop"] = relationship(back_populates="listings")
+    prices: Mapped[list["Price"]] = relationship(back_populates="listing")
+    changes: Mapped[list["ListingChange"]] = relationship(back_populates="listing")
+    attributes: Mapped[list["ListingAttribute"]] = relationship(
+        back_populates="listing",
         cascade="all, delete-orphan",
     )
     discovered_urls: Mapped[list["DiscoveredUrl"]] = relationship(
-        back_populates="shop_book"
+        back_populates="listing"
     )
     authors: Mapped[list["ShopAuthor"]] = relationship(
-        secondary="shop_book_authors",
-        order_by="ShopBookAuthor.position",
+        secondary="listing_authors",
+        order_by="ListingAuthor.position",
         viewonly=True,
     )
 
@@ -154,13 +152,13 @@ class ShopAuthor(Base):
     )
 
 
-class ShopBookAuthor(Base):
-    """Join between shop_books and shop_authors with ordering preserved."""
+class ListingAuthor(Base):
+    """Join between listings and shop_authors with ordering preserved."""
 
-    __tablename__ = "shop_book_authors"
+    __tablename__ = "listing_authors"
 
-    shop_book_id: Mapped[int] = mapped_column(
-        ForeignKey("shop_books.id", ondelete="CASCADE"), primary_key=True
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), primary_key=True
     )
     author_id: Mapped[int] = mapped_column(
         ForeignKey("shop_authors.id", ondelete="CASCADE"),
@@ -170,38 +168,36 @@ class ShopBookAuthor(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-class ShopBookAttribute(Base):
-    __tablename__ = "shop_book_attributes"
+class ListingAttribute(Base):
+    __tablename__ = "listing_attributes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    shop_book_id: Mapped[int] = mapped_column(
-        ForeignKey("shop_books.id", ondelete="CASCADE"), nullable=False
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), nullable=False
     )
     key: Mapped[str] = mapped_column(String(64), nullable=False)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "shop_book_id", "key", name="uq_shop_book_attribute_shop_book_key"
-        ),
+        UniqueConstraint("listing_id", "key", name="uq_listing_attribute_listing_key"),
     )
 
-    shop_book: Mapped["ShopBook"] = relationship(back_populates="attributes")
+    listing: Mapped["Listing"] = relationship(back_populates="attributes")
 
 
-class ShopBookFieldUpdate(Base):
-    """Per-field last-changed timestamp on a shop_book.
+class ListingFieldUpdate(Base):
+    """Per-field last-changed timestamp on a listing.
 
-    One row per (shop_book_id, field) for the handful of fields we track
+    One row per (listing_id, field) for the handful of fields we track
     (price, description, image_url, author, isbn, publisher, year,
     format). Updated only when the scrape actually sees a new value.
     """
 
-    __tablename__ = "shop_book_field_updates"
+    __tablename__ = "listing_field_updates"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    shop_book_id: Mapped[int] = mapped_column(
-        ForeignKey("shop_books.id", ondelete="CASCADE"), nullable=False
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), nullable=False
     )
     field: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -210,13 +206,11 @@ class ShopBookFieldUpdate(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "shop_book_id",
-            "field",
-            name="uq_shop_book_field_updates_shop_book_field",
+            "listing_id", "field", name="uq_listing_field_updates_listing_field"
         ),
         Index(
-            "ix_shop_book_field_updates_shop_book_field",
-            "shop_book_id",
+            "ix_listing_field_updates_listing_field",
+            "listing_id",
             "field",
         ),
     )
@@ -226,9 +220,7 @@ class Price(Base):
     __tablename__ = "prices"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    shop_book_id: Mapped[int] = mapped_column(
-        ForeignKey("shop_books.id"), nullable=False
-    )
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     price_original: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True
@@ -248,15 +240,15 @@ class Price(Base):
         ),
     )
 
-    shop_book: Mapped["ShopBook"] = relationship(back_populates="prices")
+    listing: Mapped["Listing"] = relationship(back_populates="prices")
 
 
-class ShopBookChange(Base):
-    __tablename__ = "shop_book_changes"
+class ListingChange(Base):
+    __tablename__ = "listing_changes"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    shop_book_id: Mapped[int] = mapped_column(
-        ForeignKey("shop_books.id"), nullable=False, index=True
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id"), nullable=False, index=True
     )
     scrape_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("scrape_runs.id"), nullable=True
@@ -268,7 +260,7 @@ class ShopBookChange(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
-    shop_book: Mapped["ShopBook"] = relationship(back_populates="changes")
+    listing: Mapped["Listing"] = relationship(back_populates="changes")
 
 
 discovery_source_enum = Enum(
@@ -338,14 +330,12 @@ class DiscoveredUrl(Base):
     last_seen_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("scrape_runs.id"), nullable=True
     )
-    shop_book_id: Mapped[int | None] = mapped_column(
-        ForeignKey("shop_books.id"), nullable=True
+    listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listings.id"), nullable=True
     )
 
     shop: Mapped["Shop"] = relationship()
-    shop_book: Mapped["ShopBook | None"] = relationship(
-        back_populates="discovered_urls"
-    )
+    listing: Mapped["Listing | None"] = relationship(back_populates="discovered_urls")
     last_seen_run: Mapped["ScrapeRun | None"] = relationship()
 
     __table_args__ = (
@@ -353,7 +343,7 @@ class DiscoveredUrl(Base):
             "shop_id", "normalized_url", name="uq_discovered_urls_shop_normalized"
         ),
         Index("ix_discovered_urls_shop_type_fail", "shop_id", "url_type", "fail_count"),
-        Index("ix_discovered_urls_shop_book_id", "shop_book_id"),
+        Index("ix_discovered_urls_listing_id", "listing_id"),
         Index("ix_discovered_urls_last_seen_run_id", "last_seen_run_id"),
     )
 
@@ -400,8 +390,8 @@ class ValidationIssue(Base):
     field: Mapped[str] = mapped_column(String, nullable=False)
     issue: Mapped[str] = mapped_column(String, nullable=False)
     raw_value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    shop_book_id: Mapped[int | None] = mapped_column(
-        ForeignKey("shop_books.id"), nullable=True, index=True
+    listing_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listings.id"), nullable=True, index=True
     )
     discovered_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("discovered_urls.id"), nullable=True, index=True
@@ -417,7 +407,7 @@ class ValidationIssue(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "NOT (shop_book_id IS NOT NULL AND discovered_url_id IS NOT NULL)",
+            "NOT (listing_id IS NOT NULL AND discovered_url_id IS NOT NULL)",
             name="ck_validation_issues_single_entity",
         ),
         Index(
@@ -427,5 +417,5 @@ class ValidationIssue(Base):
     )
 
     scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")
-    shop_book: Mapped["ShopBook | None"] = relationship()
+    listing: Mapped["Listing | None"] = relationship()
     discovered_url: Mapped["DiscoveredUrl | None"] = relationship()
