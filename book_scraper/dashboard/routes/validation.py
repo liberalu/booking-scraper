@@ -1,21 +1,38 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from starlette.responses import Response
+from starlette.responses import RedirectResponse, Response
 
 from book_scraper.dashboard.deps import get_db, templates
 from book_scraper.dashboard.queries import (
     get_price_changes,
     get_validation_by_type,
+    get_validation_lifecycle_counts,
     get_validation_summary,
 )
+from book_scraper.db.repo import acknowledge_validation_issue
 
 router = APIRouter()
 
+_VALID_STATES = {"open", "new", "recurring", "already_seen", "all"}
+
+
+def _normalize_state(state: str | None) -> str:
+    if state in _VALID_STATES:
+        return state
+    return "open"
+
 
 @router.get("/validation")
-def validation_list(request: Request, session: Session = Depends(get_db)) -> Response:
-    summary = get_validation_summary(session)
+def validation_list(
+    request: Request,
+    state: str = "open",
+    session: Session = Depends(get_db),
+) -> Response:
+    state = _normalize_state(state)
+    summary_state = None if state == "all" else state
+    summary = get_validation_summary(session, state=summary_state)
     price_changes = get_price_changes(session, days=7)
+    counts = get_validation_lifecycle_counts(session)
     return templates.TemplateResponse(
         request,
         "validation.html",
@@ -23,6 +40,8 @@ def validation_list(request: Request, session: Session = Depends(get_db)) -> Res
             "active_page": "issues",
             "summary": summary,
             "price_changes": price_changes,
+            "lifecycle_state": state,
+            "lifecycle_counts": counts,
         },
     )
 
@@ -31,9 +50,15 @@ def validation_list(request: Request, session: Session = Depends(get_db)) -> Res
 def validation_detail(
     issue_type: str,
     request: Request,
+    state: str = "open",
     session: Session = Depends(get_db),
 ) -> Response:
-    issues = get_validation_by_type(session, issue_type, limit=100)
+    state = _normalize_state(state)
+    detail_state = None if state == "all" else state
+    issues = get_validation_by_type(
+        session, issue_type, limit=100, state=detail_state
+    )
+    counts = get_validation_lifecycle_counts(session)
     return templates.TemplateResponse(
         request,
         "validation_detail.html",
@@ -41,5 +66,22 @@ def validation_detail(
             "active_page": "issues",
             "issue_type": issue_type,
             "issues": issues,
+            "lifecycle_state": state,
+            "lifecycle_counts": counts,
         },
     )
+
+
+@router.post("/validation-issues/{issue_id}/acknowledge")
+def acknowledge_issue(
+    issue_id: int,
+    request: Request,
+    session: Session = Depends(get_db),
+) -> Response:
+    if not acknowledge_validation_issue(session, issue_id):
+        raise HTTPException(status_code=404, detail="Issue not found")
+    session.commit()
+    # Send them back to the issue-type list (Referer works; falls back
+    # to the main /validation summary).
+    back = request.headers.get("referer") or "/validation"
+    return RedirectResponse(url=back, status_code=303)

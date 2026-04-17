@@ -113,30 +113,54 @@ def get_run_detail(
     return run, issues
 
 
-def get_validation_summary(session: Session) -> list[dict]:
+def get_validation_summary(
+    session: Session, state: str | None = None
+) -> list[dict]:
+    q = session.query(
+        ValidationIssue.issue,
+        func.count(ValidationIssue.id).label("count"),
+    )
+    if state in {"new", "recurring", "already_seen"}:
+        q = q.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
     rows = (
-        session.query(
-            ValidationIssue.issue,
-            func.count(ValidationIssue.id).label("count"),
-        )
-        .group_by(ValidationIssue.issue)
+        q.group_by(ValidationIssue.issue)
         .order_by(func.count(ValidationIssue.id).desc())
         .all()
     )
     return [{"issue_type": r.issue, "count": r.count} for r in rows]
 
 
-def get_validation_by_type(
-    session: Session, issue_type: str, limit: int = 100
-) -> list[dict]:
-    """Get validation issues with listing IDs resolved from URL."""
-    issues = (
-        session.query(ValidationIssue)
-        .filter(ValidationIssue.issue == issue_type)
-        .order_by(ValidationIssue.id.desc())
-        .limit(limit)
+def get_validation_lifecycle_counts(session: Session) -> dict[str, int]:
+    rows = (
+        session.query(
+            ValidationIssue.lifecycle_state,
+            func.count(ValidationIssue.id).label("count"),
+        )
+        .group_by(ValidationIssue.lifecycle_state)
         .all()
     )
+    counts = {"new": 0, "recurring": 0, "already_seen": 0}
+    for r in rows:
+        counts[r.lifecycle_state] = r.count
+    counts["open"] = counts["new"] + counts["recurring"]
+    return counts
+
+
+def get_validation_by_type(
+    session: Session,
+    issue_type: str,
+    limit: int = 100,
+    state: str | None = None,
+) -> list[dict]:
+    """Get validation issues with listing IDs resolved from URL."""
+    q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
+    if state in {"new", "recurring", "already_seen"}:
+        q = q.filter(ValidationIssue.lifecycle_state == state)
+    elif state == "open":
+        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+    issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
     # Resolve listing IDs by URL
     urls = {i.url for i in issues}
     url_to_listing = {}
@@ -161,6 +185,8 @@ def get_validation_by_type(
                 "scrape_run_id": issue.scrape_run_id,
                 "listing_id": listing["id"] if listing else None,
                 "listing_title": listing["title"] if listing else None,
+                "lifecycle_state": issue.lifecycle_state,
+                "acknowledged_at": issue.acknowledged_at,
             }
         )
     return result

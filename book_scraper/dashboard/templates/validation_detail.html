@@ -2,7 +2,16 @@
 {% block title %}Validation: {{ issue_type }}{% endblock %}
 {% block content %}
 <h1 class="page-title">Validation: {{ issue_type }} <span class="badge badge-warning">{{ issues|length }}</span></h1>
-<p><a href="/validation">&larr; Back to summary</a></p>
+<p><a href="/validation?state={{ lifecycle_state }}">&larr; Back to summary</a></p>
+
+{% set state = lifecycle_state or 'open' %}
+<div class="tab-bar" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+    <a href="/validation/{{ issue_type }}?state=open" class="badge {{ 'badge-warning' if state == 'open' else '' }}">Open ({{ lifecycle_counts.open }})</a>
+    <a href="/validation/{{ issue_type }}?state=new" class="badge {{ 'badge-warning' if state == 'new' else '' }}">New ({{ lifecycle_counts.new }})</a>
+    <a href="/validation/{{ issue_type }}?state=recurring" class="badge {{ 'badge-warning' if state == 'recurring' else '' }}">Recurring ({{ lifecycle_counts.recurring }})</a>
+    <a href="/validation/{{ issue_type }}?state=already_seen" class="badge {{ 'badge-warning' if state == 'already_seen' else '' }}">Already seen ({{ lifecycle_counts.already_seen }})</a>
+    <a href="/validation/{{ issue_type }}?state=all" class="badge {{ 'badge-warning' if state == 'all' else '' }}">All</a>
+</div>
 
 {% if issues %}
 <div class="card" style="padding: 0; overflow: hidden;">
@@ -10,16 +19,27 @@
         <thead>
             <tr>
                 <th>ID</th>
+                <th>State</th>
                 <th>Listing</th>
                 <th>Field</th>
                 <th>Raw Value</th>
                 <th>Run</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
             {% for issue in issues %}
             <tr>
                 <td>{{ issue.id }}</td>
+                <td>
+                    {% if issue.lifecycle_state == 'new' %}
+                    <span class="badge badge-warning">new</span>
+                    {% elif issue.lifecycle_state == 'recurring' %}
+                    <span class="badge">recurring</span>
+                    {% else %}
+                    <span class="badge text-muted">seen</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if issue.listing_id %}
                         <a href="/listings/{{ issue.listing_id }}">{{ issue.listing_title[:50] }}{{ '...' if issue.listing_title|length > 50 }}</a>
@@ -30,12 +50,19 @@
                 <td>{{ issue.field }}</td>
                 <td>{{ issue.raw_value or '-' }}</td>
                 <td><a href="/runs/{{ issue.scrape_run_id }}">Run #{{ issue.scrape_run_id }}</a></td>
+                <td>
+                    {% if issue.lifecycle_state != 'already_seen' %}
+                    <form method="post" action="/validation-issues/{{ issue.id }}/acknowledge" style="display:inline;">
+                        <button type="submit" class="badge">Acknowledge</button>
+                    </form>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% else %}
-<p>No issues of this type found.</p>
+<p>No issues of this type found in this bucket.</p>
 {% endif %}
 {% endblock %}

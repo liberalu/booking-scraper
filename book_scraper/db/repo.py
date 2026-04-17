@@ -593,7 +593,115 @@ def bulk_insert_validation_issues(
             elif url and url in du_by_url:
                 issue["discovered_url_id"] = du_by_url[url]
 
+    _assign_lifecycle_states(session, issues)
     session.add_all([ValidationIssue(**issue) for issue in issues])
+
+
+def _assign_lifecycle_states(
+    session: Session,
+    issues: list[dict[str, str | int | None]],
+) -> None:
+    """Stamp each issue with `new` or `recurring` based on prior history.
+
+    Lifecycle rule: an issue is `recurring` if the SAME (entity, field,
+    issue) triple has been seen in a previous scrape run — including
+    when the previous occurrence was acknowledged (i.e. acknowledged
+    issues that re-appear surface as `new` instead of `recurring` so
+    they get triage attention; this matches the spec's
+    "previously-acknowledged issue that reappears surfaces as new".
+    """
+    if not issues:
+        return
+
+    listing_keys: set[tuple[int, str, str]] = set()
+    du_keys: set[tuple[int, str, str]] = set()
+    url_keys: set[tuple[str, str, str]] = set()
+    for issue in issues:
+        field = str(issue.get("field") or "")
+        issue_type = str(issue.get("issue") or "")
+        if issue.get("listing_id"):
+            listing_keys.add((int(issue["listing_id"]), field, issue_type))  # type: ignore[arg-type]
+        elif issue.get("discovered_url_id"):
+            du_keys.add((int(issue["discovered_url_id"]), field, issue_type))  # type: ignore[arg-type]
+        else:
+            url_keys.add((str(issue.get("url") or ""), field, issue_type))
+
+    seen_listing: set[tuple[int, str, str]] = set()
+    seen_du: set[tuple[int, str, str]] = set()
+    seen_url: set[tuple[str, str, str]] = set()
+
+    # Look up prior occurrences. We filter on unacknowledged rows only
+    # so an acknowledged-then-reappearing issue comes back as `new`.
+    if listing_keys:
+        rows = session.execute(
+            select(
+                ValidationIssue.listing_id,
+                ValidationIssue.field,
+                ValidationIssue.issue,
+            )
+            .where(
+                ValidationIssue.listing_id.in_({k[0] for k in listing_keys}),
+                ValidationIssue.acknowledged_at.is_(None),
+            )
+            .distinct()
+        ).all()
+        seen_listing = {(r.listing_id, r.field, r.issue) for r in rows}
+    if du_keys:
+        rows = session.execute(
+            select(
+                ValidationIssue.discovered_url_id,
+                ValidationIssue.field,
+                ValidationIssue.issue,
+            )
+            .where(
+                ValidationIssue.discovered_url_id.in_({k[0] for k in du_keys}),
+                ValidationIssue.acknowledged_at.is_(None),
+            )
+            .distinct()
+        ).all()
+        seen_du = {(r.discovered_url_id, r.field, r.issue) for r in rows}
+    if url_keys:
+        rows = session.execute(
+            select(
+                ValidationIssue.url,
+                ValidationIssue.field,
+                ValidationIssue.issue,
+            )
+            .where(
+                ValidationIssue.listing_id.is_(None),
+                ValidationIssue.discovered_url_id.is_(None),
+                ValidationIssue.url.in_({k[0] for k in url_keys}),
+                ValidationIssue.acknowledged_at.is_(None),
+            )
+            .distinct()
+        ).all()
+        seen_url = {(r.url, r.field, r.issue) for r in rows}
+
+    for issue in issues:
+        field = str(issue.get("field") or "")
+        issue_type = str(issue.get("issue") or "")
+        state = "new"
+        if issue.get("listing_id"):
+            if (int(issue["listing_id"]), field, issue_type) in seen_listing:  # type: ignore[arg-type]
+                state = "recurring"
+        elif issue.get("discovered_url_id"):
+            if (int(issue["discovered_url_id"]), field, issue_type) in seen_du:  # type: ignore[arg-type]
+                state = "recurring"
+        else:
+            if (str(issue.get("url") or ""), field, issue_type) in seen_url:
+                state = "recurring"
+        issue.setdefault("lifecycle_state", state)
+
+
+def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
+    """Mark an issue as already_seen. Returns True if updated."""
+    issue = session.get(ValidationIssue, issue_id)
+    if issue is None:
+        return False
+    issue.lifecycle_state = "already_seen"
+    issue.acknowledged_at = datetime.now(UTC)
+    session.flush()
+    return True
 
 
 def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:

@@ -3,6 +3,15 @@
 {% block content %}
 <h1 class="page-title">Issues</h1>
 
+{% set state = lifecycle_state or 'open' %}
+<div class="tab-bar" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+    <a href="/validation?state=open" class="badge {{ 'badge-warning' if state == 'open' else '' }}">Open ({{ lifecycle_counts.open }})</a>
+    <a href="/validation?state=new" class="badge {{ 'badge-warning' if state == 'new' else '' }}">New ({{ lifecycle_counts.new }})</a>
+    <a href="/validation?state=recurring" class="badge {{ 'badge-warning' if state == 'recurring' else '' }}">Recurring ({{ lifecycle_counts.recurring }})</a>
+    <a href="/validation?state=already_seen" class="badge {{ 'badge-warning' if state == 'already_seen' else '' }}">Already seen ({{ lifecycle_counts.already_seen }})</a>
+    <a href="/validation?state=all" class="badge {{ 'badge-warning' if state == 'all' else '' }}">All</a>
+</div>
+
 <div class="card" style="padding: 0; overflow: hidden;">
     <p class="card-title" style="padding: 0.75rem 1rem; margin: 0; border-bottom: 1px solid var(--border);">Validation Issues</p>
     {% if summary %}
@@ -16,14 +25,14 @@
         <tbody>
             {% for s in summary %}
             <tr>
-                <td><a href="/validation/{{ s.issue_type }}">{{ s.issue_type }}</a></td>
+                <td><a href="/validation/{{ s.issue_type }}?state={{ state }}">{{ s.issue_type }}</a></td>
                 <td class="text-right"><span class="badge badge-warning">{{ s.count }}</span></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% else %}
-    <p style="padding: 1rem;">No validation issues found.</p>
+    <p style="padding: 1rem;">No validation issues in this bucket.</p>
     {% endif %}
 </div>
 

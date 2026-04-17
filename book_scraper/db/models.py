@@ -218,6 +218,14 @@ scrape_status_enum = Enum(
     create_type=False,
 )
 
+validation_lifecycle_enum = Enum(
+    "new",
+    "recurring",
+    "already_seen",
+    name="validation_lifecycle",
+    create_type=False,
+)
+
 
 class DiscoveredUrl(Base):
     __tablename__ = "discovered_urls"
@@ -310,11 +318,23 @@ class ValidationIssue(Base):
     discovered_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("discovered_urls.id"), nullable=True, index=True
     )
+    lifecycle_state: Mapped[str] = mapped_column(
+        validation_lifecycle_enum,
+        nullable=False,
+        server_default="new",
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
             "NOT (listing_id IS NOT NULL AND discovered_url_id IS NOT NULL)",
             name="ck_validation_issues_single_entity",
+        ),
+        Index(
+            "ix_validation_issues_lifecycle_state",
+            "lifecycle_state",
         ),
     )
 
