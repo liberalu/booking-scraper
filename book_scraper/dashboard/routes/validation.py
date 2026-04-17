@@ -1,3 +1,5 @@
+from urllib.parse import urlencode, urlparse
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse, Response
@@ -34,24 +36,45 @@ def _resolve_shop_id(session: Session, shop: str) -> int | None:
     return obj.id if obj else None
 
 
+def _safe_back(request: Request) -> str:
+    """Return the Referer only if it points at the same host; fall back to /validation.
+
+    Prevents an attacker-controlled Referer header from redirecting the user
+    off-site after a form POST.
+    """
+    ref = request.headers.get("referer") or ""
+    if not ref:
+        return "/validation"
+    parsed = urlparse(ref)
+    if parsed.netloc and parsed.netloc != request.url.netloc:
+        return "/validation"
+    # Reconstruct path + query only (drop scheme/netloc/fragment).
+    path = parsed.path or "/validation"
+    return f"{path}?{parsed.query}" if parsed.query else path
+
+
 def _filter_params(
     state: str, shop: str, issue_type: str, run_id: str, q: str, order: str
 ) -> str:
-    """Render a query string for paginate/ack/delete links preserving filters."""
-    parts: list[str] = []
+    """Render a query string for paginate/ack/delete links preserving filters.
+
+    Values are URL-encoded so `q` / `shop` / `issue_type` with special chars
+    (spaces, `&`, `=`, `#`) don't break pagination links.
+    """
+    params: dict[str, str] = {}
     if state:
-        parts.append(f"state={state}")
+        params["state"] = state
     if shop:
-        parts.append(f"shop={shop}")
+        params["shop"] = shop
     if issue_type:
-        parts.append(f"issue_type={issue_type}")
+        params["issue_type"] = issue_type
     if run_id:
-        parts.append(f"run_id={run_id}")
+        params["run_id"] = run_id
     if q:
-        parts.append(f"q={q}")
+        params["q"] = q
     if order:
-        parts.append(f"order={order}")
-    return "&".join(parts)
+        params["order"] = order
+    return urlencode(params)
 
 
 @router.get("/validation")
@@ -132,8 +155,7 @@ def acknowledge_issue(
     if not acknowledge_validation_issue(session, issue_id):
         raise HTTPException(status_code=404, detail="Issue not found")
     session.commit()
-    back = request.headers.get("referer") or "/validation"
-    return RedirectResponse(url=back, status_code=303)
+    return RedirectResponse(url=_safe_back(request), status_code=303)
 
 
 @router.post("/validation-issues/acknowledge-all")
@@ -160,8 +182,7 @@ def acknowledge_all(
         q=q,
     )
     session.commit()
-    back = request.headers.get("referer") or "/validation"
-    return RedirectResponse(url=back, status_code=303)
+    return RedirectResponse(url=_safe_back(request), status_code=303)
 
 
 @router.post("/validation-issues/delete-matching")
@@ -192,5 +213,4 @@ def delete_matching(
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
     session.commit()
-    back = request.headers.get("referer") or "/validation"
-    return RedirectResponse(url=back, status_code=303)
+    return RedirectResponse(url=_safe_back(request), status_code=303)
