@@ -439,6 +439,19 @@ def mark_stale_runs_failed(
     return len(stale)
 
 
+def mark_orphan_runs_failed(session: Session) -> int:
+    """Fail every run still flagged 'running'. Call on scraper boot —
+    any row still 'running' belongs to a process the restart killed."""
+    now = datetime.now(UTC)
+    stmt = select(ScrapeRun).where(ScrapeRun.status == "running")
+    orphans = list(session.execute(stmt).scalars().all())
+    for run in orphans:
+        run.status = "failed"
+        run.finished_at = now
+    session.flush()
+    return len(orphans)
+
+
 def get_latest_completed_run(
     session: Session,
     shop_id: int,

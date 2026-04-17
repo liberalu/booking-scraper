@@ -3,6 +3,7 @@ from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
     get_latest_completed_run,
+    mark_orphan_runs_failed,
     mark_stale_runs_failed,
     update_scrape_run_progress,
 )
@@ -64,6 +65,44 @@ def test_get_latest_completed_run_returns_none(db_session):
         db_session, shop_id=shop.id, phase="discover_sitemap"
     )
     assert latest is None
+
+
+def test_mark_orphan_runs_failed_spans_shops_and_phases(db_session):
+    shop_a = Shop(name="shop_a", base_url="https://a.lt")
+    shop_b = Shop(name="shop_b", base_url="https://b.lt")
+    db_session.add_all([shop_a, shop_b])
+    db_session.flush()
+
+    orphan_scan = create_scrape_run(db_session, shop_id=shop_a.id, phase="scan")
+    orphan_discover = create_scrape_run(
+        db_session, shop_id=shop_b.id, phase="discover_sitemap"
+    )
+    completed = create_scrape_run(db_session, shop_id=shop_a.id, phase="scan")
+    finish_scrape_run(db_session, run_id=completed.id, status="completed")
+    db_session.flush()
+
+    count = mark_orphan_runs_failed(db_session)
+    assert count == 2
+
+    db_session.refresh(orphan_scan)
+    db_session.refresh(orphan_discover)
+    db_session.refresh(completed)
+    assert orphan_scan.status == "failed"
+    assert orphan_scan.finished_at is not None
+    assert orphan_discover.status == "failed"
+    assert orphan_discover.finished_at is not None
+    assert completed.status == "completed"
+
+
+def test_mark_orphan_runs_failed_noop_when_none_running(db_session):
+    shop = Shop(name="test_shop", base_url="https://test.lt")
+    db_session.add(shop)
+    db_session.flush()
+    run = create_scrape_run(db_session, shop_id=shop.id, phase="scan")
+    finish_scrape_run(db_session, run_id=run.id, status="completed")
+    db_session.flush()
+
+    assert mark_orphan_runs_failed(db_session) == 0
 
 
 def test_update_scrape_run_progress(db_session):
