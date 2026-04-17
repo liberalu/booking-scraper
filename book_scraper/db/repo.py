@@ -87,9 +87,12 @@ def _sync_listing_authors(
     don't parse an author don't blow away an established list.
     """
     parts = _split_author_string(author_raw)
-    # Resolve/create author rows; build ordered (author_id, position) list.
+    # Resolve/create author rows; keep only the first occurrence of any
+    # repeated name so (listing_id, author_id) stays unique.
     desired: list[tuple[int, int]] = []
-    for idx, name in enumerate(parts):
+    seen_ids: set[int] = set()
+    position = 0
+    for name in parts:
         norm = _normalize_author(name)
         if not norm:
             continue
@@ -102,7 +105,11 @@ def _sync_listing_authors(
             author = ShopAuthor(name=name, normalized_name=norm)
             session.add(author)
             session.flush()
-        desired.append((author.id, idx))
+        if author.id in seen_ids:
+            continue
+        seen_ids.add(author.id)
+        desired.append((author.id, position))
+        position += 1
 
     existing = {
         row.author_id: row
