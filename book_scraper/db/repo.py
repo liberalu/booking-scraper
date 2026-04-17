@@ -59,6 +59,18 @@ def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
     return shop
 
 
+def _infer_listing_type(format: str | None) -> str:
+    """Map a free-form `format` string to a listing_type enum value.
+
+    Only audiobooks are currently marked as 'audio'. Ebook detection
+    is deferred until the shops start emitting a recognisable ebook
+    format string.
+    """
+    if format and format.lower() in {"audiobook", "audio", "audiobookas"}:
+        return "audio"
+    return "book"
+
+
 def upsert_listing(
     session: Session,
     shop_id: int,
@@ -94,6 +106,7 @@ def upsert_listing(
             publisher=publisher,
             year=year,
             format=format,
+            type=_infer_listing_type(format),
             description=description,
             image_url=image_url,
             categories=categories,
@@ -159,6 +172,11 @@ def upsert_listing(
                         }
                     )
                 setattr(listing, cond_field, cond_val)
+
+        # Re-derive type from the authoritative `format` string (only
+        # when a format was supplied — a PriceItem won't touch it).
+        if format is not None:
+            listing.type = _infer_listing_type(format)
 
         if categories is not None:
             listing.categories = categories

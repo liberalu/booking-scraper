@@ -54,6 +54,10 @@ match_method_enum = Enum(
     "isbn", "fuzzy", "manual", name="match_method", create_type=True
 )
 
+listing_type_enum = Enum(
+    "book", "audio", "ebook", name="listing_type", create_type=False
+)
+
 
 class Listing(Base):
     __tablename__ = "listings"
@@ -72,6 +76,9 @@ class Listing(Base):
     publisher: Mapped[str | None] = mapped_column(String, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str | None] = mapped_column(String, nullable=True)
+    type: Mapped[str] = mapped_column(
+        listing_type_enum, nullable=False, server_default="book"
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
