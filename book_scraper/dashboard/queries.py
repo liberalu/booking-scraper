@@ -72,8 +72,6 @@ ISSUE_SEVERITY: dict[str, str] = {
     "attribute_invalid_value": "warning",
 }
 
-_SEVERITY_ORDER: dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
-
 
 def _pid_alive(pid: int | None) -> bool | None:
     """Check if a process is alive. Returns None if PID not recorded."""
