@@ -11,6 +11,7 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Listing,
     ListingAttribute,
+    ListingFieldUpdate,
     Price,
     ScrapeRun,
     Shop,
@@ -47,6 +48,39 @@ def _sync_attribute_rows(
         elif row.value != str_value:
             row.value = str_value
     session.flush()
+
+
+def touch_listing_field_updates(
+    session: Session,
+    listing_id: int,
+    fields: list[str],
+    when: datetime | None = None,
+) -> None:
+    """Set updated_at=now for each (listing_id, field), inserting new
+    rows when needed.
+
+    `fields` should only contain fields that actually changed; callers
+    are expected to filter no-ops out (see PostgresPipeline).
+    """
+    if not fields:
+        return
+    stamp = when or datetime.now(UTC)
+    existing = {
+        row.field: row
+        for row in session.query(ListingFieldUpdate)
+        .filter(ListingFieldUpdate.listing_id == listing_id)
+        .filter(ListingFieldUpdate.field.in_(fields))
+    }
+    for field in fields:
+        row = existing.get(field)
+        if row is None:
+            session.add(
+                ListingFieldUpdate(
+                    listing_id=listing_id, field=field, updated_at=stamp
+                )
+            )
+        else:
+            row.updated_at = stamp
 
 
 def upsert_shop(session: Session, name: str, base_url: str) -> Shop:

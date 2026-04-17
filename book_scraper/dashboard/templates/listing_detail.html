@@ -27,6 +27,10 @@
     </div>
 </div>
 
+{% macro changed(field) %}
+    {% set ts = field_updates.get(field) if field_updates else None %}
+    {% if ts %}<div class="text-muted"><small>changed {{ ts.strftime('%Y-%m-%d') }}</small></div>{% endif %}
+{% endmacro %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <table class="data-table">
         <tbody>
@@ -38,6 +42,7 @@
                     {% else %}
                         <a href="/listings?missing=author" class="text-muted">—</a>
                     {% endif %}
+                    {{ changed('author') }}
                 </td>
             </tr>
             <tr>
@@ -48,6 +53,7 @@
                     {% else %}
                         <a href="/listings?missing=publisher" class="text-muted">—</a>
                     {% endif %}
+                    {{ changed('publisher') }}
                 </td>
             </tr>
             <tr>
@@ -58,6 +64,7 @@
                     {% else %}
                         <a href="/listings?missing=isbn" class="text-muted">—</a>
                     {% endif %}
+                    {{ changed('isbn') }}
                 </td>
             </tr>
             <tr>
@@ -68,6 +75,7 @@
                     {% else %}
                         <a href="/listings?missing=year" class="text-muted">—</a>
                     {% endif %}
+                    {{ changed('year') }}
                 </td>
             </tr>
             <tr>
@@ -84,11 +92,12 @@
                     {% else %}
                         <a href="/listings?missing=format" class="text-muted">—</a>
                     {% endif %}
+                    {{ changed('format') }}
                 </td>
             </tr>
             <tr>
                 <th>Price</th>
-                <td>{% if listing.price %}{{ listing.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if listing.price %}{{ listing.price }}{% else %}<span class="text-muted">—</span>{% endif %}{{ changed('price') }}</td>
             </tr>
             <tr>
                 <th>Original Price</th>

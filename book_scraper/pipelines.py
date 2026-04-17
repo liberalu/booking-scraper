@@ -13,6 +13,7 @@ from book_scraper.db.repo import (
     increment_scrape_run_stats,
     insert_price,
     link_discovered_url_to_listing,
+    touch_listing_field_updates,
     update_scrape_run_progress,
     upsert_discovered_url,
     upsert_listing,
@@ -402,6 +403,19 @@ class PostgresPipeline:
                     f"{old_price}->{new_price} ({change:.0%})",
                 )
 
+    _TRACKED_FIELDS = frozenset(
+        {
+            "price",
+            "description",
+            "image_url",
+            "author",
+            "isbn",
+            "publisher",
+            "year",
+            "format",
+        }
+    )
+
     def _report_field_changes(
         self,
         url: str,
@@ -424,6 +438,16 @@ class PostgresPipeline:
                     new_value=str(change["new"]) if change["new"] is not None else None,
                 )
             )
+
+        # Advance per-field "last updated" timestamps for any tracked
+        # field that actually changed.
+        touched = [
+            str(c["field"])
+            for c in changes
+            if str(c["field"]) in self._TRACKED_FIELDS
+        ]
+        if touched:
+            touch_listing_field_updates(self.session, listing_id, touched)
 
         # Also report as validation issues
         vp: ValidationPipeline | None = getattr(

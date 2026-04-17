@@ -145,6 +145,37 @@ class ListingAttribute(Base):
     listing: Mapped["Listing"] = relationship(back_populates="attributes")
 
 
+class ListingFieldUpdate(Base):
+    """Per-field last-changed timestamp on a listing.
+
+    One row per (listing_id, field) for the handful of fields we track
+    (price, description, image_url, author, isbn, publisher, year,
+    format). Updated only when the scrape actually sees a new value.
+    """
+
+    __tablename__ = "listing_field_updates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), nullable=False
+    )
+    field: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id", "field", name="uq_listing_field_updates_listing_field"
+        ),
+        Index(
+            "ix_listing_field_updates_listing_field",
+            "listing_id",
+            "field",
+        ),
+    )
+
+
 class Price(Base):
     __tablename__ = "prices"
 

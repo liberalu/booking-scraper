@@ -9,6 +9,7 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Listing,
     ListingChange,
+    ListingFieldUpdate,
     Price,
     ScrapeRun,
     Shop,
@@ -264,6 +265,16 @@ def search_listings(session: Session, query: str, limit: int = 50) -> list[Listi
         .limit(limit)
         .all()
     )
+
+
+def get_field_updates(session: Session, listing_id: int) -> dict[str, datetime]:
+    """Return {field: updated_at} for a listing's tracked fields."""
+    rows = (
+        session.query(ListingFieldUpdate)
+        .filter(ListingFieldUpdate.listing_id == listing_id)
+        .all()
+    )
+    return {r.field: r.updated_at for r in rows}
 
 
 def get_price_history(session: Session, listing_id: int) -> list[Price]:
