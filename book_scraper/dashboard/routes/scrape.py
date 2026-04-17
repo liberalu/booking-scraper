@@ -2,19 +2,21 @@
 
 The Scrapy scan spider already supports a single-URL mode via the
 `urls=` argument (comma-separated). We resolve the active filters to
-a concrete URL set on the FastAPI side and spawn a subprocess that
-invokes `scrapy crawl scan -a shop=... -a urls=...`. The subprocess
-is fire-and-forget — status and progress are visible on /runs like
-any other run because the spider creates its own scrape_run row.
+a concrete set of (shop, [urls]) pairs on the FastAPI side and spawn
+one subprocess per shop that invokes `scrapy crawl scan -a shop=... -a
+urls=...`. The subprocess is fire-and-forget — status and progress are
+visible on /runs like any other run because the spider creates its
+own scrape_run row.
 
-A safety cap prevents accidentally spawning a multi-thousand-URL
-scan that would be better served by a full rescrape.
+A safety cap prevents accidentally spawning a multi-thousand-URL scan
+that would be better served by a full rescrape.
 """
 
 from __future__ import annotations
 
 import shlex
 import subprocess
+from collections import defaultdict
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -49,20 +51,20 @@ def set_subprocess_runner(
     _subprocess_runner = runner
 
 
-def _collect_urls(
-    session: Session, shop_id: int, **filter_kwargs: str | bool
-) -> list[str]:
-    """Return every listing URL matching the filters.
+def _collect_listings(
+    session: Session,
+    shop_id: int | None,
+    **filter_kwargs: str | bool,
+) -> list[tuple[str, str]]:
+    """Return every (shop_name, url) pair matching the filters.
 
-    Reuses get_listings_page's filter logic by paging through until we
-    hit MAX_FILTERED_URLS + 1 so we can detect over-cap cases. The
-    listings page default per_page is 50; we take a larger page here
-    to keep the round-trip count small.
+    Pages through get_listings_page's filter logic until MAX+1 so we
+    can detect over-cap cases without loading everything.
     """
-    urls: list[str] = []
+    pairs: list[tuple[str, str]] = []
     page = 1
     per_page = 200
-    while len(urls) <= MAX_FILTERED_URLS:
+    while len(pairs) <= MAX_FILTERED_URLS:
         listings, _total = get_listings_page(
             session,
             page=page,
@@ -72,11 +74,11 @@ def _collect_urls(
         )
         if not listings:
             break
-        urls.extend(listing.url for listing in listings)
+        pairs.extend((listing.shop.name, listing.url) for listing in listings)
         if len(listings) < per_page:
             break
         page += 1
-    return urls
+    return pairs
 
 
 @router.post("/scrape/filtered")
@@ -93,35 +95,32 @@ def scrape_filtered(
     has_isbn: bool = False,
     session: Session = Depends(get_db),
 ) -> Response:
-    if not shop:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "shop is required; full-catalog scrapes should use "
-                "`scrapy crawl scan` directly"
-            ),
-        )
-    shop_obj = get_shop_by_name(session, shop)
-    if shop_obj is None:
-        raise HTTPException(status_code=404, detail=f"Unknown shop: {shop}")
-
     # Require at least one filter so this endpoint can't be abused for
     # a silent full rescrape.
     has_any_filter = any(
-        [q, author, publisher, category, format, missing, active, has_isbn]
+        [shop, q, author, publisher, category, format, missing, active, has_isbn]
     )
     if not has_any_filter:
         raise HTTPException(
             status_code=400,
             detail=(
                 "At least one filter is required "
-                "(q/author/publisher/category/format/missing/active/has_isbn)"
+                "(shop/q/author/publisher/category/format/missing/active/has_isbn)"
             ),
         )
 
-    urls = _collect_urls(
+    shop_id: int | None = None
+    if shop:
+        shop_obj = get_shop_by_name(session, shop)
+        if shop_obj is None:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown shop: {shop}"
+            )
+        shop_id = shop_obj.id
+
+    pairs = _collect_listings(
         session,
-        shop_obj.id,
+        shop_id,
         search=q,
         author=author,
         publisher=publisher,
@@ -132,42 +131,58 @@ def scrape_filtered(
         has_isbn=has_isbn,
     )
 
-    if not urls:
-        raise HTTPException(status_code=404, detail="No listings matched the filters")
-    if len(urls) > MAX_FILTERED_URLS:
+    if not pairs:
+        raise HTTPException(
+            status_code=404, detail="No listings matched the filters"
+        )
+    if len(pairs) > MAX_FILTERED_URLS:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Filter matches {len(urls)}+ listings — over the "
-                f"{MAX_FILTERED_URLS} cap. Narrow the filter or run "
-                f"`scrapy crawl scan -a shop={shop}` for a full pass."
+                f"Filter matches {len(pairs)}+ listings — over the "
+                f"{MAX_FILTERED_URLS} cap. Narrow the filter, pick a "
+                f"shop, or run `scrapy crawl scan` for a full pass."
             ),
         )
 
-    cmd = [
-        "uv",
-        "run",
-        "scrapy",
-        "crawl",
-        "scan",
-        "-a",
-        f"shop={shop}",
-        "-a",
-        f"urls={','.join(urls)}",
-    ]
-    process = _subprocess_runner(cmd)
-    summary = (
-        shlex.join(cmd[:6])
-        + f" -a shop={shop} -a urls=<{len(urls)} urls>"
-    )
+    # Group URLs by shop — one subprocess per shop keeps each run
+    # scoped to a single spider config.
+    by_shop: dict[str, list[str]] = defaultdict(list)
+    for shop_name, url in pairs:
+        by_shop[shop_name].append(url)
+
+    jobs = []
+    for shop_name, urls in by_shop.items():
+        cmd = [
+            "uv",
+            "run",
+            "scrapy",
+            "crawl",
+            "scan",
+            "-a",
+            f"shop={shop_name}",
+            "-a",
+            f"urls={','.join(urls)}",
+        ]
+        process = _subprocess_runner(cmd)
+        summary = (
+            shlex.join(cmd[:6])
+            + f" -a shop={shop_name} -a urls=<{len(urls)} urls>"
+        )
+        jobs.append(
+            {
+                "shop": shop_name,
+                "urls_count": len(urls),
+                "pid": getattr(process, "pid", None),
+                "command": summary,
+            }
+        )
 
     return JSONResponse(
         {
             "status": "started",
-            "shop": shop,
-            "urls_count": len(urls),
-            "pid": getattr(process, "pid", None),
-            "command": summary,
+            "urls_count": len(pairs),
+            "jobs": jobs,
         },
         status_code=202,
     )

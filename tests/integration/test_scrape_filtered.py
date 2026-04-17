@@ -72,18 +72,10 @@ def _seed(db_session: Session) -> None:
     db_session.flush()
 
 
-def test_scrape_filtered_rejects_missing_shop(
-    client: TestClient, captured_cmd: list[list[str]]
-) -> None:
-    resp = client.post("/scrape/filtered?author=Alice")
-    assert resp.status_code == 400
-    assert captured_cmd == []
-
-
 def test_scrape_filtered_rejects_unfiltered_request(
     client: TestClient, captured_cmd: list[list[str]]
 ) -> None:
-    resp = client.post("/scrape/filtered?shop=vaga")
+    resp = client.post("/scrape/filtered")
     assert resp.status_code == 400
     assert captured_cmd == []
 
@@ -106,7 +98,9 @@ def test_scrape_filtered_spawns_with_correct_urls(
     body = resp.json()
     assert body["status"] == "started"
     assert body["urls_count"] == 3
-    assert body["shop"] == "vaga"
+    assert len(body["jobs"]) == 1
+    assert body["jobs"][0]["shop"] == "vaga"
+    assert body["jobs"][0]["urls_count"] == 3
 
     assert len(captured_cmd) == 1
     cmd = captured_cmd[0]
@@ -120,6 +114,19 @@ def test_scrape_filtered_spawns_with_correct_urls(
     for url in urls:
         assert url.startswith("https://vaga.lt/a-")
     assert "https://vaga.lt/other" not in urls
+
+
+def test_scrape_filtered_without_shop_uses_filter_alone(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    """Filter-only (no shop) should still work — endpoint groups URLs
+    by shop and spawns a subprocess per shop."""
+    resp = client.post("/scrape/filtered?author=Alice")
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["urls_count"] == 3
+    assert {job["shop"] for job in body["jobs"]} == {"vaga"}
+    assert len(captured_cmd) == 1
 
 
 def test_scrape_filtered_over_cap_returns_413(

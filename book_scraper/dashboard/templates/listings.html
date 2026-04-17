@@ -50,9 +50,10 @@
     </div>
 </form>
 
-{# A filtered scrape requires a shop filter so we never accidentally
-   fan out across every shop at once. #}
-{% if shop_filter and (query or author_filter or publisher_filter or category or format_filter or missing or active_filter or has_isbn) %}
+{# Show the filtered-scrape button whenever any narrowing filter is
+   active. The endpoint handles cross-shop filters by spawning one
+   subprocess per shop; the 1000-URL cap is the real safety net. #}
+{% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter or shop_filter or has_isbn %}
 <form method="post" action="/scrape/filtered?{{ filter_params }}" style="margin: 0.5rem 0 1rem;"
       onsubmit="return confirm('Start a scrape for the currently filtered listings?');">
     <button type="submit" class="secondary">▶ Run scrape for filtered list ({{ total }})</button>
