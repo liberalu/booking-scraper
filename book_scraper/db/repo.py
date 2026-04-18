@@ -1077,6 +1077,7 @@ def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str
         {
             "id": r.id,
             "url": r.url,
+            "url_type": r.url_type,
             "discovered_url_id": r.discovered_url_id,
         }
         for r in rows

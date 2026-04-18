@@ -35,6 +35,7 @@ _STRATEGY_URL_TYPE = {
 @dataclass
 class DiscoverPlan:
     run_id: int
+    shop_id: int
     urls_total: int
     freshness_warnings: list[str] = field(default_factory=list)
 
@@ -69,7 +70,9 @@ class DiscoverService:
                 .filter_by(run_id=resumable.id, status="pending")
                 .count()
             )
-            return DiscoverPlan(run_id=resumable.id, urls_total=pending)
+            return DiscoverPlan(
+                run_id=resumable.id, shop_id=shop.id, urls_total=pending
+            )
 
         mark_stale_runs_failed(self.session, shop.id, phase)
 
@@ -87,7 +90,7 @@ class DiscoverService:
         )
         self.session.commit()
 
-        return DiscoverPlan(run_id=run.id, urls_total=1)
+        return DiscoverPlan(run_id=run.id, shop_id=shop.id, urls_total=1)
 
     @staticmethod
     def _seed_url(strategy: str, shop_config: Any) -> str:

@@ -3,21 +3,18 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import scrapy
-from sqlalchemy.orm import Session
+from scrapy import signals
 
 from book_scraper.config import load_shop_config
-from book_scraper.db.models import DiscoveredUrl, ScrapeRun
 from book_scraper.db.repo import (
-    create_scrape_run,
-    finish_scrape_run,
-    mark_cron_job_ran_if_matches,
-    mark_shop_books_inactive,
-    mark_stale_runs_failed,
-    update_scrape_run_progress,
-    upsert_shop,
+    get_pending_scrape_url_items,
+    insert_scrape_url_item,
+    mark_scrape_url_item_done,
+    reset_processing_scrape_url_items,
 )
 from book_scraper.db.session import get_session_factory
 from book_scraper.items import DiscoveredUrlItem, ShopBookItem
+from book_scraper.services.discover import DiscoverService
 from book_scraper.spiders.registry import load_parsers
 
 
@@ -63,7 +60,6 @@ class DiscoverSpider(scrapy.Spider):
         self._shop_id: int | None = None
         self._urls_processed: int = 0
         self._urls_filtered: int = 0
-        self._run_session: Session | None = None
         # URLs discovered this run, used for change detection on the
         # sitemap strategy (sitemap is comprehensive per shop).
         self._sitemap_urls: set[str] = set()
@@ -71,6 +67,12 @@ class DiscoverSpider(scrapy.Spider):
         # more specific zero-yield cause — avoids duplicate noise from the
         # generic closed() check.
         self._zero_yield_suppressed: bool = False
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
+        spider = super().from_crawler(crawler, *args, **kwargs)
+        crawler.signals.connect(spider.spider_idle, signal=signals.spider_idle)
+        return spider
 
     def _url_passes_filter(self, url: str) -> bool:
         if self.url_pattern is None:
@@ -81,41 +83,135 @@ class DiscoverSpider(scrapy.Spider):
         database_url = (
             self.settings.get("DATABASE_URL") if hasattr(self, "settings") else None
         )
-        if database_url:
-            session_factory = get_session_factory(database_url)
-            self._run_session = session_factory()
-            shop = upsert_shop(
-                self._run_session,
+
+        if not database_url:
+            # Test / no-DB path: preserve the legacy behavior of yielding the
+            # strategy's seed URL directly, so unit tests that call start()
+            # without a database keep working.
+            yield self._legacy_seed_request()
+            return
+
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            service = DiscoverService(session)
+            plan = service.prepare_discover(
                 self.shop_name,
                 self.conf.shop.base_url,
+                self.strategy,
+                self.conf,
             )
-            phase = f"discover_{self.strategy}"
-            mark_stale_runs_failed(self._run_session, shop.id, phase)
-            run = create_scrape_run(self._run_session, shop.id, phase)
-            self._run_session.commit()
-            self._run_id = run.id
-            self._shop_id = shop.id
+            self._run_id = plan.run_id
+            self._shop_id = plan.shop_id
 
-        if self.strategy == "sitemap":
+            reset_processing_scrape_url_items(session, plan.run_id)
+            url_items = get_pending_scrape_url_items(session, plan.run_id)
+            session.commit()
+        finally:
+            session.close()
+
+        for item in url_items:
             yield scrapy.Request(
+                item["url"],
+                callback=self.dispatch,
+                errback=self.handle_start_error,
+                meta={
+                    "scrape_url_item_id": item["id"],
+                    "url_type": item["url_type"],
+                    "page": 1 if item["url_type"] == "category_page" else None,
+                },
+            )
+
+    def _legacy_seed_request(self) -> scrapy.Request:
+        """Build the strategy's seed Request without touching the DB.
+
+        Used only by unit tests that call ``start()`` on a spider constructed
+        outside the Scrapy crawler pipeline.
+        """
+        if self.strategy == "sitemap":
+            return scrapy.Request(
                 self.strategy_conf.url,
                 callback=self.parse_sitemap,
                 errback=self.handle_start_error,
             )
-        elif self.strategy == "categories":
+        if self.strategy == "categories":
             url = self.strategy_conf.url.format(page=1)
-            yield scrapy.Request(
+            return scrapy.Request(
                 url,
                 callback=self.parse_categories,
                 errback=self.handle_start_error,
                 meta={"page": 1},
             )
-        elif self.strategy == "full_crawl":
-            yield scrapy.Request(
-                self.strategy_conf.start_url,
-                callback=self.parse_full_crawl,
+        # full_crawl
+        return scrapy.Request(
+            self.strategy_conf.start_url,
+            callback=self.parse_full_crawl,
+            errback=self.handle_start_error,
+        )
+
+    def dispatch(
+        self, response: scrapy.http.Response
+    ) -> Generator[Any, None, None]:
+        """Route a downloaded response to the correct parser based on url_type."""
+        url_type = response.meta.get("url_type") or "crawl"
+        try:
+            if url_type == "sitemap":
+                yield from self.parse_sitemap(response)
+            elif url_type == "category_page":
+                yield from self.parse_categories(response)
+            else:
+                # "crawl" or "product" — both handled by full_crawl parser,
+                # which already branches on whether the URL is a product page.
+                yield from self.parse_full_crawl(response)
+        finally:
+            item_id = response.meta.get("scrape_url_item_id")
+            if item_id is not None and self._run_id is not None:
+                database_url = self.settings.get("DATABASE_URL")
+                factory = get_session_factory(database_url)
+                session = factory()
+                try:
+                    mark_scrape_url_item_done(session, item_id)
+                    session.commit()
+                finally:
+                    session.close()
+
+    def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
+        """Pick up items enqueued mid-run (e.g. via parse_categories dual-write).
+
+        Mirrors the scan spider pattern: when the engine runs dry, re-check
+        the queue for newly-inserted pending items and schedule them.
+        """
+        if self._run_id is None:
+            return
+        database_url = self.settings.get("DATABASE_URL")
+        factory = get_session_factory(database_url)
+        session = factory()
+        try:
+            reset_processing_scrape_url_items(session, self._run_id)
+            new_items = get_pending_scrape_url_items(session, self._run_id)
+            session.commit()
+        finally:
+            session.close()
+
+        if not new_items:
+            return
+
+        from scrapy.exceptions import DontCloseSpider
+
+        engine = self.crawler.engine
+        assert engine is not None
+        for item in new_items:
+            req = scrapy.Request(
+                item["url"],
+                callback=self.dispatch,
                 errback=self.handle_start_error,
+                meta={
+                    "scrape_url_item_id": item["id"],
+                    "url_type": item["url_type"],
+                },
             )
+            engine.crawl(req)
+        raise DontCloseSpider
 
     def handle_start_error(self, failure: Any) -> None:
         """Surface discovery fetch failures as validation issues.
@@ -164,6 +260,35 @@ class DiscoverSpider(scrapy.Spider):
                 url,
                 raw_value,
             )
+
+    def _enqueue_url(self, url: str, url_type: str) -> int | None:
+        """Dual-write helper: insert a queue item and return its id.
+
+        No-op (returns None) when ``_run_id`` is None — unit tests construct
+        the spider without a run and call the callbacks directly.
+        """
+        if self._run_id is None or self._shop_id is None:
+            return None
+        database_url = (
+            self.settings.get("DATABASE_URL") if hasattr(self, "settings") else None
+        )
+        if not database_url:
+            return None
+        factory = get_session_factory(database_url)
+        session = factory()
+        try:
+            item = insert_scrape_url_item(
+                session,
+                run_id=self._run_id,
+                shop_id=self._shop_id,
+                discovered_url_id=None,
+                url=url,
+                url_type=url_type,
+            )
+            session.commit()
+            return item.id
+        finally:
+            session.close()
 
     def parse_sitemap(
         self, response: scrapy.http.Response
@@ -258,16 +383,27 @@ class DiscoverSpider(scrapy.Spider):
 
         # Paginate. Respect max_pages when the user set a cap so dev
         # runs don't always exhaust the whole catalog.
-        page = response.meta["page"] + 1
+        page = (response.meta.get("page") or 1) + 1
         if self._max_pages and page > self._max_pages:
             self.logger.info("max_pages cap: stopping at page %d", self._max_pages)
             return
         next_url = self.strategy_conf.url.format(page=page)
+
+        # Dual-write: persist the next page to scrape_url_items so the run
+        # can resume after a crash, THEN yield the Request so Scrapy fetches
+        # it immediately. When we have no run (unit tests), skip the insert
+        # and just yield — dispatch routes back to parse_categories.
+        new_item_id = self._enqueue_url(next_url, "category_page")
+        cb = self.dispatch if new_item_id is not None else self.parse_categories
         yield scrapy.Request(
             next_url,
-            callback=self.parse_categories,
+            callback=cb,
             errback=self.handle_start_error,
-            meta={"page": page},
+            meta={
+                "page": page,
+                "scrape_url_item_id": new_item_id,
+                "url_type": "category_page",
+            },
         )
 
     def parse_full_crawl(
@@ -321,15 +457,28 @@ class DiscoverSpider(scrapy.Spider):
                 continue
             seen.add(link)
 
-            if self._url_passes_filter(link):
+            is_product = self._url_passes_filter(link)
+            if is_product:
                 self._urls_processed += 1
                 yield DiscoveredUrlItem(
                     url=link, shop_name=self.shop_name, source="full_crawl"
                 )
 
-            # Follow all internal links for further crawling
+            # Dual-write: categorize by URL shape so dispatch can route on
+            # resume. Product pages re-enter parse_full_crawl too (which
+            # extracts product data when the URL matches the filter).
+            url_type = "product" if is_product else "crawl"
+            new_item_id = self._enqueue_url(link, url_type)
             yield scrapy.Request(
-                link, callback=self.parse_full_crawl, dont_filter=False
+                link,
+                callback=self.dispatch
+                if new_item_id is not None
+                else self.parse_full_crawl,
+                dont_filter=False,
+                meta={
+                    "scrape_url_item_id": new_item_id,
+                    "url_type": url_type,
+                },
             )
 
     def closed(self, reason: str) -> None:
@@ -346,20 +495,32 @@ class DiscoverSpider(scrapy.Spider):
                 self._urls_filtered,
             )
 
-        if self._run_id is None or self._run_session is None:
+        if self._run_id is None:
             return
+
+        database_url = (
+            self.settings.get("DATABASE_URL") if hasattr(self, "settings") else None
+        )
+        if not database_url:
+            return
+        factory = get_session_factory(database_url)
+        session = factory()
         try:
+            # Change detection and zero-yield checks still live here because
+            # they need spider-local state (_sitemap_urls, _urls_processed,
+            # _zero_yield_suppressed). finish_discover handles the generic
+            # parts: status, urls_processed, cron last_run_at, cleanup.
             status = "completed" if reason == "finished" else "failed"
-            # Only the sitemap strategy enumerates every live URL in the
-            # shop, so only it can reliably mark vanished shop_books inactive.
             if (
                 status == "completed"
                 and self.strategy == "sitemap"
                 and self._sitemap_urls
                 and self._shop_id is not None
             ):
+                from book_scraper.db.repo import mark_shop_books_inactive
+
                 deactivated = mark_shop_books_inactive(
-                    self._run_session,
+                    session,
                     shop_id=self._shop_id,
                     active_urls=self._sitemap_urls,
                 )
@@ -368,28 +529,17 @@ class DiscoverSpider(scrapy.Spider):
                         "Change detection: marked %d shop_book(s) inactive",
                         deactivated,
                     )
-            # Record final urls_processed — the pipeline only flushes
-            # progress every 100 items, so short discover runs would
-            # otherwise always show 0.
-            update_scrape_run_progress(
-                self._run_session,
-                self._run_id,
-                self._urls_processed,
-            )
-            # A completed run that found zero URLs on a shop that already
-            # had some is almost always a parser break — surface it as a
-            # validation issue so it appears in the Issues dashboard
-            # instead of silently passing as "completed". Skip when a more
-            # specific issue (fetch_failed / empty_first_page) already
-            # fired, and on the legitimate first-ever discovery.
+
             if (
                 status == "completed"
                 and self._urls_processed == 0
                 and not self._zero_yield_suppressed
                 and self._shop_id is not None
             ):
+                from book_scraper.db.models import DiscoveredUrl
+
                 prior_count = (
-                    self._run_session.query(DiscoveredUrl)
+                    session.query(DiscoveredUrl)
                     .filter(DiscoveredUrl.shop_id == self._shop_id)
                     .count()
                 )
@@ -401,19 +551,13 @@ class DiscoverSpider(scrapy.Spider):
                         f"phase=discover_{self.strategy}, "
                         f"shop had {prior_count} URLs pre-run",
                     )
-            finish_scrape_run(self._run_session, self._run_id, status)
 
-            # Update matching cron_job's last_run_at (best-effort; no-op if no match).
-            run_row = self._run_session.get(ScrapeRun, self._run_id)
-            if run_row is not None:
-                mark_cron_job_ran_if_matches(
-                    self._run_session,
-                    run_row.shop_id,
-                    phase="discover",
-                    strategy=self.strategy,
-                )
+            session.commit()
 
-            self._run_session.commit()
+            DiscoverService(session).finish_discover(
+                self._run_id,
+                self._urls_processed,
+                reason,
+            )
         finally:
-            self._run_session.close()
-            self._run_session = None
+            session.close()
