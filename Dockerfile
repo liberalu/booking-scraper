@@ -11,6 +11,7 @@ RUN uv sync --frozen --no-dev --extra dashboard
 
 # Copy application code
 COPY book_scraper/ book_scraper/
+COPY scripts/ scripts/
 COPY alembic/ alembic/
 COPY alembic.ini .
 COPY config/ config/
@@ -24,7 +25,6 @@ FROM base AS scraper
 
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
 
-COPY cron/scraper-crontab /app/cron/scraper-crontab
 COPY scripts/entrypoint-scraper.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

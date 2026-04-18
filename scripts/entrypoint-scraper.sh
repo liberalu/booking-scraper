@@ -8,8 +8,8 @@ PYTHONPATH=. .venv/bin/python -m alembic upgrade head
 echo "Reconciling orphan scrape runs..."
 PYTHONPATH=. .venv/bin/python -m book_scraper.scripts.reconcile_runs
 
-echo "Installing crontab..."
-crontab /app/cron/scraper-crontab
+echo "Generating crontab from cron_jobs table..."
+PYTHONPATH=. .venv/bin/python /app/scripts/generate_crontab.py
 
 echo "Starting cron..."
 touch /var/log/scraper.log
