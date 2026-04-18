@@ -21,6 +21,12 @@
             <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
             {% endfor %}
         </select>
+        <select name="type">
+            <option value="">All types</option>
+            {% for book_type in types %}
+            <option value="{{ book_type }}" {{ 'selected' if type_filter == book_type else '' }}>{{ book_type }}</option>
+            {% endfor %}
+        </select>
         <select name="format">
             <option value="">All formats</option>
             <option value="none" {{ 'selected' if format_filter == 'none' else '' }}>Missing format</option>
@@ -44,28 +50,44 @@
         </select>
         {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
         {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
-        {# Carry sort + order through the filter form so applying a filter
-           never wipes out the active sort. #}
         {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
         {% if order %}<input type="hidden" name="order" value="{{ order }}">{% endif %}
+
+        <details class="field-filters-panel" {{ 'open' if field_filters_active else '' }}>
+            <summary>All field filters</summary>
+            <div class="field-filter-grid">
+                {% for field in field_filters %}
+                <div class="field-filter-card">
+                    <label for="field_{{ field.name }}_op">{{ field.label }}</label>
+                    <div class="field-filter-controls">
+                        <select id="field_{{ field.name }}_op" name="field_{{ field.name }}_op">
+                            {% for option in field.operators %}
+                            <option value="{{ option.value }}" {{ 'selected' if field.operator == option.value else '' }}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if field.show_value_input %}
+                        <input
+                            type="{{ field.input_type }}"
+                            name="field_{{ field.name }}_value"
+                            value="{{ field.value }}"
+                            placeholder="{{ field.placeholder }}"
+                            {% if field.input_step %}step="{{ field.input_step }}"{% endif %}
+                        >
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+
         <button type="submit">Filter</button>
-        {% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter != 'true' or shop_filter or has_isbn %}
-        {# Reset keeps the sort by carrying it through; also resets Active to default. #}
-        <a href="/shop-books?{{ 'sort=' ~ sort ~ '&order=' ~ order if sort else '' }}" role="button" class="secondary">Reset</a>
+        {% if has_visible_filters %}
+        <a href="{{ reset_url }}" role="button" class="secondary">Reset</a>
         {% endif %}
     </div>
 </form>
 
-{% set filter_params = "q=" ~ query|urlencode ~ "&author=" ~ author_filter|urlencode ~ "&publisher=" ~ publisher_filter|urlencode ~ "&category=" ~ category|urlencode ~ "&format=" ~ format_filter|urlencode ~ "&missing=" ~ missing|urlencode ~ "&active=" ~ active_filter|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ ("&has_isbn=true" if has_isbn else "") %}
-{% set sort_params = ("sort=" ~ sort ~ "&order=" ~ order) if sort else "" %}
-{% set filter_and_sort = filter_params ~ ("&" ~ sort_params if sort_params else "") %}
-
-{# Show the filtered-scrape button whenever any narrowing filter is
-   active. The endpoint handles cross-shop filters by spawning one
-   subprocess per shop; the URL cap is the real safety net. When the
-   active filter matches more than max_filtered_urls rows we disable
-   the button and point the user at the fix. #}
-{% if query or author_filter or publisher_filter or category or format_filter or missing or active_filter or shop_filter or has_isbn %}
+{% if has_active_filters %}
 <div style="margin: 0.5rem 0 1rem;">
     {% if total > max_filtered_urls %}
     <button type="button" class="secondary" disabled
@@ -81,19 +103,11 @@
 </div>
 {% endif %}
 
-{% if shop_filter or has_isbn or active_filter in ('false', 'all') %}
+{% if filter_badges %}
 <div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
-    {% if shop_filter %}
-    <span class="filter-badge">Shop: {{ shop_filter }} <a href="/shop-books?{{ filter_and_sort|replace('&shop=' ~ shop_filter|urlencode, '') }}">✕</a></span>
-    {% endif %}
-    {% if has_isbn %}
-    <span class="filter-badge">Has ISBN <a href="/shop-books?{{ filter_and_sort|replace('&has_isbn=true', '') }}">✕</a></span>
-    {% endif %}
-    {% if active_filter == 'false' %}
-    <span class="filter-badge">Inactive <a href="/shop-books?{{ filter_and_sort|replace('&active=false', '&active=true') }}">✕</a></span>
-    {% elif active_filter == 'all' %}
-    <span class="filter-badge">All statuses <a href="/shop-books?{{ filter_and_sort|replace('&active=all', '&active=true') }}">✕</a></span>
-    {% endif %}
+    {% for badge in filter_badges %}
+    <span class="filter-badge">{{ badge.label }} <a href="{{ badge.remove_url }}">✕</a></span>
+    {% endfor %}
 </div>
 {% endif %}
 
@@ -110,6 +124,7 @@
                 <th>{{ sort_header('title', 'Title', sort, order, filter_params) }}</th>
                 <th>{{ sort_header('author', 'Author', sort, order, filter_params) }}</th>
                 <th>{{ sort_header('isbn', 'ISBN', sort, order, filter_params) }}</th>
+                <th>{{ sort_header('type', 'Type', sort, order, filter_params) }}</th>
                 <th>Format</th>
                 <th class="text-right">{{ sort_header('price', 'Price', sort, order, filter_params) }}</th>
                 <th class="text-right">Original</th>
@@ -133,6 +148,7 @@
                     <a href="/shop-books?has_isbn=true&q={{ sb.isbn|urlencode }}">{{ sb.isbn }}</a>
                     {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
+                <td><span class="badge {{ 'badge-warning' if sb.type == 'audio' else 'badge-neutral' }}">{{ sb.type }}</span></td>
                 <td>{% if sb.format %}{{ sb.format }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                 <td class="text-right">{% if sb.price %}{{ sb.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                 <td class="text-right text-muted">{{ sb.price_original or '—' }}</td>
@@ -144,7 +160,10 @@
                     <span class="badge badge-neutral">No</span>
                     {% endif %}
                 </td>
-                <td class="text-muted">{{ sb.last_seen_at.strftime('%Y-%m-%d') if sb.last_seen_at else '—' }}</td>
+                <td class="text-muted"
+                    title="{{ sb.last_seen_at.strftime('%Y-%m-%d %H:%M UTC') if sb.last_seen_at else '' }}">
+                    {{ sb.last_seen_at|relative_time if sb.last_seen_at else '—' }}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -154,13 +173,13 @@
 {% if total_pages > 1 %}
 <div class="pagination">
     {% if page > 1 %}
-    <a href="/shop-books?page={{ page - 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">← Prev</a>
+    <a href="/shop-books?page={{ page - 1 }}{% if filter_and_sort_params %}&{{ filter_and_sort_params }}{% endif %}">← Prev</a>
     {% else %}
     <span class="disabled">← Prev</span>
     {% endif %}
     <span class="current">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="/shop-books?page={{ page + 1 }}&{{ filter_params }}&sort={{ sort }}&order={{ order }}">Next →</a>
+    <a href="/shop-books?page={{ page + 1 }}{% if filter_and_sort_params %}&{{ filter_and_sort_params }}{% endif %}">Next →</a>
     {% else %}
     <span class="disabled">Next →</span>
     {% endif %}

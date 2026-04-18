@@ -1,5 +1,6 @@
 import difflib
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 import markdown as _markdown
@@ -23,6 +24,35 @@ from book_scraper.dashboard.routes import (
 # misclassify text with incidental < or > as HTML. Lithuanian source
 # text often quotes with "<...>" as an ellipsis marker.
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z/][^>]*>")
+
+
+def _relative_time(dt: "datetime | None") -> str:
+    """Return human-friendly relative time string, e.g. '3d ago'."""
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    delta = datetime.now(UTC) - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d ago"
+    weeks = days // 7
+    if weeks < 5:
+        return f"{weeks}w ago"
+    months = days // 30
+    if months < 12:
+        return f"{months}mo ago"
+    years = days // 365
+    return f"{years}y ago"
 
 
 def _render_description(text: str | None) -> Markup:
@@ -189,6 +219,7 @@ def _change_diff(old: str | None, new: str | None, limit: int = 200) -> Markup:
 
 
 templates.env.filters["markdown"] = _render_description
+templates.env.filters["relative_time"] = _relative_time
 templates.env.globals["change_diff"] = _change_diff
 
 app = FastAPI(title="Book Scraper Dashboard")
