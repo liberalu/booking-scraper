@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from book_scraper.dashboard.deps import get_db, templates
+from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.db.models import Shop
 from book_scraper.db.repo import (
     create_cron_job,
     delete_cron_job,
+    get_cron_job,
     list_cron_jobs,
     toggle_cron_job,
     update_cron_job,
@@ -80,6 +81,59 @@ def cron_toggle(job_id: int, session: Session = Depends(get_db)) -> RedirectResp
 def cron_delete(job_id: int, session: Session = Depends(get_db)) -> RedirectResponse:
     delete_cron_job(session, job_id)
     session.commit()
+    return RedirectResponse(url="/cron", status_code=303)
+
+
+@router.post("/cron/{job_id}/run")
+def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
+    """Trigger an immediate run of a cron job via docker exec.
+
+    Bypasses the enabled flag so admins can rerun disabled jobs.
+    Mirrors the /runs/trigger pattern from routes/runs.py.
+    """
+    job = get_cron_job(session, job_id)
+    if job is None:
+        return HTMLResponse(
+            '<p class="error">Cron job not found</p>', status_code=404
+        )
+
+    client = get_docker_client()
+    if client is None:
+        return HTMLResponse(
+            '<p class="error">Docker not available</p>', status_code=503
+        )
+
+    containers = client.containers.list(
+        filters={"label": "com.docker.compose.service=scraper"}
+    )
+    if not containers:
+        return HTMLResponse(
+            '<p class="error">Scraper container not found</p>', status_code=503
+        )
+
+    cmd = [
+        "/app/.venv/bin/python",
+        "-m",
+        "scrapy",
+        "crawl",
+        job.phase,
+        "-a",
+        f"shop={job.shop.name}",
+    ]
+    if job.strategy:
+        cmd.extend(["-a", f"strategy={job.strategy}"])
+    if job.args:
+        cmd.extend(job.args.split())
+
+    containers[0].exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
     return RedirectResponse(url="/cron", status_code=303)
 
 

@@ -28,6 +28,9 @@
         <td>{{ "yes" if job.enabled else "no" }}</td>
         <td>{{ job.last_run_at.strftime('%Y-%m-%d %H:%M') if job.last_run_at else "—" }}</td>
         <td>
+          <form method="post" action="/cron/{{ job.id }}/run" style="display:inline">
+            <button type="submit">Run now</button>
+          </form>
           <form method="post" action="/cron/{{ job.id }}/toggle" style="display:inline">
             <button type="submit">{{ "Disable" if job.enabled else "Enable" }}</button>
           </form>
