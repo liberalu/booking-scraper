@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from book_scraper.db.models import (
     Category,
+    CronJob,
     DiscoveredUrl,
     Price,
     ScrapeRun,
@@ -965,9 +966,7 @@ def acknowledge_validation_issues_bulk(
         pattern = f"%{q}%"
         query = query.outerjoin(
             ShopBook, ValidationIssue.shop_book_id == ShopBook.id
-        ).filter(
-            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
-        )
+        ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
     issues = query.all()
     for issue in issues:
         issue.lifecycle_state = "already_seen"
@@ -1015,9 +1014,7 @@ def delete_validation_issues_matching(
         pattern = f"%{q}%"
         query = query.outerjoin(
             ShopBook, ValidationIssue.shop_book_id == ShopBook.id
-        ).filter(
-            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
-        )
+        ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
     ids = [i.id for i in query.all()]
     if not ids:
         return 0
@@ -1069,9 +1066,7 @@ def prepare_scrape_url_items(
     session.flush()
 
 
-def get_pending_scrape_url_items(
-    session: Session, run_id: int
-) -> list[dict[str, Any]]:
+def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str, Any]]:
     """Return all pending items for a run as dicts {id, url, discovered_url_id}."""
     rows = (
         session.query(ScrapeUrlItem)
@@ -1138,9 +1133,7 @@ def insert_scrape_url_item(
     exists, returns it unchanged.
     """
     existing = (
-        session.query(ScrapeUrlItem)
-        .filter_by(run_id=run_id, url=url)
-        .one_or_none()
+        session.query(ScrapeUrlItem).filter_by(run_id=run_id, url=url).one_or_none()
     )
     if existing is not None:
         return existing
@@ -1155,6 +1148,83 @@ def insert_scrape_url_item(
     session.add(item)
     session.flush()
     return item
+
+
+# --- CronJob CRUD ---
+
+
+def list_cron_jobs(session: Session) -> list[CronJob]:
+    """Return all cron jobs, ordered by id."""
+    return list(session.execute(select(CronJob).order_by(CronJob.id)).scalars().all())
+
+
+def get_cron_job(session: Session, job_id: int) -> CronJob | None:
+    return session.get(CronJob, job_id)
+
+
+def create_cron_job(
+    session: Session,
+    shop_id: int,
+    phase: str,
+    strategy: str | None,
+    args: str,
+    cron_expression: str,
+    enabled: bool = True,
+) -> CronJob:
+    job = CronJob(
+        shop_id=shop_id,
+        phase=phase,
+        strategy=strategy,
+        args=args,
+        cron_expression=cron_expression,
+        enabled=enabled,
+    )
+    session.add(job)
+    session.flush()
+    return job
+
+
+def update_cron_job(
+    session: Session,
+    job_id: int,
+    **fields: Any,
+) -> None:
+    """Update allowed fields: phase, strategy, args, cron_expression, enabled."""
+    allowed = {"phase", "strategy", "args", "cron_expression", "enabled"}
+    job = session.get(CronJob, job_id)
+    if job is None:
+        return
+    for k, v in fields.items():
+        if k in allowed:
+            setattr(job, k, v)
+    session.flush()
+
+
+def toggle_cron_job(session: Session, job_id: int) -> None:
+    job = session.get(CronJob, job_id)
+    if job is None:
+        return
+    job.enabled = not job.enabled
+    session.flush()
+
+
+def delete_cron_job(session: Session, job_id: int) -> None:
+    job = session.get(CronJob, job_id)
+    if job is not None:
+        session.delete(job)
+        session.flush()
+
+
+def update_cron_job_last_run(
+    session: Session,
+    job_id: int,
+    when: datetime,
+) -> None:
+    job = session.get(CronJob, job_id)
+    if job is None:
+        return
+    job.last_run_at = when
+    session.flush()
 
 
 def cleanup_scrape_url_items(session: Session, run_id: int) -> int:

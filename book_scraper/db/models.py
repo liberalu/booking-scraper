@@ -16,6 +16,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    text as sa_text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -388,7 +391,10 @@ class ScrapeRun(Base):
 
 
 scrape_url_status_enum = Enum(
-    "pending", "processing", "done", "failed",
+    "pending",
+    "processing",
+    "done",
+    "failed",
     name="scrape_url_status",
     create_type=False,
 )
@@ -411,7 +417,9 @@ class ScrapeUrlItem(Base):
         ForeignKey("discovered_urls.id"), nullable=True
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    url_type: Mapped[str] = mapped_column(Text, nullable=False, server_default="product")
+    url_type: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="product"
+    )
     status: Mapped[str] = mapped_column(
         scrape_url_status_enum, nullable=False, server_default="pending"
     )
@@ -425,9 +433,7 @@ class ScrapeUrlItem(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (
-        Index("ix_scrape_url_items_run_status", "run_id", "status"),
-    )
+    __table_args__ = (Index("ix_scrape_url_items_run_status", "run_id", "status"),)
 
 
 class ValidationIssue(Base):
@@ -470,3 +476,31 @@ class ValidationIssue(Base):
     scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")
     shop_book: Mapped["ShopBook | None"] = relationship()
     discovered_url: Mapped["DiscoveredUrl | None"] = relationship()
+
+
+class CronJob(Base):
+    """Scheduled scrape job. Read by scripts/generate_crontab.py at scraper boot."""
+
+    __tablename__ = "cron_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
+    phase: Mapped[str] = mapped_column(Text, nullable=False)
+    strategy: Mapped[str | None] = mapped_column(Text, nullable=True)
+    args: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    cron_expression: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa_text("true")
+    )
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    shop: Mapped["Shop"] = relationship()
+
+    __table_args__ = (Index("ix_cron_jobs_shop_enabled", "shop_id", "enabled"),)
