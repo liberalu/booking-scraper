@@ -55,7 +55,7 @@ match_method_enum = Enum(
 )
 
 shop_book_type_enum = Enum(
-    "book", "audio", "ebook", name="shop_book_type", create_type=False
+    "book", "non_book", "audio", "ebook", name="shop_book_type", create_type=False
 )
 
 
@@ -384,6 +384,48 @@ class ScrapeRun(Base):
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(
         back_populates="scrape_run"
+    )
+
+
+scrape_url_status_enum = Enum(
+    "pending", "processing", "done", "failed",
+    name="scrape_url_status",
+    create_type=False,
+)
+
+
+class ScrapeUrlItem(Base):
+    """Persistent work-queue item for the scan spider.
+
+    Written by ScanService.prepare_scan() before scraping begins.
+    Allows the spider to resume after a crash: any 'processing' rows
+    from a previous run are reset to 'pending' on next start.
+    """
+
+    __tablename__ = "scrape_url_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("scrape_runs.id"), nullable=False)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
+    discovered_url_id: Mapped[int | None] = mapped_column(
+        ForeignKey("discovered_urls.id"), nullable=True
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        scrape_url_status_enum, nullable=False, server_default="pending"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    done_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_scrape_url_items_run_status", "run_id", "status"),
     )
 
 
