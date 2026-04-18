@@ -212,7 +212,7 @@ button.secondary,
 .top-nav-inner {
     max-width: min(1320px, calc(100vw - 2rem));
     margin: 0 auto;
-    min-height: 72px;
+    min-height: 60px;
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -231,12 +231,12 @@ button.secondary,
 }
 
 .brand-mark {
-    width: 42px;
-    height: 42px;
+    width: 30px;
+    height: 30px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
+    border-radius: 8px;
     background: linear-gradient(135deg, var(--accent-soft-strong), rgba(20, 184, 166, 0.16));
     color: var(--accent);
     font-size: 0.9rem;
@@ -285,8 +285,8 @@ button.secondary,
     display: inline-flex;
     align-items: center;
     min-height: 42px;
-    padding: 0 0.9rem;
-    border-radius: 999px;
+    padding: 0 0.8rem;
+    border-radius: 8px;
     color: var(--text-secondary);
     font-size: 0.86rem;
     font-weight: 600;
@@ -1181,7 +1181,7 @@ details.change-diff[open] > summary {
 
 @media (max-width: 1024px) {
     .top-nav-inner {
-        min-height: 64px;
+        min-height: 56px;
     }
 
     .nav-badge {
