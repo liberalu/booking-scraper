@@ -11,6 +11,41 @@ from book_scraper.db.repo import (
 from book_scraper.services.scan import ScanService
 
 
+# ---------------------------------------------------------------------------
+# Fixtures shared by ScrapeUrlItem tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def shop(db_session):
+    return upsert_shop(db_session, name="item_shop", base_url="https://item.lt")
+
+
+@pytest.fixture()
+def scrape_run(db_session, shop):
+    run = create_scrape_run(db_session, shop.id, "scan")
+    db_session.flush()
+    return run
+
+
+@pytest.fixture()
+def discovered_urls(db_session, shop):
+    from book_scraper.db.models import DiscoveredUrl
+
+    urls = []
+    for i in range(5):
+        du = DiscoveredUrl(
+            shop_id=shop.id,
+            url=f"https://item.lt/book-{i}",
+            normalized_url=f"https://item.lt/book-{i}",
+            source="sitemap",
+        )
+        db_session.add(du)
+        urls.append(du)
+    db_session.flush()
+    return urls
+
+
 @pytest.mark.integration
 class TestScanServicePrepareScan:
     def test_creates_run_and_returns_plan(self, db_session):
@@ -166,3 +201,84 @@ class TestScanServiceFinishScan:
         db_session.refresh(url_record)
         assert url_record.last_http_status == 200
         assert url_record.url_type == "product"
+
+
+# ---------------------------------------------------------------------------
+# ScrapeUrlItem repo function tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_prepare_scrape_url_items_inserts_pending_rows(
+    db_session, shop, scrape_run, discovered_urls
+):
+    """prepare_scrape_url_items inserts all URL records as 'pending'."""
+    from book_scraper.db.repo import (
+        get_pending_scrape_url_items,
+        prepare_scrape_url_items,
+    )
+
+    url_records = discovered_urls[:3]
+    prepare_scrape_url_items(db_session, shop.id, scrape_run.id, url_records)
+    db_session.commit()
+
+    items = get_pending_scrape_url_items(db_session, scrape_run.id)
+    assert len(items) == 3
+    urls = {item["url"] for item in items}
+    assert urls == {u.url for u in url_records}
+    for item in items:
+        assert "id" in item
+        assert "url" in item
+        assert "discovered_url_id" in item
+
+
+@pytest.mark.integration
+def test_mark_scrape_url_item_done(db_session, shop, scrape_run, discovered_urls):
+    """mark_scrape_url_item_done removes item from pending list."""
+    from book_scraper.db.repo import (
+        get_pending_scrape_url_items,
+        mark_scrape_url_item_done,
+        prepare_scrape_url_items,
+    )
+
+    url_records = discovered_urls[:3]
+    prepare_scrape_url_items(db_session, shop.id, scrape_run.id, url_records)
+    db_session.commit()
+
+    items = get_pending_scrape_url_items(db_session, scrape_run.id)
+    first_id = items[0]["id"]
+    mark_scrape_url_item_done(db_session, first_id)
+    db_session.commit()
+
+    remaining = get_pending_scrape_url_items(db_session, scrape_run.id)
+    assert len(remaining) == 2
+    assert all(item["id"] != first_id for item in remaining)
+
+
+@pytest.mark.integration
+def test_reset_processing_scrape_url_items(
+    db_session, shop, scrape_run, discovered_urls
+):
+    """reset_processing_scrape_url_items resets 'processing' to 'pending'."""
+    from book_scraper.db.models import ScrapeUrlItem
+    from book_scraper.db.repo import (
+        get_pending_scrape_url_items,
+        prepare_scrape_url_items,
+        reset_processing_scrape_url_items,
+    )
+
+    url_records = discovered_urls[:2]
+    prepare_scrape_url_items(db_session, shop.id, scrape_run.id, url_records)
+    db_session.commit()
+
+    # Manually set one to 'processing' (simulates crashed mid-run)
+    item = db_session.query(ScrapeUrlItem).filter_by(run_id=scrape_run.id).first()
+    item.status = "processing"
+    db_session.commit()
+
+    count = reset_processing_scrape_url_items(db_session, scrape_run.id)
+    db_session.commit()
+
+    assert count == 1
+    pending = get_pending_scrape_url_items(db_session, scrape_run.id)
+    assert len(pending) == 2  # both are pending again

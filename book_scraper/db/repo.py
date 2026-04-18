@@ -12,6 +12,7 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
     ScrapeRun,
+    ScrapeUrlItem,
     Shop,
     ShopAuthor,
     ShopBook,
@@ -20,6 +21,7 @@ from book_scraper.db.models import (
     ShopBookFieldUpdate,
     ValidationIssue,
 )
+from book_scraper.spiders.vaga.parsers import infer_shop_book_type
 from book_scraper.url_utils import normalize_url
 
 _MULTI_AUTHOR_RE = re.compile(
@@ -174,16 +176,39 @@ def upsert_shop(session: Session, name: str, base_url: str) -> Shop:
     return shop
 
 
-def _infer_shop_book_type(format: str | None) -> str:
-    """Map a free-form `format` string to a shop_book_type enum value.
+def _infer_shop_book_type(
+    *,
+    title: str,
+    author: str | None = None,
+    isbn: str | None = None,
+    year: int | None = None,
+    format: str | None = None,
+    categories: list[str] | None = None,
+    properties: dict[str, Any] | None = None,
+) -> str:
+    """Infer the final shop_book type for the current single-shop setup.
 
-    Only audiobooks are currently marked as 'audio'. Ebook detection
-    is deferred until the shops start emitting a recognisable ebook
-    format string.
+    Current values are: book, non_book, ebook, audio.
+    Price-only updates should pass no new type and leave an existing row
+    unchanged; callers use this helper when they have classification data.
     """
-    if format and format.lower() in {"audiobook", "audio", "audiobookas"}:
-        return "audio"
-    return "book"
+    properties = properties or {}
+    return infer_shop_book_type(
+        {
+            "title": title,
+            "author": author,
+            "isbn": isbn,
+            "year": year,
+            "format": format,
+            "categories": categories or [],
+            "pages": properties.get("pages"),
+            "cover_type": properties.get("cover_type"),
+            "translator": properties.get("translator"),
+            "narrator": properties.get("narrator"),
+            "duration": properties.get("duration"),
+            "schema_types": [],
+        }
+    )
 
 
 def upsert_shop_book(
@@ -191,6 +216,7 @@ def upsert_shop_book(
     shop_id: int,
     url: str,
     title: str,
+    type: str | None = None,
     author: str | None = None,
     sku: str | None = None,
     isbn: str | None = None,
@@ -215,13 +241,22 @@ def upsert_shop_book(
             shop_id=shop_id,
             url=url,
             title=title,
+            type=type
+            or _infer_shop_book_type(
+                title=title,
+                author=author,
+                isbn=isbn,
+                year=year,
+                format=format,
+                categories=categories,
+                properties=properties,
+            ),
             author=author,
             sku=sku,
             isbn=isbn,
             publisher=publisher,
             year=year,
             format=format,
-            type=_infer_shop_book_type(format),
             description=description,
             image_url=image_url,
             categories=categories,
@@ -290,10 +325,21 @@ def upsert_shop_book(
                     )
                 setattr(shop_book, cond_field, cond_val)
 
-        # Re-derive type from the authoritative `format` string (only
-        # when a format was supplied — a PriceItem won't touch it).
-        if format is not None:
-            shop_book.type = _infer_shop_book_type(format)
+        if type is not None:
+            shop_book.type = type
+        elif format is not None:
+            current_categories = (
+                categories if categories is not None else shop_book.categories
+            )
+            shop_book.type = _infer_shop_book_type(
+                title=shop_book.title,
+                author=shop_book.author,
+                isbn=shop_book.isbn,
+                year=shop_book.year,
+                format=shop_book.format,
+                categories=current_categories,
+                properties=properties,
+            )
 
         if categories is not None:
             shop_book.categories = categories
@@ -962,3 +1008,83 @@ def get_urls_already_scraped(session: Session, shop_id: int) -> set[str]:
         )
         .all()
     )
+
+
+# --- Scrape URL Items ---
+
+
+def prepare_scrape_url_items(
+    session: Session,
+    shop_id: int,
+    run_id: int,
+    url_records: "list[DiscoveredUrl]",
+) -> None:
+    """Batch-insert pending scrape_url_items for a new scan run.
+
+    Persists the work queue to DB so the spider can resume after a crash.
+    """
+    for rec in url_records:
+        session.add(
+            ScrapeUrlItem(
+                run_id=run_id,
+                shop_id=shop_id,
+                discovered_url_id=rec.id,
+                url=rec.url,
+                status="pending",
+            )
+        )
+    session.flush()
+
+
+def get_pending_scrape_url_items(
+    session: Session, run_id: int
+) -> list[dict[str, Any]]:
+    """Return all pending items for a run as dicts {id, url, discovered_url_id}."""
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(ScrapeUrlItem.run_id == run_id, ScrapeUrlItem.status == "pending")
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "url": r.url,
+            "discovered_url_id": r.discovered_url_id,
+        }
+        for r in rows
+    ]
+
+
+def mark_scrape_url_item_done(session: Session, item_id: int) -> None:
+    """Mark a scrape_url_item as done."""
+    item = session.get(ScrapeUrlItem, item_id)
+    if item:
+        item.status = "done"
+        item.done_at = datetime.now(UTC)
+        session.flush()
+
+
+def mark_scrape_url_item_failed(session: Session, item_id: int) -> None:
+    """Mark a scrape_url_item as failed."""
+    item = session.get(ScrapeUrlItem, item_id)
+    if item:
+        item.status = "failed"
+        item.done_at = datetime.now(UTC)
+        session.flush()
+
+
+def reset_processing_scrape_url_items(session: Session, run_id: int) -> int:
+    """Reset 'processing' items back to 'pending' for crash recovery.
+
+    Returns the number of items reset.
+    """
+    items = (
+        session.query(ScrapeUrlItem)
+        .filter(ScrapeUrlItem.run_id == run_id, ScrapeUrlItem.status == "processing")
+        .all()
+    )
+    for item in items:
+        item.status = "pending"
+        item.claimed_at = None
+    session.flush()
+    return len(items)
