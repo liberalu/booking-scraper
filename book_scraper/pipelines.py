@@ -595,6 +595,9 @@ class PostgresPipeline:
                 run_id=self._run_id,
             )
             spider = self.spider
+            # Second-pass hook: fires only when a DiscoveredUrlItem reaches
+            # the pipeline. Scan spider does not yet yield these — this path
+            # becomes active in Phase 2.
             if (
                 spider is not None
                 and getattr(spider, "name", "") == "scan"
@@ -611,6 +614,9 @@ class PostgresPipeline:
                         url=record.url,
                         url_type=record.url_type or "product",
                     )
+                    # Commit so spider_idle's fresh session can see the new
+                    # queue row (fresh sessions only see committed data).
+                    self.session.commit()
 
         # Commit every 100 items
         self._item_count += 1

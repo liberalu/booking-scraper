@@ -109,9 +109,16 @@ class ScanService:
     ) -> int:
         """Queue a newly-discovered URL for same-run processing. Returns item id.
 
-        Does NOT commit — caller (pipeline) controls commit cadence via its
-        existing 100-item batching. The row becomes visible to the spider's
-        fresh spider_idle session after the pipeline's next batch commit.
+        Does NOT commit — caller (pipeline) controls commit cadence. The row
+        becomes visible to the spider's fresh spider_idle session only after
+        the caller commits.
+
+        Phase 1 scope: currently only called when a ``DiscoveredUrlItem`` is
+        processed by the pipeline in rescrape mode. The scan spider does not
+        yet emit ``DiscoveredUrlItem``s — activating the second-pass path
+        fully requires Phase 2 work (scan parsers extracting internal product
+        links). The infrastructure (this function, ``insert_scrape_url_item``,
+        the ``spider_idle`` handler on ``ScanSpider``) is ready.
         """
         item = insert_scrape_url_item(
             self.session, run_id, shop_id, discovered_url_id, url, url_type

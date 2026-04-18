@@ -62,7 +62,14 @@ class ScanSpider(scrapy.Spider):
 
     def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
         """When the main queue drains, check for new items queued mid-run
-        and schedule them. Called by Scrapy when no requests are in flight."""
+        and schedule them. Called by Scrapy when no requests are in flight.
+
+        Hooks into Scrapy's ``spider_idle`` signal to pick up items enqueued
+        mid-run via ``ScanService.enqueue_new_url``. Currently no code path
+        emits such enqueues during a scan run; this handler remains inert
+        until Phase 2 wires the scan spider to yield ``DiscoveredUrlItem``
+        for newly-discovered product URLs.
+        """
         if self._run_id is None:
             return
         database_url = self.settings.get("DATABASE_URL")
