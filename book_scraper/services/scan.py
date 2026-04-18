@@ -3,14 +3,16 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from book_scraper.db.models import DiscoveredUrl
 from book_scraper.db.repo import (
     check_discover_freshness,
     create_scrape_run,
     finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
+    mark_scrape_url_item_done,
+    mark_scrape_url_item_failed,
     mark_stale_runs_failed,
+    prepare_scrape_url_items,
     update_discovered_url_status,
     update_scrape_run_progress,
     upsert_shop,
@@ -20,7 +22,7 @@ from book_scraper.db.repo import (
 @dataclass
 class ScanPlan:
     run_id: int
-    urls_to_scrape: list[DiscoveredUrl]
+    urls_total: int
     urls_skipped: int
     freshness_warnings: list[str] = field(default_factory=list)
 
@@ -37,7 +39,7 @@ class ScanService:
         rescrape: bool = False,
     ) -> ScanPlan:
         """Prepare a scan run: upsert shop, mark stale, check freshness,
-        load pending URLs, filter already done, create run."""
+        load pending URLs, filter already done, persist to scrape_url_items."""
         shop = upsert_shop(self.session, shop_name, base_url)
 
         mark_stale_runs_failed(self.session, shop.id, "scan")
@@ -64,11 +66,13 @@ class ScanService:
         run = create_scrape_run(
             self.session, shop.id, "scan", urls_total=len(urls_to_scrape)
         )
+        # Persist work queue to DB for crash recovery
+        prepare_scrape_url_items(self.session, shop.id, run.id, urls_to_scrape)
         self.session.commit()
 
         return ScanPlan(
             run_id=run.id,
-            urls_to_scrape=urls_to_scrape,
+            urls_total=len(urls_to_scrape),
             urls_skipped=urls_skipped,
             freshness_warnings=warnings,
         )
@@ -81,7 +85,14 @@ class ScanService:
     ) -> None:
         """Flush queued URL status updates and progress to DB mid-run."""
         for update in url_status_updates:
+            scrape_item_id = update.pop("scrape_url_item_id", None)
+            scrape_item_success = update.pop("scrape_url_item_success", False)
             update_discovered_url_status(self.session, **update)
+            if scrape_item_id is not None:
+                if scrape_item_success:
+                    mark_scrape_url_item_done(self.session, scrape_item_id)
+                else:
+                    mark_scrape_url_item_failed(self.session, scrape_item_id)
         update_scrape_run_progress(self.session, run_id, urls_processed)
         self.session.commit()
 
@@ -95,7 +106,14 @@ class ScanService:
         """Finalize a scan run: process URL status updates, update progress,
         mark run as completed/failed."""
         for update in url_status_updates:
+            scrape_item_id = update.pop("scrape_url_item_id", None)
+            scrape_item_success = update.pop("scrape_url_item_success", False)
             update_discovered_url_status(self.session, **update)
+            if scrape_item_id is not None:
+                if scrape_item_success:
+                    mark_scrape_url_item_done(self.session, scrape_item_id)
+                else:
+                    mark_scrape_url_item_failed(self.session, scrape_item_id)
 
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)

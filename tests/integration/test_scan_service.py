@@ -57,7 +57,7 @@ class TestScanServicePrepareScan:
         plan = service.prepare_scan("svc_shop", "https://svc.lt", {})
 
         assert plan.run_id is not None
-        assert len(plan.urls_to_scrape) == 2
+        assert plan.urls_total == 2
         assert plan.urls_skipped == 0
 
     def test_skips_already_done_urls(self, db_session):
@@ -81,7 +81,10 @@ class TestScanServicePrepareScan:
         service = ScanService(db_session)
         plan = service.prepare_scan("skip_shop", "https://sk.lt", {})
 
-        urls = [u.url for u in plan.urls_to_scrape]
+        from book_scraper.db.repo import get_pending_scrape_url_items
+
+        items = get_pending_scrape_url_items(db_session, plan.run_id)
+        urls = [i["url"] for i in items]
         assert "https://sk.lt/book-1" not in urls
         assert "https://sk.lt/book-2" in urls
         assert plan.urls_skipped == 1
@@ -121,7 +124,10 @@ class TestScanServicePrepareScan:
         service = ScanService(db_session)
         plan = service.prepare_scan("rescrape_shop", "https://rs.lt", {}, rescrape=True)
 
-        urls = [u.url for u in plan.urls_to_scrape]
+        from book_scraper.db.repo import get_pending_scrape_url_items
+
+        items = get_pending_scrape_url_items(db_session, plan.run_id)
+        urls = [i["url"] for i in items]
         assert "https://rs.lt/book-1" in urls
         assert "https://rs.lt/book-2" in urls
         assert plan.urls_skipped == 0

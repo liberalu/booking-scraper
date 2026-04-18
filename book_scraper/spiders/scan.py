@@ -5,7 +5,11 @@ import scrapy
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
-from book_scraper.db.repo import increment_scrape_run_stats
+from book_scraper.db.repo import (
+    get_pending_scrape_url_items,
+    increment_scrape_run_stats,
+    reset_processing_scrape_url_items,
+)
 from book_scraper.db.session import get_session_factory
 from book_scraper.items import ShopBookItem
 from book_scraper.services.scan import ScanService
@@ -105,15 +109,20 @@ class ScanSpider(scrapy.Spider):
             for warning in plan.freshness_warnings:
                 self.logger.warning(warning)
 
-            urls_to_scrape = plan.urls_to_scrape
-            if self._max_urls and len(urls_to_scrape) > self._max_urls:
+            # Load work queue from DB (supports crash-resume)
+            reset_processing_scrape_url_items(session, plan.run_id)
+            url_items = get_pending_scrape_url_items(session, plan.run_id)
+            session.commit()
+
+            if self._max_urls and len(url_items) > self._max_urls:
                 self.logger.info(
                     "max_urls cap: scraping %d of %d planned URLs",
                     self._max_urls,
-                    len(urls_to_scrape),
+                    len(url_items),
                 )
-                urls_to_scrape = urls_to_scrape[: self._max_urls]
-            total = len(urls_to_scrape)
+                url_items = url_items[: self._max_urls]
+
+            total = len(url_items)
             self.logger.info(
                 "Scan starting: %d URLs (%d skipped). Pacing via Scrapy "
                 "CONCURRENT_REQUESTS_PER_DOMAIN + DOWNLOAD_DELAY + AUTOTHROTTLE.",
@@ -121,18 +130,15 @@ class ScanSpider(scrapy.Spider):
                 plan.urls_skipped,
             )
 
-            # Yield all requests upfront. Scrapy's scheduler, download
-            # delay, per-domain concurrency cap, and AutoThrottle handle
-            # pacing. A manual batching loop used to live here but
-            # could hang forever if the _urls_responded counter fell
-            # short of the batch boundary (e.g. a dupefilter drop or a
-            # middleware skip produced no status-update callback).
-            for url_record in urls_to_scrape:
+            for item in url_items:
                 yield scrapy.Request(
-                    url_record.url,
+                    item["url"],
                     callback=self.parse_product,
                     errback=self.handle_error,
-                    meta={"discovered_url_id": url_record.id},
+                    meta={
+                        "discovered_url_id": item["discovered_url_id"],
+                        "scrape_url_item_id": item["id"],
+                    },
                 )
         finally:
             session.close()
@@ -141,6 +147,7 @@ class ScanSpider(scrapy.Spider):
         self, response: scrapy.http.Response
     ) -> Generator[ShopBookItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
+        scrape_url_item_id = response.meta.get("scrape_url_item_id")
 
         url = response.url.split("?")[0]
         if 400 <= response.status < 500:
@@ -156,6 +163,8 @@ class ScanSpider(scrapy.Spider):
                 discovered_url_id,
                 http_status=response.status,
                 increment_fail=True,
+                scrape_url_item_id=scrape_url_item_id,
+                success=False,
             )
             return
         if 500 <= response.status < 600:
@@ -171,6 +180,8 @@ class ScanSpider(scrapy.Spider):
                 discovered_url_id,
                 http_status=response.status,
                 increment_fail=True,
+                scrape_url_item_id=scrape_url_item_id,
+                success=False,
             )
             return
 
@@ -201,7 +212,11 @@ class ScanSpider(scrapy.Spider):
 
         if not data.get("title"):
             self._queue_url_status_update(
-                discovered_url_id, http_status=200, url_type="non_product"
+                discovered_url_id,
+                http_status=200,
+                url_type="non_product",
+                scrape_url_item_id=scrape_url_item_id,
+                success=False,
             )
             return
 
@@ -214,6 +229,7 @@ class ScanSpider(scrapy.Spider):
         item = ShopBookItem(
             url=response.url.split("?")[0],
             shop_name=self.shop_name,
+            type=data.get("type"),
             title=data["title"],
             author=data.get("author"),
             sku=data.get("sku"),
@@ -232,7 +248,11 @@ class ScanSpider(scrapy.Spider):
 
         # Mark URL as successfully scraped
         self._queue_url_status_update(
-            discovered_url_id, http_status=200, url_type="product"
+            discovered_url_id,
+            http_status=200,
+            url_type="product",
+            scrape_url_item_id=scrape_url_item_id,
+            success=True,
         )
 
         self._urls_processed += 1
@@ -242,6 +262,7 @@ class ScanSpider(scrapy.Spider):
         """Handle request failures (timeouts, connection errors)."""
         request = failure.request
         discovered_url_id = request.meta.get("discovered_url_id")
+        scrape_url_item_id = request.meta.get("scrape_url_item_id")
         url = str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
@@ -277,6 +298,8 @@ class ScanSpider(scrapy.Spider):
             discovered_url_id,
             http_status=http_status,
             increment_fail=True,
+            scrape_url_item_id=scrape_url_item_id,
+            success=False,
         )
 
     def _report_validation(
@@ -306,18 +329,22 @@ class ScanSpider(scrapy.Spider):
         http_status: int | None = None,
         url_type: str | None = None,
         increment_fail: bool = False,
+        scrape_url_item_id: int | None = None,
+        success: bool = False,
     ) -> None:
         """Queue a URL status update and flush periodically."""
-        if url_id is None:
+        if url_id is None and scrape_url_item_id is None:
             return
-        self._url_status_updates.append(
-            {
-                "url_id": url_id,
-                "http_status": http_status,
-                "url_type": url_type,
-                "increment_fail": increment_fail,
-            }
-        )
+        update: dict[str, Any] = {
+            "url_id": url_id,
+            "http_status": http_status,
+            "url_type": url_type,
+            "increment_fail": increment_fail,
+        }
+        if scrape_url_item_id is not None:
+            update["scrape_url_item_id"] = scrape_url_item_id
+            update["scrape_url_item_success"] = success
+        self._url_status_updates.append(update)
         self._urls_responded += 1
         if self._urls_responded % self._flush_every == 0:
             self._flush_progress()
