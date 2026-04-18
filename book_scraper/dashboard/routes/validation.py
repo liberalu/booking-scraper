@@ -54,7 +54,13 @@ def _safe_back(request: Request) -> str:
 
 
 def _filter_params(
-    state: str, shop: str, issue_type: str, run_id: str, q: str, order: str
+    state: str,
+    shop: str,
+    issue_type: str,
+    run_id: str,
+    q: str,
+    order: str,
+    severity: str = "",
 ) -> str:
     """Render a query string for paginate/ack/delete links preserving filters.
 
@@ -74,6 +80,8 @@ def _filter_params(
         params["q"] = q
     if order:
         params["order"] = order
+    if severity:
+        params["severity"] = severity
     return urlencode(params)
 
 
@@ -83,23 +91,26 @@ def validation_list(
     state: str = "open",
     shop: str = "",
     issue_type: str = "",
-    run_id: int | None = None,
+    run_id: str = "",
     q: str = "",
     order: str = "desc",
+    severity: str = "",
     page: int = 1,
     session: Session = Depends(get_db),
 ) -> Response:
     state = _normalize_state(state)
     lifecycle_state = None if state == "all" else state
     shop_id = _resolve_shop_id(session, shop)
+    run_id_int: int | None = int(run_id) if run_id.strip().isdigit() else None
 
     rows, total = get_issues_page(
         session,
         state=lifecycle_state,
         shop_id=shop_id,
         issue_type=issue_type,
-        run_id=run_id,
+        run_id=run_id_int,
         q=q,
+        severity=severity,
         order=order,
         page=max(page, 1),
         per_page=_PER_PAGE,
@@ -109,8 +120,9 @@ def validation_list(
         session,
         shop_id=shop_id,
         issue_type=issue_type,
-        run_id=run_id,
+        run_id=run_id_int,
         q=q,
+        severity=severity,
     )
     shops = get_all_shops(session)
 
@@ -133,14 +145,21 @@ def validation_list(
             "shops": shops,
             "selected_shop": shop,
             "selected_issue_type": issue_type,
-            "selected_run_id": run_id,
+            "selected_run_id": run_id_int,
             "q": q,
             "order": order,
             "critical_types": critical_types,
             "warning_types": warning_types,
             "issue_descriptions": ISSUE_DESCRIPTIONS,
+            "selected_severity": severity,
             "filter_params": _filter_params(
-                state, shop, issue_type, str(run_id) if run_id else "", q, order
+                state,
+                shop,
+                issue_type,
+                str(run_id_int) if run_id_int else "",
+                q,
+                order,
+                severity,
             ),
         },
     )
@@ -182,6 +201,22 @@ def acknowledge_all(
         q=q,
     )
     session.commit()
+    return RedirectResponse(url=_safe_back(request), status_code=303)
+
+
+@router.post("/validation-issues/acknowledge-selected")
+def acknowledge_selected(
+    request: Request,
+    ids: str = Form(""),
+    session: Session = Depends(get_db),
+) -> Response:
+    id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+    if id_list:
+        from book_scraper.db.repo import acknowledge_validation_issue
+
+        for issue_id in id_list:
+            acknowledge_validation_issue(session, issue_id)
+        session.commit()
     return RedirectResponse(url=_safe_back(request), status_code=303)
 
 

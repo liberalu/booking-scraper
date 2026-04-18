@@ -5,6 +5,10 @@ from typing import Any
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
+from book_scraper.dashboard.shop_book_filters import (
+    ShopBookFieldFilter,
+    apply_shop_book_field_filters,
+)
 from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
@@ -40,10 +44,6 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
     "html_in_text": (
         "HTML tags found in title or author. Raw markup leaked into a text field."
     ),
-    "invalid_isbn": (
-        "ISBN fails checksum (ISBN-10 or ISBN-13)."
-        " Parser may be selecting a barcode or wrong field."
-    ),
     "format_mismatch": (
         "Format inconsistent with metadata"
         " — e.g. audiobook has pages, hardcover has duration."
@@ -54,6 +54,9 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
     ),
     "attribute_invalid_value": (
         "A property value doesn't match the allowed enum or regex in the shop config."
+    ),
+    "field_cleared": (
+        "A field that had a value is now missing. Likely a parser regression."
     ),
 }
 
@@ -66,10 +69,10 @@ ISSUE_SEVERITY: dict[str, str] = {
     "missing_title": "critical",
     "suspicious_title": "warning",
     "html_in_text": "warning",
-    "invalid_isbn": "warning",
     "format_mismatch": "warning",
     "attribute_unknown_key": "warning",
     "attribute_invalid_value": "warning",
+    "field_cleared": "critical",
 }
 
 
@@ -198,6 +201,7 @@ def get_validation_lifecycle_counts(
     issue_type: str = "",
     run_id: int | None = None,
     q: str = "",
+    severity: str = "",
 ) -> dict[str, int]:
     """Bucket counts of issues (new/recurring/already_seen/open) under the same
     filter semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs."""
@@ -213,15 +217,16 @@ def get_validation_lifecycle_counts(
         query = query.filter(ScrapeRun.shop_id == shop_id)
     if issue_type:
         query = query.filter(ValidationIssue.issue == issue_type)
+    if severity in ("critical", "warning"):
+        severity_types = [k for k, v in ISSUE_SEVERITY.items() if v == severity]
+        query = query.filter(ValidationIssue.issue.in_(severity_types))
     if run_id is not None:
         query = query.filter(ValidationIssue.scrape_run_id == run_id)
     if q:
         pattern = f"%{q}%"
         query = query.outerjoin(
             ShopBook, ValidationIssue.shop_book_id == ShopBook.id
-        ).filter(
-            or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern))
-        )
+        ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
 
     rows = query.group_by(ValidationIssue.lifecycle_state).all()
     counts = {"new": 0, "recurring": 0, "already_seen": 0}
@@ -238,6 +243,7 @@ def get_issues_page(
     issue_type: str = "",
     run_id: int | None = None,
     q: str = "",
+    severity: str = "",
     order: str = "desc",
     page: int = 1,
     per_page: int = 50,
@@ -266,6 +272,9 @@ def get_issues_page(
         query = query.filter(ScrapeRun.shop_id == shop_id)
     if issue_type:
         query = query.filter(ValidationIssue.issue == issue_type)
+    if severity in ("critical", "warning"):
+        severity_types = [k for k, v in ISSUE_SEVERITY.items() if v == severity]
+        query = query.filter(ValidationIssue.issue.in_(severity_types))
     if run_id is not None:
         query = query.filter(ValidationIssue.scrape_run_id == run_id)
     if q:
@@ -492,6 +501,7 @@ SORT_COLUMNS = {
     "title": ShopBook.title,
     "author": ShopBook.author,
     "isbn": ShopBook.isbn,
+    "type": ShopBook.type,
     "price": ShopBook.price,
     "year": ShopBook.year,
     "is_active": ShopBook.is_active,
@@ -508,6 +518,7 @@ def get_shop_books_page(
     author: str = "",
     publisher: str = "",
     category: str = "",
+    type_filter: str = "",
     format_filter: str = "",
     missing_field: str = "",
     shop_id: int | None = None,
@@ -515,6 +526,7 @@ def get_shop_books_page(
     has_isbn: bool = False,
     sort_by: str = "",
     sort_order: str = "asc",
+    field_filters: dict[str, ShopBookFieldFilter] | None = None,
 ) -> tuple[list[ShopBook], int]:
     """Return paginated shop_books with filters. Returns (shop_books, total_count)."""
     query = session.query(ShopBook).options(joinedload(ShopBook.shop))
@@ -529,6 +541,8 @@ def get_shop_books_page(
         query = query.filter(ShopBook.publisher.ilike(f"%{publisher}%"))
     if category:
         query = query.filter(ShopBook.categories.any(category))
+    if type_filter:
+        query = query.filter(ShopBook.type == type_filter)
     if format_filter:
         if format_filter == "none":
             query = query.filter(ShopBook.format.is_(None))
@@ -558,6 +572,8 @@ def get_shop_books_page(
     # "all" or "" — no active/inactive filter applied
     if has_isbn:
         query = query.filter(ShopBook.isbn.isnot(None))
+    if field_filters:
+        query = apply_shop_book_field_filters(query, field_filters)
 
     total = query.count()
     order_col = SORT_COLUMNS.get(sort_by, ShopBook.last_seen_at)
@@ -593,6 +609,18 @@ def get_all_formats(session: Session) -> list[str]:
         .filter(ShopBook.format.isnot(None))
         .distinct()
         .order_by(ShopBook.format)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def get_all_types(session: Session) -> list[str]:
+    """Get distinct shop-book type values."""
+    rows = (
+        session.query(ShopBook.type)
+        .filter(ShopBook.type.isnot(None))
+        .distinct()
+        .order_by(ShopBook.type)
         .all()
     )
     return [r[0] for r in rows]
@@ -650,9 +678,79 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
     )
 
 
+def get_run_changed_fields(
+    session: Session, run_id: int, shop_book_ids: list[int]
+) -> dict[int, list[tuple[str, str | None, str | None]]]:
+    """Return {shop_book_id: [(field, old_value, new_value), ...]} for this run."""
+    if not shop_book_ids:
+        return {}
+    rows = (
+        session.query(
+            ShopBookChange.shop_book_id,
+            ShopBookChange.field,
+            ShopBookChange.old_value,
+            ShopBookChange.new_value,
+        )
+        .filter(
+            ShopBookChange.scrape_run_id == run_id,
+            ShopBookChange.shop_book_id.in_(shop_book_ids),
+        )
+        .all()
+    )
+    result: dict[int, list[tuple[str, str | None, str | None]]] = {}
+    for row in rows:
+        result.setdefault(row.shop_book_id, []).append(
+            (row.field, row.old_value, row.new_value)
+        )
+    return result
+
+
+def get_run_price_changes(
+    session: Session, run_id: int, shop_book_ids: list[int]
+) -> dict[int, tuple[str, str]]:
+    """Return old/new prices for price-changed shop books in a run."""
+    if not shop_book_ids:
+        return {}
+    cur_rows = (
+        session.query(Price.shop_book_id, Price.price)
+        .filter(Price.scrape_run_id == run_id, Price.shop_book_id.in_(shop_book_ids))
+        .all()
+    )
+    cur_map = {r.shop_book_id: r.price for r in cur_rows}
+    if not cur_map:
+        return {}
+    # Per-book cutoff: earliest scraped_at for this book within the run
+    run_prices = (
+        session.query(
+            Price.shop_book_id,
+            func.min(Price.scraped_at).label("run_scraped_at"),
+        )
+        .filter(Price.scrape_run_id == run_id, Price.shop_book_id.in_(shop_book_ids))
+        .group_by(Price.shop_book_id)
+        .subquery()
+    )
+    prev_rows = (
+        session.query(Price.shop_book_id, Price.price)
+        .join(run_prices, Price.shop_book_id == run_prices.c.shop_book_id)
+        .filter(
+            Price.scrape_run_id != run_id,
+            Price.scraped_at < run_prices.c.run_scraped_at,
+        )
+        .distinct(Price.shop_book_id)
+        .order_by(Price.shop_book_id, Price.scraped_at.desc())
+        .all()
+    )
+    prev_map = {r.shop_book_id: r.price for r in prev_rows}
+    return {
+        sb_id: (str(prev_map[sb_id]), str(cur_map[sb_id]))
+        for sb_id in shop_book_ids
+        if sb_id in cur_map and sb_id in prev_map and cur_map[sb_id] != prev_map[sb_id]
+    }
+
+
 def get_run_shop_books(
     session: Session, run_id: int
-) -> tuple[list[ShopBook], list[ShopBook], list[ShopBook]]:
+) -> tuple[list[ShopBook], list[ShopBook], list[ShopBook], set[int]]:
     """Get shop_books created, changed, and unchanged in a specific run.
 
     Uses the prices table (append-only, keyed by scrape_run_id) to find
@@ -713,7 +811,7 @@ def get_run_shop_books(
         ]
 
     if not rest:
-        return created, [], []
+        return created, [], [], set()
 
     # IDs of shop_books with field-level changes in this run
     changed_ids = set(
@@ -792,7 +890,7 @@ def get_run_shop_books(
     changed = [shop_book for shop_book in rest if shop_book.id in all_changed_ids]
     unchanged = [shop_book for shop_book in rest if shop_book.id not in all_changed_ids]
 
-    return created, changed, unchanged
+    return created, changed, unchanged, price_changed_ids
 
 
 def get_shop_field_stats(session: Session, shop_id: int) -> dict:
@@ -822,6 +920,27 @@ def get_shop_field_stats(session: Session, shop_id: int) -> dict:
         )
         fields[field_name] = {"missing": missing, "present": total - missing}
     return {"total": total, "fields": fields}
+
+
+def get_shop_book_issues(session: Session, shop_book_id: int) -> list[dict[str, Any]]:
+    rows = (
+        session.query(ValidationIssue)
+        .filter(ValidationIssue.shop_book_id == shop_book_id)
+        .order_by(ValidationIssue.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": issue.id,
+            "issue": issue.issue,
+            "field": issue.field,
+            "raw_value": issue.raw_value,
+            "lifecycle_state": issue.lifecycle_state,
+            "scrape_run_id": issue.scrape_run_id,
+            "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
+        }
+        for issue in rows
+    ]
 
 
 def get_shop_book_changes(

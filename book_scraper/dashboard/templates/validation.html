@@ -18,7 +18,7 @@
 </div>
 
 {# ── Lifecycle tabs ─────────────────────────────────────────── #}
-{% set base = 'shop=' ~ selected_shop|urlencode ~ '&issue_type=' ~ selected_issue_type|urlencode ~ ('&run_id=' ~ selected_run_id if selected_run_id else '') ~ '&q=' ~ q|urlencode ~ '&order=' ~ order %}
+{% set base = 'shop=' ~ selected_shop|urlencode ~ '&issue_type=' ~ selected_issue_type|urlencode ~ '&severity=' ~ selected_severity|urlencode ~ ('&run_id=' ~ selected_run_id if selected_run_id else '') ~ '&q=' ~ q|urlencode ~ '&order=' ~ order %}
 <div class="tab-row">
     {% for label, val in [('Open','open'),('New','new'),('Recurring','recurring'),('Acknowledged','already_seen'),('All','all')] %}
     <a href="/validation?state={{ val }}&{{ base }}"
@@ -56,6 +56,13 @@
             </optgroup>
         </select>
 
+        <label>Severity</label>
+        <select name="severity">
+            <option value="">All severities</option>
+            <option value="critical" {% if selected_severity == 'critical' %}selected{% endif %}>Critical</option>
+            <option value="warning" {% if selected_severity == 'warning' %}selected{% endif %}>Warning</option>
+        </select>
+
         <label>Run</label>
         <input type="number" name="run_id" placeholder="#" style="width:90px"
                value="{{ selected_run_id or '' }}">
@@ -64,7 +71,7 @@
         <input type="search" name="q" placeholder="Book or URL..." value="{{ q }}">
 
         <button type="submit">Filter</button>
-        {% if selected_shop or selected_issue_type or selected_run_id or q %}
+        {% if selected_shop or selected_issue_type or selected_run_id or q or selected_severity %}
         <a href="/validation?state={{ state }}" role="button" class="secondary">Reset</a>
         {% endif %}
     </div>
@@ -82,6 +89,10 @@
     </span>
     {% if total > 0 and state != 'already_seen' %}
     <div class="bulk-actions">
+        <form id="ack-selected-form" method="post" action="/validation-issues/acknowledge-selected" style="display:none;">
+            <input type="hidden" name="ids" id="selected-ids-input">
+            <button type="submit" class="bulk-btn" id="ack-selected-btn">Acknowledge selected (<span id="sel-count">0</span>)</button>
+        </form>
         <form method="post" action="/validation-issues/acknowledge-all" style="display:inline;"
               onsubmit="return confirm('Acknowledge {{ total }} matching issue(s)?');">
             <input type="hidden" name="issue_type" value="{{ selected_issue_type }}">
@@ -110,7 +121,7 @@
 <table class="data-table">
     <thead>
         <tr>
-            <th style="width:28px"><input type="checkbox" disabled title="Row selection coming in v2"></th>
+            <th style="width:28px"><input type="checkbox" id="select-all" title="Select all on this page"></th>
             <th>
                 <a href="/validation?state={{ state }}&shop={{ selected_shop|urlencode }}&issue_type={{ selected_issue_type|urlencode }}&run_id={{ selected_run_id or '' }}&q={{ q|urlencode }}&order={{ 'asc' if order == 'desc' else 'desc' }}">
                     Added <span class="sort-arrow">{{ '▼' if order == 'desc' else '▲' }}</span>
@@ -128,7 +139,7 @@
     <tbody>
         {% for r in rows %}
         <tr>
-            <td><input type="checkbox" disabled></td>
+            <td><input type="checkbox" class="row-cb" data-id="{{ r.id }}"></td>
             <td class="text-muted" style="white-space:nowrap;font-size:0.75rem;">
                 {{ r.added_at.strftime('%Y-%m-%d %H:%M:%S') if r.added_at else '—' }}
             </td>
@@ -230,4 +241,38 @@
               max-width:220px; display:inline-block; overflow:hidden;
               text-overflow:ellipsis; white-space:nowrap; vertical-align:middle; }
 </style>
+<script>
+(function() {
+    const selectAll = document.getElementById('select-all');
+    const form = document.getElementById('ack-selected-form');
+    const idsInput = document.getElementById('selected-ids-input');
+    const selCount = document.getElementById('sel-count');
+    if (!selectAll) return;
+
+    function getChecked() {
+        return Array.from(document.querySelectorAll('.row-cb:checked'));
+    }
+    function updateBar() {
+        const checked = getChecked();
+        if (form) form.style.display = checked.length > 0 ? 'inline' : 'none';
+        if (selCount) selCount.textContent = checked.length;
+        if (idsInput) idsInput.value = checked.map(cb => cb.dataset.id).join(',');
+    }
+    selectAll.addEventListener('change', function() {
+        document.querySelectorAll('.row-cb').forEach(cb => { cb.checked = selectAll.checked; });
+        updateBar();
+    });
+    document.querySelectorAll('.row-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const all = document.querySelectorAll('.row-cb');
+            selectAll.checked = Array.from(all).every(c => c.checked);
+            selectAll.indeterminate = !selectAll.checked && Array.from(all).some(c => c.checked);
+            updateBar();
+        });
+    });
+    if (form) form.addEventListener('submit', function() {
+        return confirm('Acknowledge ' + getChecked().length + ' selected issue(s)?');
+    });
+})();
+</script>
 {% endblock %}
