@@ -939,7 +939,7 @@ a.stat-card:hover,
 .progress-track {
     position: relative;
     flex: 1;
-    height: 8px;
+    height: 6px;
     border-radius: 999px;
     overflow: hidden;
     background: var(--neutral-soft);
@@ -961,6 +961,14 @@ a.stat-card:hover,
 
 .progress-fill.error {
     background: linear-gradient(90deg, var(--danger), #fb7185);
+}
+
+.progress-fill.high {
+    background: linear-gradient(90deg, var(--success), #22d3ee);
+}
+
+.progress-fill.medium {
+    background: linear-gradient(90deg, var(--warning), #f97316);
 }
 
 .validation-inline {
