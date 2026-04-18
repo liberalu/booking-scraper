@@ -12,6 +12,7 @@ from book_scraper.db.repo import (
     finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
+    insert_scrape_url_item,
     mark_scrape_url_item_done,
     mark_scrape_url_item_failed,
     mark_stale_runs_failed,
@@ -97,6 +98,21 @@ class ScanService:
             urls_skipped=urls_skipped,
             freshness_warnings=warnings,
         )
+
+    def enqueue_new_url(
+        self,
+        run_id: int,
+        shop_id: int,
+        discovered_url_id: int | None,
+        url: str,
+        url_type: str = "product",
+    ) -> int:
+        """Queue a newly-discovered URL for same-run processing. Returns item id."""
+        item = insert_scrape_url_item(
+            self.session, run_id, shop_id, discovered_url_id, url, url_type
+        )
+        self.session.commit()
+        return item.id
 
     def flush_progress(
         self,

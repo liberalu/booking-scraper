@@ -587,13 +587,30 @@ class PostgresPipeline:
 
         elif isinstance(item, DiscoveredUrlItem):
             shop_id = self._get_shop_id(shop_name)
-            upsert_discovered_url(
+            record = upsert_discovered_url(
                 self.session,
                 shop_id=shop_id,
                 url=item["url"],
                 source=item["source"],
                 run_id=self._run_id,
             )
+            spider = self.spider
+            if (
+                spider is not None
+                and getattr(spider, "name", "") == "scan"
+                and getattr(spider, "_rescrape", False)
+            ):
+                from book_scraper.services.scan import ScanService
+
+                scan_run_id = getattr(spider, "_run_id", None)
+                if scan_run_id is not None:
+                    ScanService(self.session).enqueue_new_url(
+                        run_id=scan_run_id,
+                        shop_id=shop_id,
+                        discovered_url_id=record.id,
+                        url=record.url,
+                        url_type=record.url_type or "product",
+                    )
 
         # Commit every 100 items
         self._item_count += 1

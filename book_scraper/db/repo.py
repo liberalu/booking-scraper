@@ -1123,6 +1123,40 @@ def reset_processing_scrape_url_items(session: Session, run_id: int) -> int:
     return len(items)
 
 
+def insert_scrape_url_item(
+    session: Session,
+    run_id: int,
+    shop_id: int,
+    discovered_url_id: int | None,
+    url: str,
+    url_type: str = "product",
+) -> ScrapeUrlItem:
+    """Insert a single pending scrape_url_item mid-run.
+
+    Used to enqueue newly-discovered URLs so the same run processes them
+    as a second pass. Idempotent: if an item for (run_id, url) already
+    exists, returns it unchanged.
+    """
+    existing = (
+        session.query(ScrapeUrlItem)
+        .filter_by(run_id=run_id, url=url)
+        .one_or_none()
+    )
+    if existing is not None:
+        return existing
+    item = ScrapeUrlItem(
+        run_id=run_id,
+        shop_id=shop_id,
+        discovered_url_id=discovered_url_id,
+        url=url,
+        url_type=url_type,
+        status="pending",
+    )
+    session.add(item)
+    session.flush()
+    return item
+
+
 def cleanup_scrape_url_items(session: Session, run_id: int) -> int:
     """Delete all scrape_url_items for a finished run.
 

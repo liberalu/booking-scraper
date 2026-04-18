@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import scrapy
+from scrapy import signals
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
@@ -52,6 +53,47 @@ class ScanSpider(scrapy.Spider):
         self._errors_4xx: int = 0
         self._errors_5xx: int = 0
         self._error_count: int = 0
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
+        spider = super().from_crawler(crawler, *args, **kwargs)
+        crawler.signals.connect(spider.spider_idle, signal=signals.spider_idle)
+        return spider
+
+    def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
+        """When the main queue drains, check for new items queued mid-run
+        and schedule them. Called by Scrapy when no requests are in flight."""
+        if self._run_id is None:
+            return
+        database_url = self.settings.get("DATABASE_URL")
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            reset_processing_scrape_url_items(session, self._run_id)
+            new_items = get_pending_scrape_url_items(session, self._run_id)
+            session.commit()
+        finally:
+            session.close()
+
+        if not new_items:
+            return
+
+        from scrapy.exceptions import DontCloseSpider
+
+        engine = self.crawler.engine
+        assert engine is not None
+        for item in new_items:
+            req = scrapy.Request(
+                item["url"],
+                callback=self.parse_product,
+                errback=self.handle_error,
+                meta={
+                    "discovered_url_id": item["discovered_url_id"],
+                    "scrape_url_item_id": item["id"],
+                },
+            )
+            engine.crawl(req)
+        raise DontCloseSpider
 
     async def start(self) -> AsyncGenerator[scrapy.Request, None]:
         # Apply max_urls cap to single-URL mode too — keeps the flag
