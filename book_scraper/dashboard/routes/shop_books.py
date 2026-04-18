@@ -250,7 +250,9 @@ def shop_books_page(
             "formats": formats,
             "max_filtered_urls": MAX_FILTERED_URLS,
             "scrape_started": scrape_started,
-            "secondary_filters_active": bool(author or publisher or category or type or format or missing),
+            "secondary_filters_active": bool(
+                author or publisher or category or type or format or missing
+            ),
             "field_filters_active": bool(field_filters),
             "field_filter_options": get_shop_book_field_options(),
             "field_filter_operator_options": [
