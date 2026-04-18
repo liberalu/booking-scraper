@@ -982,7 +982,7 @@ a.stat-card:hover,
     align-items: center;
     gap: 0.35rem;
     padding: 0.45rem 0.7rem;
-    border-radius: 999px;
+    border-radius: 10px;
     background: var(--card-muted);
     color: var(--text-primary);
     font-size: 0.82rem;
