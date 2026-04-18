@@ -6,6 +6,7 @@ class ShopBookItem(scrapy.Item):
 
     url = scrapy.Field()
     shop_name = scrapy.Field()
+    type = scrapy.Field()
     title = scrapy.Field()
     author = scrapy.Field()
     sku = scrapy.Field()

@@ -3,17 +3,25 @@ from book_scraper.db.repo import _infer_shop_book_type, upsert_shop_book
 
 
 def test_infer_shop_book_type_maps_audiobook():
-    assert _infer_shop_book_type("audiobook") == "audio"
-    assert _infer_shop_book_type("audio") == "audio"
-    assert _infer_shop_book_type("AUDIOBOOK") == "audio"
+    assert _infer_shop_book_type(title="X", format="audiobook") == "audio"
+    assert _infer_shop_book_type(title="X", format="audio") == "audio"
+    assert _infer_shop_book_type(title="X", format="AUDIOBOOK") == "audio"
 
 
-def test_infer_shop_book_type_defaults_book():
-    assert _infer_shop_book_type(None) == "book"
-    assert _infer_shop_book_type("paperback") == "book"
-    assert _infer_shop_book_type("hardcover") == "book"
-    assert _infer_shop_book_type("book") == "book"
-    assert _infer_shop_book_type("n/a") == "book"
+def test_infer_shop_book_type_maps_book_formats():
+    assert _infer_shop_book_type(title="X", format="paperback") == "book"
+    assert _infer_shop_book_type(title="X", format="hardcover") == "book"
+    assert _infer_shop_book_type(title="X", format="book") == "book"
+
+
+def test_infer_shop_book_type_maps_non_book_from_categories():
+    assert (
+        _infer_shop_book_type(
+            title="Envelope",
+            categories=["Mokyklinės ir raštinės prekės"],
+        )
+        == "non_book"
+    )
 
 
 def _make_shop(db_session):
@@ -45,6 +53,18 @@ def test_upsert_shop_book_sets_type_book_by_default(db_session):
         format="paperback",
     )
     assert shop_book.type == "book"
+
+
+def test_upsert_shop_book_sets_type_non_book_for_stationery(db_session):
+    shop = _make_shop(db_session)
+    shop_book, _created, _, _ = upsert_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://vaga.lt/vokas",
+        title="Vokas popierinis",
+        categories=["Mokyklinės ir raštinės prekės"],
+    )
+    assert shop_book.type == "non_book"
 
 
 def test_upsert_shop_book_rederives_type_on_format_change(db_session):

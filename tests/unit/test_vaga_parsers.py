@@ -1,9 +1,15 @@
 from pathlib import Path
 
+import pytest
+
 from book_scraper.spiders.vaga.parsers import (
+    classify_book_product,
+    infer_shop_book_type,
+    is_book_product_page,
     parse_category_page,
     parse_product_page,
     parse_sitemap_urls,
+    title_looks_like_game_or_toy,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -36,6 +42,8 @@ def test_parse_product_page():
     assert "isbn" in data
     assert "in_stock" in data
     assert "categories" in data
+    assert data["is_book_product"] is True
+    assert data["type"] == "book"
 
 
 def test_parse_product_page_unescapes_html_entities_in_title():
@@ -178,3 +186,155 @@ def test_parse_product_page_price_knygyne_still_wins_for_original():
     data = parse_product_page(html_doc)
     assert data["price"] == "15.80"
     assert data["price_original"] == "18.90"
+
+
+def test_title_looks_like_game_or_toy():
+    assert title_looks_like_game_or_toy("Stalo žaidimas „Teleloto“") is True
+    assert title_looks_like_game_or_toy("Dėlionė vaikams") is True
+    assert title_looks_like_game_or_toy("Knyga apie stalo žaidimus") is False
+
+
+def test_parse_product_page_marks_board_game_as_non_book():
+    ld = (
+        '{"@type":"Product","name":"Stalo žaidimas \\"Teleloto\\"","sku":"1",'
+        '"offers":{"price":"25.49","availability":"OutOfStock"},'
+        '"brand":{"name":"Terra Publica"},'
+        '"isRelatedTo":{"isbn":"4779054890696"}}'
+    )
+    breadcrumbs = (
+        '{"@type":"BreadcrumbList","itemListElement":['
+        '{"name":"Žaislai ir žaidimai"},'
+        '{"name":"Stalo žaidimai"},'
+        '{"name":"Šeimos stalo žaidimai"}]}'
+    )
+    html_doc = (
+        '<html><body>'
+        '<script type="application/ld+json">'
+        + ld
+        + "</script>"
+        '<script type="application/ld+json">'
+        + breadcrumbs
+        + "</script>"
+        "</body></html>"
+    )
+    data = parse_product_page(html_doc)
+    assert data["title"] == 'Stalo žaidimas "Teleloto"'
+    assert data["is_book_product"] is False
+    assert data["book_score"] == -7
+    assert "-3 game/toy title" in data["book_score_reasons"]
+    assert "-4 non-book categories" in data["book_score_reasons"]
+    assert data["type"] == "non_book"
+
+
+def test_book_category_and_metadata_outweigh_game_like_title():
+    data = {
+        "title": "Knyga apie stalo žaidimus",
+        "author": "Jonas Jonaitis",
+        "isbn": None,
+        "categories": ["Grožinė literatūra", "Laisvalaikis"],
+        "pages": 240,
+        "cover_type": "Minkštas",
+        "year": 2024,
+        "translator": None,
+        "narrator": None,
+        "duration": None,
+        "format": "paperback",
+        "schema_types": ["Product"],
+    }
+    assert is_book_product_page(data) is True
+
+
+def test_classify_book_product_returns_score_and_reasons():
+    data = {
+        "title": "Stalo žaidimas „Teleloto“",
+        "author": None,
+        "isbn": "4779054890696",
+        "categories": ["Žaislai ir žaidimai", "Stalo žaidimai"],
+        "pages": None,
+        "cover_type": None,
+        "year": None,
+        "translator": None,
+        "narrator": None,
+        "duration": None,
+        "format": None,
+        "schema_types": ["Product"],
+    }
+    result = classify_book_product(data)
+    assert result["is_book_product"] is False
+    assert result["score"] == -7
+    assert "-3 game/toy title" in result["reasons"]
+    assert "-4 non-book categories" in result["reasons"]
+
+
+@pytest.mark.parametrize(
+    "category",
+    [
+        "Negrožinė literatūra",
+        "Grožinė literatūra",
+        "Knygos vaikams ir jaunimui",
+        "Knygos anglų kalba",
+        "Audioknygos",
+    ],
+)
+def test_top_level_book_categories_get_positive_score(category):
+    data = {
+        "title": "Neutral product title",
+        "author": None,
+        "isbn": None,
+        "categories": [category],
+        "pages": None,
+        "cover_type": None,
+        "year": None,
+        "translator": None,
+        "narrator": None,
+        "duration": None,
+        "format": None,
+        "schema_types": ["Product"],
+    }
+    result = classify_book_product(data)
+    assert result["is_book_product"] is True
+    assert result["score"] == 3
+    assert "+3 book categories" in result["reasons"]
+
+
+def test_infer_shop_book_type_prefers_audio_and_non_book():
+    assert infer_shop_book_type({"title": "X", "format": "audiobook"}) == "audio"
+    assert (
+        infer_shop_book_type(
+            {
+                "title": "Envelope",
+                "categories": ["Mokyklinės ir raštinės prekės"],
+            }
+        )
+        == "non_book"
+    )
+
+
+@pytest.mark.parametrize(
+    "category",
+    [
+        "MOKYKLINĖS IR RAŠTINĖS PREKĖS",
+        "DOVANŲ IDĖJOS",
+        "ŽAISLAI IR ŽAIDIMAI",
+        "VISKAS NAMAMS",
+    ],
+)
+def test_top_level_non_book_categories_get_negative_score(category):
+    data = {
+        "title": "Neutral product title",
+        "author": None,
+        "isbn": None,
+        "categories": [category],
+        "pages": None,
+        "cover_type": None,
+        "year": None,
+        "translator": None,
+        "narrator": None,
+        "duration": None,
+        "format": None,
+        "schema_types": ["Product"],
+    }
+    result = classify_book_product(data)
+    assert result["is_book_product"] is False
+    assert result["score"] == -4
+    assert "-4 non-book categories" in result["reasons"]

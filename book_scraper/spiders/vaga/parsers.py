@@ -4,10 +4,201 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
+from book_scraper.isbn import is_valid_isbn
+
+_BOOK_CATEGORY_LABELS = (
+    "negrožinė literatūra",
+    "grožinė literatūra",
+    "knygos vaikams ir jaunimui",
+    "knygos anglų kalba",
+    "audioknygos",
+)
+_NON_BOOK_CATEGORY_KEYWORDS = ("žaisl", "žaidim", "dėlion", "puzzle", "lego")
+_NON_BOOK_CATEGORY_LABELS = (
+    "mokyklinės ir raštinės prekės",
+    "dovanų idėjos",
+    "žaislai ir žaidimai",
+    "viskas namams",
+)
+_AUDIO_FORMATS = ("audiobook", "audio", "audiobookas")
+_EBOOK_FORMATS = (
+    "ebook",
+    "e-book",
+    "eknyga",
+    "e-knyga",
+    "elektroninė knyga",
+)
+_BOOK_FORMATS = ("book", "hardcover", "paperback")
+_GAME_OR_TOY_PATTERNS = (
+    r"^\s*stalo\s+žaidim",
+    r"^\s*kort[ųu]\s+žaidim",
+    r"^\s*edukacinis\s+žaidim",
+    r"^\s*dėlion",
+    r"\bpuzzle\b",
+    r"\blego\b",
+    r"^\s*žaislas\b",
+)
+
 
 def _unescape(value: object) -> object:
     """html.unescape on str values; pass through None and non-strings."""
     return html_module.unescape(value) if isinstance(value, str) else value
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", html_module.unescape(value).casefold()).strip()
+
+
+def _categories_contain_keywords(
+    categories: object, keywords: tuple[str, ...]
+) -> bool:
+    if not isinstance(categories, list):
+        return False
+    normalized = [_normalize_text(c) for c in categories if isinstance(c, str)]
+    return any(
+        any(keyword in category for keyword in keywords) for category in normalized
+    )
+
+
+def _categories_contain_labels(categories: object, labels: tuple[str, ...]) -> bool:
+    if not isinstance(categories, list):
+        return False
+    normalized = {_normalize_text(c) for c in categories if isinstance(c, str)}
+    return any(label in normalized for label in labels)
+
+
+def title_looks_like_game_or_toy(title: str | None) -> bool:
+    if not title:
+        return False
+    normalized = _normalize_text(title)
+    return any(re.search(pattern, normalized) for pattern in _GAME_OR_TOY_PATTERNS)
+
+
+def classify_book_product(data: dict[str, object]) -> dict[str, object]:
+    title = data.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return {
+            "score": 0,
+            "is_book_product": False,
+            "reasons": ["No title"],
+            "has_primary_book_signal": False,
+        }
+
+    categories = data.get("categories")
+    schema_types = {
+        schema_type.casefold()
+        for schema_type in data.get("schema_types", [])
+        if isinstance(schema_type, str)
+    }
+
+    has_book_category = _categories_contain_labels(categories, _BOOK_CATEGORY_LABELS)
+    has_non_book_category = _categories_contain_keywords(
+        categories, _NON_BOOK_CATEGORY_KEYWORDS
+    )
+    has_non_book_category = has_non_book_category or _categories_contain_labels(
+        categories, _NON_BOOK_CATEGORY_LABELS
+    )
+    isbn = data.get("isbn") if isinstance(data.get("isbn"), str) else None
+    valid_isbn = is_valid_isbn(isbn)
+    author = data.get("author")
+    has_author = isinstance(author, str) and bool(author.strip())
+    reasons: list[str] = []
+    has_book_metadata = any(
+        data.get(field) not in (None, "")
+        for field in (
+            "pages",
+            "cover_type",
+            "year",
+            "translator",
+            "narrator",
+            "duration",
+            "format",
+        )
+    )
+    schema_is_book = "book" in schema_types
+    title_is_non_book = title_looks_like_game_or_toy(title)
+
+    score = 0
+    if has_book_category:
+        score += 3
+        reasons.append("+3 book categories")
+    if valid_isbn:
+        score += 3
+        reasons.append("+3 valid ISBN")
+    if schema_is_book:
+        score += 2
+        reasons.append("+2 Book schema")
+    if has_author:
+        score += 2
+        reasons.append("+2 author present")
+    if has_book_metadata:
+        score += 2
+        reasons.append("+2 book metadata present")
+    if title_is_non_book:
+        score -= 3
+        reasons.append("-3 game/toy title")
+    if has_non_book_category:
+        score -= 4
+        reasons.append("-4 non-book categories")
+
+    if has_non_book_category and not (
+        has_book_category or valid_isbn or schema_is_book or has_author
+    ):
+        reasons.append("blocked: strong non-book category with no book evidence")
+        return {
+            "score": score,
+            "is_book_product": False,
+            "reasons": reasons,
+            "has_primary_book_signal": False,
+        }
+    if title_is_non_book and not (
+        has_book_category or valid_isbn or schema_is_book or has_book_metadata
+    ):
+        reasons.append("blocked: game/toy title with no book evidence")
+        return {
+            "score": score,
+            "is_book_product": False,
+            "reasons": reasons,
+            "has_primary_book_signal": False,
+        }
+
+    has_primary_book_signal = has_book_category or valid_isbn or schema_is_book
+    if has_author and has_book_metadata:
+        has_primary_book_signal = True
+    return {
+        "score": score,
+        "is_book_product": score >= 3 and has_primary_book_signal,
+        "reasons": reasons,
+        "has_primary_book_signal": has_primary_book_signal,
+    }
+
+
+def is_book_product_page(data: dict[str, object]) -> bool:
+    return bool(classify_book_product(data)["is_book_product"])
+
+
+def infer_shop_book_type(data: dict[str, object]) -> str:
+    format_value = data.get("format")
+    normalized_format = (
+        _normalize_text(format_value) if isinstance(format_value, str) else ""
+    )
+
+    if normalized_format in _AUDIO_FORMATS:
+        return "audio"
+    if normalized_format in _EBOOK_FORMATS:
+        return "ebook"
+    if normalized_format in _BOOK_FORMATS:
+        return "book"
+
+    categories = data.get("categories")
+    if _categories_contain_keywords(categories, ("audioknyg", "audiokny")):
+        return "audio"
+    if _categories_contain_keywords(categories, ("e-knyg", "eknyg", "elektronin")):
+        return "ebook"
+
+    if classify_book_product(data)["is_book_product"]:
+        return "book"
+    return "non_book"
 
 
 _ALLOWED_DESCRIPTION_TAGS = frozenset(
@@ -131,7 +322,13 @@ def parse_product_page(html: str) -> dict[str, object]:
         "duration": None,
         "narrator": None,
         "translator": None,
+        "schema_types": [],
+        "is_book_product": False,
+        "book_score": 0,
+        "book_score_reasons": [],
+        "type": "book",
     }
+    schema_types: set[str] = set()
 
     # Parse author: <div class="brand"><span>Autorius </span><a>Name</a></div>
     author_match = re.search(
@@ -157,9 +354,13 @@ def parse_product_page(html: str) -> dict[str, object]:
         # Product/Book data
         ld_type = ld.get("@type", "")
         if isinstance(ld_type, list):
-            is_product = "Product" in ld_type or "Book" in ld_type
+            ld_types = [str(value) for value in ld_type]
+        elif ld_type:
+            ld_types = [str(ld_type)]
         else:
-            is_product = ld_type in ("Product", "Book")
+            ld_types = []
+        schema_types.update(ld_types)
+        is_product = "Product" in ld_types or "Book" in ld_types
 
         if is_product:
             data["title"] = _unescape(ld.get("name"))
@@ -264,4 +465,10 @@ def parse_product_page(html: str) -> dict[str, object]:
     elif "Puslapiai" in prop_map:
         data["format"] = "book"
 
+    data["schema_types"] = sorted(schema_types)
+    classification = classify_book_product(data)
+    data["is_book_product"] = classification["is_book_product"]
+    data["book_score"] = classification["score"]
+    data["book_score_reasons"] = classification["reasons"]
+    data["type"] = infer_shop_book_type(data)
     return data
