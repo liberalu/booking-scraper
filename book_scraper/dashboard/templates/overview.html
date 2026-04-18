@@ -58,7 +58,7 @@
         <div class="progress-item">
             <div class="progress-label">{{ item.field }} {{ item.pct }}%</div>
             <div class="progress-track">
-                <div class="progress-fill" style="width: {{ item.pct }}%"></div>
+                <div class="progress-fill{% if item.pct >= 80 %} high{% elif item.pct >= 40 %} medium{% endif %}" style="width: {{ item.pct }}%"></div>
             </div>
         </div>
         {% endfor %}
