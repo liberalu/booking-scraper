@@ -10,6 +10,7 @@ from markupsafe import Markup, escape
 
 from book_scraper.dashboard.deps import templates
 from book_scraper.dashboard.routes import (
+    cron,
     overview,
     prices,
     runs,
@@ -238,3 +239,4 @@ app.include_router(urls.router)
 app.include_router(validation.router)
 app.include_router(prices.router)
 app.include_router(scrape.router)
+app.include_router(cron.router)

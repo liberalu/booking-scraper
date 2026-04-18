@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Cron Jobs</h1>
+
+<section class="card">
+  <h2>Schedules</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Shop</th>
+        <th>Phase</th>
+        <th>Strategy</th>
+        <th>Args</th>
+        <th>Schedule (cron)</th>
+        <th>Enabled</th>
+        <th>Last run</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>{{ job.shop_name }}</td>
+        <td>{{ job.phase }}</td>
+        <td>{{ job.strategy }}</td>
+        <td><code>{{ job.args }}</code></td>
+        <td><code>{{ job.cron_expression }}</code></td>
+        <td>{{ "yes" if job.enabled else "no" }}</td>
+        <td>{{ job.last_run_at.strftime('%Y-%m-%d %H:%M') if job.last_run_at else "—" }}</td>
+        <td>
+          <form method="post" action="/cron/{{ job.id }}/toggle" style="display:inline">
+            <button type="submit">{{ "Disable" if job.enabled else "Enable" }}</button>
+          </form>
+          <form method="post" action="/cron/{{ job.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Delete this cron job?');">
+            <button type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not jobs %}
+      <tr><td colspan="8">No cron jobs configured.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Add job</h2>
+  <form method="post" action="/cron">
+    <label>
+      Shop:
+      <select name="shop_id" required>
+        {% for s in shops %}
+        <option value="{{ s.id }}">{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Phase:
+      <select name="phase" required>
+        <option value="discover">discover</option>
+        <option value="scan">scan</option>
+      </select>
+    </label>
+    <label>
+      Strategy (for discover):
+      <input type="text" name="strategy" placeholder="sitemap, categories, full_crawl" />
+    </label>
+    <label>
+      Extra args:
+      <input type="text" name="args" placeholder="-a rescrape=true" />
+    </label>
+    <label>
+      Cron expression:
+      <input type="text" name="cron_expression" required placeholder="0 2 * * *" />
+    </label>
+    <p style="font-size:0.85em;color:#666">
+      Changes take effect after the scraper container restarts. Run <code>docker compose restart scraper</code> after editing.
+    </p>
+    <button type="submit">Create</button>
+  </form>
+</section>
+{% endblock %}
