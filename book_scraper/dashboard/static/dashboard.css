@@ -1073,12 +1073,30 @@ a.stat-card:hover,
     }
 }
 
-.cron-actions button {
+.cron-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.cron-actions form {
+    display: inline-block;
+    margin: 0;
+}
+
+.cron-actions button,
+.cron-actions form > button {
     padding: 0.15em 0.5em;
     font-size: 0.72em;
     line-height: 1.35;
-    margin-right: 0.2em;
+    min-height: 0;
+    min-width: 0;
+    width: auto;
+    display: inline-block;
     border-radius: 5px;
+    margin: 0;
 }
 
 .cron-edit-form {
@@ -1086,6 +1104,37 @@ a.stat-card:hover,
     flex-wrap: wrap;
     gap: 0.6rem;
     align-items: flex-end;
+}
+
+.quick-args {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.8rem;
+    margin: 0.4rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem 1.2rem;
+    align-items: center;
+}
+
+.quick-args legend {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    padding: 0 0.4rem;
+}
+
+.quick-args label {
+    font-size: 0.85em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.quick-args input[type="number"],
+.quick-args input[type="text"] {
+    width: 11ch;
+    padding: 0.2em 0.4em;
 }
 
 .cron-edit-form label {

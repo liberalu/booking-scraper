@@ -22,8 +22,8 @@
       <tr>
         <td>{{ job.shop_name }}</td>
         <td>{{ job.phase }}</td>
-        <td>{% if job.strategy %}{{ job.strategy }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-        <td>{% if job.args %}<code>{{ job.args }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td>{% if job.strategy %}{{ job.strategy }}{% endif %}</td>
+        <td>{% if job.args %}<code>{{ job.args }}</code>{% endif %}</td>
         <td><code>{{ job.cron_expression }}</code></td>
         <td>{{ "yes" if job.enabled else "no" }}</td>
         <td>{{ job.last_run_at.strftime('%Y-%m-%d %H:%M') if job.last_run_at else "—" }}</td>
@@ -108,13 +108,15 @@
         </select>
       </label>
     </div>
-    <label>
-      Extra args:
-      <input type="text" name="args" placeholder="e.g. -a rescrape=true -a max_urls=100" />
-    </label>
-    <p style="font-size:0.85em;color:#666;margin-top:-0.5em">
-      Space-separated -a key=value pairs (validated server-side)
-    </p>
+    <fieldset class="quick-args">
+      <legend>Extra args</legend>
+      <label><input type="checkbox" data-arg-flag="rescrape=true" /> rescrape (scan only)</label>
+      <label>max_urls (scan): <input type="number" min="1" data-arg-num="max_urls" /></label>
+      <label>max_pages (discover): <input type="number" min="1" data-arg-num="max_pages" /></label>
+      <label>Custom (raw): <input type="text" data-arg-raw placeholder="-a key=value" /></label>
+    </fieldset>
+    <input type="hidden" name="args" data-args-hidden />
+    <p class="args-preview text-muted" style="font-size:0.8em;margin-top:-0.2em">Will be sent as: <code data-args-preview>(none)</code></p>
     <label>
       Cron expression:
       <input type="text" name="cron_expression" required placeholder="0 2 * * *" />
@@ -129,7 +131,8 @@
 <script>
 (function () {
     // Add form: hide Strategy when phase=scan.
-    var addPhase = document.querySelector('form[action="/cron"] [name="phase"]');
+    var addForm = document.querySelector('form[action="/cron"]');
+    var addPhase = addForm && addForm.querySelector('[name="phase"]');
     var addStrategyWrap = document.getElementById('strategy-wrap');
     if (addPhase && addStrategyWrap) {
         function syncAdd() {
@@ -139,7 +142,35 @@
         syncAdd();
     }
 
-    // Per-row edit forms: same behaviour.
+    // Add form: compose `args` from checkbox + number inputs.
+    if (addForm) {
+        var hidden = addForm.querySelector('[data-args-hidden]');
+        var preview = addForm.querySelector('[data-args-preview]');
+        function composeArgs() {
+            var parts = [];
+            addForm.querySelectorAll('[data-arg-flag]').forEach(function (el) {
+                if (el.checked) parts.push('-a ' + el.getAttribute('data-arg-flag'));
+            });
+            addForm.querySelectorAll('[data-arg-num]').forEach(function (el) {
+                var v = (el.value || '').trim();
+                if (v) parts.push('-a ' + el.getAttribute('data-arg-num') + '=' + v);
+            });
+            addForm.querySelectorAll('[data-arg-raw]').forEach(function (el) {
+                var v = (el.value || '').trim();
+                if (v) parts.push(v);
+            });
+            var joined = parts.join(' ');
+            if (hidden) hidden.value = joined;
+            if (preview) preview.textContent = joined || '(none)';
+        }
+        addForm.querySelectorAll('[data-arg-flag], [data-arg-num], [data-arg-raw]').forEach(function (el) {
+            el.addEventListener('input', composeArgs);
+            el.addEventListener('change', composeArgs);
+        });
+        composeArgs();
+    }
+
+    // Per-row edit forms: same strategy-hide behaviour.
     document.querySelectorAll('[data-edit-form]').forEach(function (form) {
         var phase = form.querySelector('[data-phase]');
         var wrap = form.querySelector('[data-strategy-wrap]');
