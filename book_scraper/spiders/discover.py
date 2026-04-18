@@ -16,7 +16,7 @@ from book_scraper.db.repo import (
     upsert_shop,
 )
 from book_scraper.db.session import get_session_factory
-from book_scraper.items import DiscoveredUrlItem, PriceItem
+from book_scraper.items import DiscoveredUrlItem, ShopBookItem
 from book_scraper.spiders.registry import load_parsers
 
 
@@ -198,7 +198,7 @@ class DiscoverSpider(scrapy.Spider):
 
     def parse_categories(
         self, response: scrapy.http.Response
-    ) -> Generator[DiscoveredUrlItem | PriceItem | scrapy.Request, None, None]:
+    ) -> Generator[DiscoveredUrlItem | ShopBookItem | scrapy.Request, None, None]:
         products: list[dict[str, str | None]] = self.parsers.parse_category_page(
             response.text
         )
@@ -231,16 +231,26 @@ class DiscoverSpider(scrapy.Spider):
                     url=url, shop_name=self.shop_name, source="category"
                 )
 
-                # Also yield price data if available
-                if product.get("price"):
-                    yield PriceItem(
+                # Yield product data when we have at least a title and price
+                if product.get("title") and product.get("price"):
+                    yield ShopBookItem(
                         url=url,
                         shop_name=self.shop_name,
-                        title=product.get("title", ""),
+                        title=product["title"],
                         author=product.get("author"),
                         price=product.get("price"),
                         price_original=product.get("price_original"),
                         in_stock=True,
+                        type=None,
+                        sku=None,
+                        isbn=None,
+                        publisher=None,
+                        year=None,
+                        format=None,
+                        description=None,
+                        image_url=product.get("image_url"),
+                        categories=product.get("categories", []),
+                        properties=None,
                     )
             else:
                 self._urls_filtered += 1
@@ -261,13 +271,44 @@ class DiscoverSpider(scrapy.Spider):
 
     def parse_full_crawl(
         self, response: scrapy.http.Response
-    ) -> Generator[DiscoveredUrlItem | scrapy.Request, None, None]:
-        """Follow all internal links, yield product URLs."""
+    ) -> Generator[DiscoveredUrlItem | ShopBookItem | scrapy.Request, None, None]:
+        """Follow all internal links, yield product URLs and parse product data."""
         base_url: str = self.conf.shop.base_url
         seen: set[str] = getattr(self, "_seen_urls", set())
         self._seen_urls = seen
         if self._max_pages and len(seen) >= self._max_pages:
             return
+
+        # If the current page matches the product URL pattern, extract product data
+        current_url = response.url.split("?")[0]
+        if self._url_passes_filter(current_url):
+            data = self.parsers.parse_product_page(response.text)
+            if data.get("title"):
+                props: dict[str, object] = {}
+                for key in (
+                    "pages", "cover_type", "duration", "narrator", "translator"
+                ):
+                    if data.get(key) is not None:
+                        props[key] = data[key]
+                yield ShopBookItem(
+                    url=current_url,
+                    shop_name=self.shop_name,
+                    type=data.get("type"),
+                    title=data["title"],
+                    author=data.get("author"),
+                    sku=data.get("sku"),
+                    isbn=data.get("isbn"),
+                    publisher=data.get("publisher"),
+                    year=data.get("year"),
+                    format=data.get("format"),
+                    description=data.get("description"),
+                    image_url=data.get("image_url"),
+                    categories=data.get("categories", []),
+                    properties=props or None,
+                    price=data.get("price"),
+                    price_original=data.get("price_original"),
+                    in_stock=data.get("in_stock"),
+                )
 
         for link in response.css("a::attr(href)").getall():
             if not link.startswith("http"):

@@ -7,7 +7,7 @@ import pytest
 from scrapy import Request
 from scrapy.http import HtmlResponse, TextResponse
 
-from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
+from book_scraper.items import DiscoveredUrlItem, ShopBookItem
 from book_scraper.spiders.discover import DiscoverSpider
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -65,7 +65,7 @@ class TestDiscoverSpiderCategories:
         assert len(requests) == 1
         assert "page=1" in requests[0].url
 
-    def test_parse_categories_yields_urls_and_prices(self):
+    def test_parse_categories_yields_urls_and_shop_books(self):
         spider = DiscoverSpider(shop="vaga", strategy="categories")
         html = (FIXTURES / "vaga_category_page.html").read_text()
         response = _fake_response(
@@ -74,12 +74,13 @@ class TestDiscoverSpiderCategories:
         results = list(spider.parse_categories(response))
 
         discovered = [r for r in results if isinstance(r, DiscoveredUrlItem)]
-        prices = [r for r in results if isinstance(r, PriceItem)]
+        shop_books = [r for r in results if isinstance(r, ShopBookItem)]
         next_pages = [r for r in results if isinstance(r, Request)]
 
         assert len(discovered) > 0
         assert all(item["source"] == "category" for item in discovered)
-        assert len(prices) > 0
+        assert len(shop_books) > 0
+        assert all(item["shop_name"] == "vaga" for item in shop_books)
         assert len(next_pages) == 1
         assert "page=2" in next_pages[0].url
 
@@ -201,3 +202,35 @@ class TestScanSpider:
         items = list(spider.parse_product(response))
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
         assert shop_book_items == []
+
+    def test_parse_product_yields_non_book_product_item(self):
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        html = """
+        <html><body>
+          <script type="application/ld+json">
+            {"@type":"Product","name":"Stalo žaidimas \\"Teleloto\\"","sku":"1",
+             "offers":{"price":"25.49","availability":"OutOfStock"},
+             "brand":{"name":"Terra Publica"},
+             "isRelatedTo":{"isbn":"4779054890696"}}
+          </script>
+          <script type="application/ld+json">
+            {"@type":"BreadcrumbList","itemListElement":[
+              {"name":"Žaislai ir žaidimai"},
+              {"name":"Stalo žaidimai"},
+              {"name":"Šeimos stalo žaidimai"}
+            ]}
+          </script>
+        </body></html>
+        """
+        response = _fake_response(
+            "https://vaga.lt/stalo-zaidimas-teleloto",
+            html,
+            meta={"discovered_url_id": 3},
+        )
+        items = list(spider.parse_product(response))
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert len(shop_book_items) == 1
+        assert shop_book_items[0]["type"] == "non_book"
+        assert spider._url_status_updates[-1]["url_type"] == "product"
