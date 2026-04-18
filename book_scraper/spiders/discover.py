@@ -6,10 +6,11 @@ import scrapy
 from sqlalchemy.orm import Session
 
 from book_scraper.config import load_shop_config
-from book_scraper.db.models import DiscoveredUrl
+from book_scraper.db.models import DiscoveredUrl, ScrapeRun
 from book_scraper.db.repo import (
     create_scrape_run,
     finish_scrape_run,
+    mark_cron_job_ran_if_matches,
     mark_shop_books_inactive,
     mark_stale_runs_failed,
     update_scrape_run_progress,
@@ -401,6 +402,17 @@ class DiscoverSpider(scrapy.Spider):
                         f"shop had {prior_count} URLs pre-run",
                     )
             finish_scrape_run(self._run_session, self._run_id, status)
+
+            # Update matching cron_job's last_run_at (best-effort; no-op if no match).
+            run_row = self._run_session.get(ScrapeRun, self._run_id)
+            if run_row is not None:
+                mark_cron_job_ran_if_matches(
+                    self._run_session,
+                    run_row.shop_id,
+                    phase="discover",
+                    strategy=self.strategy,
+                )
+
             self._run_session.commit()
         finally:
             self._run_session.close()

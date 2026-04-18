@@ -1227,6 +1227,33 @@ def update_cron_job_last_run(
     session.flush()
 
 
+def mark_cron_job_ran_if_matches(
+    session: Session,
+    shop_id: int,
+    phase: str,
+    strategy: str | None = None,
+) -> None:
+    """Update last_run_at on the cron_job that matches (shop_id, phase, strategy).
+
+    No-op if no cron_job matches. Used at end of scrape runs to keep the
+    dashboard's 'last run' column current. Strategy matching is exact
+    including NULL — a scan job has strategy=NULL; a discover_sitemap job
+    has strategy='sitemap'.
+    """
+    strategy_clause = (
+        CronJob.strategy.is_(None) if strategy is None else CronJob.strategy == strategy
+    )
+    stmt = select(CronJob).where(
+        CronJob.shop_id == shop_id,
+        CronJob.phase == phase,
+        strategy_clause,
+    )
+    job = session.execute(stmt).scalar_one_or_none()
+    if job is not None:
+        job.last_run_at = datetime.now(UTC)
+        session.flush()
+
+
 def cleanup_scrape_url_items(session: Session, run_id: int) -> int:
     """Delete all scrape_url_items for a finished run.
 

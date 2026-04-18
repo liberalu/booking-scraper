@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from book_scraper.db.models import ScrapeUrlItem
+from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
     cleanup_scrape_url_items,
@@ -13,6 +13,7 @@ from book_scraper.db.repo import (
     get_pending_scan_urls,
     get_urls_already_scraped,
     insert_scrape_url_item,
+    mark_cron_job_ran_if_matches,
     mark_scrape_url_item_done,
     mark_scrape_url_item_failed,
     mark_stale_runs_failed,
@@ -167,5 +168,13 @@ class ScanService:
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
         finish_scrape_run(self.session, run_id, status)
+
+        # Update matching cron_job's last_run_at (best-effort; no-op if no match).
+        run_row = self.session.get(ScrapeRun, run_id)
+        if run_row is not None:
+            mark_cron_job_ran_if_matches(
+                self.session, run_row.shop_id, phase="scan", strategy=None
+            )
+
         cleanup_scrape_url_items(self.session, run_id)
         self.session.commit()
