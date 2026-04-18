@@ -203,7 +203,7 @@ class TestScanSpider:
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
         assert shop_book_items == []
 
-    def test_parse_product_yields_non_book_product_item(self):
+    def test_parse_product_non_book_is_skipped(self):
         from book_scraper.spiders.scan import ScanSpider
 
         spider = ScanSpider(shop="vaga")
@@ -231,6 +231,5 @@ class TestScanSpider:
         )
         items = list(spider.parse_product(response))
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
-        assert len(shop_book_items) == 1
-        assert shop_book_items[0]["type"] == "non_book"
-        assert spider._url_status_updates[-1]["url_type"] == "product"
+        assert shop_book_items == []
+        assert spider._url_status_updates[-1]["url_type"] == "non_product"

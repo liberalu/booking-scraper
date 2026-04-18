@@ -259,7 +259,7 @@ class ScanSpider(scrapy.Spider):
 
         data = self.parsers.parse_product_page(response.text)
 
-        if not data.get("title"):
+        if not data.get("is_book_product"):
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=200,
