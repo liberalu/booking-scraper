@@ -22,8 +22,8 @@
       <tr>
         <td>{{ job.shop_name }}</td>
         <td>{{ job.phase }}</td>
-        <td>{{ job.strategy }}</td>
-        <td><code>{{ job.args }}</code></td>
+        <td>{% if job.strategy %}{{ job.strategy }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td>{% if job.args %}<code>{{ job.args }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td><code>{{ job.cron_expression }}</code></td>
         <td>{{ "yes" if job.enabled else "no" }}</td>
         <td>{{ job.last_run_at.strftime('%Y-%m-%d %H:%M') if job.last_run_at else "—" }}</td>
@@ -43,14 +43,14 @@
       </tr>
       <tr id="edit-row-{{ job.id }}" class="edit-row" style="display:none">
         <td colspan="8">
-          <form method="post" action="/cron/{{ job.id }}/update" class="cron-edit-form">
+          <form method="post" action="/cron/{{ job.id }}/update" class="cron-edit-form" data-edit-form>
             <label>Phase:
-              <select name="phase" required>
+              <select name="phase" required data-phase>
                 <option value="discover" {% if job.phase == 'discover' %}selected{% endif %}>discover</option>
                 <option value="scan" {% if job.phase == 'scan' %}selected{% endif %}>scan</option>
               </select>
             </label>
-            <label>Strategy:
+            <label data-strategy-wrap>Strategy:
               <select name="strategy">
                 <option value="" {% if not job.strategy %}selected{% endif %}>(none)</option>
                 <option value="sitemap" {% if job.strategy == 'sitemap' %}selected{% endif %}>sitemap</option>
@@ -59,7 +59,7 @@
               </select>
             </label>
             <label>Args:
-              <input type="text" name="args" value="{{ job.args }}" />
+              <input type="text" name="args" value="{{ job.args }}" placeholder="e.g. -a rescrape=true" />
             </label>
             <label>Cron:
               <input type="text" name="cron_expression" value="{{ job.cron_expression }}" required />
@@ -128,14 +128,28 @@
 
 <script>
 (function () {
-    var phase = document.getElementsByName('phase')[0];
-    var strategyWrap = document.getElementById('strategy-wrap');
-    if (!phase || !strategyWrap) return;
-    function sync() {
-        strategyWrap.style.display = (phase.value === 'discover') ? '' : 'none';
+    // Add form: hide Strategy when phase=scan.
+    var addPhase = document.querySelector('form[action="/cron"] [name="phase"]');
+    var addStrategyWrap = document.getElementById('strategy-wrap');
+    if (addPhase && addStrategyWrap) {
+        function syncAdd() {
+            addStrategyWrap.style.display = (addPhase.value === 'discover') ? '' : 'none';
+        }
+        addPhase.addEventListener('change', syncAdd);
+        syncAdd();
     }
-    phase.addEventListener('change', sync);
-    sync();
+
+    // Per-row edit forms: same behaviour.
+    document.querySelectorAll('[data-edit-form]').forEach(function (form) {
+        var phase = form.querySelector('[data-phase]');
+        var wrap = form.querySelector('[data-strategy-wrap]');
+        if (!phase || !wrap) return;
+        function sync() {
+            wrap.style.display = (phase.value === 'discover') ? '' : 'none';
+        }
+        phase.addEventListener('change', sync);
+        sync();
+    });
 })();
 </script>
 {% endblock %}

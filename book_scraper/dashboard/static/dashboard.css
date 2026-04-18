@@ -1074,10 +1074,11 @@ a.stat-card:hover,
 }
 
 .cron-actions button {
-    padding: 0.25em 0.6em;
-    font-size: 0.85em;
-    margin-right: 0.3em;
-    border-radius: 8px;
+    padding: 0.15em 0.5em;
+    font-size: 0.72em;
+    line-height: 1.35;
+    margin-right: 0.2em;
+    border-radius: 5px;
 }
 
 .cron-edit-form {
