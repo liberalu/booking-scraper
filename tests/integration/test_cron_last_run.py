@@ -71,3 +71,26 @@ def test_mark_cron_job_ran_if_matches_strategy(db_session):
     db_session.expire_all()
     assert get_cron_job(db_session, sitemap_job.id).last_run_at is not None
     assert get_cron_job(db_session, categories_job.id).last_run_at is None
+
+
+def test_mark_cron_job_ran_updates_all_matches(db_session):
+    """Multiple cron_jobs matching (shop_id, phase, strategy) all get updated."""
+    from book_scraper.db.repo import mark_cron_job_ran_if_matches
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    morning = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 3 * * *", enabled=True,
+    )
+    evening = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 15 * * *", enabled=True,
+    )
+    db_session.commit()
+
+    mark_cron_job_ran_if_matches(db_session, shop.id, "scan", None)
+    db_session.commit()
+
+    db_session.expire_all()
+    assert get_cron_job(db_session, morning.id).last_run_at is not None
+    assert get_cron_job(db_session, evening.id).last_run_at is not None

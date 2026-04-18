@@ -107,3 +107,72 @@ def test_post_delete_removes_job(client: TestClient, db_session: Session) -> Non
 
     db_session.expire_all()
     assert get_cron_job(db_session, job.id) is None
+
+
+def test_post_cron_rejects_shell_injection_in_args(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+
+    r = client.post(
+        "/cron",
+        data={
+            "shop_id": shop.id,
+            "phase": "scan",
+            "strategy": "",
+            "args": "; rm -rf /",
+            "cron_expression": "0 4 * * *",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+    db_session.expire_all()
+    assert list_cron_jobs(db_session) == []
+
+
+def test_post_cron_rejects_malformed_cron(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+
+    r = client.post(
+        "/cron",
+        data={
+            "shop_id": shop.id,
+            "phase": "scan",
+            "strategy": "",
+            "args": "",
+            "cron_expression": "not a cron",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    db_session.expire_all()
+    assert list_cron_jobs(db_session) == []
+
+
+def test_post_cron_accepts_valid_args(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+
+    r = client.post(
+        "/cron",
+        data={
+            "shop_id": shop.id,
+            "phase": "scan",
+            "strategy": "",
+            "args": "-a rescrape=true -a max_urls=10",
+            "cron_expression": "0 5 * * *",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    db_session.expire_all()
+    assert any(
+        j.args == "-a rescrape=true -a max_urls=10" for j in list_cron_jobs(db_session)
+    )

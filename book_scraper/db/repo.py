@@ -1233,12 +1233,11 @@ def mark_cron_job_ran_if_matches(
     phase: str,
     strategy: str | None = None,
 ) -> None:
-    """Update last_run_at on the cron_job that matches (shop_id, phase, strategy).
+    """Update last_run_at on every cron_job matching (shop_id, phase, strategy).
 
-    No-op if no cron_job matches. Used at end of scrape runs to keep the
-    dashboard's 'last run' column current. Strategy matching is exact
-    including NULL — a scan job has strategy=NULL; a discover_sitemap job
-    has strategy='sitemap'.
+    No-op if no cron_job matches. Multiple matches are all updated — the
+    schema permits duplicate (shop_id, phase, strategy) rows (e.g. a
+    sitemap scan scheduled for morning + evening).
     """
     strategy_clause = (
         CronJob.strategy.is_(None) if strategy is None else CronJob.strategy == strategy
@@ -1248,9 +1247,11 @@ def mark_cron_job_ran_if_matches(
         CronJob.phase == phase,
         strategy_clause,
     )
-    job = session.execute(stmt).scalar_one_or_none()
-    if job is not None:
-        job.last_run_at = datetime.now(UTC)
+    jobs = list(session.execute(stmt).scalars().all())
+    now = datetime.now(UTC)
+    for job in jobs:
+        job.last_run_at = now
+    if jobs:
         session.flush()
 
 

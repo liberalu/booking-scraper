@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
@@ -19,6 +21,41 @@ from book_scraper.db.repo import (
 )
 
 router = APIRouter()
+
+
+_ARGS_TOKEN_RE = re.compile(r"^-a [A-Za-z_][A-Za-z0-9_]*=\S+$")
+
+
+def _validate_args(args: str) -> tuple[bool, str]:
+    """Return (ok, error_message). Empty string is allowed."""
+    if not args.strip():
+        return True, ""
+    if any(c in args for c in ";&|`$<>\n\r"):
+        return False, "args contains shell metacharacters"
+    tokens = args.strip().split()
+    if len(tokens) % 2 != 0:
+        return False, "args must be an even number of tokens (pairs of '-a key=value')"
+    for i in range(0, len(tokens), 2):
+        flag, pair = tokens[i], tokens[i + 1]
+        if flag != "-a":
+            return False, f"expected '-a' at position {i}, got {flag!r}"
+        if "=" not in pair:
+            return False, f"expected 'key=value', got {pair!r}"
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=\S+$", pair):
+            return False, f"invalid key=value token: {pair!r}"
+    return True, ""
+
+
+_CRON_EXPR_RE = re.compile(r"^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$")
+
+
+def _validate_cron_expression(expr: str) -> tuple[bool, str]:
+    """Validate a 5-field cron expression. Very permissive — just checks shape."""
+    if not expr.strip():
+        return False, "cron expression is empty"
+    if not _CRON_EXPR_RE.match(expr):
+        return False, "cron expression must have exactly 5 whitespace-separated fields"
+    return True, ""
 
 
 @router.get("/cron")
@@ -56,7 +93,17 @@ def cron_create(
     args: str = Form(""),
     cron_expression: str = Form(...),
     session: Session = Depends(get_db),
-) -> RedirectResponse:
+) -> Response:
+    ok, err = _validate_args(args)
+    if not ok:
+        return HTMLResponse(
+            f'<p class="error">Invalid args: {err}</p>', status_code=400
+        )
+    ok, err = _validate_cron_expression(cron_expression)
+    if not ok:
+        return HTMLResponse(
+            f'<p class="error">Invalid cron: {err}</p>', status_code=400
+        )
     create_cron_job(
         session,
         shop_id=shop_id,
@@ -145,7 +192,17 @@ def cron_update(
     args: str = Form(""),
     cron_expression: str = Form(...),
     session: Session = Depends(get_db),
-) -> RedirectResponse:
+) -> Response:
+    ok, err = _validate_args(args)
+    if not ok:
+        return HTMLResponse(
+            f'<p class="error">Invalid args: {err}</p>', status_code=400
+        )
+    ok, err = _validate_cron_expression(cron_expression)
+    if not ok:
+        return HTMLResponse(
+            f'<p class="error">Invalid cron: {err}</p>', status_code=400
+        )
     update_cron_job(
         session,
         job_id,
