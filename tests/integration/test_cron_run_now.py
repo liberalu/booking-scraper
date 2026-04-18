@@ -115,3 +115,36 @@ def test_post_run_now_disabled_job_still_runs(
     cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
     assert "scan" in cmd_str
     assert "rescrape=true" in cmd_str
+
+
+def test_post_run_now_refuses_when_run_already_in_progress(
+    client: TestClient, db_session: Session
+) -> None:
+    """Guard: clicking Run now while a matching run is already 'running' returns 409."""
+    from book_scraper.db.repo import create_scrape_run
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    job = create_cron_job(
+        db_session,
+        shop_id=shop.id,
+        phase="scan",
+        strategy=None,
+        args="",
+        cron_expression="0 3 * * *",
+        enabled=True,
+    )
+    create_scrape_run(db_session, shop.id, "scan")
+    db_session.commit()
+
+    fake_container = MagicMock()
+    fake_client = MagicMock()
+    fake_client.containers.list.return_value = [fake_container]
+
+    with patch(
+        "book_scraper.dashboard.routes.cron.get_docker_client",
+        return_value=fake_client,
+    ):
+        r = client.post(f"/cron/{job.id}/run", follow_redirects=False)
+
+    assert r.status_code == 409
+    fake_container.exec_run.assert_not_called()
