@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from book_scraper.db.repo import (
     check_discover_freshness,
+    cleanup_scrape_url_items,
     create_scrape_run,
     finish_scrape_run,
     get_pending_scan_urls,
@@ -118,4 +119,5 @@ class ScanService:
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
         finish_scrape_run(self.session, run_id, status)
+        cleanup_scrape_url_items(self.session, run_id)
         self.session.commit()
