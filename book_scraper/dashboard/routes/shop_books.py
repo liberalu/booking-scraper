@@ -10,6 +10,8 @@ from book_scraper.dashboard.queries import (
     get_all_categories,
     get_all_formats,
     get_all_types,
+    get_attribute_keys,
+    get_attribute_values,
     get_field_history,
     get_field_updates,
     get_price_history,
@@ -91,6 +93,8 @@ def shop_books_page(
     sort: str = "",
     order: str = "desc",
     scrape_started: str = "",
+    attr_key: str = "",
+    attr_value: str = "",
     session: Session = Depends(get_db),
 ):
     field_filters = parse_shop_book_field_filters(request.query_params)
@@ -125,10 +129,16 @@ def shop_books_page(
         sort_by=sort,
         sort_order=order,
         field_filters=field_filters,
+        attr_key=attr_key,
+        attr_value=attr_value,
     )
     categories = get_all_categories(session)
     types = get_all_types(session)
     formats = get_all_formats(session)
+    attribute_keys = get_attribute_keys(session, shop_id=shop_id)
+    attribute_values = (
+        get_attribute_values(session, attr_key, shop_id=shop_id) if attr_key else []
+    )
     total_pages = (total + 49) // 50
 
     filter_params: dict[str, str] = {
@@ -144,6 +154,8 @@ def shop_books_page(
             "active": active,
             "shop": shop,
             "has_isbn": "true" if has_isbn else "",
+            "attr_key": attr_key,
+            "attr_value": attr_value,
         }.items()
         if v
     }
@@ -161,6 +173,7 @@ def shop_books_page(
             has_isbn,
             active != "true",
             bool(field_filters),
+            attr_key,
         ]
     )
 
@@ -224,6 +237,17 @@ def shop_books_page(
             }
         )
 
+    if attr_key:
+        attr_label = f"Attr: {attr_key}" + (
+            f"={attr_value}" if attr_value else " (any)"
+        )
+        params = dict(filter_and_sort_params)
+        params.pop("attr_key", None)
+        params.pop("attr_value", None)
+        filter_badges.append(
+            {"label": attr_label, "remove_url": _build_shop_books_url(params)}
+        )
+
     return templates.TemplateResponse(
         request,
         "shop_books.html",
@@ -248,10 +272,14 @@ def shop_books_page(
             "categories": categories,
             "types": types,
             "formats": formats,
+            "attr_key": attr_key,
+            "attr_value": attr_value,
+            "attribute_keys": attribute_keys,
+            "attribute_values": attribute_values,
             "max_filtered_urls": MAX_FILTERED_URLS,
             "scrape_started": scrape_started,
             "secondary_filters_active": bool(
-                author or publisher or category or type or format or missing
+                author or publisher or category or type or format or missing or attr_key
             ),
             "field_filters_active": bool(field_filters),
             "field_filter_options": get_shop_book_field_options(),

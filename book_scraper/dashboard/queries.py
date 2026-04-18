@@ -574,6 +574,8 @@ def get_shop_books_page(
     sort_by: str = "",
     sort_order: str = "asc",
     field_filters: dict[str, ShopBookFieldFilter] | None = None,
+    attr_key: str = "",
+    attr_value: str = "",
 ) -> tuple[list[ShopBook], int]:
     """Return paginated shop_books with filters. Returns (shop_books, total_count)."""
     query = session.query(ShopBook).options(joinedload(ShopBook.shop))
@@ -619,6 +621,18 @@ def get_shop_books_page(
     # "all" or "" — no active/inactive filter applied
     if has_isbn:
         query = query.filter(ShopBook.isbn.isnot(None))
+    if attr_key:
+        from sqlalchemy import exists
+
+        from book_scraper.db.models import ShopBookAttribute
+
+        attr_subq = session.query(ShopBookAttribute).filter(
+            ShopBookAttribute.shop_book_id == ShopBook.id,
+            ShopBookAttribute.key == attr_key,
+        )
+        if attr_value:
+            attr_subq = attr_subq.filter(ShopBookAttribute.value == attr_value)
+        query = query.filter(exists(attr_subq))
     if field_filters:
         query = apply_shop_book_field_filters(query, field_filters)
 
@@ -659,6 +673,38 @@ def get_all_formats(session: Session) -> list[str]:
         .all()
     )
     return [r[0] for r in rows]
+
+
+def get_attribute_keys(
+    session: Session, shop_id: int | None = None
+) -> list[str]:
+    """Return distinct attribute keys (sorted) across all shop_books."""
+    from book_scraper.db.models import ShopBookAttribute
+
+    query = session.query(ShopBookAttribute.key).distinct()
+    if shop_id is not None:
+        query = query.join(
+            ShopBook, ShopBookAttribute.shop_book_id == ShopBook.id
+        ).filter(ShopBook.shop_id == shop_id)
+    return sorted(r[0] for r in query.all())
+
+
+def get_attribute_values(
+    session: Session, key: str, shop_id: int | None = None
+) -> list[str]:
+    """Return distinct non-null attribute values for a given key (sorted)."""
+    from book_scraper.db.models import ShopBookAttribute
+
+    query = (
+        session.query(ShopBookAttribute.value)
+        .filter(ShopBookAttribute.key == key, ShopBookAttribute.value.isnot(None))
+        .distinct()
+    )
+    if shop_id is not None:
+        query = query.join(
+            ShopBook, ShopBookAttribute.shop_book_id == ShopBook.id
+        ).filter(ShopBook.shop_id == shop_id)
+    return sorted(r[0] for r in query.all())
 
 
 def get_all_types(session: Session) -> list[str]:

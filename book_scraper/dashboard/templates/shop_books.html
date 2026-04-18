@@ -52,6 +52,20 @@
                     <option value="publisher" {{ 'selected' if missing == 'publisher' else '' }}>Missing publisher</option>
                     <option value="format" {{ 'selected' if missing == 'format' else '' }}>Missing format</option>
                 </select>
+                <select name="attr_key" id="attr_key_select" onchange="this.form.submit()">
+                    <option value="">All attributes</option>
+                    {% for key in attribute_keys %}
+                    <option value="{{ key }}" {{ 'selected' if attr_key == key else '' }}>{{ key }}</option>
+                    {% endfor %}
+                </select>
+                {% if attr_key %}
+                <select name="attr_value">
+                    <option value="">Any value</option>
+                    {% for val in attribute_values %}
+                    <option value="{{ val }}" {{ 'selected' if attr_value == val else '' }}>{{ val }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
             </div>
         </details>
 
