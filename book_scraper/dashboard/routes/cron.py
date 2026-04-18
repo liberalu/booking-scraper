@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -150,8 +151,14 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
             '<p class="error">Docker not available</p>', status_code=503
         )
 
+    project = os.environ.get("COMPOSE_PROJECT_NAME", "book-scraper")
     containers = client.containers.list(
-        filters={"label": "com.docker.compose.service=scraper"}
+        filters={
+            "label": [
+                "com.docker.compose.service=scraper",
+                f"com.docker.compose.project={project}",
+            ]
+        }
     )
     if not containers:
         return HTMLResponse(
@@ -159,9 +166,7 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
         )
 
     cmd = [
-        "/app/.venv/bin/python",
-        "-m",
-        "scrapy",
+        "/app/.venv/bin/scrapy",
         "crawl",
         job.phase,
         "-a",

@@ -164,8 +164,14 @@ def trigger_run(request: Request, phase: str = "scan"):
             status_code=503,
         )
 
+    project = os.environ.get("COMPOSE_PROJECT_NAME", "book-scraper")
     containers = client.containers.list(
-        filters={"label": "com.docker.compose.service=scraper"}
+        filters={
+            "label": [
+                "com.docker.compose.service=scraper",
+                f"com.docker.compose.project={project}",
+            ]
+        }
     )
     if not containers:
         return HTMLResponse(

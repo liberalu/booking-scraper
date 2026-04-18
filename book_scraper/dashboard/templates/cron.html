@@ -27,16 +27,47 @@
         <td><code>{{ job.cron_expression }}</code></td>
         <td>{{ "yes" if job.enabled else "no" }}</td>
         <td>{{ job.last_run_at.strftime('%Y-%m-%d %H:%M') if job.last_run_at else "—" }}</td>
-        <td>
+        <td class="cron-actions">
           <form method="post" action="/cron/{{ job.id }}/run" style="display:inline">
             <button type="submit">Run now</button>
           </form>
+          <button type="button" onclick="document.getElementById('edit-row-{{ job.id }}').style.display='table-row'">Edit</button>
           <form method="post" action="/cron/{{ job.id }}/toggle" style="display:inline">
             <button type="submit">{{ "Disable" if job.enabled else "Enable" }}</button>
           </form>
           <form method="post" action="/cron/{{ job.id }}/delete" style="display:inline"
                 onsubmit="return confirm('Delete this cron job?');">
             <button type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      <tr id="edit-row-{{ job.id }}" class="edit-row" style="display:none">
+        <td colspan="8">
+          <form method="post" action="/cron/{{ job.id }}/update" class="cron-edit-form">
+            <label>Phase:
+              <select name="phase" required>
+                <option value="discover" {% if job.phase == 'discover' %}selected{% endif %}>discover</option>
+                <option value="scan" {% if job.phase == 'scan' %}selected{% endif %}>scan</option>
+              </select>
+            </label>
+            <label>Strategy:
+              <select name="strategy">
+                <option value="" {% if not job.strategy %}selected{% endif %}>(none)</option>
+                <option value="sitemap" {% if job.strategy == 'sitemap' %}selected{% endif %}>sitemap</option>
+                <option value="categories" {% if job.strategy == 'categories' %}selected{% endif %}>categories</option>
+                <option value="full_crawl" {% if job.strategy == 'full_crawl' %}selected{% endif %}>full_crawl</option>
+              </select>
+            </label>
+            <label>Args:
+              <input type="text" name="args" value="{{ job.args }}" />
+            </label>
+            <label>Cron:
+              <input type="text" name="cron_expression" value="{{ job.cron_expression }}" required />
+            </label>
+            <span class="cron-actions">
+              <button type="submit">Save</button>
+              <button type="button" onclick="document.getElementById('edit-row-{{ job.id }}').style.display='none'">Cancel</button>
+            </span>
           </form>
         </td>
       </tr>
@@ -66,14 +97,24 @@
         <option value="scan">scan</option>
       </select>
     </label>
-    <label>
-      Strategy (for discover):
-      <input type="text" name="strategy" placeholder="sitemap, categories, full_crawl" />
-    </label>
+    <div id="strategy-wrap">
+      <label>
+        Strategy (for discover):
+        <select name="strategy" id="strategy-select">
+          <option value="">(none — only valid for scan)</option>
+          <option value="sitemap">sitemap</option>
+          <option value="categories">categories</option>
+          <option value="full_crawl">full_crawl</option>
+        </select>
+      </label>
+    </div>
     <label>
       Extra args:
-      <input type="text" name="args" placeholder="-a rescrape=true" />
+      <input type="text" name="args" placeholder="e.g. -a rescrape=true -a max_urls=100" />
     </label>
+    <p style="font-size:0.85em;color:#666;margin-top:-0.5em">
+      Space-separated -a key=value pairs (validated server-side)
+    </p>
     <label>
       Cron expression:
       <input type="text" name="cron_expression" required placeholder="0 2 * * *" />
@@ -84,4 +125,17 @@
     <button type="submit">Create</button>
   </form>
 </section>
+
+<script>
+(function () {
+    var phase = document.getElementsByName('phase')[0];
+    var strategyWrap = document.getElementById('strategy-wrap');
+    if (!phase || !strategyWrap) return;
+    function sync() {
+        strategyWrap.style.display = (phase.value === 'discover') ? '' : 'none';
+    }
+    phase.addEventListener('change', sync);
+    sync();
+})();
+</script>
 {% endblock %}
