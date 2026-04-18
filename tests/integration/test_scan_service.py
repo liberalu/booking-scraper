@@ -287,3 +287,30 @@ def test_reset_processing_scrape_url_items(
     assert count == 1
     pending = get_pending_scrape_url_items(db_session, scrape_run.id)
     assert len(pending) == 2  # both are pending again
+
+
+@pytest.mark.integration
+def test_prepare_scan_persists_url_type_on_items(db_session):
+    from book_scraper.db.models import DiscoveredUrl, ScrapeUrlItem
+    from book_scraper.db.repo import upsert_shop
+    from book_scraper.services.scan import ScanService
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.add(
+        DiscoveredUrl(
+            shop_id=shop.id,
+            url="https://vaga.lt/foo",
+            normalized_url="https://vaga.lt/foo",
+            source="sitemap",
+            url_type="product",
+            fail_count=0,
+        )
+    )
+    db_session.commit()
+
+    service = ScanService(db_session)
+    plan = service.prepare_scan("vaga", "https://vaga.lt", {}, rescrape=True)
+
+    items = db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).all()
+    assert len(items) == 1
+    assert items[0].url_type == "product"

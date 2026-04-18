@@ -1022,6 +1022,7 @@ def prepare_scrape_url_items(
     """Batch-insert pending scrape_url_items for a new scan run.
 
     Persists the work queue to DB so the spider can resume after a crash.
+    Uses each DiscoveredUrl.url_type as the item's url_type (defaults to 'product').
     """
     for rec in url_records:
         session.add(
@@ -1030,6 +1031,7 @@ def prepare_scrape_url_items(
                 shop_id=shop_id,
                 discovered_url_id=rec.id,
                 url=rec.url,
+                url_type=rec.url_type or "product",
                 status="pending",
             )
         )

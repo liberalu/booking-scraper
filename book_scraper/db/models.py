@@ -411,6 +411,7 @@ class ScrapeUrlItem(Base):
         ForeignKey("discovered_urls.id"), nullable=True
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    url_type: Mapped[str] = mapped_column(Text, nullable=False, server_default="product")
     status: Mapped[str] = mapped_column(
         scrape_url_status_enum, nullable=False, server_default="pending"
     )
