@@ -34,8 +34,17 @@
 </div>
 
 {% macro changed(field) %}
-    {% set ts = field_updates.get(field) if field_updates else None %}
-    {% if ts %}<div class="text-muted"><small>changed {{ ts.strftime('%Y-%m-%d') }}</small></div>{% endif %}
+    {% set h = field_history.get(field) if field_history else None %}
+    {% if h %}
+    <div class="text-muted" style="font-size:0.75rem; margin-top:0.2rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+        {% if h.first_seen_at %}
+        <span title="{{ h.first_seen_at.strftime('%Y-%m-%d %H:%M UTC') }}">added {{ h.first_seen_at|relative_time }}</span>
+        {% endif %}
+        {% if h.changed_at %}
+        <span title="{{ h.changed_at.strftime('%Y-%m-%d %H:%M UTC') }}">changed {{ h.changed_at|relative_time }}</span>
+        {% endif %}
+    </div>
+    {% endif %}
 {% endmacro %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <table class="data-table">
@@ -109,7 +118,7 @@
             </tr>
             <tr>
                 <th>Original Price</th>
-                <td>{% if shop_book.price_original %}{{ shop_book.price_original }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if shop_book.price_original %}{{ shop_book.price_original }}{% else %}<span class="text-muted">—</span>{% endif %}{{ changed('price_original') }}</td>
             </tr>
             <tr>
                 <th>URL</th>
@@ -323,7 +332,13 @@
 {% endif %}
 
 <div class="card" style="padding: 0; overflow: hidden;">
-    <div class="card-title" style="padding: 1rem 1.25rem 0;">Change History</div>
+    <div class="card-title" style="padding: 1rem 1.25rem 0; display:flex; align-items:center; gap:0.75rem;">
+        Change History
+        <span id="change-field-chip" class="filter-badge" style="display:none;">
+            <span class="chip-label"></span>
+            <a href="#" class="chip-remove" style="cursor:pointer; text-decoration:none;">✕</a>
+        </span>
+    </div>
     {% if changes %}
     <table class="data-table">
         <thead>
@@ -336,9 +351,9 @@
         </thead>
         <tbody>
             {% for c in changes %}
-            <tr>
+            <tr class="change-history-row" data-field="{{ c.field }}">
                 <td class="text-muted">{{ c.changed_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td>{{ c.field }}</td>
+                <td class="change-history-field" data-field="{{ c.field }}" style="cursor:pointer;" title="Click to filter by this field">{{ c.field }}</td>
                 <td class="change-diff-cell">
                     {% if c.field == 'description' %}
                     <details class="change-diff">
@@ -359,6 +374,48 @@
     {% endif %}
 </div>
 
+<script>
+(function() {
+    var fieldCells = document.querySelectorAll('.change-history-field');
+    var changeRows = document.querySelectorAll('.change-history-row');
+    var activeField = null;
+    var chip = document.getElementById('change-field-chip');
+
+    fieldCells.forEach(function(cell) {
+        cell.addEventListener('click', function() {
+            var field = cell.dataset.field;
+            if (activeField === field) {
+                // Toggle off
+                activeField = null;
+                changeRows.forEach(function(row) { row.style.display = ''; });
+                fieldCells.forEach(function(c) { c.style.fontWeight = ''; });
+                if (chip) chip.style.display = 'none';
+            } else {
+                activeField = field;
+                changeRows.forEach(function(row) {
+                    row.style.display = row.dataset.field === field ? '' : 'none';
+                });
+                fieldCells.forEach(function(c) { c.style.fontWeight = ''; });
+                cell.style.fontWeight = 'bold';
+                if (chip) {
+                    chip.style.display = 'inline-flex';
+                    chip.querySelector('.chip-label').textContent = 'Field: ' + field;
+                }
+            }
+        });
+    });
+
+    if (chip) {
+        chip.querySelector('.chip-remove').addEventListener('click', function(e) {
+            e.preventDefault();
+            activeField = null;
+            changeRows.forEach(function(row) { row.style.display = ''; });
+            fieldCells.forEach(function(c) { c.style.fontWeight = ''; });
+            chip.style.display = 'none';
+        });
+    }
+})();
+</script>
 <script>
 fetch('/api/prices/{{ shop_book.id }}/chart')
     .then(r => r.json())

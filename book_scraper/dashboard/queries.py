@@ -382,6 +382,53 @@ def get_field_updates(session: Session, shop_book_id: int) -> dict[str, datetime
     return {r.field: r.updated_at for r in rows}
 
 
+def get_field_history(
+    session: Session, shop_book_id: int
+) -> dict[str, dict[str, datetime | None]]:
+    """Return {field: {first_seen_at, changed_at}} for a shop_book's tracked fields.
+
+    first_seen_at: earliest ShopBookChange where old_value IS NULL for that field
+                   (i.e. the first time the field was set). Falls back to
+                   shop_book.first_seen_at if no such change record exists.
+    changed_at:    ShopBookFieldUpdate.updated_at (last time the field changed).
+    """
+    updates = (
+        session.query(ShopBookFieldUpdate)
+        .filter(ShopBookFieldUpdate.shop_book_id == shop_book_id)
+        .all()
+    )
+    if not updates:
+        return {}
+
+    changed_map: dict[str, datetime] = {r.field: r.updated_at for r in updates}
+
+    # Earliest "field set from None" change per field
+    first_set_rows = (
+        session.query(
+            ShopBookChange.field,
+            func.min(ShopBookChange.changed_at).label("first_at"),
+        )
+        .filter(
+            ShopBookChange.shop_book_id == shop_book_id,
+            ShopBookChange.old_value.is_(None),
+        )
+        .group_by(ShopBookChange.field)
+        .all()
+    )
+    first_set_map: dict[str, datetime] = {r.field: r.first_at for r in first_set_rows}
+
+    sb = session.get(ShopBook, shop_book_id)
+    fallback = sb.first_seen_at if sb else None
+
+    result: dict[str, dict[str, datetime | None]] = {}
+    for field, changed_at in changed_map.items():
+        result[field] = {
+            "first_seen_at": first_set_map.get(field, fallback),
+            "changed_at": changed_at,
+        }
+    return result
+
+
 def get_price_history(session: Session, shop_book_id: int) -> list[Price]:
     return (
         session.query(Price)

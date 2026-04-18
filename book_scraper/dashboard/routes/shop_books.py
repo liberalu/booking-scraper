@@ -10,6 +10,7 @@ from book_scraper.dashboard.queries import (
     get_all_categories,
     get_all_formats,
     get_all_types,
+    get_field_history,
     get_field_updates,
     get_price_history,
     get_shop_book_changes,
@@ -283,6 +284,7 @@ def shop_book_detail(
     prices = get_price_history(session, shop_book_id)
     changes = get_shop_book_changes(session, shop_book_id)
     field_updates = get_field_updates(session, shop_book_id)
+    field_history = get_field_history(session, shop_book_id)
     issues = get_shop_book_issues(session, shop_book_id)
     type_score = _get_type_score(shop_book)
 
@@ -322,6 +324,7 @@ def shop_book_detail(
             "prices": prices,
             "changes": all_changes,
             "field_updates": field_updates,
+            "field_history": field_history,
             "issues": issues,
             "type_score": type_score,
         },
