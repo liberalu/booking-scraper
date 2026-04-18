@@ -10,7 +10,6 @@ from book_scraper.db.repo import (
 )
 from book_scraper.services.scan import ScanService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures shared by ScrapeUrlItem tests
 # ---------------------------------------------------------------------------

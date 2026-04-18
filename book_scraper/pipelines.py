@@ -21,12 +21,11 @@ from book_scraper.db.repo import (
     upsert_shop_book,
 )
 from book_scraper.db.session import get_session_factory
+from book_scraper.isbn import is_valid_isbn
 from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
 
 logger = logging.getLogger(__name__)
 
-_ISBN_13_RE = re.compile(r"^97[89]\d{10}$")
-_ISBN_10_RE = re.compile(r"^\d{9}[\dXx]$")
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z/][^>]*>")
 _MIN_YEAR = 1800
 _MAX_YEAR = 2030
@@ -65,17 +64,7 @@ def _validate_year(adapter: ItemAdapter) -> None:
 
 
 def _is_valid_isbn(raw: str) -> bool:
-    """Check if a string is a valid ISBN-10 or ISBN-13."""
-    cleaned = raw.replace("-", "").replace(" ", "")
-    if _ISBN_13_RE.match(cleaned):
-        total = sum(int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(cleaned))
-        return total % 10 == 0
-    if _ISBN_10_RE.match(cleaned):
-        total = sum(
-            (10 if c in "Xx" else int(c)) * (10 - i) for i, c in enumerate(cleaned)
-        )
-        return total % 11 == 0
-    return False
+    return is_valid_isbn(raw)
 
 
 class ValidationPipeline:
@@ -274,11 +263,6 @@ class ValidationPipeline:
                 self._warn("missing_title", "title", url)
                 raise DropItem("Missing title")
 
-            isbn = adapter.get("isbn")
-            if isbn is not None and not _is_valid_isbn(isbn):
-                self._warn("invalid_isbn", "isbn", url, str(isbn))
-                adapter["isbn"] = None
-
             year_before = adapter.get("year")
             _validate_year(adapter)
             year_after = adapter.get("year")
@@ -286,6 +270,11 @@ class ValidationPipeline:
                 self._warn("invalid_year", "year", url, str(year_before))
             elif year_before is not None and year_before != year_after:
                 self._warn("year_pages_swap", "year", url, str(year_before))
+
+            isbn = adapter.get("isbn")
+            if isbn is not None and not _is_valid_isbn(isbn):
+                self._warn("invalid_isbn", "isbn", url, str(isbn))
+                adapter["isbn"] = None
 
             # Strip whitespace from text fields
             for field in ("title", "author", "publisher"):
@@ -448,29 +437,18 @@ class PostgresPipeline:
         if touched:
             touch_shop_book_field_updates(self.session, shop_book_id, touched)
 
-        # Also report as validation issues
         vp: ValidationPipeline | None = getattr(
             self.crawler, "validation_pipeline", None
         )
         if vp is None:
             return
         for change in changes:
-            field = change["field"]
-            old = change["old"]
-            new = change["new"]
-            if old is not None and new is None:
+            if change["old"] is not None and change["new"] is None:
                 vp._warn(
                     "field_cleared",
-                    str(field),
+                    str(change["field"]),
                     url,
-                    f"was: {old}",
-                )
-            elif old != new and old is not None:
-                vp._warn(
-                    "field_changed",
-                    str(field),
-                    url,
-                    f"{old} -> {new}",
+                    f"was: {change['old']}",
                 )
 
     def _get_shop_id(self, shop_name: str) -> int:
@@ -515,6 +493,7 @@ class PostgresPipeline:
                 shop_id=shop_id,
                 url=adapter["url"],
                 title=adapter["title"],
+                type=adapter.get("type"),
                 author=adapter.get("author"),
                 sku=adapter.get("sku"),
                 isbn=adapter.get("isbn"),
