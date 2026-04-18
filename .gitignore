@@ -42,3 +42,4 @@ _prototypes/
 
 # Env files
 .env
+.worktrees/
