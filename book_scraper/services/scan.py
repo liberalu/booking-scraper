@@ -107,11 +107,16 @@ class ScanService:
         url: str,
         url_type: str = "product",
     ) -> int:
-        """Queue a newly-discovered URL for same-run processing. Returns item id."""
+        """Queue a newly-discovered URL for same-run processing. Returns item id.
+
+        Does NOT commit — caller (pipeline) controls commit cadence via its
+        existing 100-item batching. The row becomes visible to the spider's
+        fresh spider_idle session after the pipeline's next batch commit.
+        """
         item = insert_scrape_url_item(
             self.session, run_id, shop_id, discovered_url_id, url, url_type
         )
-        self.session.commit()
+        self.session.flush()
         return item.id
 
     def flush_progress(
