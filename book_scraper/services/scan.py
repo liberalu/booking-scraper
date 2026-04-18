@@ -3,10 +3,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from book_scraper.db.models import ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
     cleanup_scrape_url_items,
     create_scrape_run,
+    find_resumable_run,
     finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
@@ -39,9 +41,27 @@ class ScanService:
         shop_config: Any,
         rescrape: bool = False,
     ) -> ScanPlan:
-        """Prepare a scan run: upsert shop, mark stale, check freshness,
-        load pending URLs, filter already done, persist to scrape_url_items."""
+        """Prepare a scan run.
+
+        If a previous 'running' run with pending scrape_url_items exists for
+        this shop, resume it (return its run_id, keep the queue). Otherwise
+        mark stale runs failed, create a new run, and populate the queue.
+        """
         shop = upsert_shop(self.session, shop_name, base_url)
+
+        resumable = find_resumable_run(self.session, shop.id, "scan")
+        if resumable is not None:
+            pending_count = (
+                self.session.query(ScrapeUrlItem)
+                .filter_by(run_id=resumable.id, status="pending")
+                .count()
+            )
+            return ScanPlan(
+                run_id=resumable.id,
+                urls_total=pending_count,
+                urls_skipped=0,
+                freshness_warnings=[],
+            )
 
         mark_stale_runs_failed(self.session, shop.id, "scan")
 

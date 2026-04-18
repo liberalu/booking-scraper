@@ -604,6 +604,37 @@ def mark_stale_runs_failed(
     return len(stale)
 
 
+def find_resumable_run(
+    session: Session,
+    shop_id: int,
+    phase: str,
+) -> "ScrapeRun | None":
+    """Find a 'running' scrape run with pending scrape_url_items.
+
+    Such a run was crash-interrupted and can be resumed: the queue still
+    holds unprocessed URLs. Returns None if no resumable run exists.
+    """
+    from sqlalchemy import exists
+
+    has_pending = (
+        exists()
+        .where(ScrapeUrlItem.run_id == ScrapeRun.id)
+        .where(ScrapeUrlItem.status == "pending")
+    )
+    stmt = (
+        select(ScrapeRun)
+        .where(
+            ScrapeRun.shop_id == shop_id,
+            ScrapeRun.phase == phase,
+            ScrapeRun.status == "running",
+            has_pending,
+        )
+        .order_by(ScrapeRun.started_at.desc())
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
 def mark_orphan_runs_failed(session: Session) -> int:
     """Fail every run still flagged 'running'. Call on scraper boot —
     any row still 'running' belongs to a process the restart killed."""
