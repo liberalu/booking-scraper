@@ -116,6 +116,10 @@
     --chart-5: #fb7185;
 }
 
+:root {
+    --pico-font-family: 'DM Sans', system-ui, sans-serif;
+}
+
 html,
 body {
     min-height: 100%;
@@ -123,6 +127,7 @@ body {
 
 body {
     margin: 0;
+    font-family: 'DM Sans', system-ui, sans-serif;
     color: var(--text-primary);
     background:
         radial-gradient(circle at top left, var(--page-bg-accent), transparent 34%),
