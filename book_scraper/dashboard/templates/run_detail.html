@@ -123,18 +123,28 @@
         <thead>
             <tr>
                 <th>Title</th>
-                <th>Author</th>
-                <th>ISBN</th>
-                <th>Price</th>
+                <th>Changes</th>
             </tr>
         </thead>
         <tbody>
             {% for sb in changed %}
+            {% set entries = changed_info.get(sb.id, []) %}
             <tr>
                 <td><a href="/shop-books/{{ sb.id }}">{{ sb.title[:60] }}{{ '...' if sb.title|length > 60 else '' }}</a></td>
-                <td>{{ sb.author or '-' }}</td>
-                <td>{{ sb.isbn or '-' }}</td>
-                <td>{{ sb.price or '-' }}</td>
+                <td style="font-size: 0.85em;">
+                    {% for field, old, new in entries %}
+                    {% set old_s = (old or '—')[:25] %}
+                    {% set new_s = (new or '—')[:25] %}
+                    <span style="white-space: nowrap;">
+                        <strong>{{ field }}</strong>
+                        ({{ old_s }}{{ '…' if old and old|length > 25 else '' }}
+                        →
+                        {{ new_s }}{{ '…' if new and new|length > 25 else '' }})
+                    </span>{% if not loop.last %}, {% endif %}
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endfor %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

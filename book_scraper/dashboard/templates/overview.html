@@ -1,16 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Overview{% endblock %}
 {% block content %}
-<h1 class="page-title">Overview</h1>
+<section class="page-hero">
+    <div>
+        <div class="page-eyebrow">Operations</div>
+        <h1 class="page-title">Overview</h1>
+        <p class="page-subtitle">
+            A quick read on scraper health, metadata coverage, and the latest operational activity across the catalog.
+        </p>
+    </div>
+    <div class="page-actions">
+        <a href="/runs" role="button" class="secondary">Recent Runs</a>
+        <a href="/shop-books" role="button" class="secondary">Browse Catalog</a>
+    </div>
+</section>
 
 <div class="stat-grid">
     <a href="/shop-books" class="stat-card">
-        <div class="stat-label">Total Shop Books</div>
-        <div class="stat-value">{{ "{:,}".format(stats.total_shop_books) }}</div>
+        <span class="stat-label">Total Shop Books</span>
+        <p class="stat-value">{{ "{:,}".format(stats.total_shop_books) }}</p>
+        <div class="stat-sub">Full catalog discovered so far</div>
     </a>
     <a href="/shop-books?active=true" class="stat-card">
-        <div class="stat-label">Active</div>
-        <div class="stat-value">{{ "{:,}".format(stats.active_shop_books) }}</div>
+        <span class="stat-label">Active</span>
+        <p class="stat-value">{{ "{:,}".format(stats.active_shop_books) }}</p>
         <div class="stat-sub">
             {% if stats.total_shop_books > 0 %}
             {{ "%.1f"|format(stats.active_shop_books / stats.total_shop_books * 100) }}% of total
@@ -18,8 +31,8 @@
         </div>
     </a>
     <a href="/shop-books?has_isbn=true" class="stat-card">
-        <div class="stat-label">With ISBN</div>
-        <div class="stat-value">{{ "{:,}".format(stats.with_isbn) }}</div>
+        <span class="stat-label">With ISBN</span>
+        <p class="stat-value">{{ "{:,}".format(stats.with_isbn) }}</p>
         <div class="stat-sub">
             {% if stats.total_shop_books > 0 %}
             {{ "%.1f"|format(stats.with_isbn / stats.total_shop_books * 100) }}% of total
@@ -27,14 +40,20 @@
         </div>
     </a>
     <a href="/prices" class="stat-card">
-        <div class="stat-label">Price Records</div>
-        <div class="stat-value">{{ "{:,}".format(stats.total_prices) }}</div>
+        <span class="stat-label">Price Records</span>
+        <p class="stat-value">{{ "{:,}".format(stats.total_prices) }}</p>
+        <div class="stat-sub">Tracked over time for change analysis</div>
     </a>
 </div>
 
 <div class="grid-2col">
-    <div class="card mb-0">
-        <div class="card-title">Data Completeness</div>
+    <section class="card">
+        <div class="section-head">
+            <div>
+                <h2 class="section-title">Metadata completeness</h2>
+                <p class="section-copy">Field coverage across active shop books.</p>
+            </div>
+        </div>
         {% for item in completeness %}
         <div class="progress-item">
             <div class="progress-label">{{ item.field }} {{ item.pct }}%</div>
@@ -46,10 +65,15 @@
         {% if not completeness %}
         <p class="text-muted">No shop books yet.</p>
         {% endif %}
-    </div>
+    </section>
 
-    <div class="card mb-0">
-        <div class="card-title">Recent Runs</div>
+    <section class="card">
+        <div class="section-head">
+            <div>
+                <h2 class="section-title">Recent runs</h2>
+                <p class="section-copy">Latest scrape activity with status and throughput.</p>
+            </div>
+        </div>
         <table class="data-table">
             <thead>
                 <tr>
@@ -58,7 +82,7 @@
                     <th>Status</th>
                     <th class="text-right">Added</th>
                     <th class="text-right">Updated</th>
-                    <th class="text-right text-muted">Time</th>
+                    <th class="text-right">Time</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,12 +106,17 @@
                 {% endif %}
             </tbody>
         </table>
-    </div>
+    </section>
 </div>
 
 {% if validation %}
-<div class="card">
-    <div class="card-title">Validation Issues</div>
+<section class="card">
+    <div class="section-head">
+        <div>
+            <h2 class="section-title">Needs attention</h2>
+            <p class="section-copy">Open validation clusters worth reviewing next.</p>
+        </div>
+    </div>
     <div class="validation-inline">
         {% for v in validation %}
         <a href="/validation?issue_type={{ v.issue_type|urlencode }}" class="validation-inline-item">
@@ -96,6 +125,6 @@
         </a>
         {% endfor %}
     </div>
-</div>
+</section>
 {% endif %}
 {% endblock %}

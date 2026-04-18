@@ -26,6 +26,10 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from book_scraper.dashboard.deps import get_db
 from book_scraper.dashboard.queries import get_shop_books_page, get_shop_by_name
+from book_scraper.dashboard.shop_book_filters import (
+    get_shop_book_field_filter_params,
+    parse_shop_book_field_filters,
+)
 
 router = APIRouter()
 
@@ -97,17 +101,30 @@ def scrape_filtered(
     has_isbn: bool = False,
     session: Session = Depends(get_db),
 ) -> Response:
+    field_filters = parse_shop_book_field_filters(request.query_params)
     # Require at least one filter so this endpoint can't be abused for
     # a silent full rescrape.
     has_any_filter = any(
-        [shop, q, author, publisher, category, format, missing, active, has_isbn]
+        [
+            shop,
+            q,
+            author,
+            publisher,
+            category,
+            format,
+            missing,
+            active,
+            has_isbn,
+            bool(field_filters),
+        ]
     )
     if not has_any_filter:
         raise HTTPException(
             status_code=400,
             detail=(
                 "At least one filter is required "
-                "(shop/q/author/publisher/category/format/missing/active/has_isbn)"
+                "(shop/q/author/publisher/category/format/missing/active/"
+                "has_isbn/field filters)"
             ),
         )
 
@@ -129,6 +146,7 @@ def scrape_filtered(
         missing_field=missing,
         active_filter=active,
         has_isbn=has_isbn,
+        field_filters=field_filters,
     )
 
     if not pairs:
@@ -202,6 +220,7 @@ def scrape_filtered(
         }.items()
         if v
     }
+    back_params.update(get_shop_book_field_filter_params(field_filters))
     back_params["scrape_started"] = str(len(pairs))
     return RedirectResponse(
         url=f"/shop-books?{urlencode(back_params)}",

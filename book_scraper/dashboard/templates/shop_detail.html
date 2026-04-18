@@ -63,6 +63,7 @@
     <div class="actions" style="flex-wrap: wrap;">
         <button style="font-size: 0.85rem;" hx-post="/shops/{{ shop.name }}/run?phase=discover_sitemap" hx-target="#run-result" hx-swap="innerHTML">Discover (Sitemap)</button>
         <button style="font-size: 0.85rem;" hx-post="/shops/{{ shop.name }}/run?phase=discover_categories" hx-target="#run-result" hx-swap="innerHTML">Discover (Categories)</button>
+        <button style="font-size: 0.85rem;" hx-post="/shops/{{ shop.name }}/run?phase=discover_full_crawl" hx-target="#run-result" hx-swap="innerHTML">Discover (Full Crawl)</button>
         <button style="font-size: 0.85rem;" hx-post="/shops/{{ shop.name }}/run?phase=scan" hx-target="#run-result" hx-swap="innerHTML">Scan</button>
         <button class="secondary" style="font-size: 0.85rem;" hx-post="/shops/{{ shop.name }}/run?phase=rescrape" hx-target="#run-result" hx-swap="innerHTML">Rescrape All</button>
     </div>

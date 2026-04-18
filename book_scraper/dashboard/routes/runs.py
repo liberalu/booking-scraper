@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
     get_recent_runs,
+    get_run_changed_fields,
     get_run_detail,
     get_run_health,
     get_run_issue_summary,
+    get_run_price_changes,
     get_run_shop_books,
     mark_stale_runs,
 )
@@ -78,7 +80,24 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
         return HTMLResponse("Run not found", status_code=404)
     health = get_run_health(run)
     issue_summary = get_run_issue_summary(session, run_id)
-    created, changed, unchanged = get_run_shop_books(session, run_id)
+    created, changed, unchanged, price_changed_ids = get_run_shop_books(session, run_id)
+    changed_ids = [sb.id for sb in changed]
+    field_changes = get_run_changed_fields(session, run_id, changed_ids)
+    price_changes = get_run_price_changes(
+        session, run_id, [i for i in changed_ids if i in price_changed_ids]
+    )
+    # Build {shop_book_id: [(field, old, new), ...]} — skip null→null entries
+    changed_info: dict[int, list[tuple[str, str | None, str | None]]] = {}
+    for sb in changed:
+        entries = [
+            (f, o, n)
+            for f, o, n in field_changes.get(sb.id, [])
+            if o is not None or n is not None
+        ]
+        if sb.id in price_changed_ids and sb.id in price_changes:
+            old_p, new_p = price_changes[sb.id]
+            entries.append(("price", old_p, new_p))
+        changed_info[sb.id] = entries
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -90,6 +109,7 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             "created": created,
             "changed": changed,
             "unchanged": unchanged,
+            "changed_info": changed_info,
         },
     )
 

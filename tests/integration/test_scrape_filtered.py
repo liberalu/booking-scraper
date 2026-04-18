@@ -61,13 +61,27 @@ def _seed(db_session: Session) -> None:
             for i in range(3)
         ]
     )
-    db_session.add(
-        ShopBook(
-            shop_id=shop.id,
-            url="https://vaga.lt/other",
-            title="Other",
-            author="Bob",
-        )
+    db_session.add_all(
+        [
+            ShopBook(
+                shop_id=shop.id,
+                url="https://vaga.lt/other",
+                title="Other",
+                author="Bob",
+            ),
+            ShopBook(
+                shop_id=shop.id,
+                url="https://vaga.lt/empty-author",
+                title="Empty Author",
+                author="",
+            ),
+            ShopBook(
+                shop_id=shop.id,
+                url="https://vaga.lt/null-author",
+                title="Null Author",
+                author=None,
+            ),
+        ]
     )
     db_session.flush()
 
@@ -147,3 +161,20 @@ def test_scrape_filtered_over_cap_returns_413(
     resp = client.post("/scrape/filtered?shop=vaga&author=Alice")
     assert resp.status_code == 413
     assert captured_cmd == []
+
+
+def test_scrape_filtered_supports_shared_field_filters(
+    client: TestClient, captured_cmd: list[list[str]]
+) -> None:
+    resp = client.post("/scrape/filtered?field_author_op=empty&output=json")
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["urls_count"] == 2
+
+    assert len(captured_cmd) == 1
+    urls_arg = next(a for a in captured_cmd[0] if a.startswith("urls="))
+    urls = urls_arg.removeprefix("urls=").split(",")
+    assert set(urls) == {
+        "https://vaga.lt/empty-author",
+        "https://vaga.lt/null-author",
+    }

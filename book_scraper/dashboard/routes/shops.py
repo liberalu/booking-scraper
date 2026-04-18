@@ -43,6 +43,15 @@ SHOP_COMMANDS = {
         "-a",
         "strategy=categories",
     ],
+    "discover_full_crawl": [
+        _SCRAPY,
+        "crawl",
+        "discover",
+        "-a",
+        "shop={shop}",
+        "-a",
+        "strategy=full_crawl",
+    ],
     "scan": [
         _SCRAPY,
         "crawl",

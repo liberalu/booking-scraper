@@ -34,11 +34,36 @@ def _seed(db_session: Session) -> None:
             [
                 ShopBook(
                     shop_id=shop.id,
-                    url=f"https://vaga.lt/t-{i}",
-                    title=f"Title {i}",
-                    price=i,
-                )
-                for i in range(1, 4)
+                    url="https://vaga.lt/alpha",
+                    title="Alpha",
+                    type="book",
+                    author="Alice",
+                    publisher="Alpha Press",
+                    year=2024,
+                    price=30,
+                    in_stock=True,
+                ),
+                ShopBook(
+                    shop_id=shop.id,
+                    url="https://vaga.lt/beta",
+                    title="Beta",
+                    type="audio",
+                    author="",
+                    publisher="",
+                    price=20,
+                    in_stock=False,
+                ),
+                ShopBook(
+                    shop_id=shop.id,
+                    url="https://vaga.lt/gamma",
+                    title="Gamma",
+                    type="book",
+                    author=None,
+                    publisher=None,
+                    year=2023,
+                    price=10,
+                    in_stock=True,
+                ),
             ]
         )
         db_session.flush()
@@ -97,3 +122,47 @@ def test_both_applied_together(client: TestClient) -> None:
     """Sanity: the server does filter+sort in one request without error."""
     resp = client.get("/shop-books?shop=vaga&active=true&sort=price&order=desc")
     assert resp.status_code == 200
+
+
+def test_field_filter_empty_matches_null_and_blank_text(client: TestClient) -> None:
+    html = client.get("/shop-books?field_author_op=empty").text
+    assert "Alpha" not in html
+    assert "Beta" in html
+    assert "Gamma" in html
+
+
+def test_field_filter_contains_matches_real_text_value(client: TestClient) -> None:
+    html = client.get(
+        "/shop-books?field_author_op=contains&field_author_value=Alice"
+    ).text
+    assert "Alpha" in html
+    assert "Beta" not in html
+    assert "Gamma" not in html
+
+
+def test_field_filter_equals_matches_numeric_value(client: TestClient) -> None:
+    html = client.get("/shop-books?field_year_op=equals&field_year_value=2024").text
+    assert "Alpha" in html
+    assert "Beta" not in html
+    assert "Gamma" not in html
+
+
+def test_field_filter_matches_boolean_value(client: TestClient) -> None:
+    html = client.get("/shop-books?field_in_stock_op=false").text
+    assert "Alpha" not in html
+    assert "Beta" in html
+    assert "Gamma" not in html
+
+
+def test_type_filter_limits_results(client: TestClient) -> None:
+    html = client.get("/shop-books?type=audio").text
+    assert "Alpha" not in html
+    assert "Beta" in html
+    assert "Gamma" not in html
+
+
+def test_type_filter_badge_and_sort_header_are_present(client: TestClient) -> None:
+    html = client.get("/shop-books?type=audio&sort=type&order=asc").text
+    assert 'name="type"' in html
+    assert "Type: audio" in html
+    assert "sort=type" in html

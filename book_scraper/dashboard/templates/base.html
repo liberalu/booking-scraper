@@ -16,23 +16,34 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
-    <nav class="top-nav">
-        <a href="/" class="brand">BookScraper</a>
-        <ul class="nav-links">
-            <li><a href="/" class="{{ 'active' if active_page == 'overview' else '' }}">Overview</a></li>
-            <li><a href="/shop-books" class="{{ 'active' if active_page == 'shop_books' else '' }}">Shop Books</a></li>
-            <li><a href="/urls" class="{{ 'active' if active_page == 'urls' else '' }}">URLs</a></li>
-            <li><a href="/shops" class="{{ 'active' if active_page == 'shops' else '' }}">Shops</a></li>
-            <li><a href="/runs" class="{{ 'active' if active_page == 'runs' else '' }}">Runs</a></li>
-            <li><a href="/validation" class="{{ 'active' if active_page == 'issues' else '' }}">Issues</a></li>
-        </ul>
-        <div class="nav-right">
-            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" id="theme-toggle-btn">🌙</button>
-        </div>
-    </nav>
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
+    <div class="app-shell">
+        <nav class="top-nav">
+            <div class="top-nav-inner">
+                <a href="/" class="brand">
+                    <span class="brand-mark">BS</span>
+                    <span class="brand-copy">
+                        <span class="brand-name">BookScraper</span>
+                        <span class="brand-subtitle">Admin Console</span>
+                    </span>
+                </a>
+                <ul class="nav-links">
+                    <li><a href="/" class="{{ 'active' if active_page == 'overview' else '' }}">Overview</a></li>
+                    <li><a href="/shop-books" class="{{ 'active' if active_page == 'shop_books' else '' }}">Shop Books</a></li>
+                    <li><a href="/urls" class="{{ 'active' if active_page == 'urls' else '' }}">URLs</a></li>
+                    <li><a href="/shops" class="{{ 'active' if active_page == 'shops' else '' }}">Shops</a></li>
+                    <li><a href="/runs" class="{{ 'active' if active_page == 'runs' else '' }}">Runs</a></li>
+                    <li><a href="/validation" class="{{ 'active' if active_page == 'issues' else '' }}">Issues</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span class="nav-badge">Live admin</span>
+                    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" id="theme-toggle-btn">🌙</button>
+                </div>
+            </div>
+        </nav>
+        <main class="container app-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
     <script>
         function toggleTheme() {
             var html = document.documentElement;

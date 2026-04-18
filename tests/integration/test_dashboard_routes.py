@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
-from book_scraper.db.models import Shop
+from book_scraper.db.models import Shop, ShopBook
 
 
 @pytest.fixture()
@@ -49,11 +49,13 @@ ROUTES = [
     "/shop-books?active=true",
     "/shop-books?has_isbn=true",
     "/shop-books?shop=vaga",
+    "/shop-books?type=book",
     # Sorting
     "/runs?sort=started_at&order=desc",
     "/runs?sort=id&order=asc",
     "/shop-books?sort=title&order=asc",
     "/shop-books?sort=price&order=desc",
+    "/shop-books?sort=type&order=asc",
     "/shops/vaga?sort=started_at&order=desc",
 ]
 
@@ -128,3 +130,27 @@ def test_delete_matching_requires_filter(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 400
+
+
+@pytest.mark.integration
+def test_shop_book_detail_shows_classification_score(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    shop_book = ShopBook(
+        shop_id=shop.id,
+        url="https://vaga.lt/vokas",
+        title="Vokas popierinis",
+        type="non_book",
+        categories=["Mokyklinės ir raštinės prekės"],
+    )
+    db_session.add(shop_book)
+    db_session.commit()
+
+    response = client.get(f"/shop-books/{shop_book.id}")
+
+    assert response.status_code == 200
+    assert "Classification Score" in response.text
+    assert "non_book" in response.text
+    assert "-4" in response.text
+    assert "-4 non-book categories" in response.text
