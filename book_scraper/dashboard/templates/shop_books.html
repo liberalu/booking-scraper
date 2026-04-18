@@ -13,41 +13,48 @@
 <form method="get" action="/shop-books">
     <div class="filter-bar">
         <input type="search" name="q" placeholder="Search by title..." value="{{ query }}">
-        <input type="search" name="author" placeholder="Filter by author..." value="{{ author_filter }}">
-        <input type="search" name="publisher" placeholder="Filter by publisher..." value="{{ publisher_filter }}">
-        <select name="category">
-            <option value="">All categories</option>
-            {% for cat in categories %}
-            <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
-            {% endfor %}
-        </select>
-        <select name="type">
-            <option value="">All types</option>
-            {% for book_type in types %}
-            <option value="{{ book_type }}" {{ 'selected' if type_filter == book_type else '' }}>{{ book_type }}</option>
-            {% endfor %}
-        </select>
-        <select name="format">
-            <option value="">All formats</option>
-            <option value="none" {{ 'selected' if format_filter == 'none' else '' }}>Missing format</option>
-            {% for fmt in formats %}
-            <option value="{{ fmt }}" {{ 'selected' if format_filter == fmt else '' }}>{{ fmt }}</option>
-            {% endfor %}
-        </select>
-        <select name="missing">
-            <option value="">No missing filter</option>
-            <option value="any" {{ 'selected' if missing == 'any' else '' }}>Any field missing</option>
-            <option value="author" {{ 'selected' if missing == 'author' else '' }}>Missing author</option>
-            <option value="isbn" {{ 'selected' if missing == 'isbn' else '' }}>Missing ISBN</option>
-            <option value="year" {{ 'selected' if missing == 'year' else '' }}>Missing year</option>
-            <option value="publisher" {{ 'selected' if missing == 'publisher' else '' }}>Missing publisher</option>
-            <option value="format" {{ 'selected' if missing == 'format' else '' }}>Missing format</option>
-        </select>
         <select name="active">
             <option value="true" {{ 'selected' if active_filter == 'true' else '' }}>Active</option>
             <option value="false" {{ 'selected' if active_filter == 'false' else '' }}>Inactive</option>
             <option value="all" {{ 'selected' if active_filter == 'all' else '' }}>All</option>
         </select>
+
+        <details class="more-filters-panel" {{ 'open' if secondary_filters_active else '' }}>
+            <summary>More filters ▼</summary>
+            <div class="more-filters-grid">
+                <input type="search" name="author" placeholder="Filter by author..." value="{{ author_filter }}">
+                <input type="search" name="publisher" placeholder="Filter by publisher..." value="{{ publisher_filter }}">
+                <select name="category">
+                    <option value="">All categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+                <select name="type">
+                    <option value="">All types</option>
+                    {% for book_type in types %}
+                    <option value="{{ book_type }}" {{ 'selected' if type_filter == book_type else '' }}>{{ book_type }}</option>
+                    {% endfor %}
+                </select>
+                <select name="format">
+                    <option value="">All formats</option>
+                    <option value="none" {{ 'selected' if format_filter == 'none' else '' }}>Missing format</option>
+                    {% for fmt in formats %}
+                    <option value="{{ fmt }}" {{ 'selected' if format_filter == fmt else '' }}>{{ fmt }}</option>
+                    {% endfor %}
+                </select>
+                <select name="missing">
+                    <option value="">No missing filter</option>
+                    <option value="any" {{ 'selected' if missing == 'any' else '' }}>Any field missing</option>
+                    <option value="author" {{ 'selected' if missing == 'author' else '' }}>Missing author</option>
+                    <option value="isbn" {{ 'selected' if missing == 'isbn' else '' }}>Missing ISBN</option>
+                    <option value="year" {{ 'selected' if missing == 'year' else '' }}>Missing year</option>
+                    <option value="publisher" {{ 'selected' if missing == 'publisher' else '' }}>Missing publisher</option>
+                    <option value="format" {{ 'selected' if missing == 'format' else '' }}>Missing format</option>
+                </select>
+            </div>
+        </details>
+
         {% if shop_filter %}<input type="hidden" name="shop" value="{{ shop_filter }}">{% endif %}
         {% if has_isbn %}<input type="hidden" name="has_isbn" value="true">{% endif %}
         {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
@@ -86,6 +93,13 @@
         {% endif %}
     </div>
 </form>
+
+<style>
+.more-filters-panel { width: 100%; }
+.more-filters-panel > summary { cursor: pointer; font-size: 0.85rem; color: var(--text-secondary); padding: 0.25rem 0; user-select: none; }
+.more-filters-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.more-filters-grid input[type="search"], .more-filters-grid select { min-width: 150px; }
+</style>
 
 {% if has_active_filters %}
 <div style="margin: 0.5rem 0 1rem;">
