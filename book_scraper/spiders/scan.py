@@ -266,6 +266,9 @@ class ScanSpider(scrapy.Spider):
                 url_type="non_product",
                 scrape_url_item_id=scrape_url_item_id,
                 success=False,
+                book_score=data.get("book_score", 0),
+                is_book_product=False,
+                book_score_reasons=data.get("book_score_reasons", []),
             )
             return
 
@@ -302,6 +305,9 @@ class ScanSpider(scrapy.Spider):
             url_type="product",
             scrape_url_item_id=scrape_url_item_id,
             success=True,
+            book_score=data.get("book_score", 0),
+            is_book_product=True,
+            book_score_reasons=data.get("book_score_reasons", []),
         )
 
         self._urls_processed += 1
@@ -380,6 +386,9 @@ class ScanSpider(scrapy.Spider):
         increment_fail: bool = False,
         scrape_url_item_id: int | None = None,
         success: bool = False,
+        book_score: int | None = None,
+        is_book_product: bool | None = None,
+        book_score_reasons: list[str] | None = None,
     ) -> None:
         """Queue a URL status update and flush periodically."""
         if url_id is None and scrape_url_item_id is None:
@@ -393,6 +402,10 @@ class ScanSpider(scrapy.Spider):
         if scrape_url_item_id is not None:
             update["scrape_url_item_id"] = scrape_url_item_id
             update["scrape_url_item_success"] = success
+        if book_score is not None and is_book_product is not None:
+            update["book_score"] = book_score
+            update["is_book_product"] = is_book_product
+            update["book_score_reasons"] = book_score_reasons or []
         self._url_status_updates.append(update)
         self._urls_responded += 1
         if self._urls_responded % self._flush_every == 0:

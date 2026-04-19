@@ -21,6 +21,7 @@ from book_scraper.db.repo import (
     update_discovered_url_status,
     update_scrape_run_progress,
     upsert_shop,
+    upsert_url_classification,
 )
 
 
@@ -137,7 +138,22 @@ class ScanService:
         for update in url_status_updates:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
+            book_score = update.pop("book_score", None)
+            is_book_product = update.pop("is_book_product", None)
+            book_score_reasons = update.pop("book_score_reasons", None)
             update_discovered_url_status(self.session, **update)
+            if (
+                book_score is not None
+                and is_book_product is not None
+                and update.get("url_id") is not None
+            ):
+                upsert_url_classification(
+                    self.session,
+                    discovered_url_id=update["url_id"],
+                    book_score=book_score,
+                    is_book_product=is_book_product,
+                    reasons=book_score_reasons or [],
+                )
             if scrape_item_id is not None:
                 if scrape_item_success:
                     mark_scrape_url_item_done(self.session, scrape_item_id)
@@ -158,7 +174,22 @@ class ScanService:
         for update in url_status_updates:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
+            book_score = update.pop("book_score", None)
+            is_book_product = update.pop("is_book_product", None)
+            book_score_reasons = update.pop("book_score_reasons", None)
             update_discovered_url_status(self.session, **update)
+            if (
+                book_score is not None
+                and is_book_product is not None
+                and update.get("url_id") is not None
+            ):
+                upsert_url_classification(
+                    self.session,
+                    discovered_url_id=update["url_id"],
+                    book_score=book_score,
+                    is_book_product=is_book_product,
+                    reasons=book_score_reasons or [],
+                )
             if scrape_item_id is not None:
                 if scrape_item_success:
                     mark_scrape_url_item_done(self.session, scrape_item_id)
