@@ -154,3 +154,24 @@ def test_shop_book_detail_shows_classification_score(
     assert "non_book" in response.text
     assert "-4" in response.text
     assert "-4 non-book categories" in response.text
+
+
+@pytest.mark.integration
+def test_url_detail_page_404(client: TestClient) -> None:
+    """Non-existent URL ID returns 404."""
+    response = client.get("/urls/999999")
+    assert response.status_code == 404
+
+
+@pytest.mark.integration
+def test_url_detail_page_exists(client: TestClient, db_session: Session) -> None:
+    """An existing DiscoveredUrl returns 200 on its detail page."""
+    from book_scraper.db.repo import upsert_discovered_url, upsert_shop
+
+    shop = upsert_shop(db_session, "smoke_shop", "https://smoke.example.com")
+    url = upsert_discovered_url(db_session, shop.id, "https://smoke.example.com/p/1", "sitemap")
+    db_session.commit()
+
+    response = client.get(f"/urls/{url.id}")
+    assert response.status_code == 200
+    assert "Not yet classified" in response.text
