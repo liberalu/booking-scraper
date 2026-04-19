@@ -7,23 +7,25 @@
 
 Three related improvements to the Discovered URLs dashboard page:
 
-1. Split the current mixed "status" filter into separate **type** and **status** dropdowns
+1. Replace the current mixed "status" filter with a clean **type** dropdown (url_type only); remove derived-state filters
 2. Add a **book score column** to the list (sortable, filterable) backed by a new `url_classifications` table
 3. Add a **URL detail page** at `/urls/<id>` showing metadata, linked shop book, and full score breakdown
 
 ---
 
-## 1. Filter Bar — Split Type and Status
+## 1. Filter Bar — Replace Status with Type
 
 ### Problem
 
 The current "status" dropdown conflates two unrelated concepts:
-- URL classification (`unknown`, `product`, `non_product`) — what the URL *is*
-- Scrape state (`not_in_shop_books`, `failed`) — what happened to the URL
+- URL classification (`unknown`, `product`, `non_product`) — what the URL *is*, stored in `DiscoveredUrl.url_type`
+- Derived state (`not_in_shop_books`, `failed`) — computed conditions with no dedicated DB column
+
+This makes the filter confusing and couples unrelated concerns.
 
 ### Solution
 
-Replace the single dropdown with two:
+Remove the `status` param entirely. Replace the dropdown with a **Type** filter:
 
 **Type** (`type` query param) — filters `DiscoveredUrl.url_type`:
 - All types *(default)*
@@ -31,16 +33,15 @@ Replace the single dropdown with two:
 - `product`
 - `non_product`
 
-**Status** (`status` query param) — filters derived state:
-- All statuses *(default)*
-- `not_in_shop_books` — `shop_book_id IS NULL`
-- `failed` — `fail_count >= 3`
+### Stat Cards
+
+The "Not in Shop Books" and "Failed 3+" stat cards currently link to `?status=not_in_shop_books` and `?status=failed`. Since `status` is being removed, these cards become **non-clickable** (display-only). They still show the counts but no longer act as filter shortcuts.
 
 ### Changes Required
 
-- `book_scraper/dashboard/routes/urls.py`: add `type: str = ""` query param
-- `book_scraper/dashboard/queries.py`: add `type` filter branch in `get_discovered_urls_page()`; remove `unknown`/`product`/`non_product` from the `status` filter branches
-- `book_scraper/dashboard/templates/discovered_urls.html`: replace single `<select name="status">` with two selects; add `type_filter` to filter badges and `filter_params`
+- `book_scraper/dashboard/routes/urls.py`: remove `status: str = ""` param; add `type: str = ""` param
+- `book_scraper/dashboard/queries.py`: remove `status` filter branches entirely; add `type` filter on `DiscoveredUrl.url_type`
+- `book_scraper/dashboard/templates/discovered_urls.html`: replace `<select name="status">` with `<select name="type">`; make "Not in Shop Books" and "Failed 3+" stat cards non-clickable; update filter badges and `filter_params`
 
 ---
 
@@ -77,9 +78,14 @@ The `vaga` parser already computes all three fields (`book_score`, `book_score_r
 - Sortable via `DISCOVERED_URL_SORT_COLUMNS`: add `"score": UrlClassification.book_score`
 - Query: LEFT JOIN `url_classifications` on `discovered_url_id`
 
-**New filter**: `score_min` query param (integer, optional) — filters `book_score >= score_min`. Exposed as a small number input in the filter bar (e.g. "Score ≥ __").
+**New filters** in the filter bar:
 
-**New filter badge**: "Score ≥ N" dismissible chip, consistent with existing filter badge style.
+- `score_min` (integer, optional) — small number input "Score ≥ __", filters `book_score >= score_min`
+- `is_book` (string, optional) — dropdown with `all` / `book` / `not book`, filters on `UrlClassification.is_book_product`; useful for quickly isolating misclassified pages
+
+Both filters apply only to URLs that have a `url_classifications` row; URLs without a classification are excluded when either filter is active.
+
+**New filter badges**: "Score ≥ N" and "Book: yes/no" dismissible chips, consistent with existing badge style.
 
 ---
 
