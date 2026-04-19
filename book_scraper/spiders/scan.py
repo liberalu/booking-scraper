@@ -112,7 +112,9 @@ class ScanSpider(scrapy.Spider):
             database_url = self.settings.get("DATABASE_URL")
             session_factory = get_session_factory(database_url)
             session = session_factory()
+            url_id_map: dict[str, int | None] = {}
             try:
+                from book_scraper.db.models import DiscoveredUrl
                 from book_scraper.db.repo import create_scrape_run, upsert_shop
 
                 shop = upsert_shop(session, self.shop_name, self.conf.shop.base_url)
@@ -124,6 +126,14 @@ class ScanSpider(scrapy.Spider):
                 )
                 session.commit()
                 self._run_id = run.id
+
+                for url in self._single_urls:
+                    du = (
+                        session.query(DiscoveredUrl)
+                        .filter_by(url=url, shop_id=shop.id)
+                        .one_or_none()
+                    )
+                    url_id_map[url] = du.id if du else None
             finally:
                 session.close()
 
@@ -137,7 +147,7 @@ class ScanSpider(scrapy.Spider):
                     url,
                     callback=self.parse_product,
                     errback=self.handle_error,
-                    meta={"discovered_url_id": None},
+                    meta={"discovered_url_id": url_id_map.get(url)},
                 )
             return
 
