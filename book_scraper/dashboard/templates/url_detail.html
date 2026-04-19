@@ -83,13 +83,11 @@
         </thead>
         <tbody>
             {% for reason in classification.reasons %}
-            {% set parts = reason.split(' ', 1) %}
-            {% set pts = parts[0] %}
-            {% set label = parts[1] if parts|length > 1 else reason %}
-            {% if pts.startswith('+') %}
+            {% set pts = reason.points %}
+            {% if pts > 0 %}
                 {% set row_color = 'var(--badge-success-fg)' %}
-                {% set pts_display = pts %}
-            {% elif pts.startswith('-') %}
+                {% set pts_display = '+' ~ pts %}
+            {% elif pts < 0 %}
                 {% set row_color = 'var(--badge-error-fg)' %}
                 {% set pts_display = pts %}
             {% else %}
@@ -97,7 +95,7 @@
                 {% set pts_display = '—' %}
             {% endif %}
             <tr style="border-bottom:1px solid var(--border,#e5e7eb);">
-                <td style="padding:5px 8px; color:{{ row_color }};">{{ label }}</td>
+                <td style="padding:5px 8px; color:{{ row_color }};">{{ reason.key | replace('_', ' ') | title }}</td>
                 <td style="text-align:right; padding:5px 8px; font-weight:600; color:{{ row_color }};">{{ pts_display }}</td>
             </tr>
             {% endfor %}

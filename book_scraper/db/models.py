@@ -371,7 +371,7 @@ class UrlClassification(Base):
     )
     book_score: Mapped[int] = mapped_column(Integer, nullable=False)
     is_book_product: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    reasons: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    reasons: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
     classified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

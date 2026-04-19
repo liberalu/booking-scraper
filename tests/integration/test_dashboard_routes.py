@@ -153,7 +153,7 @@ def test_shop_book_detail_shows_classification_score(
     assert "Classification Score" in response.text
     assert "non_book" in response.text
     assert "-4" in response.text
-    assert "-4 non-book categories" in response.text
+    assert "Non Book Categories" in response.text
 
 
 @pytest.mark.integration

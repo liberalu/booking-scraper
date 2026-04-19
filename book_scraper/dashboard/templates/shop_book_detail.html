@@ -146,7 +146,10 @@
     {% if type_score.reasons %}
     <div style="display: grid; gap: 0.35rem;">
         {% for reason in type_score.reasons %}
-        <div class="text-muted">{{ reason }}</div>
+        <div class="text-muted">
+            {% if reason.points > 0 %}+{{ reason.points }}{% elif reason.points < 0 %}{{ reason.points }}{% else %}—{% endif %}
+            {{ reason.key | replace('_', ' ') | title }}
+        </div>
         {% endfor %}
     </div>
     {% else %}
