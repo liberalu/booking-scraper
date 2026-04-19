@@ -1,9 +1,9 @@
 # tests/unit/test_url_classifications_repo.py
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
-from datetime import datetime, UTC
 
-from book_scraper.db.repo import upsert_url_classification
 from book_scraper.db.models import UrlClassification
+from book_scraper.db.repo import upsert_url_classification
 
 
 def _make_session():

@@ -169,7 +169,9 @@ def test_url_detail_page_exists(client: TestClient, db_session: Session) -> None
     from book_scraper.db.repo import upsert_discovered_url, upsert_shop
 
     shop = upsert_shop(db_session, "smoke_shop", "https://smoke.example.com")
-    url = upsert_discovered_url(db_session, shop.id, "https://smoke.example.com/p/1", "sitemap")
+    url = upsert_discovered_url(
+        db_session, shop.id, "https://smoke.example.com/p/1", "sitemap"
+    )
     db_session.commit()
 
     response = client.get(f"/urls/{url.id}")

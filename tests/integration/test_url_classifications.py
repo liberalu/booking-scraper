@@ -3,7 +3,11 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from book_scraper.db.models import UrlClassification
-from book_scraper.db.repo import upsert_discovered_url, upsert_shop, upsert_url_classification
+from book_scraper.db.repo import (
+    upsert_discovered_url,
+    upsert_shop,
+    upsert_url_classification,
+)
 
 
 def test_upsert_creates_classification(db_session: Session):
@@ -23,9 +27,11 @@ def test_upsert_creates_classification(db_session: Session):
     )
     db_session.flush()
 
-    row = db_session.query(UrlClassification).filter_by(
-        discovered_url_id=discovered_url.id
-    ).one()
+    row = (
+        db_session.query(UrlClassification)
+        .filter_by(discovered_url_id=discovered_url.id)
+        .one()
+    )
     assert row.book_score == 7
     assert row.is_book_product is True
     assert row.reasons == ["+3 valid ISBN", "+2 author present"]
@@ -61,9 +67,11 @@ def test_upsert_overwrites_on_rescan(db_session: Session):
     )
     db_session.flush()
 
-    rows = db_session.query(UrlClassification).filter_by(
-        discovered_url_id=discovered_url.id
-    ).all()
+    rows = (
+        db_session.query(UrlClassification)
+        .filter_by(discovered_url_id=discovered_url.id)
+        .all()
+    )
     assert len(rows) == 1
     assert rows[0].book_score == -2
     assert rows[0].is_book_product is False
@@ -72,7 +80,7 @@ def test_upsert_overwrites_on_rescan(db_session: Session):
 
 
 def test_relationship_accessible(db_session: Session):
-    """Test that the relationship between DiscoveredUrl and UrlClassification is accessible."""
+    """Verify the ORM relationship between DiscoveredUrl and UrlClassification."""
     shop = upsert_shop(db_session, name="test_shop", base_url="https://example.com")
     discovered_url = upsert_discovered_url(
         db_session, shop_id=shop.id, url="https://example.com/p/1", source="sitemap"

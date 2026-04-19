@@ -676,9 +676,7 @@ def get_all_formats(session: Session) -> list[str]:
     return [r[0] for r in rows]
 
 
-def get_attribute_keys(
-    session: Session, shop_id: int | None = None
-) -> list[str]:
+def get_attribute_keys(session: Session, shop_id: int | None = None) -> list[str]:
     """Return distinct attribute keys (sorted) across all shop_books."""
     from book_scraper.db.models import ShopBookAttribute
 
@@ -1184,7 +1182,9 @@ def get_discovered_urls_page(
     query = (
         session.query(DiscoveredUrl)
         .options(joinedload(DiscoveredUrl.shop))
-        .outerjoin(UrlClassification, UrlClassification.discovered_url_id == DiscoveredUrl.id)
+        .outerjoin(
+            UrlClassification, UrlClassification.discovered_url_id == DiscoveredUrl.id
+        )
     )
     if shop_id:
         query = query.filter(DiscoveredUrl.shop_id == shop_id)
