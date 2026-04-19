@@ -20,6 +20,7 @@ from book_scraper.db.models import (
     ShopBookAttribute,
     ShopBookAuthor,
     ShopBookFieldUpdate,
+    UrlClassification,
     ValidationIssue,
 )
 from book_scraper.spiders.vaga.parsers import infer_shop_book_type
@@ -529,6 +530,40 @@ def update_discovered_url_status(
         record.fail_count += 1
     else:
         record.fail_count = 0
+    session.flush()
+
+
+def upsert_url_classification(
+    session: Session,
+    discovered_url_id: int,
+    book_score: int,
+    is_book_product: bool,
+    reasons: list[str],
+) -> None:
+    """Upsert the book classification for a discovered URL.
+
+    Called unconditionally after parse_product_page() — covers both book
+    and non-book results so every scanned URL has a classification row.
+    """
+    stmt = select(UrlClassification).where(
+        UrlClassification.discovered_url_id == discovered_url_id
+    )
+    existing = session.execute(stmt).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if existing is not None:
+        existing.book_score = book_score
+        existing.is_book_product = is_book_product
+        existing.reasons = reasons
+        existing.classified_at = now
+    else:
+        record = UrlClassification(
+            discovered_url_id=discovered_url_id,
+            book_score=book_score,
+            is_book_product=is_book_product,
+            reasons=reasons,
+            classified_at=now,
+        )
+        session.add(record)
     session.flush()
 
 
