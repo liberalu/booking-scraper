@@ -74,14 +74,35 @@
         {% endif %}
     </div>
     {% if classification.reasons %}
-    <ul style="list-style:none; padding:0; margin:0;">
-        {% for reason in classification.reasons %}
-        <li style="padding:0.2rem 0; font-size:0.9rem;
-            color:{{ 'var(--badge-success-fg)' if reason.startswith('+') else ('var(--badge-error-fg)' if reason.startswith('-') else 'inherit') }};">
-            {{ reason }}
-        </li>
-        {% endfor %}
-    </ul>
+    <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-top:0.5rem;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--border,#e5e7eb);">
+                <th style="text-align:left; padding:4px 8px; color:var(--text-muted); font-weight:500;">Criterion</th>
+                <th style="text-align:right; padding:4px 8px; color:var(--text-muted); font-weight:500;">Points</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for reason in classification.reasons %}
+            {% set parts = reason.split(' ', 1) %}
+            {% set pts = parts[0] %}
+            {% set label = parts[1] if parts|length > 1 else reason %}
+            {% if pts.startswith('+') %}
+                {% set row_color = 'var(--badge-success-fg)' %}
+                {% set pts_display = pts %}
+            {% elif pts.startswith('-') %}
+                {% set row_color = 'var(--badge-error-fg)' %}
+                {% set pts_display = pts %}
+            {% else %}
+                {% set row_color = 'var(--text-muted)' %}
+                {% set pts_display = '—' %}
+            {% endif %}
+            <tr style="border-bottom:1px solid var(--border,#e5e7eb);">
+                <td style="padding:5px 8px; color:{{ row_color }};">{{ label }}</td>
+                <td style="text-align:right; padding:5px 8px; font-weight:600; color:{{ row_color }};">{{ pts_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% else %}
     <p class="text-muted">No reasons recorded.</p>
     {% endif %}

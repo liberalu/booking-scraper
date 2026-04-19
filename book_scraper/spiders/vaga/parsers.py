@@ -49,9 +49,7 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", html_module.unescape(value).casefold()).strip()
 
 
-def _categories_contain_keywords(
-    categories: object, keywords: tuple[str, ...]
-) -> bool:
+def _categories_contain_keywords(categories: object, keywords: tuple[str, ...]) -> bool:
     if not isinstance(categories, list):
         return False
     normalized = [_normalize_text(c) for c in categories if isinstance(c, str)]
@@ -122,24 +120,38 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
     if has_book_category:
         score += 3
         reasons.append("+3 book categories")
+    else:
+        reasons.append("0 book categories")
     if valid_isbn:
         score += 3
         reasons.append("+3 valid ISBN")
+    else:
+        reasons.append("0 valid ISBN")
     if schema_is_book:
         score += 2
         reasons.append("+2 Book schema")
+    else:
+        reasons.append("0 Book schema")
     if has_author:
         score += 2
         reasons.append("+2 author present")
+    else:
+        reasons.append("0 author present")
     if has_book_metadata:
         score += 2
         reasons.append("+2 book metadata present")
+    else:
+        reasons.append("0 book metadata present")
     if title_is_non_book:
         score -= 3
         reasons.append("-3 game/toy title")
+    else:
+        reasons.append("0 game/toy title")
     if has_non_book_category:
         score -= 4
         reasons.append("-4 non-book categories")
+    else:
+        reasons.append("0 non-book categories")
 
     if has_non_book_category and not (
         has_book_category or valid_isbn or schema_is_book or has_author
