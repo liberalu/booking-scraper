@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.shop_book_filters import (
@@ -1213,10 +1213,8 @@ def get_discovered_urls_page(
 def get_url_detail(
     session: Session, url_id: int
 ) -> tuple["DiscoveredUrl", "UrlClassification | None"] | None:
-    from sqlalchemy import select as _select
-
     stmt = (
-        _select(DiscoveredUrl)
+        select(DiscoveredUrl)
         .options(
             joinedload(DiscoveredUrl.shop),
             joinedload(DiscoveredUrl.shop_book),
