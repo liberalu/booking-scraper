@@ -33,9 +33,11 @@ Remove the `status` param entirely. Replace the dropdown with a **Type** filter:
 - `product`
 - `non_product`
 
-### Stat Cards
+### Stat Cards and Compatibility
 
-The "Not in Shop Books" and "Failed 3+" stat cards currently link to `?status=not_in_shop_books` and `?status=failed`. Since `status` is being removed, these cards become **non-clickable** (display-only). They still show the counts but no longer act as filter shortcuts.
+All three derived-state stat cards ("In Shop Books", "Not in Shop Books", "Failed 3+") become **display-only**. None of them mapped to a real DB column and "In Shop Books" was already a no-op filter in the current query implementation.
+
+Old `?status=...` query params are **silently ignored** — the route drops the `status` param and treats any stale bookmarks or links as showing all results. No redirect or translation layer is added.
 
 ### Changes Required
 
@@ -59,15 +61,30 @@ url_classifications
   classified_at      DATETIME NOT NULL
 ```
 
-One row per discovered URL, upserted on each scan. Index on `discovered_url_id`.
+One row per discovered URL, upserted on each scan.
+
+**Indexes:**
+- `UNIQUE (discovered_url_id)` — covers the LEFT JOIN from the list query
+- `(book_score)` — supports range filter (`score_min`) and ORDER BY score
+- `(is_book_product)` — supports exact filter on book/not-book
 
 ### Data Flow
 
-1. **Scan phase**: after `parse_product_page()` returns, the pipeline reads `book_score`, `is_book_product`, and `book_score_reasons` from the parsed data dict and upserts a `url_classifications` row.
-2. **Re-scan**: upserts the existing row — score and reasons update if page content changed.
-3. **Discover phase**: no write to `url_classifications` (URLs not yet scraped show `—`).
+The scan spider (`book_scraper/spiders/scan.py`) currently returns early for non-book pages at line 270, before yielding any item. This means the Scrapy pipeline never sees non-book results. To guarantee the classification is written for **both book and non-book pages**, the write must happen in the **scan spider**, not the pipeline.
+
+Concretely:
+
+1. After `parse_product_page()` returns (line 260), the scan spider calls `repo.upsert_url_classification(session, discovered_url_id, data)` unconditionally — before the `is_book_product` check and early return.
+2. `upsert_url_classification` lives in `book_scraper/db/repo.py` and issues a PostgreSQL `INSERT ... ON CONFLICT (discovered_url_id) DO UPDATE SET ...`.
+3. The existing early-return path for non-book pages is unchanged — it still skips creating a `ShopBookItem`. Only the classification upsert is added before it.
+4. **Re-scan**: same upsert overwrites the existing row.
+5. **Discover phase**: no write to `url_classifications`. Discovered-but-unscanned URLs show `—` in the list.
 
 The `vaga` parser already computes all three fields (`book_score`, `book_score_reasons`, `is_book_product`) in `parse_product_page()`. No parser changes needed.
+
+### Backfill
+
+Already-scanned URLs have no `url_classifications` row and will show `—` until re-scanned. This is accepted — no backfill step is planned. Score-based filtering will naturally exclude these rows, which is the correct behaviour (they have no verified classification). A full re-scan will populate them.
 
 ### List Page Enhancements
 
@@ -77,6 +94,7 @@ The `vaga` parser already computes all three fields (`book_score`, `book_score_r
 - `—` when no `url_classifications` row exists (URL not yet scanned)
 - Sortable via `DISCOVERED_URL_SORT_COLUMNS`: add `"score": UrlClassification.book_score`
 - Query: LEFT JOIN `url_classifications` on `discovered_url_id`
+- **Null ordering**: when sorting by score with no score filter active, unclassified rows (NULL score) appear **last** (`NULLS LAST`). This applies to both ascending and descending sort directions.
 
 **New filters** in the filter bar:
 
