@@ -78,6 +78,7 @@ def discovered_urls_page(
 def url_detail_page(
     request: Request,
     url_id: int,
+    scraped: str = "",
     session: Session = Depends(get_db),
 ) -> HTMLResponse:
     result = get_url_detail(session, url_id)
@@ -91,5 +92,6 @@ def url_detail_page(
             "active_page": "urls",
             "url": discovered_url,
             "classification": classification,
+            "scraped": scraped,
         },
     )

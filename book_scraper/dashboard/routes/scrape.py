@@ -229,6 +229,34 @@ def scrape_filtered(
     )
 
 
+@router.post("/scrape/url/{url_id}")
+def scrape_single_url(
+    url_id: int,
+    session: Session = Depends(get_db),
+) -> Response:
+    from book_scraper.db.models import Shop
+
+    row = (
+        session.query(DiscoveredUrl.url, DiscoveredUrl.shop_id)
+        .filter(DiscoveredUrl.id == url_id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="URL not found")
+
+    shop = session.get(Shop, row.shop_id)
+    if shop is None:
+        raise HTTPException(status_code=404, detail="Shop not found for URL")
+
+    cmd = [
+        "uv", "run", "scrapy", "crawl", "scan",
+        "-a", f"shop={shop.name}",
+        "-a", f"urls={row.url}",
+    ]
+    _subprocess_runner(cmd)
+    return RedirectResponse(url=f"/urls/{url_id}?scraped=1", status_code=303)
+
+
 @router.post("/scrape/unknown-urls")
 def scrape_unknown_urls(
     shop: str = "",

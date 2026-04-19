@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% block title %}URL #{{ url.id }}{% endblock %}
 {% block content %}
-<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
     <a href="/urls" class="text-muted" style="font-size:0.85rem;">← Discovered URLs</a>
     <h1 class="page-title" style="margin:0;">URL #{{ url.id }}</h1>
+    <form method="post" action="/scrape/url/{{ url.id }}" style="margin:0; margin-left:auto;">
+        <button type="submit" class="btn-secondary">Scrape this page</button>
+    </form>
+    {% if scraped %}
+    <span style="color:var(--badge-success-fg); font-size:0.85rem;">✓ Scrape started — refresh in a moment to see updated score</span>
+    {% endif %}
 </div>
 
 <!-- Section 1: URL metadata -->
