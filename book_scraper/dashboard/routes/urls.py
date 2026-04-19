@@ -26,6 +26,7 @@ def discovered_urls_page(
     is_book: str = "",
     sort: str = "discovered",
     order: str = "desc",
+    scrape_started: str = "",
     session: Session = Depends(get_db),
 ) -> HTMLResponse:
     shop_obj = get_shop_by_name(session, shop) if shop else None
@@ -68,6 +69,7 @@ def discovered_urls_page(
             "sort": sort,
             "order": order,
             "shops": shops,
+            "scrape_started": scrape_started,
         },
     )
 
