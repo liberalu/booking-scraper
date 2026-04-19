@@ -17,6 +17,7 @@ from book_scraper.db.models import (
     ShopBook,
     ShopBookChange,
     ShopBookFieldUpdate,
+    UrlClassification,
     ValidationIssue,
 )
 
@@ -1141,6 +1142,7 @@ DISCOVERED_URL_SORT_COLUMNS = {
     "url": DiscoveredUrl.url,
     "fails": DiscoveredUrl.fail_count,
     "discovered": DiscoveredUrl.first_seen_at,
+    "score": UrlClassification.book_score,
 }
 
 
@@ -1171,29 +1173,33 @@ def get_discovered_urls_page(
     per_page: int = 50,
     shop_id: int | None = None,
     source: str = "",
-    status: str = "",
+    url_type: str = "",
     search: str = "",
+    score_min: int | None = None,
+    is_book: str = "",
     sort_by: str = "discovered",
     sort_order: str = "desc",
 ) -> tuple[list, int]:
     """Return paginated discovered URLs with filters."""
-    query = session.query(DiscoveredUrl).options(joinedload(DiscoveredUrl.shop))
+    query = (
+        session.query(DiscoveredUrl)
+        .options(joinedload(DiscoveredUrl.shop))
+        .outerjoin(UrlClassification, UrlClassification.discovered_url_id == DiscoveredUrl.id)
+    )
     if shop_id:
         query = query.filter(DiscoveredUrl.shop_id == shop_id)
     if source:
         query = query.filter(DiscoveredUrl.source == source)
+    if url_type:
+        query = query.filter(DiscoveredUrl.url_type == url_type)
     if search:
         query = query.filter(DiscoveredUrl.url.ilike(f"%{search}%"))
-    if status == "not_in_shop_books":
-        query = query.outerjoin(
-            ShopBook,
-            (ShopBook.shop_id == DiscoveredUrl.shop_id)
-            & (ShopBook.url == DiscoveredUrl.url),
-        ).filter(ShopBook.id.is_(None))
-    elif status == "failed":
-        query = query.filter(DiscoveredUrl.fail_count >= 3)
-    elif status in ("unknown", "product", "non_product"):
-        query = query.filter(DiscoveredUrl.url_type == status)
+    if score_min is not None:
+        query = query.filter(UrlClassification.book_score >= score_min)
+    if is_book == "book":
+        query = query.filter(UrlClassification.is_book_product.is_(True))
+    elif is_book == "not_book":
+        query = query.filter(UrlClassification.is_book_product.is_(False))
     total = query.count()
     order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.first_seen_at)
     if sort_order == "asc":
@@ -1202,3 +1208,23 @@ def get_discovered_urls_page(
         query = query.order_by(order_col.desc().nulls_last())
     urls = query.offset((page - 1) * per_page).limit(per_page).all()
     return urls, total
+
+
+def get_url_detail(
+    session: Session, url_id: int
+) -> tuple["DiscoveredUrl", "UrlClassification | None"] | None:
+    from sqlalchemy import select as _select
+
+    stmt = (
+        _select(DiscoveredUrl)
+        .options(
+            joinedload(DiscoveredUrl.shop),
+            joinedload(DiscoveredUrl.shop_book),
+            joinedload(DiscoveredUrl.classification),
+        )
+        .where(DiscoveredUrl.id == url_id)
+    )
+    url = session.execute(stmt).unique().scalar_one_or_none()
+    if url is None:
+        return None
+    return url, url.classification
