@@ -31,7 +31,10 @@ def discovered_urls_page(
     shop_obj = get_shop_by_name(session, shop) if shop else None
     shop_id = shop_obj.id if shop_obj else None
     stats = get_discovered_urls_stats(session, shop_id=shop_id)
-    score_min_int = int(score_min) if score_min.strip().lstrip("-").isdigit() else None
+    try:
+        score_min_int: int | None = int(score_min)
+    except ValueError:
+        score_min_int = None
     urls, total = get_discovered_urls_page(
         session,
         page=page,
