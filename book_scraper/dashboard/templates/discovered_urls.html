@@ -99,6 +99,7 @@
     <table class="data-table">
         <thead>
             <tr>
+                <th>ID</th>
                 <th>{{ sort_header('url', 'URL', sort, order, filter_params) }}</th>
                 <th>Shop</th>
                 <th>Shop Book</th>
@@ -108,12 +109,14 @@
                 <th class="text-right">{{ sort_header('fails', 'Fails', sort, order, filter_params) }}</th>
                 <th class="text-right">HTTP</th>
                 <th>{{ sort_header('discovered', 'Discovered', sort, order, filter_params) }}</th>
-                <th></th>
             </tr>
         </thead>
         <tbody>
             {% for u in urls %}
             <tr>
+                <td style="white-space:nowrap;">
+                    <a href="/urls/{{ u.id }}" style="font-size:0.85rem;">{{ u.id }}</a>
+                </td>
                 <td class="cell-truncate">
                     <a href="{{ u.url }}" target="_blank" rel="noopener noreferrer">{{ u.url }}</a>
                 </td>
@@ -165,9 +168,6 @@
                     {% if u.first_seen_at %}
                     {{ u.first_seen_at.strftime('%b %-d') }}
                     {% else %}—{% endif %}
-                </td>
-                <td class="text-right" style="white-space:nowrap;">
-                    <a href="/urls/{{ u.id }}" style="font-size:0.8rem;">edit</a>
                 </td>
             </tr>
             {% endfor %}
