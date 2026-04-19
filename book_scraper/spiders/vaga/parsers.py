@@ -83,12 +83,6 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
         }
 
     categories = data.get("categories")
-    schema_types = {
-        schema_type.casefold()
-        for schema_type in data.get("schema_types", [])
-        if isinstance(schema_type, str)
-    }
-
     has_book_category = _categories_contain_labels(categories, _BOOK_CATEGORY_LABELS)
     has_non_book_category = _categories_contain_keywords(
         categories, _NON_BOOK_CATEGORY_KEYWORDS
@@ -113,7 +107,6 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
             "format",
         )
     )
-    schema_is_book = "book" in schema_types
     title_is_non_book = title_looks_like_game_or_toy(title)
 
     score = 0
@@ -127,11 +120,6 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
         reasons.append({"key": "valid_isbn", "points": 3})
     else:
         reasons.append({"key": "valid_isbn", "points": 0})
-    if schema_is_book:
-        score += 2
-        reasons.append({"key": "book_schema", "points": 2})
-    else:
-        reasons.append({"key": "book_schema", "points": 0})
     if has_author:
         score += 2
         reasons.append({"key": "author_present", "points": 2})
@@ -154,7 +142,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
         reasons.append({"key": "non_book_categories", "points": 0})
 
     if has_non_book_category and not (
-        has_book_category or valid_isbn or schema_is_book or has_author
+        has_book_category or valid_isbn or has_author
     ):
         reasons.append({"key": "blocked_non_book_category", "points": 0})
         return {
@@ -164,7 +152,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
             "has_primary_book_signal": False,
         }
     if title_is_non_book and not (
-        has_book_category or valid_isbn or schema_is_book or has_book_metadata
+        has_book_category or valid_isbn or has_book_metadata
     ):
         reasons.append({"key": "blocked_game_toy_title", "points": 0})
         return {
@@ -174,7 +162,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
             "has_primary_book_signal": False,
         }
 
-    has_primary_book_signal = has_book_category or valid_isbn or schema_is_book
+    has_primary_book_signal = has_book_category or valid_isbn
     if has_author and has_book_metadata:
         has_primary_book_signal = True
     return {
