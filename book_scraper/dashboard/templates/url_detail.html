@@ -56,20 +56,20 @@
 <!-- Section 3: Book score -->
 <div class="card">
     <h3 style="margin-top:0;">Book Score</h3>
-    {% if url.classification %}
+    {% if classification %}
     <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
-        <span style="font-size:2rem; font-weight:700; color:{{ 'var(--badge-success-fg)' if url.classification.is_book_product else 'var(--badge-warning-fg)' }};">
-            {{ url.classification.book_score }}
+        <span style="font-size:2rem; font-weight:700; color:{{ 'var(--badge-success-fg)' if classification.is_book_product else 'var(--badge-warning-fg)' }};">
+            {{ classification.book_score }}
         </span>
-        {% if url.classification.is_book_product %}
+        {% if classification.is_book_product %}
         <span class="badge badge-completed">✓ Classified as book</span>
         {% else %}
         <span class="badge badge-warning">✗ Not a book</span>
         {% endif %}
     </div>
-    {% if url.classification.reasons %}
+    {% if classification.reasons %}
     <ul style="list-style:none; padding:0; margin:0;">
-        {% for reason in url.classification.reasons %}
+        {% for reason in classification.reasons %}
         <li style="padding:0.2rem 0; font-size:0.9rem;
             color:{{ 'var(--badge-success-fg)' if reason.startswith('+') else ('var(--badge-error-fg)' if reason.startswith('-') else 'inherit') }};">
             {{ reason }}
@@ -80,7 +80,7 @@
     <p class="text-muted">No reasons recorded.</p>
     {% endif %}
     <p class="text-muted" style="font-size:0.8rem; margin-top:0.75rem;">
-        Classified {{ url.classification.classified_at.strftime('%Y-%m-%d %H:%M') if url.classification.classified_at else '' }}
+        Classified {{ classification.classified_at.strftime('%Y-%m-%d %H:%M') if classification.classified_at else '' }}
     </p>
     {% else %}
     <p class="text-muted">Not yet classified — this URL has not been scanned.</p>
