@@ -4,12 +4,12 @@ function HFRuns({ nav, goto }) {
   const HF = getHF();
   const statusTone = { running:'ok', completed:'neutral', failed:'err', queued:'warn' };
 
-  const [data, setData] = React.useState({ runs: [], kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0 } });
+  const [data, setData] = React.useState({ runs: [], total: 0, kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0, all_time: 0 } });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
-    const load = () => fetch('/api/runs?limit=100')
+    const load = () => fetch('/api/runs?limit=500')
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
@@ -74,6 +74,7 @@ function HFRuns({ nav, goto }) {
       <HFKpiStrip items={[
         { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span> },
         { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:HF.ink3}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span> },
+        { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:HF.ink3}}>total runs</span> },
       ]}/>
 
       {/* Filters */}
@@ -157,18 +158,14 @@ function HFRuns({ nav, goto }) {
         )}
       </HFCard>
 
-      {/* Pagination */}
+      {/* Footer */}
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
-        <span>Showing 1–12 of 2,184</span>
-        <div style={{display:'flex', gap:6}}>
-          <HFButton size="sm" variant="ghost">‹ Prev</HFButton>
-          <HFButton size="sm" variant="accent">1</HFButton>
-          <HFButton size="sm">2</HFButton>
-          <HFButton size="sm">3</HFButton>
-          <span style={{padding:'6px 4px', color:HF.ink4}}>…</span>
-          <HFButton size="sm">183</HFButton>
-          <HFButton size="sm">Next ›</HFButton>
-        </div>
+        <span>
+          Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} loaded
+          {data.total > allRows.length && (
+            <span style={{color:HF.ink4}}> · {data.total.toLocaleString()} total in DB</span>
+          )}
+        </span>
       </div>
     </HFShell>
   );

@@ -247,6 +247,7 @@ def api_runs(
     if status:
         query = query.filter(ScrapeRun.status == status)
 
+    total = query.count()
     runs = query.limit(limit).all()
 
     running_now = (
@@ -277,11 +278,14 @@ def api_runs(
 
     return {
         "runs": [_run_dict(r) for r in runs],
+        "total": total,
+        "limit": limit,
         "kpis": {
             "running_now": running_now,
             "today_total": today_total,
             "today_ok": today_ok,
             "today_failed": today_failed,
+            "all_time": total,
         },
     }
 
