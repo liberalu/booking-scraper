@@ -108,11 +108,16 @@ function HFRuns({ nav, goto }) {
               <div style={{fontSize:12.5, color:HF.ink3, marginBottom:14}}>
                 {allRows.length === 0
                   ? 'Trigger a run with the "New run" button.'
-                  : 'Try clearing filters or adjusting the time range.'}
+                  : `${allRows.length} runs in the database, but none match the active filters.`}
               </div>
             )}
-            {!loading && allRows.length > 0 && activeCount > 0 && (
-              <HFButton size="sm" onClick={clearAll}>Clear filters</HFButton>
+            {!loading && allRows.length > 0 && (
+              <div style={{fontSize:11.5, color:HF.ink4, fontFamily:HF.mono, marginBottom:14}}>
+                shop={shop} · phase={phase} · type={type} · status={status} · when={when} · trigger={trigger}{q ? ` · q="${q}"` : ''}
+              </div>
+            )}
+            {!loading && allRows.length > 0 && (
+              <HFButton size="sm" onClick={clearAll}>Reset filters</HFButton>
             )}
           </div>
         ) : (
