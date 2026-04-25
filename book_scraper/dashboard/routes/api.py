@@ -226,26 +226,54 @@ def api_overview(session: Session = Depends(get_db)) -> dict[str, Any]:
 # ─── Runs ────────────────────────────────────────────────────────────────────
 
 
+_WHEN_BOUNDS_HOURS = {"1h": 1, "24h": 24, "7d": 168, "30d": 720}
+
+
 @router.get("/runs")
 def api_runs(
-    shop: str = "",
-    phase: str = "",
-    status: str = "",
+    shop: str = "all",
+    phase: str = "all",
+    status: str = "all",
+    when: str = "any",
+    q: str = "",
     limit: int = 50,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    from datetime import timedelta
+
+    from sqlalchemy import or_
+
     query = (
         session.query(ScrapeRun)
         .join(Shop, ScrapeRun.shop_id == Shop.id)
         .options(joinedload(ScrapeRun.shop))
         .order_by(ScrapeRun.started_at.desc())
     )
-    if shop:
+    if shop and shop != "all":
         query = query.filter(Shop.name == shop)
-    if phase:
-        query = query.filter(ScrapeRun.phase == phase)
-    if status:
+    if phase and phase != "all":
+        if phase == "discover":
+            # 'discover' matches discover_sitemap / _categories / _full_crawl too.
+            query = query.filter(
+                or_(
+                    ScrapeRun.phase == "discover",
+                    ScrapeRun.phase.like("discover\\_%"),
+                )
+            )
+        else:
+            query = query.filter(ScrapeRun.phase == phase)
+    if status and status != "all":
         query = query.filter(ScrapeRun.status == status)
+    if when in _WHEN_BOUNDS_HOURS:
+        cutoff = datetime.now(UTC) - timedelta(hours=_WHEN_BOUNDS_HOURS[when])
+        query = query.filter(ScrapeRun.started_at >= cutoff)
+    if q.strip():
+        token = q.strip()
+        like = f"%{token}%"
+        clauses = [Shop.name.ilike(like), ScrapeRun.phase.ilike(like)]
+        if token.isdigit():
+            clauses.append(ScrapeRun.id == int(token))
+        query = query.filter(or_(*clauses))
 
     total = query.count()
     runs = query.limit(limit).all()

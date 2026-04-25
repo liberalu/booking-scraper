@@ -3,63 +3,43 @@
 function HFRuns({ nav, goto }) {
   const HF = getHF();
   const statusTone = { running:'ok', completed:'neutral', failed:'err', queued:'warn' };
+  const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
+
+  // Filter state — backend handles the actual filtering.
+  const [q, setQ] = React.useState('');
+  const [shop, setShop]     = React.useState('all');
+  const [phase, setPhase]   = React.useState('all');
+  const [status, setStatus] = React.useState('all');
+  const [when, setWhen]     = React.useState('any');
 
   const [data, setData] = React.useState({ runs: [], total: 0, kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0, all_time: 0 } });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
-    const load = () => fetch('/api/runs?limit=500')
+    const params = new URLSearchParams({ limit: '50' });
+    if (shop !== 'all') params.set('shop', shop);
+    if (phase !== 'all') params.set('phase', phase);
+    if (status !== 'all') params.set('status', status);
+    if (when !== 'any') params.set('when', when);
+    if (q.trim()) params.set('q', q.trim());
+    const load = () => fetch(`/api/runs?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     load();
     const id = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  }, [q, shop, phase, status, when]);
 
   const allRows = data.runs;
-
-  const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
-
-  // Filter state
-  const [q, setQ] = React.useState('');
-  const [shop, setShop]     = React.useState('all');
-  const [phase, setPhase]   = React.useState('all');
-  const [type, setType]     = React.useState('all');
-  const [status, setStatus] = React.useState('all');
-  const [when, setWhen]     = React.useState('any');
-  const [trigger, setTrigger] = React.useState('all');
-
-  const whenBounds = { any: Infinity, '1h': 1, '24h': 24, '7d': 168, '30d': 720 };
-
-  const filtered = React.useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    return allRows.filter(r => {
-      if (shop !== 'all' && r.shop !== shop) return false;
-      // 'discover' matches discover_sitemap / discover_categories / discover_full_crawl
-      if (phase !== 'all' && r.phase !== phase && !(phase === 'discover' && r.phase.startsWith('discover'))) return false;
-      if (type !== 'all' && r.type !== type) return false;
-      if (status !== 'all' && r.status !== status) return false;
-      if (trigger !== 'all') {
-        if (trigger === 'cron' && !r.by.startsWith('cron')) return false;
-        if (trigger === 'manual' && !r.by.startsWith('manual')) return false;
-      }
-      if (when !== 'any' && r.startedH > whenBounds[when]) return false;
-      if (qq) {
-        const hay = `${r.id} ${r.shop} ${r.phase} ${r.type} ${r.status} ${r.by}`.toLowerCase();
-        if (!hay.includes(qq)) return false;
-      }
-      return true;
-    });
-  }, [allRows, q, shop, phase, type, status, when, trigger]);
+  const filtered = allRows;  // backend already filtered; keep alias for table render
 
   const activeCount =
-    (shop!=='all'?1:0) + (phase!=='all'?1:0) + (type!=='all'?1:0) +
-    (status!=='all'?1:0) + (when!=='any'?1:0) + (trigger!=='all'?1:0) +
-    (q.trim()?1:0);
+    (shop!=='all'?1:0) + (phase!=='all'?1:0) +
+    (status!=='all'?1:0) + (when!=='any'?1:0) + (q.trim()?1:0);
 
-  const clearAll = () => { setQ(''); setShop('all'); setPhase('all'); setType('all'); setStatus('all'); setWhen('any'); setTrigger('all'); };
+  const clearAll = () => { setQ(''); setShop('all'); setPhase('all'); setStatus('all'); setWhen('any'); };
 
   return (
     <HFShell {...nav} activePage="runs"
@@ -77,24 +57,21 @@ function HFRuns({ nav, goto }) {
         { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:HF.ink3}}>total runs</span> },
       ]}/>
 
-      {/* Filters */}
-      <HFCard style={{ marginBottom: HF.gap }} padding={12}>
+      {/* Filters — overflow:visible so the dropdown isn't clipped by the card */}
+      <HFCard style={{ marginBottom: HF.gap, overflow: 'visible' }} padding={12}>
         <HFFilterBar right={<>
           <span style={{fontSize:11.5, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
-            {filtered.length} of {allRows.length}
+            {data.runs.length.toLocaleString()} of {(data.total || 0).toLocaleString()}
           </span>
           {activeCount > 0 && (
             <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>
           )}
-          <HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Refresh</HFButton>
         </>}>
-          <HFSearch placeholder="Search by ID, shop, user…" width={260} value={q} onChange={setQ}/>
+          <HFSearch placeholder="Search by ID, shop, phase…" width={260} value={q} onChange={setQ}/>
           <HFFilter label="Shop"    value={shop}    onChange={setShop}    options={['all','vaga','knygos']}/>
           <HFFilter label="Phase"   value={phase}   onChange={setPhase}   options={['all','discover','scan','prices']}/>
-          <HFFilter label="Type"    value={type}    onChange={setType}    options={['all','full','sitemap','discovered']}/>
           <HFFilter label="Status"  value={status}  onChange={setStatus}  options={['all','running','queued','completed','failed']}/>
           <HFFilter label="When"    value={when}    onChange={setWhen}    options={['any','1h','24h','7d','30d']}/>
-          <HFFilter label="Trigger" value={trigger} onChange={setTrigger} options={['all','cron','manual']}/>
         </HFFilterBar>
       </HFCard>
 
@@ -103,21 +80,21 @@ function HFRuns({ nav, goto }) {
           <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
             <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
             <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>
-              {loading ? 'Loading…' : allRows.length === 0 ? 'No runs yet' : 'No runs match these filters'}
+              {loading ? 'Loading…' : (data.kpis.all_time || 0) === 0 ? 'No runs yet' : 'No runs match these filters'}
             </div>
             {!loading && (
               <div style={{fontSize:12.5, color:HF.ink3, marginBottom:14}}>
-                {allRows.length === 0
+                {(data.kpis.all_time || 0) === 0
                   ? 'Trigger a run with the "New run" button.'
-                  : `${allRows.length} runs in the database, but none match the active filters.`}
+                  : `${data.kpis.all_time.toLocaleString()} runs in the database, but none match the active filters.`}
               </div>
             )}
-            {!loading && allRows.length > 0 && (
+            {!loading && activeCount > 0 && (
               <div style={{fontSize:11.5, color:HF.ink4, fontFamily:HF.mono, marginBottom:14}}>
-                shop={shop} · phase={phase} · type={type} · status={status} · when={when} · trigger={trigger}{q ? ` · q="${q}"` : ''}
+                shop={shop} · phase={phase} · status={status} · when={when}{q ? ` · q="${q}"` : ''}
               </div>
             )}
-            {!loading && allRows.length > 0 && (
+            {!loading && activeCount > 0 && (
               <HFButton size="sm" onClick={clearAll}>Reset filters</HFButton>
             )}
           </div>
@@ -161,9 +138,9 @@ function HFRuns({ nav, goto }) {
       {/* Footer */}
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
         <span>
-          Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} loaded
-          {data.total > allRows.length && (
-            <span style={{color:HF.ink4}}> · {data.total.toLocaleString()} total in DB</span>
+          Showing {data.runs.length.toLocaleString()} of {(data.total || 0).toLocaleString()} match{data.total === 1 ? '' : 'es'}
+          {data.kpis.all_time > (data.total || 0) && (
+            <span style={{color:HF.ink4}}> · {data.kpis.all_time.toLocaleString()} total in DB</span>
           )}
         </span>
       </div>

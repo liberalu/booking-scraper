@@ -46,7 +46,7 @@ function HFUrls({ nav, goto }) {
         { label:'Failing',     value: urlStats.failed.toLocaleString(), delta:<span style={{color:HF.errInk}}>3+ fails</span>, tone:'err' },
       ]}/>
 
-      <HFCard style={{marginBottom:HF.gap}} padding={12}>
+      <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
           <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
             {filters.filtered.length} of {rows.length}
