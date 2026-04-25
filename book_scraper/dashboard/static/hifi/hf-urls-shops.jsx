@@ -166,14 +166,15 @@ function HFShops({ nav, goto }) {
           const sTone = s.last_run_status === 'completed' ? 'ok' : s.last_run_status === 'failed' ? 'err' : 'neutral';
           const sStatus = s.last_run_status === 'completed' ? 'healthy' : s.last_run_status === 'failed' ? 'failing' : s.last_run_status || 'unknown';
           return (
-          <HFCard key={s.name}
+          <div key={s.name} onClick={() => goto('shop-detail', { name: s.name })} style={{ cursor: 'pointer' }}>
+          <HFCard
             title={<span style={{display:'flex', alignItems:'center', gap:8}}>
               <HFDot tone={sTone} pulse={sTone==='err'} size={8}/>
               <span style={{fontSize:15, fontWeight:600}}>{s.name}.lt</span>
               <HFPill tone={sTone==='ok'?'ok':'err'}>{sStatus}</HFPill>
             </span>}
             sub={`${(s.books||0).toLocaleString()} books · last run ${s.last_run_ago || '—'}`}
-            action={<HFButton size="sm" onClick={()=>goto('shop-detail',{name:s.name})}>Open <span style={{display:'flex'}}>{HF_ICONS.arrow}</span></HFButton>}
+            action={<HFButton size="sm" onClick={(e)=>{e.stopPropagation(); goto('shop-detail',{name:s.name});}}>Open <span style={{display:'flex'}}>{HF_ICONS.arrow}</span></HFButton>}
           >
             <div style={{padding:`${HF.cardP}px`, display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:14}}>
               {[['Books', s.books], ['Active', s.active]].map(([l,v]) => (
@@ -186,6 +187,7 @@ function HFShops({ nav, goto }) {
               ))}
             </div>
           </HFCard>
+          </div>
           );
         })}
       </div>
