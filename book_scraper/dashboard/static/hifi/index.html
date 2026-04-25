@@ -39,6 +39,7 @@ function App() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [accent, setAccent] = React.useState(localStorage.getItem('hf_accent') || 'forest');
   const [density, setDensity] = React.useState(localStorage.getItem('hf_density') || 'ultra');
+  const [newRunOpen, setNewRunOpen] = React.useState(false);
   const [, force] = React.useReducer(x => x + 1, 0);
 
   React.useEffect(() => { window.HF_ACCENT = accent; localStorage.setItem('hf_accent', accent); force(); }, [accent]);
@@ -49,7 +50,7 @@ function App() {
   const nav = { collapsed, setCollapsed, setPage: goto, activePage: page };
 
   window.HF_APP = {
-    openNewRun: () => {},
+    openNewRun: () => setNewRunOpen(true),
     openNewSchedule: () => {},
     openAddURL: () => {},
     openAddBook: () => {},
@@ -76,7 +77,12 @@ function App() {
   };
 
   const renderer = pages[page];
-  return renderer ? renderer() : <div style={{padding:40}}>Unknown page: {page}</div>;
+  return (
+    <>
+      {renderer ? renderer() : <div style={{padding:40}}>Unknown page: {page}</div>}
+      <HFNewRunDialog open={newRunOpen} onClose={() => setNewRunOpen(false)} goto={goto}/>
+    </>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);

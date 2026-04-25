@@ -323,28 +323,48 @@ function HFCommandK({ open, onClose, goto }) {
 // ══════════════════════════════ New Run dialog ══════════════════════════════
 function HFNewRunDialog({ open, onClose, goto }) {
   const HF = getHF();
-  const [shop, setShop] = React.useState('vaga');
-  const [mode, setMode] = React.useState('full');
-  const [priority, setPriority] = React.useState('normal');
-  const [dryRun, setDryRun] = React.useState(false);
+  const [shop, setShop] = React.useState('');
+  const [mode, setMode] = React.useState('delta');
+  const [shops, setShops] = React.useState([]);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState('');
 
-  const shops = [
-    { v:'vaga',    lbl:'vaga.lt',    urls:1720 },
-    { v:'knygos',  lbl:'knygos.lt',  urls:980 },
-    { v:'patogupirkti', lbl:'patogupirkti.lt', urls:2140 },
-    { v:'humanitas', lbl:'humanitas.lt', urls:430 },
-    { v:'_all',     lbl:'All shops', urls:5270 },
-  ];
+  React.useEffect(() => {
+    if (!open) return;
+    setError('');
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => {
+        const list = d.shops || [];
+        setShops(list);
+        setShop(prev => prev || (list[0] && list[0].name) || '');
+      })
+      .catch(() => setError('Could not load shops'));
+  }, [open]);
 
-  const selShop = shops.find(s => s.v === shop);
-  const selUrls = mode === 'full' ? selShop.urls
-                : mode === 'delta' ? Math.round(selShop.urls * 0.18)
-                : mode === 'failed' ? Math.round(selShop.urls * 0.03)
-                : 10;
+  const selShop = shops.find(s => s.name === shop);
+  const urlCount = selShop ? (selShop.discovered_urls || 0) : 0;
 
-  const submit = () => {
-    onClose();
-    goto('run-detail', { id: '4822' });
+  const submit = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      const resp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop, mode }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Request failed (${resp.status})`);
+      }
+      onClose();
+      goto('runs');
+    } catch (e) {
+      setError(String(e.message || e));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -352,53 +372,36 @@ function HFNewRunDialog({ open, onClose, goto }) {
       <HFModalHead title="New run" sub="Trigger a scrape manually" onClose={onClose} icon={HF_ICONS.play}/>
       <HFModalBody>
         <HFField label="Shop" required>
-          <HFSelect value={shop} onChange={setShop} options={shops.map(s => ({value:s.v, label:`${s.lbl} · ${s.urls.toLocaleString()} URLs`}))}/>
+          <HFSelect value={shop} onChange={setShop} options={shops.map(s => ({
+            value: s.name,
+            label: `${s.name}.lt · ${(s.discovered_urls || 0).toLocaleString()} URLs`,
+          }))}/>
         </HFField>
         <HFField label="Mode" hint={{
-          full:`Re-scrape every URL (${selUrls.toLocaleString()} items · ~${Math.ceil(selUrls/28)}m)`,
-          delta:`Only URLs changed since last run (${selUrls.toLocaleString()} items)`,
-          failed:`Retry URLs that failed last time (${selUrls.toLocaleString()} items)`,
+          full:`Re-scrape every known URL (${urlCount.toLocaleString()} items)`,
+          delta:`Resumable scan — only URLs not yet scraped`,
           sample:`First 10 URLs only (for testing)`,
         }[mode]}>
           <HFSegmented value={mode} onChange={setMode} options={[
-            { value:'full',   label:'Full' },
             { value:'delta',  label:'Delta' },
-            { value:'failed', label:'Retry failed' },
+            { value:'full',   label:'Full' },
             { value:'sample', label:'Sample (10)' },
           ]}/>
         </HFField>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <HFField label="Priority">
-            <HFSelect value={priority} onChange={setPriority} options={[
-              { value:'low', label:'Low (background)' },
-              { value:'normal', label:'Normal' },
-              { value:'high', label:'High (jump queue)' },
-            ]}/>
-          </HFField>
-          <HFField label="Concurrency">
-            <HFSelect value="4" onChange={() => {}} options={['1','2','4','8']}/>
-          </HFField>
-        </div>
-        <label style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px', background: HF.subtle,
-          border: `1px solid ${HF.border}`, borderRadius: 6, cursor: 'pointer',
-        }}>
-          <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)}
-                 style={{ margin: 0, accentColor: HF.accent }}/>
-          <span style={{ flex: 1 }}>
-            <span style={{ fontSize: 12.5, color: HF.ink, fontWeight: 500 }}>Dry run</span>
-            <span style={{ fontSize: 11.5, color: HF.ink3, marginLeft: 8 }}>don't write to database</span>
-          </span>
-        </label>
+        {error && (
+          <div style={{
+            color: HF.errInk, fontSize: 12.5, padding: '8px 10px',
+            background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
+          }}>{error}</div>
+        )}
       </HFModalBody>
       <HFModalFoot>
         <div style={{ flex: 1, fontSize: 11.5, color: HF.ink3, fontFamily: HF.mono, display: 'flex', alignItems: 'center' }}>
-          {selUrls.toLocaleString()} URLs · ~{Math.max(1, Math.ceil(selUrls/28))}m estimated
+          {selShop ? `${urlCount.toLocaleString()} URLs available` : 'Loading shops…'}
         </div>
         <HFButton onClick={onClose}>Cancel</HFButton>
-        <HFButton variant="primary" onClick={submit}>
-          <span style={{ display: 'flex' }}>{HF_ICONS.play}</span> Start run
+        <HFButton variant="primary" onClick={submit} disabled={!shop || submitting}>
+          <span style={{ display: 'flex' }}>{HF_ICONS.play}</span> {submitting ? 'Starting…' : 'Start run'}
         </HFButton>
       </HFModalFoot>
     </HFModal>

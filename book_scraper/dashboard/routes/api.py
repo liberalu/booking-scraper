@@ -1,10 +1,13 @@
 # book_scraper/dashboard/routes/api.py
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -281,6 +284,53 @@ def api_runs(
             "today_ok": today_ok,
             "today_failed": today_failed,
         },
+    }
+
+
+class NewRunRequest(BaseModel):
+    shop: str
+    mode: str = "delta"  # "full" | "delta" | "sample"
+
+
+def _default_run_runner(cmd: list[str]) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+
+
+_run_subprocess_runner: Callable[[list[str]], subprocess.Popen[bytes]] = (
+    _default_run_runner
+)
+
+
+def set_run_subprocess_runner(
+    runner: Callable[[list[str]], subprocess.Popen[bytes]],
+) -> None:
+    """Test hook: swap the subprocess launcher."""
+    global _run_subprocess_runner
+    _run_subprocess_runner = runner
+
+
+@router.post("/runs")
+def api_create_run(
+    req: NewRunRequest, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    shop = get_shop_by_name(session, req.shop)
+    if not shop:
+        raise HTTPException(status_code=404, detail=f"Unknown shop: {req.shop}")
+
+    cmd = ["uv", "run", "scrapy", "crawl", "scan", "-a", f"shop={req.shop}"]
+    if req.mode == "full":
+        cmd.extend(["-a", "rescrape=true"])
+    elif req.mode == "sample":
+        cmd.extend(["-a", "max_urls=10"])
+
+    process = _run_subprocess_runner(cmd)
+    return {
+        "status": "started",
+        "shop": req.shop,
+        "mode": req.mode,
+        "pid": getattr(process, "pid", None),
     }
 
 
