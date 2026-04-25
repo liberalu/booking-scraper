@@ -5,11 +5,13 @@ from pathlib import Path
 
 import markdown as _markdown
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup, escape
 
 from book_scraper.dashboard.deps import templates
 from book_scraper.dashboard.routes import (
+    api as api_routes,
     cron,
     overview,
     prices,
@@ -230,6 +232,14 @@ app.mount(
     StaticFiles(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
+
+app.include_router(api_routes.router, prefix="/api")
+
+
+@app.get("/app")
+async def spa_index() -> FileResponse:
+    return FileResponse(str(Path(__file__).parent / "static" / "hifi" / "index.html"))
+
 
 app.include_router(overview.router)
 app.include_router(shops.router)
