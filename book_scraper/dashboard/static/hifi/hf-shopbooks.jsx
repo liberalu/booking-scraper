@@ -55,10 +55,14 @@ function HFShopBooks({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total books',   value: data.kpis.total.toLocaleString(), delta:<span style={{color:HF.ink3}}>total</span> },
-        { label:'Active',        value: data.kpis.active.toLocaleString(), delta:<span style={{color:HF.ink3}}>{data.kpis.total > 0 ? Math.round(data.kpis.active/data.kpis.total*100) : 0}%</span> },
-        { label:'Missing ISBN',  value: data.kpis.missing_isbn.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_isbn/data.kpis.total*100) : 0}%</span>, tone:'warn' },
-        { label:'Missing price', value: data.kpis.missing_price.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_price/data.kpis.total*100) : 0}%</span>, tone:'warn' },
+        { label:'Total books',   value: data.kpis.total.toLocaleString(), delta:<span style={{color:HF.ink3}}>total</span>,
+          onClick: clearAll },
+        { label:'Active',        value: data.kpis.active.toLocaleString(), delta:<span style={{color:HF.ink3}}>{data.kpis.total > 0 ? Math.round(data.kpis.active/data.kpis.total*100) : 0}%</span>,
+          onClick: () => { setActive('true'); setMissing('any'); } },
+        { label:'Missing ISBN',  value: data.kpis.missing_isbn.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_isbn/data.kpis.total*100) : 0}%</span>, tone:'warn',
+          onClick: () => { setMissing('isbn'); setActive('all'); } },
+        { label:'Missing price', value: data.kpis.missing_price.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_price/data.kpis.total*100) : 0}%</span>, tone:'warn',
+          onClick: () => { setMissing('price'); setActive('all'); } },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
@@ -72,7 +76,7 @@ function HFShopBooks({ nav, goto }) {
           <HFFilter label="Shop"     value={shop}     options={['all','vaga','knygos']}                                  onChange={setShop}/>
           <HFFilter label="Active"   value={active}   options={['all','true','false']}                                   onChange={setActive}/>
           <HFFilter label="Type"     value={bookType} options={['all','book','non_book','audio','ebook']}                onChange={setBookType}/>
-          <HFFilter label="Missing"  value={missing}  options={['any','author','isbn','year','publisher','format']}      onChange={setMissing} allLabel="any"/>
+          <HFFilter label="Missing"  value={missing}  options={['any','author','isbn','year','publisher','format','price']}      onChange={setMissing} allLabel="any"/>
           <HFFilter label="ISBN"     value={hasIsbn}  options={['any','yes']}                                            onChange={setHasIsbn} allLabel="any"/>
         </HFFilterBar>
       </HFCard>

@@ -474,16 +474,23 @@ function HFSparkBars({ data, h = 80 }) {
   );
 }
 
-function HFKpiTile({ label, value, delta, tone, href = '#', last, icon }) {
+function HFKpiTile({ label, value, delta, tone, href = '#', last, icon, onClick }) {
   const HF = getHF();
   const toneColor = tone === 'ok' ? HF.okInk : tone === 'warn' ? HF.warnInk : tone === 'err' ? HF.errInk : tone === 'accent' ? HF.accentInk : HF.ink3;
+  const clickable = !!onClick;
   return (
-    <a href={href} className="hf-link" style={{
+    <a href={href}
+       onClick={clickable ? (e) => { e.preventDefault(); onClick(); } : undefined}
+       className="hf-link" style={{
       display: 'block', textDecoration: 'none', color: HF.ink,
       padding: `${HF.kpiP}px ${HF.kpiP + 2}px`,
       borderRight: last ? 'none' : `1px solid ${HF.border}`,
       background: HF.surface,
-    }}>
+      cursor: clickable ? 'pointer' : 'default',
+      transition: 'background 100ms',
+    }}
+    onMouseEnter={clickable ? (e) => { e.currentTarget.style.background = HF.subtle; } : undefined}
+    onMouseLeave={clickable ? (e) => { e.currentTarget.style.background = HF.surface; } : undefined}>
       <div style={{
         fontSize: 11.5, color: HF.ink3, fontWeight: 500,
         textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,

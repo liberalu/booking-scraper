@@ -117,16 +117,27 @@ function HFCron({ nav, goto }) {
 function HFIssues({ nav, goto }) {
   const HF = getHF();
   const [tab, setTab] = React.useState('open');
-  const [data, setData] = React.useState({ issues: [], total: 0, counts: { new: 0, recurring: 0, already_seen: 0, open: 0 } });
+  const [page, setPage] = React.useState(1);
+  const PER_PAGE = 30;
+  const [data, setData] = React.useState({
+    issues: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
+    counts: { new: 0, recurring: 0, already_seen: 0, open: 0 },
+  });
   const [loading, setLoading] = React.useState(true);
 
+  // Reset to page 1 when tab changes.
+  React.useEffect(() => { setPage(1); }, [tab]);
+
   React.useEffect(() => {
+    let cancelled = false;
     const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
-    fetch(`/api/issues?state=${stateParam}&per_page=100`)
+    const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE) });
+    fetch(`/api/issues?${params.toString()}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [tab]);
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, page]);
 
   const seed = data.issues.map(i => ({
     id: `ISS-${i.id}`,
@@ -379,6 +390,37 @@ function HFIssues({ nav, goto }) {
         />
         )}
       </HFCard>
+
+      {(data.total || 0) > 0 && (
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+          <span>
+            Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
+            {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
+          </span>
+          {data.pages > 1 && (
+            <div style={{display:'flex', gap:6, alignItems:'center'}}>
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={data.page <= 1}>‹ Prev</HFButton>
+              {(() => {
+                const buttons = [];
+                const total = data.pages, cur = data.page;
+                const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
+                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>);
+                if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
+                else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return buttons;
+              })()}
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={data.page >= data.pages}>Next ›</HFButton>
+            </div>
+          )}
+        </div>
+      )}
     </HFShell>
   );
 }

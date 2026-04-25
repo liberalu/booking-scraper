@@ -715,14 +715,16 @@ def api_issues(
     severity: str = "",
     q: str = "",
     page: int = 1,
-    per_page: int = 50,
+    per_page: int = 30,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     shop_id = None
-    if shop:
+    if shop and shop != "all":
         s = get_shop_by_name(session, shop)
-        shop_id = s.id if s else None
+        shop_id = s.id if s else -1
 
+    page = max(1, page)
+    per_page = max(1, min(per_page, 200))
     rows, total = get_issues_page(
         session,
         state=state,
@@ -756,11 +758,13 @@ def api_issues(
         for r in rows
     ]
 
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
     return {
         "issues": issues,
         "total": total,
         "page": page,
         "per_page": per_page,
+        "pages": pages,
         "counts": counts,
     }
 

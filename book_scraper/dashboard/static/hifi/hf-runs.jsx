@@ -58,11 +58,14 @@ function HFRuns({ nav, goto }) {
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> New run</HFButton>
       </>}
     >
-      {/* Summary strip */}
+      {/* Summary strip — clickable filter shortcuts */}
       <HFKpiStrip items={[
-        { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span> },
-        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:HF.ink3}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span> },
-        { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:HF.ink3}}>total runs</span> },
+        { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span>,
+          onClick: () => { setStatus('running'); setWhen('any'); } },
+        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:HF.ink3}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span>,
+          onClick: () => { setStatus('all'); setWhen('24h'); } },
+        { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:HF.ink3}}>total runs</span>,
+          onClick: clearAll },
       ]}/>
 
       {/* Filters — overflow:visible so the dropdown isn't clipped by the card */}
