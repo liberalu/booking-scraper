@@ -37,7 +37,8 @@ function HFRuns({ nav, goto }) {
     const qq = q.trim().toLowerCase();
     return allRows.filter(r => {
       if (shop !== 'all' && r.shop !== shop) return false;
-      if (phase !== 'all' && r.phase !== phase) return false;
+      // 'discover' matches discover_sitemap / discover_categories / discover_full_crawl
+      if (phase !== 'all' && r.phase !== phase && !(phase === 'discover' && r.phase.startsWith('discover'))) return false;
       if (type !== 'all' && r.type !== type) return false;
       if (status !== 'all' && r.status !== status) return false;
       if (trigger !== 'all') {
@@ -100,9 +101,19 @@ function HFRuns({ nav, goto }) {
         {filtered.length === 0 ? (
           <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
             <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
-            <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>No runs match these filters</div>
-            <div style={{fontSize:12.5, color:HF.ink3, marginBottom:14}}>Try clearing filters or adjusting the time range.</div>
-            <HFButton size="sm" onClick={clearAll}>Clear filters</HFButton>
+            <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>
+              {loading ? 'Loading…' : allRows.length === 0 ? 'No runs yet' : 'No runs match these filters'}
+            </div>
+            {!loading && (
+              <div style={{fontSize:12.5, color:HF.ink3, marginBottom:14}}>
+                {allRows.length === 0
+                  ? 'Trigger a run with the "New run" button.'
+                  : 'Try clearing filters or adjusting the time range.'}
+              </div>
+            )}
+            {!loading && allRows.length > 0 && activeCount > 0 && (
+              <HFButton size="sm" onClick={clearAll}>Clear filters</HFButton>
+            )}
           </div>
         ) : (
         <HFTable
