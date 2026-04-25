@@ -2,33 +2,43 @@
 
 function HFUrls({ nav, goto }) {
   const HF = getHF();
+  const sTone = { ok:'ok', warn:'warn', error:'err' };
 
-  const [data, setData] = React.useState({ urls: [], total: 0, stats: { total: 0, in_shop_books: 0, not_in_shop_books: 0, failed: 0 } });
+  // Filter state — backend handles filtering & pagination.
+  const [q, setQ]               = React.useState('');
+  const [shop, setShop]         = React.useState('all');
+  const [urlType, setUrlType]   = React.useState('all');
+  const [isBook, setIsBook]     = React.useState('any');
+  const [page, setPage]         = React.useState(1);
+  const PER_PAGE = 30;
+
+  React.useEffect(() => { setPage(1); }, [q, shop, urlType, isBook]);
+
+  const [data, setData] = React.useState({
+    urls: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
+    stats: { total: 0, in_shop_books: 0, not_in_shop_books: 0, failed: 0 },
+  });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    fetch('/api/urls?per_page=100')
+    let cancelled = false;
+    const params = new URLSearchParams({ page: String(page), per_page: String(PER_PAGE) });
+    if (q.trim()) params.set('search', q.trim());
+    if (shop !== 'all') params.set('shop', shop);
+    if (urlType !== 'all') params.set('url_type', urlType);
+    if (isBook !== 'any') params.set('is_book', isBook);
+    fetch(`/api/urls?${params.toString()}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [q, shop, urlType, isBook, page]);
 
   const rows = data.urls;
   const urlStats = data.stats;
-
-  const sTone = { ok:'ok', warn:'warn', error:'err' };
-
-  const filters = useHFFilters(rows, {
-    search: { fields: r => `${r.url} ${r.shop} ${r.fail_count}` },
-    filters: [
-      { id:'shop',   default:'all', match:(r,v) => r.shop === v },
-      { id:'status', default:'all', match:(r,v) => {
-        const st = r.fail_count >= 3 ? 'error' : 'ok';
-        return st === v;
-      }},
-      { id:'kind',   default:'any', match:(r,v) => r.kind === v },
-    ],
-  });
+  const activeCount =
+    (q.trim()?1:0) + (shop!=='all'?1:0) + (urlType!=='all'?1:0) + (isBook!=='any'?1:0);
+  const clearAll = () => { setQ(''); setShop('all'); setUrlType('all'); setIsBook('any'); };
 
   return (
     <HFShell {...nav} activePage="urls"
@@ -48,22 +58,27 @@ function HFUrls({ nav, goto }) {
 
       <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
-            {filters.filtered.length} of {rows.length}
+          <span style={{fontSize:11.5, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
+            {rows.length.toLocaleString()} of {(data.total || 0).toLocaleString()}
           </span>
-          {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
-          <HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Recheck all</HFButton>
+          {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
         </>}>
-          <HFSearch placeholder="Search URL, book, shop…" width={300} value={filters.q} onChange={filters.setQ}/>
-          <HFFilter label="Shop"   value={filters.vals.shop}   options={['all','vaga','knygos']}            onChange={v=>filters.setVal('shop',v)}/>
-          <HFFilter label="Status" value={filters.vals.status} options={['all','ok','warn','error']}         onChange={v=>filters.setVal('status',v)}/>
-          <HFFilter label="Kind"   value={filters.vals.kind}   options={['any','product','category','author','alias','promo']} onChange={v=>filters.setVal('kind',v)} allLabel="any"/>
+          <HFSearch placeholder="Search URL, book, shop…" width={300} value={q} onChange={setQ}/>
+          <HFFilter label="Shop"    value={shop}    options={['all','vaga','knygos']}                                          onChange={setShop}/>
+          <HFFilter label="Type"    value={urlType} options={['all','product','category','sitemap','unknown']}                onChange={setUrlType}/>
+          <HFFilter label="Is book" value={isBook}  options={['any','book','not_book']}                                       onChange={setIsBook} allLabel="any"/>
         </HFFilterBar>
       </HFCard>
 
       <HFCard>
-        {filters.filtered.length === 0 ? (
-          <HFEmptyState title="No URLs match these filters" sub="Try clearing filters, or adjusting the search." onClear={filters.clearAll}/>
+        {rows.length === 0 ? (
+          <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
+            <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
+            <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>
+              {loading ? 'Loading…' : (urlStats.total || 0) === 0 ? 'No URLs yet' : 'No URLs match these filters'}
+            </div>
+            {!loading && activeCount > 0 && <HFButton size="sm" onClick={clearAll}>Reset filters</HFButton>}
+          </div>
         ) : (
         <HFTable
           onRowClick={(r) => goto('url-detail', { id: r.id })}
@@ -77,17 +92,49 @@ function HFUrls({ nav, goto }) {
                 </span>
               );
             }},
-            { key:'fail_count', label:'Status', w:'0.8fr', sortable:true, cell:(v,r) => {
+            { key:'url_type', label:'Type', w:'0.7fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
+            { key:'fail_count', label:'Status', w:'0.7fr', sortable:true, cell:(v,r) => {
               const urlStatus = r.fail_count >= 3 ? 'error' : 'ok';
               return <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={sTone[urlStatus]}/> <span>{urlStatus}</span></span>;
             }},
             { key:'last_scraped_ago', label:'Last check', w:'0.9fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
-            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.dots}</span> },
+            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
-          rows={filters.filtered}
+          rows={rows}
         />
         )}
       </HFCard>
+
+      {(data.total || 0) > 0 && (
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+          <span>
+            Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
+            {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
+          </span>
+          {data.pages > 1 && (
+            <div style={{display:'flex', gap:6, alignItems:'center'}}>
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={data.page <= 1}>‹ Prev</HFButton>
+              {(() => {
+                const buttons = [];
+                const total = data.pages, cur = data.page;
+                const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
+                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>);
+                if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
+                else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return buttons;
+              })()}
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={data.page >= data.pages}>Next ›</HFButton>
+            </div>
+          )}
+        </div>
+      )}
     </HFShell>
   );
 }

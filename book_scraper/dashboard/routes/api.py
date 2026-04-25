@@ -562,7 +562,7 @@ def api_shop_book_detail(
 @router.get("/urls")
 def api_urls(
     page: int = 1,
-    per_page: int = 50,
+    per_page: int = 30,
     shop: str = "",
     url_type: str = "",
     search: str = "",
@@ -570,26 +570,30 @@ def api_urls(
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     shop_id = None
-    if shop:
+    if shop and shop != "all":
         s = get_shop_by_name(session, shop)
-        shop_id = s.id if s else None
+        shop_id = s.id if s else -1
 
+    page = max(1, page)
+    per_page = max(1, min(per_page, 200))
     urls, total = get_discovered_urls_page(
         session,
         page=page,
         per_page=per_page,
         shop_id=shop_id,
-        url_type=url_type,
+        url_type=url_type if url_type and url_type != "all" else "",
         search=search,
-        is_book=is_book,
+        is_book=is_book if is_book and is_book != "any" else "",
     )
     stats = get_discovered_urls_stats(session, shop_id=shop_id)
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
 
     return {
         "urls": [_url_dict(u) for u in urls],
         "total": total,
         "page": page,
         "per_page": per_page,
+        "pages": pages,
         "stats": stats,
     }
 
