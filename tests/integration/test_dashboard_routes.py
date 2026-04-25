@@ -177,3 +177,97 @@ def test_url_detail_page_exists(client: TestClient, db_session: Session) -> None
     response = client.get(f"/urls/{url.id}")
     assert response.status_code == 200
     assert "Not yet classified" in response.text
+
+
+@pytest.mark.integration
+def test_api_overview(client: TestClient) -> None:
+    resp = client.get("/api/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "stats" in data
+    assert "recent_runs" in data
+    assert "activity" in data
+    assert len(data["activity"]) == 14
+
+
+@pytest.mark.integration
+def test_api_runs(client: TestClient) -> None:
+    resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "runs" in data
+    assert "kpis" in data
+    assert "running_now" in data["kpis"]
+
+
+@pytest.mark.integration
+def test_api_shop_books(client: TestClient) -> None:
+    resp = client.get("/api/shop-books")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "books" in data
+    assert "total" in data
+    assert "kpis" in data
+
+
+@pytest.mark.integration
+def test_api_urls(client: TestClient) -> None:
+    resp = client.get("/api/urls")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "urls" in data
+    assert "stats" in data
+
+
+@pytest.mark.integration
+def test_api_shops(client: TestClient) -> None:
+    resp = client.get("/api/shops")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "shops" in data
+
+
+@pytest.mark.integration
+def test_api_cron(client: TestClient) -> None:
+    resp = client.get("/api/cron")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "jobs" in data
+
+
+@pytest.mark.integration
+def test_api_issues(client: TestClient) -> None:
+    resp = client.get("/api/issues")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "issues" in data
+    assert "counts" in data
+
+
+@pytest.mark.integration
+def test_api_prices(client: TestClient) -> None:
+    resp = client.get("/api/prices")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "changes" in data
+    assert "days" in data
+
+
+@pytest.mark.integration
+def test_api_shop_not_found(client: TestClient) -> None:
+    resp = client.get("/api/shops/nonexistent_shop_xyz")
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+def test_api_run_not_found(client: TestClient) -> None:
+    resp = client.get("/api/runs/999999999")
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+def test_spa_entry_point(client: TestClient) -> None:
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert b"<html" in resp.content
+    assert b"BookScraper Dashboard" in resp.content
