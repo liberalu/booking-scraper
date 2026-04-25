@@ -1,11 +1,12 @@
 import difflib
 import re
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import markdown as _markdown
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup, escape
 
@@ -237,9 +238,19 @@ app.mount(
 app.include_router(api_routes.router, prefix="/api")
 
 
+_SPA_BUILD_VERSION = str(int(time.time()))
+_SPA_INDEX_PATH = Path(__file__).parent / "static" / "hifi" / "index.html"
+
+
 @app.get("/")
-async def spa_index() -> FileResponse:
-    return FileResponse(str(Path(__file__).parent / "static" / "hifi" / "index.html"))
+async def spa_index() -> HTMLResponse:
+    """Serve the SPA entry with versioned JSX URLs for cache busting."""
+    html = _SPA_INDEX_PATH.read_text(encoding="utf-8")
+    html = html.replace('.jsx"', f'.jsx?v={_SPA_BUILD_VERSION}"')
+    return HTMLResponse(
+        html,
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 app.include_router(shops.router)
