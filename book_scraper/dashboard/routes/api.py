@@ -256,15 +256,11 @@ def api_runs(
         query = query.filter(Shop.name == shop)
     if phase and phase != "all":
         if phase == "discover":
-            # 'discover' matches discover_sitemap / _categories / _full_crawl too.
-            query = query.filter(
-                or_(
-                    ScrapeRun.phase == "discover",
-                    phase_text.like("discover\\_%"),
-                )
-            )
-        else:
+            # No literal "discover" enum value — match the variants.
+            query = query.filter(phase_text.like("discover\\_%"))
+        elif phase in ("scan", "discover_sitemap", "discover_categories", "discover_full_crawl"):
             query = query.filter(ScrapeRun.phase == phase)
+        # Unknown phase → silently match nothing rather than 500.
     if status and status != "all":
         query = query.filter(ScrapeRun.status == status)
     if when in _WHEN_BOUNDS_HOURS:
