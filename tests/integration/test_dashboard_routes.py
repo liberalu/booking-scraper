@@ -68,7 +68,8 @@ def test_route_returns_200(client: TestClient, route: str) -> None:
 
 @pytest.mark.integration
 def test_nonexistent_shop_returns_404(client: TestClient) -> None:
-    response = client.get("/shops/nonexistent")
+    # SPA owns /shops/X — always 200. The 404 lives on the API.
+    response = client.get("/api/shops/nonexistent")
     assert response.status_code == 404
 
 
@@ -132,9 +133,11 @@ def test_delete_matching_requires_filter(client: TestClient) -> None:
 
 
 @pytest.mark.integration
-def test_shop_book_detail_shows_classification_score(
+def test_shop_book_detail_api_returns_classification(
     client: TestClient, db_session: Session
 ) -> None:
+    # SPA fetches via /api/shop-books/{id} — verify the JSON has the
+    # fields the UI renders (type, categories).
     shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
     shop_book = ShopBook(
         shop_id=shop.id,
@@ -146,25 +149,25 @@ def test_shop_book_detail_shows_classification_score(
     db_session.add(shop_book)
     db_session.commit()
 
-    response = client.get(f"/shop-books/{shop_book.id}")
-
+    response = client.get(f"/api/shop-books/{shop_book.id}")
     assert response.status_code == 200
-    assert "Classification Score" in response.text
-    assert "non_book" in response.text
-    assert "-4" in response.text
-    assert "Non Book Categories" in response.text
+    data = response.json()
+    assert data["type"] == "non_book"
+    assert "Mokyklinės ir raštinės prekės" in data["categories"]
 
 
 @pytest.mark.integration
-def test_url_detail_page_404(client: TestClient) -> None:
-    """Non-existent URL ID returns 404."""
-    response = client.get("/urls/999999")
+def test_url_detail_api_404(client: TestClient) -> None:
+    """Non-existent URL ID returns 404 from the API."""
+    response = client.get("/api/urls/999999")
     assert response.status_code == 404
 
 
 @pytest.mark.integration
-def test_url_detail_page_exists(client: TestClient, db_session: Session) -> None:
-    """An existing DiscoveredUrl returns 200 on its detail page."""
+def test_url_detail_api_returns_url(
+    client: TestClient, db_session: Session
+) -> None:
+    """An existing DiscoveredUrl is returned by the API."""
     from book_scraper.db.repo import upsert_discovered_url, upsert_shop
 
     shop = upsert_shop(db_session, "smoke_shop", "https://smoke.example.com")
@@ -173,9 +176,11 @@ def test_url_detail_page_exists(client: TestClient, db_session: Session) -> None
     )
     db_session.commit()
 
-    response = client.get(f"/urls/{url.id}")
+    response = client.get(f"/api/urls/{url.id}")
     assert response.status_code == 200
-    assert "Not yet classified" in response.text
+    data = response.json()
+    assert data["url"] == "https://smoke.example.com/p/1"
+    assert data["shop"] == "smoke_shop"
 
 
 @pytest.mark.integration

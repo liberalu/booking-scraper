@@ -229,6 +229,15 @@ templates.env.globals["change_diff"] = _change_diff
 
 app = FastAPI(title="Book Scraper Dashboard")
 
+
+@app.middleware("http")
+async def _no_cache_jsx(request, call_next):
+    response = await call_next(request)
+    if request.url.path.endswith(".jsx"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 app.mount(
     "/static",
     StaticFiles(directory=str(Path(__file__).parent / "static")),
@@ -242,15 +251,50 @@ _SPA_BUILD_VERSION = str(int(time.time()))
 _SPA_INDEX_PATH = Path(__file__).parent / "static" / "hifi" / "index.html"
 
 
-@app.get("/")
-async def spa_index() -> HTMLResponse:
-    """Serve the SPA entry with versioned JSX URLs for cache busting."""
+def _spa_html() -> HTMLResponse:
     html = _SPA_INDEX_PATH.read_text(encoding="utf-8")
     html = html.replace('.jsx"', f'.jsx?v={_SPA_BUILD_VERSION}"')
     return HTMLResponse(
         html,
         headers={"Cache-Control": "no-cache, must-revalidate"},
     )
+
+
+# Every SPA page URL serves the same index.html — client-side routing
+# in the SPA reads window.location.pathname to pick the page.
+_SPA_FLAT_PATHS = [
+    "/",
+    "/runs",
+    "/shop-books",
+    "/urls",
+    "/shops",
+    "/cron",
+    "/issues",
+    "/prices",
+    "/parser",
+]
+_SPA_DETAIL_PATHS = [
+    "/runs/{rest:path}",
+    "/shop-books/{rest:path}",
+    "/urls/{rest:path}",
+    "/shops/{rest:path}",
+    "/cron/{rest:path}",
+    "/issues/{rest:path}",
+]
+
+
+async def _spa_index_flat() -> HTMLResponse:
+    return _spa_html()
+
+
+async def _spa_index_detail(rest: str = "") -> HTMLResponse:  # noqa: ARG001
+    return _spa_html()
+
+
+for _spa_path in _SPA_FLAT_PATHS:
+    app.add_api_route(_spa_path, _spa_index_flat, methods=["GET"])
+for _spa_path in _SPA_DETAIL_PATHS:
+    app.add_api_route(_spa_path, _spa_index_detail, methods=["GET"])
 
 
 app.include_router(shops.router)
