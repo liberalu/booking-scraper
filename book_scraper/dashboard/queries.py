@@ -1210,6 +1210,27 @@ def get_discovered_urls_page(
     return urls, total
 
 
+def get_scrape_activity_by_day(session: Session, days: int = 14) -> list[int]:
+    """Return items scraped per day for the last N days (oldest first, zeros filled)."""
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    sql = text("""
+        SELECT
+            DATE(started_at AT TIME ZONE 'UTC') AS day,
+            SUM(items_added + items_updated) AS items
+        FROM scrape_runs
+        WHERE started_at >= :cutoff AND status = 'completed'
+        GROUP BY day
+        ORDER BY day
+    """)
+    rows = session.execute(sql, {"cutoff": cutoff}).mappings().all()
+    day_map: dict[str, int] = {str(r["day"]): int(r["items"]) for r in rows}
+    result = []
+    for i in range(days):
+        day = (datetime.now(UTC) - timedelta(days=days - 1 - i)).date()
+        result.append(day_map.get(str(day), 0))
+    return result
+
+
 def get_url_detail(
     session: Session, url_id: int
 ) -> tuple["DiscoveredUrl", "UrlClassification | None"] | None:
