@@ -1,47 +1,43 @@
 // Hi-fi Overview — light mode, Retool/Metabase-feel
 
-function HFOverview({ nav }) {
+function HFOverview({ nav, goto }) {
   const HF = getHF();
   const { collapsed, setCollapsed } = nav;
 
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/overview')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading || !data) {
+    return (
+      <HFShell collapsed={collapsed} setCollapsed={setCollapsed} activePage="overview"
+        title="Overview" subtitle="Loading…" breadcrumb={<span>Overview</span>}
+        setPage={nav.setPage}>
+        <div style={{padding:40, color:HF.ink3, fontSize:13}}>Loading…</div>
+      </HFShell>
+    );
+  }
+
+  const stats = data.stats;
   const kpis = [
-    { label: 'Shop books', value: '18,432', delta: <span><span style={{color:HF.okInk}}>▲ 124</span><span style={{color:HF.ink3, marginLeft:4}}>today</span></span>, href: '#' },
-    { label: 'Active listings', value: '16,201', delta: <span style={{color:HF.ink3}}>87.9% of total</span>, href: '#' },
-    { label: 'With ISBN', value: '14,889', delta: <span style={{color:HF.ink3}}>80.8% coverage</span>, href: '#' },
-    { label: 'Price records', value: '412,550', delta: <span><span style={{color:HF.okInk}}>▲ 1,204</span><span style={{color:HF.ink3, marginLeft:4}}>· 24h</span></span>, tone:'ok', href: '#' },
-    { label: 'Open issues', value: '267', delta: <span><span style={{color:HF.warnInk}}>▲ 12</span><span style={{color:HF.ink3, marginLeft:4}}>new · 24h</span></span>, tone:'warn', href: '#' },
+    { label: 'Shop books',      value: stats.total_shop_books.toLocaleString(),  delta: <span style={{color:HF.ink3}}>total</span> },
+    { label: 'Active listings', value: stats.active_shop_books.toLocaleString(), delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.active_shop_books/stats.total_shop_books*100) : 0}% of total</span> },
+    { label: 'With ISBN',       value: stats.with_isbn.toLocaleString(),          delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.with_isbn/stats.total_shop_books*100) : 0}% coverage</span> },
+    { label: 'Price records',   value: stats.total_prices.toLocaleString(),       delta: <span style={{color:HF.ink3}}>total</span>, tone:'ok' },
+    { label: 'Open issues',     value: stats.open_issues.toLocaleString(),        delta: <span style={{color:HF.ink3}}>open</span>, tone: stats.open_issues > 0 ? 'warn' : 'ok' },
   ];
-
-  const spark = [420, 380, 510, 390, 680, 720, 640, 810, 520, 470, 560, 720, 910, 640];
-
-  const completeness = [
-    ['ISBN',        81],
-    ['Author',      94],
-    ['Publisher',   72],
-    ['Year',        64],
-    ['Pages',       58],
-    ['Description', 49],
-  ];
-
-  const runs = [
-    { id: 4821, shop: 'vaga',    phase: 'scan',     status: 'running',   prog: 72,  items: 1240, elapsed: '12m' },
-    { id: 4820, shop: 'vaga',    phase: 'discover', status: 'completed', prog: 100, items: 820,  elapsed: '4m'  },
-    { id: 4819, shop: 'knygos',  phase: 'prices',   status: 'running',   prog: 41,  items: 455,  elapsed: '2m'  },
-    { id: 4815, shop: 'vaga',    phase: 'scan',     status: 'completed', prog: 100, items: 3102, elapsed: '42m' },
-    { id: 4812, shop: 'knygos',  phase: 'discover', status: 'failed',    prog: 12,  items: 0,    elapsed: '1m'  },
-    { id: 4810, shop: 'vaga',    phase: 'discover', status: 'completed', prog: 100, items: 612,  elapsed: '18m' },
-  ];
-
-  const clusters = [
-    { type: 'missing_isbn',        n: 234, tone: 'warn' },
-    { type: 'price_regression',    n: 48,  tone: 'err' },
-    { type: 'title_too_short',     n: 19,  tone: 'warn' },
-    { type: 'stale_listing',       n: 112, tone: 'neutral' },
-    { type: 'duplicate_sku',       n: 6,   tone: 'err' },
-    { type: 'invalid_year',        n: 3,   tone: 'neutral' },
-  ];
-
+  const spark = data.activity;
+  const completeness = data.completeness.map(c => [c.field.charAt(0).toUpperCase() + c.field.slice(1), c.pct]);
   const statusTone = { running: 'ok', completed: 'neutral', failed: 'err' };
+  const runs = data.recent_runs;
+  const clusters = data.issue_clusters.map(c => ({ type: c.issue_type, n: c.count, tone: c.count > 100 ? 'err' : 'warn' }));
+  const shopCards = data.shops;
 
   return (
     <HFShell
@@ -152,21 +148,21 @@ function HFOverview({ nav }) {
 
         <HFCard title="By shop" sub="health + key counts">
           <div style={{ padding: `2px ${HF.cardP}px 4px` }}>
-            {[
-              { name: 'vaga',   status: 'healthy', tone: 'ok',  books: 15420, active: 13892, issues: 38,  last: '12m' },
-              { name: 'knygos', status: 'failing', tone: 'err', books: 3012,  active: 2309,  issues: 229, last: '1h'  },
-            ].map((s, i) => (
+            {shopCards.map((s, i) => {
+              const sTone = s.last_run_status === 'completed' ? 'ok' : s.last_run_status === 'failed' ? 'err' : 'neutral';
+              const sStatus = s.last_run_status === 'completed' ? 'healthy' : s.last_run_status === 'failed' ? 'failing' : s.last_run_status || 'unknown';
+              return (
               <a key={s.name} href="#" style={{
                 display: 'block', textDecoration: 'none', color: HF.ink,
                 padding: '14px 0',
-                borderBottom: i === 0 ? `1px solid ${HF.borderFaint}` : 'none',
+                borderBottom: i < shopCards.length - 1 ? `1px solid ${HF.borderFaint}` : 'none',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <HFDot tone={s.tone} pulse={s.tone==='err'}/>
+                  <HFDot tone={sTone} pulse={sTone==='err'}/>
                   <span style={{ fontSize: 14.5, fontWeight: 600, color: HF.ink }}>{s.name}.lt</span>
-                  <HFPill tone={s.tone==='ok'?'ok':'err'}>{s.status}</HFPill>
+                  <HFPill tone={sTone==='ok'?'ok':'err'}>{sStatus}</HFPill>
                   <span style={{ flex: 1 }}/>
-                  <span style={{ fontSize: 11.5, color: HF.ink3, fontFamily: HF.mono, fontVariantNumeric:'tabular-nums' }}>last run {s.last}</span>
+                  <span style={{ fontSize: 11.5, color: HF.ink3, fontFamily: HF.mono, fontVariantNumeric:'tabular-nums' }}>last run {s.last_run_ago}</span>
                   <span style={{ color: HF.ink4, display: 'flex' }}>{HF_ICONS.external}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -180,7 +176,8 @@ function HFOverview({ nav }) {
                   ))}
                 </div>
               </a>
-            ))}
+              );
+            })}
           </div>
         </HFCard>
       </div>

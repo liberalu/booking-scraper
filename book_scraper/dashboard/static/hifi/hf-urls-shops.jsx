@@ -3,39 +3,29 @@
 function HFUrls({ nav, goto }) {
   const HF = getHF();
 
-  const rows = [
-    { u:'/knygos/sapiens-yuval-noah-harari', shop:'vaga',   status:'ok',    code:200, last:'12m ago', next:'in 48m',  book:'Sapiens' },
-    { u:'/knygos/atomic-habits',             shop:'vaga',   status:'ok',    code:200, last:'12m ago', next:'in 48m',  book:'Atomic Habits' },
-    { u:'/category/history',                 shop:'vaga',   status:'ok',    code:200, last:'1h ago',  next:'in 11h',  book:'—' },
-    { u:'/popular/sapiens',                  shop:'vaga',   status:'error', code:404, last:'3d ago',  next:'paused',  book:'Sapiens (alias)' },
-    { u:'/knygos/thinking-fast-and-slow',    shop:'knygos', status:'ok',    code:200, last:'1h ago',  next:'in 11h',  book:'Thinking, Fast…' },
-    { u:'/knygos/clean-code',                shop:'vaga',   status:'warn',  code:301, last:'4h ago',  next:'in 20h',  book:'Clean Code' },
-    { u:'/authors/ries-eric',                shop:'knygos', status:'ok',    code:200, last:'1h ago',  next:'in 11h',  book:'—' },
-    { u:'/knygos/zero-to-one',               shop:'knygos', status:'ok',    code:200, last:'1h ago',  next:'in 11h',  book:'Zero to One' },
-    { u:'/promos/summer-2024',               shop:'vaga',   status:'error', code:410, last:'2d ago',  next:'paused',  book:'—' },
-    { u:'/knygos/dune',                      shop:'vaga',   status:'ok',    code:200, last:'12m ago', next:'in 48m',  book:'Dune' },
-  ];
+  const [data, setData] = React.useState({ urls: [], total: 0, stats: { total: 0, in_shop_books: 0, not_in_shop_books: 0, failed: 0 } });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/urls?per_page=100')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const rows = data.urls;
+  const urlStats = data.stats;
 
   const sTone = { ok:'ok', warn:'warn', error:'err' };
 
-  // Derive kind per row
-  rows.forEach(r => {
-    if (!r.kind) {
-      r.kind = r.u.startsWith('/knygos/') ? 'product'
-             : r.u.startsWith('/category/') ? 'category'
-             : r.u.startsWith('/authors/') ? 'author'
-             : r.u.startsWith('/popular/') ? 'alias'
-             : r.u.startsWith('/promos/') ? 'promo' : 'other';
-    }
-  });
-
   const filters = useHFFilters(rows, {
-    search: { fields: r => `${r.u} ${r.shop} ${r.book} ${r.code}` },
+    search: { fields: r => `${r.url} ${r.shop} ${r.fail_count}` },
     filters: [
       { id:'shop',   default:'all', match:(r,v) => r.shop === v },
-      { id:'status', default:'all', match:(r,v) => r.status === v },
-      { id:'code',   default:'any',
-        match:(r,v) => v==='2xx' ? r.code < 300 : v==='3xx' ? r.code>=300 && r.code<400 : v==='4xx' ? r.code>=400 && r.code<500 : r.code>=500 },
+      { id:'status', default:'all', match:(r,v) => {
+        const st = r.fail_count >= 3 ? 'error' : 'ok';
+        return st === v;
+      }},
       { id:'kind',   default:'any', match:(r,v) => r.kind === v },
     ],
   });
@@ -50,11 +40,10 @@ function HFUrls({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total URLs',   value:'24,182', delta:<span style={{color:HF.ink3}}>all shops</span> },
-        { label:'Healthy',      value:'23,491', delta:<span style={{color:HF.okInk}}>97.1%</span>, tone:'ok' },
-        { label:'Warnings',     value:'441',    delta:<span style={{color:HF.warnInk}}>3xx / slow</span>, tone:'warn' },
-        { label:'Broken',       value:'250',    delta:<span style={{color:HF.errInk}}>4xx / 5xx</span>, tone:'err' },
-        { label:'Paused',       value:'87',     delta:<span style={{color:HF.ink3}}>manually</span> },
+        { label:'Total URLs',  value: urlStats.total.toLocaleString(), delta:<span style={{color:HF.ink3}}>all shops</span> },
+        { label:'In catalog',  value: urlStats.in_shop_books.toLocaleString(), delta:<span style={{color:HF.okInk}}>mapped</span>, tone:'ok' },
+        { label:'Not scraped', value: urlStats.not_in_shop_books.toLocaleString(), delta:<span style={{color:HF.warnInk}}>pending</span>, tone:'warn' },
+        { label:'Failing',     value: urlStats.failed.toLocaleString(), delta:<span style={{color:HF.errInk}}>3+ fails</span>, tone:'err' },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}} padding={12}>
@@ -68,7 +57,6 @@ function HFUrls({ nav, goto }) {
           <HFSearch placeholder="Search URL, book, shop…" width={300} value={filters.q} onChange={filters.setQ}/>
           <HFFilter label="Shop"   value={filters.vals.shop}   options={['all','vaga','knygos']}            onChange={v=>filters.setVal('shop',v)}/>
           <HFFilter label="Status" value={filters.vals.status} options={['all','ok','warn','error']}         onChange={v=>filters.setVal('status',v)}/>
-          <HFFilter label="Code"   value={filters.vals.code}   options={['any','2xx','3xx','4xx','5xx']}     onChange={v=>filters.setVal('code',v)} allLabel="any"/>
           <HFFilter label="Kind"   value={filters.vals.kind}   options={['any','product','category','author','alias','promo']} onChange={v=>filters.setVal('kind',v)} allLabel="any"/>
         </HFFilterBar>
       </HFCard>
@@ -78,19 +66,22 @@ function HFUrls({ nav, goto }) {
           <HFEmptyState title="No URLs match these filters" sub="Try clearing filters, or adjusting the search." onClear={filters.clearAll}/>
         ) : (
         <HFTable
-          onRowClick={(r) => goto('url-detail', { u: r.u, shop: r.shop, status: r.status, code: r.code })}
+          onRowClick={(r) => goto('url-detail', { id: r.id })}
           columns={[
-            { key:'u', label:'URL', w:'2.5fr', sortable:true, cell:(v,r) => (
-              <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-                <span style={{color:HF.ink3, fontFamily:HF.mono, fontSize:11.5, whiteSpace:'nowrap'}}>{r.shop}.lt</span>
-                <span style={{fontFamily:HF.mono, color: r.status==='error'? HF.ink4 : HF.ink2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration: r.status==='error'? 'line-through' : 'none'}}>{v}</span>
-              </span>
-            )},
-            { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={sTone[v]}/> <span>{v}</span></span>},
-            { key:'code', label:'Code', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.code, cell:v => <span style={{color: v>=400? HF.errInk : v>=300? HF.warnInk : HF.ink2, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span>},
-            { key:'book', label:'Resolves to', w:'1.2fr', muted:true, sortable:true, cell:v => v==='—' ? <span style={{color:HF.ink4}}>—</span> : <span style={{color:HF.ink2}}>{v}</span>},
-            { key:'last', label:'Last check', w:'0.9fr', mono:true, muted:true, sortable:true },
-            { key:'next', label:'Next', w:'0.9fr', mono:true, muted:true, sortable:true },
+            { key:'url', label:'URL', w:'2.5fr', sortable:true, cell:(v,r) => {
+              const urlStatus = r.fail_count >= 3 ? 'error' : 'ok';
+              return (
+                <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                  <span style={{color:HF.ink3, fontFamily:HF.mono, fontSize:11.5, whiteSpace:'nowrap'}}>{r.shop}.lt</span>
+                  <span style={{fontFamily:HF.mono, color: urlStatus==='error'? HF.ink4 : HF.ink2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration: urlStatus==='error'? 'line-through' : 'none'}}>{v}</span>
+                </span>
+              );
+            }},
+            { key:'fail_count', label:'Status', w:'0.8fr', sortable:true, cell:(v,r) => {
+              const urlStatus = r.fail_count >= 3 ? 'error' : 'ok';
+              return <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={sTone[urlStatus]}/> <span>{urlStatus}</span></span>;
+            }},
+            { key:'last_scraped_ago', label:'Last check', w:'0.9fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.dots}</span> },
           ]}
           rows={filters.filtered}
@@ -105,11 +96,17 @@ function HFUrls({ nav, goto }) {
 
 function HFShops({ nav, goto }) {
   const HF = getHF();
+  const [data, setData] = React.useState({ shops: [] });
+  const [loading, setLoading] = React.useState(true);
 
-  const shops = [
-    { name:'vaga',   tone:'ok',   status:'healthy',  books:15420, active:13892, issues:38,  last:'12m ago', success:98.4, host:'vaga.lt' },
-    { name:'knygos', tone:'err',  status:'failing',  books:3012,  active:2309,  issues:229, last:'1h ago',  success:72.1, host:'knygos.lt' },
-  ];
+  React.useEffect(() => {
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const rows = data.shops;
 
   return (
     <HFShell {...nav} activePage="shops"
@@ -118,38 +115,32 @@ function HFShops({ nav, goto }) {
       actions={<HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openAddShop()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add shop</HFButton>}
     >
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap}}>
-        {shops.map(s => (
+        {rows.map(s => {
+          const sTone = s.last_run_status === 'completed' ? 'ok' : s.last_run_status === 'failed' ? 'err' : 'neutral';
+          const sStatus = s.last_run_status === 'completed' ? 'healthy' : s.last_run_status === 'failed' ? 'failing' : s.last_run_status || 'unknown';
+          return (
           <HFCard key={s.name}
             title={<span style={{display:'flex', alignItems:'center', gap:8}}>
-              <HFDot tone={s.tone} pulse={s.tone==='err'} size={8}/>
-              <span style={{fontSize:15, fontWeight:600}}>{s.host}</span>
-              <HFPill tone={s.tone==='ok'?'ok':'err'}>{s.status}</HFPill>
+              <HFDot tone={sTone} pulse={sTone==='err'} size={8}/>
+              <span style={{fontSize:15, fontWeight:600}}>{s.name}.lt</span>
+              <HFPill tone={sTone==='ok'?'ok':'err'}>{sStatus}</HFPill>
             </span>}
-            sub={`${s.books.toLocaleString()} books · last run ${s.last} · ${s.success}% success (7d)`}
+            sub={`${(s.books||0).toLocaleString()} books · last run ${s.last_run_ago || '—'}`}
             action={<HFButton size="sm" onClick={()=>goto('shop-detail',{name:s.name})}>Open <span style={{display:'flex'}}>{HF_ICONS.arrow}</span></HFButton>}
           >
-            <div style={{padding:`${HF.cardP}px`, display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:14}}>
-              {[['Books', s.books], ['Active', s.active], ['Issues', s.issues], ['Success', s.success+'%']].map(([l,v]) => (
+            <div style={{padding:`${HF.cardP}px`, display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:14}}>
+              {[['Books', s.books], ['Active', s.active]].map(([l,v]) => (
                 <div key={l}>
                   <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{l}</div>
                   <div style={{fontFamily:HF.mono, fontSize:18, fontWeight:600, color:HF.ink, marginTop:4, fontVariantNumeric:'tabular-nums', letterSpacing:-0.3}}>
-                    {typeof v === 'number' ? v.toLocaleString() : v}
+                    {typeof v === 'number' ? v.toLocaleString() : (v || '—')}
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{borderTop:`1px solid ${HF.borderFaint}`, padding:`10px ${HF.cardP}px`, display:'flex', gap:8, alignItems:'center', fontSize:11.5, color:HF.ink3, fontFamily:HF.mono}}>
-              <span>concurrency=4</span>
-              <span style={{color:HF.ink5}}>·</span>
-              <span>rate=1/s</span>
-              <span style={{color:HF.ink5}}>·</span>
-              <span>retry=exp×3</span>
-              <span style={{marginLeft:'auto'}}>
-                <a href="#" style={hfLink(HF)}>Settings {HF_ICONS.arrow}</a>
-              </span>
-            </div>
           </HFCard>
-        ))}
+          );
+        })}
       </div>
     </HFShell>
   );
@@ -159,19 +150,41 @@ function HFShops({ nav, goto }) {
 
 function HFShopDetail({ nav, goto, params }) {
   const HF = getHF();
-  const name = params?.name || 'vaga';
+  const shopName = params?.name;
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState('overview');
 
+  React.useEffect(() => {
+    if (!shopName) return;
+    fetch(`/api/shops/${shopName}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [shopName]);
+
+  if (loading || !data) {
+    return (
+      <HFShell {...nav} activePage="shops" title="Shop detail" subtitle="Loading…"
+        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('shops');}}>Shops</a><span>/</span><span>{shopName}</span></>}>
+        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+      </HFShell>
+    );
+  }
+
+  const name = data.name || shopName;
+  const dTone = data.last_run_status === 'completed' ? 'ok' : data.last_run_status === 'failed' ? 'err' : 'neutral';
+  const dStatus = data.last_run_status === 'completed' ? 'healthy' : data.last_run_status === 'failed' ? 'failing' : data.last_run_status || 'unknown';
   const spark = [220, 250, 280, 310, 290, 330, 360, 340, 380, 410, 390, 420, 450, 430];
 
   return (
     <HFShell {...nav} activePage="shops"
       title={<span style={{display:'flex', alignItems:'center', gap:12}}>
-        <HFDot tone="ok" size={10}/>
+        <HFDot tone={dTone} size={10}/>
         <span>{name}.lt</span>
-        <HFPill tone="ok">healthy</HFPill>
+        <HFPill tone={dTone}>{dStatus}</HFPill>
       </span>}
-      subtitle="Scheduled every hour · concurrency 4 · rate 1/s · retry exp×3"
+      subtitle={`${(data.books||0).toLocaleString()} books · last run ${data.last_run_ago || '—'}`}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('shops');}} style={{color:HF.ink3, textDecoration:'none'}}>Shops</a>
         <span style={{color:HF.ink5}}>/</span>
@@ -183,11 +196,9 @@ function HFShopDetail({ nav, goto, params }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Books',    value:'15,420', delta:<span style={{color:HF.okInk}}>▲ 94 today</span> },
-        { label:'Active',   value:'13,892', delta:<span style={{color:HF.ink3}}>90.1%</span> },
-        { label:'URLs',     value:'21,170', delta:<span style={{color:HF.ink3}}>seed+product</span> },
-        { label:'Success',  value:'98.4%',  delta:<span style={{color:HF.okInk}}>7d avg</span>, tone:'ok' },
-        { label:'Issues',   value:'38',     delta:<span style={{color:HF.warnInk}}>mostly validation</span>, tone:'warn' },
+        { label:'Books',    value: (data.books||0).toLocaleString(), delta:<span style={{color:HF.ink3}}>total</span> },
+        { label:'Active',   value: (data.active||0).toLocaleString(), delta:<span style={{color:HF.ink3}}>{data.books > 0 ? Math.round((data.active||0)/data.books*100) : 0}%</span> },
+        { label:'Last run', value: data.last_run_ago || '—', delta:<span style={{color:HF.ink3}}>{dStatus}</span>, tone: dTone },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}}>

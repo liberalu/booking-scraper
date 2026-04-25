@@ -2,19 +2,24 @@
 
 function HFCron({ nav, goto }) {
   const HF = getHF();
+  const [data, setData] = React.useState({ jobs: [] });
+  const [loading, setLoading] = React.useState(true);
 
-  const jobsRaw = [
-    { name:'vaga.scan.hourly',      cron:'0 * * * *',    next:'in 48m',  last:'12m ago',  lastStatus:'ok',   avgDur:'12m',  enabled:true,  shop:'vaga'   },
-    { name:'vaga.discover.daily',   cron:'0 3 * * *',    next:'in 12h',  last:'11h ago',  lastStatus:'ok',   avgDur:'42m',  enabled:true,  shop:'vaga'   },
-    { name:'vaga.prices.daily',     cron:'0 5 * * *',    next:'in 14h',  last:'9h ago',   lastStatus:'ok',   avgDur:'1h 02m', enabled:true, shop:'vaga'   },
-    { name:'knygos.scan.daily',     cron:'0 4 * * *',    next:'in 13h',  last:'10h ago',  lastStatus:'ok',   avgDur:'18m',  enabled:true,  shop:'knygos' },
-    { name:'knygos.discover.daily', cron:'0 2 * * *',    next:'in 11h',  last:'3h ago',   lastStatus:'fail', avgDur:'22m',  enabled:true,  shop:'knygos' },
-    { name:'knygos.prices.daily',   cron:'30 5 * * *',   next:'in 14h',  last:'9h ago',   lastStatus:'ok',   avgDur:'22m',  enabled:true,  shop:'knygos' },
-    { name:'cleanup.stale.weekly',  cron:'0 0 * * 0',    next:'in 3d',   last:'4d ago',   lastStatus:'ok',   avgDur:'4m',   enabled:true,  shop:'—'      },
-    { name:'validate.all.nightly',  cron:'0 1 * * *',    next:'in 10h',  last:'14h ago',  lastStatus:'ok',   avgDur:'8m',   enabled:false, shop:'—'      },
-  ];
+  React.useEffect(() => {
+    fetch('/api/cron')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
 
-  const jobs = jobsRaw.map(j => ({ ...j, state: j.enabled ? (j.lastStatus==='fail'?'failing':'active') : 'disabled' }));
+  const jobsRaw = data.jobs;
+  const jobs = jobsRaw.map(j => ({
+    ...j,
+    state: j.enabled ? 'active' : 'disabled',
+    lastStatus: j.last_status || 'ok',
+    next: '—',
+    avgDur: '—',
+  }));
 
   const filters = useHFFilters(jobs, {
     search: { fields: j => `${j.name} ${j.cron} ${j.shop}` },
@@ -31,11 +36,7 @@ function HFCron({ nav, goto }) {
       actions={<HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewSchedule()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> New schedule</HFButton>}
     >
       <HFKpiStrip items={[
-        { label:'Schedules',   value:'8', delta:<span style={{color:HF.ink3}}>7 enabled · 1 disabled</span> },
-        { label:'Next run',    value:'48m', delta:<span style={{color:HF.accentInk}}>vaga.scan.hourly</span>, tone:'accent' },
-        { label:'Last 24h',    value:'38 runs', delta:<span style={{color:HF.okInk}}>36 ok · 2 failed</span> },
-        { label:'Success rate',value:'94.7%',   delta:<span style={{color:HF.okInk}}>30d</span>, tone:'ok' },
-        { label:'CPU used',    value:'4.2h',    delta:<span style={{color:HF.ink3}}>today</span> },
+        { label:'Schedules',   value: String(jobs.length), delta:<span style={{color:HF.ink3}}>{jobs.filter(j=>j.enabled).length} enabled</span> },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}} padding={12}>
@@ -88,54 +89,50 @@ function HFCron({ nav, goto }) {
 function HFIssues({ nav, goto }) {
   const HF = getHF();
   const [tab, setTab] = React.useState('open');
+  const [data, setData] = React.useState({ issues: [], total: 0, counts: { new: 0, recurring: 0, already_seen: 0, open: 0 } });
+  const [loading, setLoading] = React.useState(true);
 
-  // Flat list of actual issues — each row is a single detected event, not a group.
-  // `known: true` = someone has acknowledged it's expected behavior, not a bug.
-  const seed = [
-    { id:'ISS-4128', type:'parser_error',     sev:'high',   shop:'knygos', book:'—',                                 url:'/discover?p=7',                  detail:'CSS selector .price returned null',       age:'3m ago',    known:false },
-    { id:'ISS-4127', type:'price_regression', sev:'high',   shop:'vaga',   book:'Clean Code',                        url:'/p/clean-code',                  detail:'€32.90 → €28.50  (−13.4%)',               age:'1h ago',    known:false },
-    { id:'ISS-4126', type:'duplicate_sku',    sev:'high',   shop:'vaga',   book:'Sapiens',                           url:'/p/sapiens-3',                   detail:'SKU 9780062316097 matches 2 other URLs',  age:'2h ago',    known:false },
-    { id:'ISS-4125', type:'broken_url',       sev:'medium', shop:'vaga',   book:'Atomic Habits',                     url:'/popular/atomic-habits-old',     detail:'HTTP 404 for 3 consecutive checks',       age:'4h ago',    known:false },
-    { id:'ISS-4124', type:'missing_isbn',     sev:'medium', shop:'vaga',   book:'Lietuvos istorija, t. II',          url:'/p/lietuvos-istorija-2',         detail:'ISBN field empty after 2 retries',        age:'5h ago',    known:false },
-    { id:'ISS-4123', type:'parser_error',     sev:'high',   shop:'knygos', book:'—',                                 url:'/discover?p=12',                 detail:'Timeout after 30s · rate-limited?',       age:'6h ago',    known:false },
-    { id:'ISS-4122', type:'price_regression', sev:'high',   shop:'vaga',   book:'Dune',                              url:'/p/dune',                        detail:'€14.20 → €13.50  (−4.9%)',                age:'8h ago',    known:false },
-    { id:'ISS-4121', type:'missing_isbn',     sev:'medium', shop:'knygos', book:'Thinking, Fast and Slow',           url:'/p/thinking-fast-slow',          detail:'ISBN field empty',                        age:'10h ago',   known:true  },
-    { id:'ISS-4120', type:'title_too_short',  sev:'low',    shop:'knygos', book:'—',                                 url:'/p/untitled-4a2f',               detail:'Title is 3 chars · minimum 8',            age:'11h ago',   known:false },
-    { id:'ISS-4119', type:'broken_url',       sev:'medium', shop:'vaga',   book:'—',                                 url:'/popular/2019-summer',           detail:'HTTP 404',                                age:'14h ago',   known:true  },
-    { id:'ISS-4118', type:'stale_listing',    sev:'low',    shop:'vaga',   book:'The Pragmatic Programmer',          url:'/p/pragmatic-programmer',        detail:'Not updated in 42 days',                  age:'18h ago',   known:false },
-    { id:'ISS-4117', type:'missing_isbn',     sev:'medium', shop:'vaga',   book:'Educated',                          url:'/p/educated',                    detail:'ISBN field empty',                        age:'1 day ago', known:false },
-    { id:'ISS-4116', type:'invalid_year',     sev:'low',    shop:'knygos', book:'Pan Tadeusz',                       url:'/p/pan-tadeusz',                 detail:'Year = 1834 · min 1900',                  age:'1 day ago', known:true  },
-    { id:'ISS-4115', type:'price_regression', sev:'high',   shop:'vaga',   book:'Zero to One',                       url:'/p/zero-to-one',                 detail:'€18.50 → €14.90  (−19.5%)',               age:'1 day ago', known:false },
-    { id:'ISS-4114', type:'duplicate_sku',    sev:'high',   shop:'vaga',   book:'Sapiens',                           url:'/p/sapiens-compact',             detail:'SKU 9780062316097 matches 1 other URL',   age:'1 day ago', known:false },
-    { id:'ISS-4113', type:'broken_url',       sev:'medium', shop:'vaga',   book:'—',                                 url:'/popular/best-of-2018',          detail:'HTTP 410 Gone',                           age:'2 days ago',known:true  },
-    { id:'ISS-4112', type:'missing_isbn',     sev:'medium', shop:'knygos', book:'Baltoji gulbė',                     url:'/p/baltoji-gulbe',               detail:'ISBN field empty',                        age:'2 days ago',known:false },
-    { id:'ISS-4111', type:'parser_error',     sev:'high',   shop:'knygos', book:'—',                                 url:'/discover?p=3',                  detail:'Expected <div.price>, got <span>',         age:'3 days ago',known:false },
-    { id:'ISS-4110', type:'title_too_short',  sev:'low',    shop:'knygos', book:'—',                                 url:'/p/ab',                          detail:'Title is 2 chars · minimum 8',            age:'3 days ago',known:false },
-    { id:'ISS-4109', type:'stale_listing',    sev:'low',    shop:'vaga',   book:'Homo Deus',                         url:'/p/homo-deus',                   detail:'Not updated in 38 days',                  age:'4 days ago',known:true  },
-  ];
+  React.useEffect(() => {
+    const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
+    fetch(`/api/issues?state=${stateParam}&per_page=100`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [tab]);
+
+  const seed = data.issues.map(i => ({
+    id: `ISS-${i.id}`,
+    type: i.issue,
+    sev: i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low',
+    shop: '—',
+    book: i.shop_book_title || '—',
+    url: i.url || '—',
+    detail: i.description || i.raw_value || '—',
+    age: i.added_ago,
+    known: i.lifecycle_state === 'already_seen',
+  }));
 
   // Persist known state + selection in component state (prototype — resets on reload).
-  const [knownMap, setKnownMap] = React.useState(() => {
-    const m = {}; seed.forEach(r => { m[r.id] = !!r.known; }); return m;
-  });
+  const [knownMap, setKnownMap] = React.useState({});
   const [selected, setSelected] = React.useState(() => new Set());
 
   const allIssues = React.useMemo(
     () => seed.map(r => ({ ...r, known: !!knownMap[r.id] })),
-    [knownMap]
+    [knownMap, seed]
   );
 
   const sevTone = { high:'err', medium:'warn', low:'neutral' };
 
+  const tabSource = allIssues;  // API already filtered by tab
+
   const byTab = {
-    open:     allIssues.filter(i => !i.known),   // not-yet-acknowledged
-    triage:   allIssues.filter(i => i.sev === 'high' && !i.known),
-    known:    allIssues.filter(i => i.known),     // acknowledged / expected
-    snoozed:  [],
-    resolved: [],
-    all:      allIssues,
+    open:     data.counts.open || 0,
+    triage:   0,
+    known:    data.counts.already_seen || 0,
+    snoozed:  0,
+    resolved: 0,
+    all:      data.total || 0,
   };
-  const tabSource = byTab[tab] || allIssues;
 
   // When tab changes, clear selection (selection is only meaningful within a tab).
   React.useEffect(() => { setSelected(new Set()); }, [tab]);
@@ -247,22 +244,19 @@ function HFIssues({ nav, goto }) {
       actions={<><HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton></>}
     >
       <HFKpiStrip items={[
-        { label:'Open',      value:byTab.open.length, delta:<span style={{color:HF.errInk}}>▲ 12 · 24h</span>, tone:'err' },
-        { label:'High sev',  value:byTab.triage.length,  delta:<span style={{color:HF.errInk}}>price + parser</span>, tone:'err' },
-        { label:'Known',     value:byTab.known.length,  delta:<span style={{color:HF.ink3}}>acknowledged</span> },
-        { label:'Resolved 7d', value:'321', delta:<span style={{color:HF.okInk}}>▲ 42 vs prev</span>, tone:'ok' },
-        { label:'MTTR',      value:'2.4d', delta:<span style={{color:HF.ink3}}>median</span> },
+        { label:'Open',      value: String(byTab.open), delta:<span style={{color:HF.errInk}}>open</span>, tone: byTab.open > 0 ? 'err' : 'ok' },
+        { label:'Known',     value: String(byTab.known), delta:<span style={{color:HF.ink3}}>acknowledged</span> },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}}>
         <div style={{padding:`0 ${HF.cardP}px`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
-            { id:'open', label:'Open', count:byTab.open.length },
-            { id:'triage', label:'Needs triage', count:byTab.triage.length },
-            { id:'known', label:'Known', count:byTab.known.length },
-            { id:'snoozed', label:'Snoozed', count:byTab.snoozed.length },
-            { id:'resolved', label:'Resolved', count:321 },
-            { id:'all', label:'All', count:byTab.all.length },
+            { id:'open', label:'Open', count: byTab.open },
+            { id:'triage', label:'Needs triage' },
+            { id:'known', label:'Known', count: byTab.known },
+            { id:'snoozed', label:'Snoozed' },
+            { id:'resolved', label:'Resolved' },
+            { id:'all', label:'All', count: byTab.all },
           ]}/>
         </div>
       </HFCard>
@@ -365,20 +359,32 @@ function HFIssues({ nav, goto }) {
 
 function HFPrices({ nav, goto }) {
   const HF = getHF();
+  const [data, setData] = React.useState({ changes: [] });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/prices?days=7')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const rows = data.changes.map(c => ({
+    id: c.shop_book_id,
+    title: c.title,
+    prev: c.prev_price !== null ? `€${c.prev_price.toFixed(2)}` : '—',
+    new: c.new_price !== null ? `€${c.new_price.toFixed(2)}` : '—',
+    change: c.change !== null ? `${c.change >= 0 ? '+' : ''}€${Math.abs(c.change).toFixed(2)}` : '—',
+    when: c.scraped_ago,
+    pct: c.prev_price && c.prev_price !== 0 ? Math.round(c.change / c.prev_price * 100) : 0,
+    shop: c.shop || '—',
+    book: c.title || '—',
+    old: c.prev_price !== null ? `€${c.prev_price.toFixed(2)}` : '—',
+  }));
 
   const deltas = [-1.10, -0.50, -0.20, 0, 0, 0.10, 0.20, 0.50, 1.00, 1.50, 2.00, 2.50, 3.00];
-  const changes = [
-    { book:'Sapiens',                        shop:'vaga',   old:'€21.00', new:'€19.90', pct:-5.2,  when:'12m ago' },
-    { book:'Clean Code',                     shop:'vaga',   old:'€32.90', new:'€28.50', pct:-13.4, when:'1h ago'  },
-    { book:'Atomic Habits',                  shop:'vaga',   old:'€16.50', new:'€17.90', pct:+8.5,  when:'2h ago'  },
-    { book:'Thinking, Fast and Slow',        shop:'knygos', old:'€21.00', new:'€22.50', pct:+7.1,  when:'4h ago'  },
-    { book:'Dune',                           shop:'vaga',   old:'€14.20', new:'€13.50', pct:-4.9,  when:'6h ago'  },
-    { book:'The Lean Startup',               shop:'knygos', old:'€17.80', new:'€19.90', pct:+11.8, when:'8h ago'  },
-    { book:'Zero to One',                    shop:'knygos', old:'€18.50', new:'€17.90', pct:-3.2,  when:'10h ago' },
-    { book:'Educated',                       shop:'vaga',   old:'€13.90', new:'€14.90', pct:+7.2,  when:'12h ago' },
-  ];
 
-  const filters = useHFFilters(changes, {
+  const filters = useHFFilters(rows, {
     search: { fields: c => `${c.book} ${c.shop}` },
     filters: [
       { id:'shop', default:'all', match:(c,v) => c.shop === v },
@@ -389,16 +395,12 @@ function HFPrices({ nav, goto }) {
 
   return (
     <HFShell {...nav} activePage="prices"
-      title="Prices" subtitle="Price records across all books and shops. 412,550 data points since Feb 2024."
+      title="Prices" subtitle="Price records across all books and shops."
       breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Prices</span></>}
       actions={<HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>}
     >
       <HFKpiStrip items={[
-        { label:'Price records',   value:'412,550', delta:<span style={{color:HF.okInk}}>▲ 1,204 · 24h</span>, tone:'ok' },
-        { label:'Books tracked',   value:'15,140',  delta:<span style={{color:HF.ink3}}>with ≥1 price</span> },
-        { label:'Avg change · 7d', value:'−0.8%',   delta:<span style={{color:HF.okInk}}>slight deflation</span>, tone:'ok' },
-        { label:'Volatility',      value:'3.2%',    delta:<span style={{color:HF.ink3}}>σ · 30d</span> },
-        { label:'Drops > 10%',     value:'42',      delta:<span style={{color:HF.errInk}}>last 7d</span>, tone:'err' },
+        { label:'Recent changes', value: String(rows.length), delta:<span style={{color:HF.ink3}}>last 7 days</span>, tone:'ok' },
       ]}/>
 
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
@@ -430,12 +432,12 @@ function HFPrices({ nav, goto }) {
         </HFCard>
       </div>
 
-      <HFCard title="Recent changes" sub="non-zero price movements"
+      <HFCard title="Recent changes" sub="non-zero price movements · last 7 days"
               action={<a href="#" style={hfLink(HF)}>All changes {HF_ICONS.arrow}</a>}>
         <div style={{padding:`10px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`}}>
           <HFFilterBar right={<>
             <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
-              {filters.filtered.length} of {changes.length}
+              {filters.filtered.length} of {rows.length}
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
           </>}>
@@ -452,9 +454,9 @@ function HFPrices({ nav, goto }) {
           columns={[
             { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500}}>{v}</span> },
             { key:'shop', label:'Shop', w:'0.7fr', sortable:true },
-            { key:'old', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true, sortVal:r=>parseFloat((r.old||'').replace(/[^\d.]/g,''))||0 },
-            { key:'new', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.new||'').replace(/[^\d.]/g,''))||0, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
-            { key:'pct', label:'Δ %', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => <span style={{color: v<0?HF.errInk:v>0?HF.okInk:HF.ink3, fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span> },
+            { key:'old', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true },
+            { key:'new', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
+            { key:'pct', label:'Δ %', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => <span style={{color: v<0?HF.errInk:v>0?HF.okInk:HF.ink3, fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v}%</span> },
             { key:'when', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
           ]}
           rows={filters.filtered}

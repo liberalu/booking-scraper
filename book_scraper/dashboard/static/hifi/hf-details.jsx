@@ -2,39 +2,36 @@
 
 function HFUrlDetail({ nav, goto, params }) {
   const HF = getHF();
-  const urlPath = params?.u || '/popular/sapiens';
-  const shop = params?.shop || 'vaga';
-  const status = params?.status || 'error';
-  const code = params?.code || 404;
+  const urlId = params?.id;
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
 
+  React.useEffect(() => {
+    if (!urlId) return;
+    fetch(`/api/urls/${urlId}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [urlId]);
+
+  if (loading || !data) {
+    return (
+      <HFShell {...nav} activePage="urls" title="URL detail" subtitle="Loading…"
+        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('urls');}}>URLs</a><span>/</span><span>#{urlId}</span></>}>
+        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+      </HFShell>
+    );
+  }
+
+  const urlPath = data.url;
+  const shop = data.shop;
+  const status = data.fail_count >= 3 ? 'error' : 'ok';
+  const code = data.fail_count >= 3 ? 404 : 200;
   const sTone = { ok: 'ok', warn: 'warn', error: 'err' };
   const sInk = { ok: HF.okInk, warn: HF.warnInk, error: HF.errInk };
 
-  // 14 days of check history
-  const history = [
-    { t:'now',          code:404, ms:210,  status:'error' },
-    { t:'48m ago',      code:404, ms:198,  status:'error' },
-    { t:'1h 48m ago',   code:404, ms:204,  status:'error' },
-    { t:'2h 48m ago',   code:404, ms:220,  status:'error' },
-    { t:'yesterday',    code:404, ms:215,  status:'error' },
-    { t:'2d ago',       code:404, ms:190,  status:'error' },
-    { t:'3d ago',       code:301, ms:380,  status:'warn'  },
-    { t:'4d ago',       code:200, ms:420,  status:'ok'    },
-    { t:'5d ago',       code:200, ms:410,  status:'ok'    },
-    { t:'6d ago',       code:200, ms:395,  status:'ok'    },
-    { t:'7d ago',       code:200, ms:480,  status:'ok'    },
-    { t:'8d ago',       code:200, ms:370,  status:'ok'    },
-    { t:'9d ago',       code:200, ms:402,  status:'ok'    },
-    { t:'10d ago',      code:200, ms:415,  status:'ok'    },
-  ];
-
-  const runs = [
-    { id:4820, phase:'scan',     started:'18m ago',  dur:'4m 18s', outcome:'found',     code:404 },
-    { id:4815, phase:'scan',     started:'1h 12m',   dur:'42m',    outcome:'found',     code:404 },
-    { id:4810, phase:'discover', started:'5h ago',   dur:'18m',    outcome:'found',     code:404 },
-    { id:4800, phase:'discover', started:'1d ago',   dur:'22m',    outcome:'resolved',  code:200 },
-    { id:4784, phase:'scan',     started:'2d ago',   dur:'22m',    outcome:'resolved',  code:200 },
-  ];
+  const history = [];
+  const runs = [];
 
   return (
     <HFShell {...nav} activePage="urls"
@@ -48,7 +45,7 @@ function HFUrlDetail({ nav, goto, params }) {
           <HFPill tone={code>=400?'err':code>=300?'warn':'ok'}>HTTP {code}</HFPill>
         </span>
       }
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>kind=product · discovered via sitemap on Feb 14 · 147 checks total</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('urls');}} style={{color:HF.ink3, textDecoration:'none'}}>URLs</a>
         <span style={{color:HF.ink5}}>/</span>
@@ -81,16 +78,14 @@ function HFUrlDetail({ nav, goto, params }) {
 
       <HFKpiStrip items={[
         { label:'Status',       value:status, tone: sTone[status], delta:<span style={{color:sInk[status]}}>HTTP {code}</span> },
-        { label:'Last checked', value:'12m ago', delta:<span style={{color:HF.ink3}}>next in 48m</span> },
-        { label:'Avg response', value:'205ms', delta:<span style={{color:HF.okInk}}>p95 310ms</span> },
-        { label:'Success (30d)',value:'57.1%',  delta:<span style={{color:HF.errInk}}>▼ 42.9pp</span>, tone:'err' },
-        { label:'Total checks', value:'147',    delta:<span style={{color:HF.ink3}}>since Feb 14</span> },
+        { label:'Last scraped', value: data.last_scraped_ago || '—', delta:<span style={{color:HF.ink3}}>last check</span> },
+        { label:'Fail count',   value: String(data.fail_count || 0), tone: data.fail_count >= 3 ? 'err' : 'ok', delta:<span style={{color:data.fail_count >= 3 ? HF.errInk : HF.okInk}}>{data.fail_count >= 3 ? 'failing' : 'ok'}</span> },
       ]}/>
 
       <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
-        <HFCard title="Response code history" sub="last 14 checks · newest first">
+        <HFCard title="Response code history" sub="check history not yet available">
           <div style={{padding:`${HF.cardP}px`}}>
-            <HFAreaChart data={history.slice().reverse().map(h => h.ms)} h={140}/>
+            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:13}}>No history data yet</div>
             <div style={{display:'flex', gap:14, marginTop:10, fontSize:11, color:HF.ink3, fontFamily:HF.mono}}>
               <span><span style={{color:HF.accent}}>━</span> response time (ms)</span>
               <span style={{marginLeft:'auto'}}>{history.length} checks</span>
@@ -102,14 +97,10 @@ function HFUrlDetail({ nav, goto, params }) {
           <div style={{padding:`4px 0`}}>
             {[
               ['Full URL',      `https://${shop}.lt${urlPath}`, true],
-              ['Kind',          'product'],
-              ['Canonical',     '—'],
-              ['Discovered',    'Feb 14, 2024'],
-              ['Discovered by', 'sitemap.xml'],
-              ['Schedule',      'hourly'],
-              ['Priority',      'normal'],
-              ['Parser',        'product.v3'],
-              ['Robots',        'allowed'],
+              ['Shop',          shop],
+              ['Fail count',    String(data.fail_count || 0), true],
+              ['Discovered',    data.discovered_ago || '—'],
+              ['Last scraped',  data.last_scraped_ago || '—'],
             ].map(([k,v,mono], i, arr) => (
               <div key={k} style={{
                 display:'flex', padding:`8px ${HF.cardP}px`,

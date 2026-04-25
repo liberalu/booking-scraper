@@ -3,20 +3,17 @@
 function HFShopBooks({ nav, goto }) {
   const HF = getHF();
 
-  const rows = [
-    { id:10234, title:'Sapiens: A Brief History of Humankind', author:'Yuval Noah Harari',  shop:'vaga',   isbn:'9789955134572', price:'€19.90', status:'active',   issues:0, updated:'12m ago' },
-    { id:10233, title:'Atomic Habits',                         author:'James Clear',         shop:'vaga',   isbn:'9781847941831', price:'€16.50', status:'active',   issues:0, updated:'12m ago' },
-    { id:10232, title:'Thinking, Fast and Slow',               author:'Daniel Kahneman',     shop:'knygos', isbn:'9780141033570', price:'€21.00', status:'active',   issues:0, updated:'1h ago' },
-    { id:10231, title:'Lietuvos istorija, t. II',              author:'Edvardas Gudavičius', shop:'vaga',   isbn:null,            price:'€28.00', status:'active',   issues:2, updated:'18m ago' },
-    { id:10230, title:'The Lean Startup',                      author:'Eric Ries',           shop:'knygos', isbn:'9780307887894', price:'€17.80', status:'active',   issues:0, updated:'1h ago' },
-    { id:10229, title:'Dune',                                  author:'Frank Herbert',       shop:'vaga',   isbn:'9780441013593', price:'€14.20', status:'active',   issues:0, updated:'12m ago' },
-    { id:10228, title:'Clean Code',                            author:'Robert C. Martin',    shop:'vaga',   isbn:'9780132350884', price:'€32.90', status:'out',      issues:1, updated:'4h ago' },
-    { id:10227, title:'Pragmatic Programmer, 2ed',             author:'Dave Thomas',         shop:'knygos', isbn:'9780135957059', price:'€29.50', status:'active',   issues:0, updated:'1h ago' },
-    { id:10226, title:'Neimaru kam',                           author:'—',                   shop:'knygos', isbn:null,            price:'—',      status:'delisted', issues:3, updated:'2d ago' },
-    { id:10225, title:'Kafka on the Shore',                    author:'Haruki Murakami',     shop:'vaga',   isbn:'9781400079278', price:'€15.40', status:'active',   issues:0, updated:'18m ago' },
-    { id:10224, title:'Educated',                              author:'Tara Westover',       shop:'vaga',   isbn:'9780399590504', price:'€13.90', status:'active',   issues:0, updated:'18m ago' },
-    { id:10223, title:'Zero to One',                           author:'Peter Thiel',         shop:'knygos', isbn:'9780804139298', price:'€18.50', status:'active',   issues:0, updated:'1h ago' },
-  ];
+  const [data, setData] = React.useState({ books: [], total: 0, kpis: { total: 0, active: 0, missing_isbn: 0, missing_price: 0 } });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/shop-books?per_page=100')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const rows = data.books;
 
   const statusTone = { active:'ok', out:'warn', delisted:'neutral' };
 
@@ -46,11 +43,10 @@ function HFShopBooks({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total books',  value:'18,432', delta:<span style={{color:HF.okInk}}>▲ 124 today</span> },
-        { label:'Active',       value:'16,201', delta:<span style={{color:HF.ink3}}>87.9%</span> },
-        { label:'Missing ISBN', value:'3,543',  delta:<span style={{color:HF.warnInk}}>19.2%</span>, tone:'warn' },
-        { label:'Missing price',value:'892',    delta:<span style={{color:HF.warnInk}}>4.8%</span>, tone:'warn' },
-        { label:'Duplicates',   value:'47',     delta:<span style={{color:HF.errInk}}>needs merge</span>, tone:'err' },
+        { label:'Total books',   value: data.kpis.total.toLocaleString(), delta:<span style={{color:HF.ink3}}>total</span> },
+        { label:'Active',        value: data.kpis.active.toLocaleString(), delta:<span style={{color:HF.ink3}}>{data.kpis.total > 0 ? Math.round(data.kpis.active/data.kpis.total*100) : 0}%</span> },
+        { label:'Missing ISBN',  value: data.kpis.missing_isbn.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_isbn/data.kpis.total*100) : 0}%</span>, tone:'warn' },
+        { label:'Missing price', value: data.kpis.missing_price.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_price/data.kpis.total*100) : 0}%</span>, tone:'warn' },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}} padding={12}>
@@ -117,35 +113,53 @@ function HFShopBooks({ nav, goto }) {
 
 function HFShopBookDetail({ nav, goto, params }) {
   const HF = getHF();
-  const id = params?.id || 10234;
+  const bookId = params?.id;
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState('overview');
 
-  const priceHistory = [19.9, 19.9, 18.5, 18.5, 18.5, 19.5, 19.5, 21.0, 19.9, 19.9, 19.9, 19.9, 18.9, 19.9, 19.9, 19.9, 18.5, 19.9, 19.9, 19.9, 19.9, 18.9, 19.9, 19.9, 19.9, 19.9, 19.9, 19.9, 19.9, 19.9];
+  React.useEffect(() => {
+    if (!bookId) return;
+    fetch(`/api/shop-books/${bookId}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [bookId]);
+
+  if (loading || !data) {
+    return (
+      <HFShell {...nav} activePage="shop-books" title="Book detail" subtitle="Loading…"
+        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('shop-books');}}>Shop Books</a><span>/</span><span>#{bookId}</span></>}>
+        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+      </HFShell>
+    );
+  }
+
+  const id = data.id;
+  const priceHistory = data.price_history || [];
 
   return (
     <HFShell {...nav} activePage="shop-books"
       title={<span style={{display:'flex', alignItems:'baseline', gap:12}}>
-        <span>Sapiens: A Brief History of Humankind</span>
-        <HFPill tone="ok">active</HFPill>
+        <span>{data.title || 'Book detail'}</span>
+        <HFPill tone={data.is_active ? 'ok' : 'neutral'}>{data.status || 'unknown'}</HFPill>
       </span>}
-      subtitle={<span style={{fontSize:13}}>by Yuval Noah Harari · <span style={{fontFamily:HF.mono, color:HF.ink3}}>#{id}</span> · shop <span style={{color:HF.ink2, fontWeight:500}}>vaga</span></span>}
+      subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:HF.mono, color:HF.ink3}}>#{id}</span> · shop <span style={{color:HF.ink2, fontWeight:500}}>{data.shop}</span></span>}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-books');}} style={{color:HF.ink3, textDecoration:'none'}}>Shop Books</a>
         <span style={{color:HF.ink5}}>/</span>
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>#{id}</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open on vaga.lt</HFButton>
+        {data.url && <HFButton onClick={() => window.open(data.url, '_blank')}><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open on {data.shop}.lt</HFButton>}
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Re-scrape</HFButton>
         <HFButton variant="primary">Edit</HFButton>
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Current price', value:'€19.90', delta:<span><span style={{color:HF.errInk}}>▼ €1.10</span><span style={{color:HF.ink3, marginLeft:4}}>vs 30d avg</span></span>, tone:'err' },
-        { label:'All-time low',  value:'€18.50', delta:<span style={{color:HF.ink3}}>Mar 22</span> },
-        { label:'All-time high', value:'€21.00', delta:<span style={{color:HF.ink3}}>Apr 2</span> },
-        { label:'Data points',   value:'127',    delta:<span style={{color:HF.ink3}}>since Feb 18</span> },
-        { label:'Issues',        value:'0',      delta:<span style={{color:HF.okInk}}>all clean</span>, tone:'ok' },
+        { label:'Current price', value: data.price || '—', delta:<span style={{color:HF.ink3}}>current</span> },
+        { label:'Issues',        value: String(data.issues || 0), delta:<span style={{color: (data.issues||0) > 0 ? HF.warnInk : HF.okInk}}>{(data.issues||0) > 0 ? 'needs attention' : 'all clean'}</span>, tone: (data.issues||0) > 0 ? 'warn' : 'ok' },
+        { label:'Status',        value: data.status || '—', tone: data.is_active ? 'ok' : 'neutral', delta:<span style={{color:HF.ink3}}>listing</span> },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}}>
@@ -163,85 +177,48 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'prices' && <HFPricesPanel/>}
       {tab === 'runs'   && <HFRunsPanel goto={goto} scope="book" entity={id}/>}
       {tab === 'urls'   && (
-        <HFCard title="Source URLs" sub="all URLs that point to this book"
-                action={<HFButton size="sm" onClick={() => window.HF_APP && window.HF_APP.openAddURL()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add URL</HFButton>}>
-          <HFTable
-            onRowClick={r => goto('url-detail', { u:r.u, shop:'vaga', status:r.s, code: r.s==='ok'?200:404 })}
-            columns={[
-              { key:'u', label:'URL', w:'2.4fr', mono:true, sortable:true, cell:(v,r) => (
-                <span style={{color: r.s==='ok'? HF.ink2 : HF.ink4, textDecoration: r.s==='ok'? 'none' : 'line-through'}}>vaga.lt{v}</span>
-              )},
-              { key:'p', label:'Role', w:'0.6fr', sortable:true, cell:v => <HFPill tone={v==='primary'?'accent':'neutral'}>{v}</HFPill> },
-              { key:'s', label:'Status', w:'0.6fr', sortable:true, cell:v => <HFPill tone={v==='ok'?'ok':'warn'}>{v}</HFPill> },
-              { key:'last', label:'Last check', w:'0.8fr', mono:true, muted:true, sortable:true },
-              { key:'hits', label:'Hits 30d', w:'0.6fr', mono:true, align:'right', muted:true, sortable:true, sortVal:r=>r.hits },
-            ]}
-            rows={[
-              { u:'/knygos/sapiens-yuval-noah-harari',    p:'primary', s:'ok',   last:'12m ago', hits:720 },
-              { u:'/autoriai/yuval-noah-harari/sapiens',  p:'alias',   s:'ok',   last:'12m ago', hits:318 },
-              { u:'/popular/sapiens',                     p:'alias',   s:'warn', last:'3d ago',  hits:0 },
-            ]}
-          />
+        <HFCard title="Source URLs" sub="all URLs that point to this book">
+          {data.url ? (
+            <div style={{padding:`10px ${HF.cardP}px`, display:'flex', alignItems:'center', gap:10, fontSize:12.5}}>
+              <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
+              <HFPill tone="accent">primary</HFPill>
+              <HFPill tone="ok">ok</HFPill>
+            </div>
+          ) : (
+            <HFEmptyState title="No URLs" sub="No URLs available for this book."/>
+          )}
         </HFCard>
       )}
       {tab === 'raw' && (
-        <HFCard title="Raw extracted data" sub={`JSON response · from run #4820 · 12m ago`}
+        <HFCard title="Raw extracted data" sub={`API response for book #${id}`}
                 action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export JSON</HFButton>}>
           <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:11.5, lineHeight:1.65, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`, whiteSpace:'pre', overflow:'auto'}}>
-{`{
-  "id": ${id},
-  "shop": "vaga",
-  "url": "https://vaga.lt/knygos/sapiens-yuval-noah-harari",
-  "scraped_at": "2025-04-19T14:12:04Z",
-  "fields": {
-    "title":       "Sapiens: A Brief History of Humankind",
-    "author":      "Yuval Noah Harari",
-    "price":       19.90,
-    "old_price":   21.00,
-    "currency":    "EUR",
-    "isbn":        "9789955134572",
-    "publisher":   "Kitos knygos",
-    "year":        2019,
-    "pages":       null,
-    "language":    "EN",
-    "binding":     "Paperback",
-    "category":    ["History", "Non-fiction"],
-    "description": "Sapiens tackles the biggest questions of history and of the modern world..."
-  },
-  "status":  "active",
-  "issues":  [],
-  "parser":  "product.v3"
-}`}
+            {JSON.stringify(data, null, 2)}
           </div>
         </HFCard>
       )}
 
       {tab === 'overview' && <>
       <div style={{display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
-        <HFCard title="Price history" sub="last 30 data points · vaga.lt"
-                action={<HFPill tone="err">▼ 5.2% vs 30d avg</HFPill>}>
+        <HFCard title="Price history" sub={`${priceHistory.length} data points`}>
           <div style={{padding:`${HF.cardP}px`}}>
-            <HFAreaChart data={priceHistory} h={180}/>
-            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:8, fontVariantNumeric:'tabular-nums'}}>
-              <span>Mar 20</span><span>Mar 30</span><span>Apr 9</span><span>Apr 19</span>
-            </div>
+            {priceHistory.length > 0 ? (
+              <HFAreaChart data={priceHistory.map(p => typeof p === 'number' ? p : p.price || 0)} h={180}/>
+            ) : (
+              <div style={{height:180, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:13}}>No price history yet</div>
+            )}
           </div>
         </HFCard>
 
-        <HFCard title="Metadata" sub="extracted fields · 9 of 11 complete">
+        <HFCard title="Metadata" sub="extracted fields">
           <div style={{padding:`2px 0 6px`}}>
             {[
-              ['ISBN',        '9789955134572', 'ok'],
-              ['Author',      'Yuval Noah Harari', 'ok'],
-              ['Publisher',   'Kitos knygos', 'ok'],
-              ['Year',        '2019', 'ok'],
-              ['Pages',       '464', 'ok'],
-              ['Language',    'EN', 'ok'],
-              ['Binding',     'Paperback', 'ok'],
-              ['Weight',      '—', 'warn'],
-              ['Dimensions',  '—', 'warn'],
-              ['Category',    'History / Non-fiction', 'ok'],
-              ['Description', '2,340 chars', 'ok'],
+              ['ISBN',        data.isbn || '—',        data.isbn ? 'ok' : 'warn'],
+              ['Author',      data.author || '—',      data.author ? 'ok' : 'warn'],
+              ['Publisher',   data.publisher || '—',   data.publisher ? 'ok' : 'warn'],
+              ['Year',        data.year ? String(data.year) : '—', data.year ? 'ok' : 'warn'],
+              ['Format',      data.format || '—',      data.format ? 'ok' : 'warn'],
+              ['Status',      data.status || '—',      'ok'],
             ].map(([k, v, tone], i, arr) => (
               <div key={k} style={{
                 display:'grid', gridTemplateColumns:'110px 1fr 14px',
@@ -261,46 +238,37 @@ function HFShopBookDetail({ nav, goto, params }) {
       </div>
 
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap}}>
-        <HFCard title="Source URLs" sub="3 URLs point to this book"
-                action={<a href="#" style={hfLink(HF)}>Manage {HF_ICONS.arrow}</a>}>
+        <HFCard title="Source URL" sub="URL for this book">
           <div>
-            {[
-              { u:'/knygos/sapiens-yuval-noah-harari', p:'primary',   s:'ok',   r:'OK · 12m' },
-              { u:'/autoriai/yuval-noah-harari/sapiens', p:'alias',  s:'ok',   r:'OK · 12m' },
-              { u:'/popular/sapiens',                    p:'alias',  s:'warn', r:'404 · 3d' },
-            ].map((r, i, arr) => (
-              <div key={r.u} style={{
+            {data.url ? (
+              <div style={{
                 padding:`10px ${HF.cardP}px`,
-                borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
                 display:'flex', alignItems:'center', gap:10,
                 fontSize:12.5,
               }}>
-                <span style={{fontFamily:HF.mono, color: r.s==='ok'? HF.ink2 : HF.ink4, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration: r.s==='ok'? 'none' : 'line-through'}}>{r.u}</span>
-                <HFPill tone={r.p==='primary'?'accent':'neutral'}>{r.p}</HFPill>
-                <HFPill tone={r.s==='ok'?'ok':'warn'}>{r.r}</HFPill>
+                <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
+                <HFPill tone="accent">primary</HFPill>
+                <HFPill tone="ok">ok</HFPill>
               </div>
-            ))}
+            ) : (
+              <div style={{padding:`10px ${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No URL available</div>
+            )}
           </div>
         </HFCard>
 
-        <HFCard title="Recent runs" sub="last 5 scrapes"
-                action={<a href="#" style={hfLink(HF)}>All runs {HF_ICONS.arrow}</a>}>
-          <HFTable
-            columns={[
-              { key:'id', label:'Run', w:'0.7fr', mono:true, cell: v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
-              { key:'when', label:'When', w:'1fr', muted:true, mono:true },
-              { key:'price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v}</span> },
-              { key:'delta', label:'Δ', w:'0.6fr', mono:true, align:'right', cell: v => v ? <span style={{color: v.startsWith('-')? HF.errInk : HF.okInk, fontWeight:500}}>{v}</span> : <span style={{color:HF.ink4}}>—</span> },
-              { key:'st', label:'Status', w:'0.7fr', cell: v => <HFPill tone={v==='ok'?'ok':'warn'}>{v}</HFPill> },
-            ]}
-            rows={[
-              { id:4820, when:'12m ago',  price:'€19.90', delta:null,    st:'ok' },
-              { id:4812, when:'1h ago',   price:'€19.90', delta:'0.00',  st:'ok' },
-              { id:4801, when:'5h ago',   price:'€19.90', delta:'0.00',  st:'ok' },
-              { id:4788, when:'12h ago',  price:'€19.90', delta:'-1.10', st:'ok' },
-              { id:4770, when:'1d ago',   price:'€21.00', delta:'+1.10', st:'ok' },
-            ]}
-          />
+        <HFCard title="Recent price changes" sub="from price history">
+          {(data.changes && data.changes.length > 0) ? (
+            <HFTable
+              columns={[
+                { key:'scraped_ago', label:'When', w:'1fr', muted:true, mono:true },
+                { key:'new_price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v != null ? `€${v.toFixed(2)}` : '—'}</span> },
+                { key:'change', label:'Δ', w:'0.6fr', mono:true, align:'right', cell: v => v != null ? <span style={{color: v < 0 ? HF.errInk : v > 0 ? HF.okInk : HF.ink4, fontWeight:500}}>{v > 0 ? '+' : ''}{v.toFixed(2)}</span> : <span style={{color:HF.ink4}}>—</span> },
+              ]}
+              rows={data.changes.slice(0, 5)}
+            />
+          ) : (
+            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No price changes yet</div>
+          )}
         </HFCard>
       </div>
       </>}

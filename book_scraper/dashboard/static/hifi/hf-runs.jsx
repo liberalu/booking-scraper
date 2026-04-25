@@ -4,24 +4,17 @@ function HFRuns({ nav, goto }) {
   const HF = getHF();
   const statusTone = { running:'ok', completed:'neutral', failed:'err', queued:'warn' };
 
-  const allRows = [
-    { id:4821, shop:'vaga',   phase:'scan',     type:'full',       status:'running',   prog:72,  items:1240, dur:'12m',   started:'2 min ago',  startedH:0.03, by:'cron:hourly' },
-    { id:4820, shop:'vaga',   phase:'discover', type:'sitemap',    status:'completed', prog:100, items:820,  dur:'4m 18s', started:'18 min ago', startedH:0.3, by:'cron:hourly' },
-    { id:4819, shop:'knygos', phase:'prices',   type:'discovered', status:'running',   prog:41,  items:455,  dur:'2m 02s', started:'2 min ago',  startedH:0.03,by:'manual · anna' },
-    { id:4818, shop:'vaga',   phase:'scan',     type:'discovered', status:'queued',    prog:0,   items:0,    dur:'—',     started:'queued',     startedH:0,   by:'cron:hourly' },
-    { id:4815, shop:'vaga',   phase:'scan',     type:'full',       status:'completed', prog:100, items:3102, dur:'42m',   started:'1h 12m ago', startedH:1.2, by:'cron:daily' },
-    { id:4814, shop:'knygos', phase:'scan',     type:'discovered', status:'completed', prog:100, items:612,  dur:'18m',   started:'2h ago',     startedH:2,   by:'cron:daily' },
-    { id:4812, shop:'knygos', phase:'discover', type:'sitemap',    status:'failed',    prog:12,  items:0,    dur:'1m',    started:'3h ago',     startedH:3,   by:'manual · tomas' },
-    { id:4810, shop:'vaga',   phase:'discover', type:'sitemap',    status:'completed', prog:100, items:612,  dur:'18m',   started:'5h ago',     startedH:5,   by:'cron:daily' },
-    { id:4808, shop:'vaga',   phase:'prices',   type:'full',       status:'completed', prog:100, items:14200,dur:'1h 02m', started:'7h ago',    startedH:7,   by:'cron:daily' },
-    { id:4805, shop:'knygos', phase:'prices',   type:'discovered', status:'completed', prog:100, items:2890, dur:'22m',   started:'9h ago',     startedH:9,   by:'cron:daily' },
-    { id:4803, shop:'vaga',   phase:'scan',     type:'full',       status:'failed',    prog:38,  items:420,  dur:'14m',   started:'12h ago',    startedH:12,  by:'cron:hourly' },
-    { id:4800, shop:'knygos', phase:'discover', type:'sitemap',    status:'completed', prog:100, items:1012, dur:'22m',   started:'1d ago',     startedH:24,  by:'cron:daily' },
-    { id:4795, shop:'vaga',   phase:'scan',     type:'discovered', status:'completed', prog:100, items:240,  dur:'6m',    started:'1d 4h ago',  startedH:28,  by:'manual · anna' },
-    { id:4790, shop:'vaga',   phase:'prices',   type:'sitemap',    status:'completed', prog:100, items:8900, dur:'48m',   started:'1d 12h ago', startedH:36,  by:'cron:daily' },
-    { id:4784, shop:'knygos', phase:'scan',     type:'full',       status:'failed',    prog:62,  items:180,  dur:'22m',   started:'2d ago',     startedH:48,  by:'cron:daily' },
-    { id:4770, shop:'vaga',   phase:'discover', type:'discovered', status:'completed', prog:100, items:94,   dur:'3m',    started:'5d ago',     startedH:120, by:'manual · tomas' },
-  ];
+  const [data, setData] = React.useState({ runs: [], kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0 } });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/runs?limit=100')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const allRows = data.runs;
 
   const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
 
@@ -74,11 +67,8 @@ function HFRuns({ nav, goto }) {
     >
       {/* Summary strip */}
       <HFKpiStrip items={[
-        { label:'Running now', value:'2', delta:<span style={{color:HF.okInk}}>● live</span> },
-        { label:'Queued',      value:'1', delta:<span style={{color:HF.ink3}}>next in 4m</span> },
-        { label:'Today',       value:'38', delta:<span style={{color:HF.ink3}}>34 completed · 2 failed</span> },
-        { label:'Success rate (7d)', value:'94.2%', delta:<span style={{color:HF.okInk}}>▲ 1.4pp</span> },
-        { label:'Avg duration', value:'18m', delta:<span style={{color:HF.ink3}}>p95 42m</span> },
+        { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span> },
+        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:HF.ink3}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span> },
       ]}/>
 
       {/* Filters */}
@@ -168,39 +158,45 @@ function HFRuns({ nav, goto }) {
 
 function HFRunDetail({ nav, goto, params }) {
   const HF = getHF();
-  const id = params?.id || 4821;
+  const runId = params?.id;
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
 
-  const timeline = [
-    { t:'14:02:11', ev:'run.started',    msg:'Triggered by cron:hourly · shop=vaga', tone:'accent' },
-    { t:'14:02:13', ev:'urls.loaded',    msg:'Loaded 1,720 URLs from seed queue',    tone:'neutral' },
-    { t:'14:02:14', ev:'worker.spawned', msg:'4 workers started · concurrency=4',    tone:'neutral' },
-    { t:'14:03:02', ev:'batch.completed',msg:'Batch 1/14 · 124 items · 49s',         tone:'ok' },
-    { t:'14:04:41', ev:'batch.completed',msg:'Batch 2/14 · 128 items · 1m 39s',      tone:'ok' },
-    { t:'14:06:18', ev:'rate_limit',     msg:'429 from vaga.lt · backoff 20s',       tone:'warn' },
-    { t:'14:08:22', ev:'batch.completed',msg:'Batch 3/14 · 118 items · 2m 04s',      tone:'ok' },
-    { t:'14:10:55', ev:'validation',     msg:'18 items failed validation (missing_isbn)', tone:'warn' },
-    { t:'14:13:09', ev:'batch.completed',msg:'Batch 4/14 · 130 items · 2m 14s',      tone:'ok' },
-    { t:'14:14:22', ev:'heartbeat',      msg:'alive · 532/1720 done · eta 9m',       tone:'neutral' },
-  ];
+  React.useEffect(() => {
+    if (!runId) return;
+    fetch(`/api/runs/${runId}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [runId]);
+
+  if (loading || !data) {
+    return (
+      <HFShell {...nav} activePage="runs" title={`Run #${runId}`} subtitle="Loading…"
+        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('runs');}}>Runs</a><span style={{color:nav.HF?.ink5||'#c7cbd3'}}>/</span><span>#{runId}</span></>}>
+        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+      </HFShell>
+    );
+  }
+
+  const id = data.id;
+
+  const timeline = [];
 
   const throughputData = [22, 28, 34, 30, 18, 26, 32, 35, 33, 29, 31, 34, 36, 33, 30, 28];
 
-  const phases = [
-    { name:'init',     status:'ok',      dur:'2s',    items:0 },
-    { name:'load',     status:'ok',      dur:'14s',   items:1720 },
-    { name:'discover', status:'ok',      dur:'52s',   items:532 },
-    { name:'scan',     status:'running', dur:'11m',   items:1240, prog:72 },
-    { name:'validate', status:'pending', dur:'—',     items:0 },
-    { name:'persist',  status:'pending', dur:'—',     items:0 },
-  ];
+  const phases = [];
+
+  const runStatus = data.status || 'completed';
+  const runStatusTone = { running: 'ok', completed: 'neutral', failed: 'err' };
 
   return (
     <HFShell {...nav} activePage="runs"
       title={<span style={{display:'flex', alignItems:'center', gap:12}}>
         <span style={{fontFamily:HF.mono, fontSize:24, fontWeight:600, color:HF.ink}}>Run #{id}</span>
-        <HFPill tone="ok"><HFDot tone="ok" pulse size={6}/> running</HFPill>
+        <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>shop=vaga · phase=scan · started 2 min ago · triggered by cron:hourly</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>shop={data.shop} · phase={data.phase} · started {data.started} · triggered by {data.by}</span>}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('runs');}} style={{color:HF.ink3, textDecoration:'none'}}>Runs</a>
         <span style={{color:HF.ink5}}>/</span>
@@ -213,11 +209,10 @@ function HFRunDetail({ nav, goto, params }) {
     >
       {/* Live metrics strip */}
       <HFKpiStrip items={[
-        { label:'Progress',       value:'72%', delta:<span style={{color:HF.ink3}}>1,240 of 1,720</span> },
-        { label:'Throughput',     value:'28/min', delta:<span style={{color:HF.okInk}}>▲ 4 vs avg</span> },
-        { label:'Elapsed',        value:'12m 04s', delta:<span style={{color:HF.ink3}}>eta 4m</span> },
-        { label:'Workers',        value:'4 / 4',   delta:<span style={{color:HF.ink3}}>0 idle</span> },
-        { label:'Errors',         value:'18', delta:<span style={{color:HF.warnInk}}>all validation</span>, tone:'warn' },
+        { label:'Progress',       value:`${data.prog}%`, delta:<span style={{color:HF.ink3}}>{data.items ? data.items.toLocaleString() + ' items' : '—'}</span> },
+        { label:'Elapsed',        value:data.dur || '—', delta:<span style={{color:HF.ink3}}>duration</span> },
+        { label:'Items',          value:data.items ? data.items.toLocaleString() : '0', delta:<span style={{color:HF.ink3}}>scraped</span> },
+        { label:'Status',         value:data.status, tone: runStatusTone[runStatus] || 'neutral', delta:<span style={{color:HF.ink3}}>current</span> },
       ]}/>
 
       {/* Phase pipeline + Throughput */}
@@ -301,20 +296,18 @@ function HFRunDetail({ nav, goto, params }) {
           <div style={{padding:`4px 0`}}>
             {[
               ['run_id', `#${id}`],
-              ['shop', 'vaga'],
-              ['phase', 'scan'],
-              ['triggered_by', 'cron:hourly'],
-              ['started_at', '2026-04-19 14:02:11'],
-              ['concurrency', '4'],
-              ['timeout_s', '3600'],
-              ['seed_size', '1720'],
-              ['retry_policy', 'exp · max=3'],
-              ['commit_batch', '100'],
-            ].map(([k,v], i) => (
+              ['shop', data.shop || '—'],
+              ['phase', data.phase || '—'],
+              ['triggered_by', data.by || '—'],
+              ['started', data.started || '—'],
+              ['duration', data.dur || '—'],
+              ['items', data.items != null ? String(data.items) : '—'],
+              ['status', data.status || '—'],
+            ].map(([k,v], i, arr) => (
               <div key={k} style={{
                 display:'grid', gridTemplateColumns:'120px 1fr',
                 padding:`7px ${HF.cardP}px`,
-                borderBottom: i < 9 ? `1px solid ${HF.borderFaint}` : 'none',
+                borderBottom: i < arr.length - 1 ? `1px solid ${HF.borderFaint}` : 'none',
                 fontSize:12.5,
               }}>
                 <span style={{fontFamily:HF.mono, color:HF.ink3}}>{k}</span>
