@@ -52,9 +52,18 @@ function HFUrlDetail({ nav, goto, params }) {
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono, overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>{urlPath}</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open in browser</HFButton>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.stop}</span> Pause checks</HFButton>
-        <HFButton variant="primary"><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Recheck now</HFButton>
+        <HFButton onClick={() => {
+          const fullUrl = data.url && (data.url.startsWith('http') ? data.url : `https://${shop}.lt${urlPath}`);
+          if (fullUrl) window.open(fullUrl, '_blank', 'noopener,noreferrer');
+        }}><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open in browser</HFButton>
+        <HFButton variant="primary" onClick={async () => {
+          const resp = await fetch('/api/runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shop, phase: 'scan', mode: 'sample' }),
+          });
+          if (resp.ok) goto('runs');
+        }}><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Recheck now</HFButton>
       </>}
     >
       {/* Error banner */}

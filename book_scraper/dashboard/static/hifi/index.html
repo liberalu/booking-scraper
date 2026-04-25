@@ -84,7 +84,13 @@ function App() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [accent, setAccent] = React.useState(localStorage.getItem('hf_accent') || 'forest');
   const [density, setDensity] = React.useState(localStorage.getItem('hf_density') || 'ultra');
-  const [newRunOpen, setNewRunOpen] = React.useState(false);
+  const [newRunOpen, setNewRunOpen]           = React.useState(false);
+  const [newScheduleOpen, setNewScheduleOpen] = React.useState(false);
+  const [addURLOpen, setAddURLOpen]           = React.useState(false);
+  const [addShopOpen, setAddShopOpen]         = React.useState(false);
+  const [addBookOpen, setAddBookOpen]         = React.useState(false);
+  const [cmdKOpen, setCmdKOpen]               = React.useState(false);
+  const [avatarMenu, setAvatarMenu]           = React.useState({ open: false, rect: null });
   const [, force] = React.useReducer(x => x + 1, 0);
 
   React.useEffect(() => { window.HF_ACCENT = accent; localStorage.setItem('hf_accent', accent); force(); }, [accent]);
@@ -100,6 +106,18 @@ function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  // ⌘K shortcut → open command palette
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdKOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const goto = (p, pms = {}) => {
     setPage(p);
     setParams(pms);
@@ -111,12 +129,13 @@ function App() {
   const nav = { collapsed, setCollapsed, setPage: goto, activePage: page };
 
   window.HF_APP = {
-    openNewRun: () => setNewRunOpen(true),
-    openNewSchedule: () => {},
-    openAddURL: () => {},
-    openAddBook: () => {},
-    openCmdK: () => {},
-    openAvatarMenu: () => {},
+    openNewRun:      () => setNewRunOpen(true),
+    openNewSchedule: () => setNewScheduleOpen(true),
+    openAddURL:      () => setAddURLOpen(true),
+    openAddShop:     () => setAddShopOpen(true),
+    openAddBook:     () => setAddBookOpen(true),
+    openCmdK:        () => setCmdKOpen(true),
+    openAvatarMenu:  (rect) => setAvatarMenu({ open: true, rect }),
   };
 
   const pages = {
@@ -141,7 +160,14 @@ function App() {
   return (
     <>
       {renderer ? renderer() : <div style={{padding:40}}>Unknown page: {page}</div>}
-      <HFNewRunDialog open={newRunOpen} onClose={() => setNewRunOpen(false)} goto={goto}/>
+      <HFNewRunDialog      open={newRunOpen}      onClose={() => setNewRunOpen(false)}      goto={goto}/>
+      <HFNewScheduleDialog open={newScheduleOpen} onClose={() => setNewScheduleOpen(false)}/>
+      <HFAddURLDialog      open={addURLOpen}      onClose={() => setAddURLOpen(false)}/>
+      <HFAddShopDialog     open={addShopOpen}     onClose={() => setAddShopOpen(false)}     goto={goto}/>
+      <HFAddBookDialog     open={addBookOpen}     onClose={() => setAddBookOpen(false)}/>
+      <HFCommandK          open={cmdKOpen}        onClose={() => setCmdKOpen(false)}        goto={goto}/>
+      <HFAvatarMenu        open={avatarMenu.open} anchorRect={avatarMenu.rect}
+                           onClose={() => setAvatarMenu({ open: false, rect: null })} goto={goto}/>
     </>
   );
 }

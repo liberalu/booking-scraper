@@ -5,12 +5,33 @@ function HFCron({ nav, goto }) {
   const [data, setData] = React.useState({ jobs: [] });
   const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
+  const reload = React.useCallback(() => {
     fetch('/api/cron')
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const toggleJob = async (job) => {
+    try {
+      await fetch(`/api/cron/${job.id}/toggle`, { method: 'POST' });
+      reload();
+    } catch (e) { console.error(e); }
+  };
+
+  const runJobNow = async (job) => {
+    try {
+      const body = { shop: job.shop, phase: job.phase, strategy: job.strategy || '', mode: 'delta' };
+      const resp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) goto('runs');
+    } catch (e) { console.error(e); }
+  };
 
   const jobsRaw = data.jobs;
   const jobs = jobsRaw.map(j => ({
@@ -65,16 +86,23 @@ function HFCron({ nav, goto }) {
             { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? HF.errInk : HF.ink}}>{r.last}</span></span> },
             { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? HF.accentInk : HF.ink4, fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
             { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
-            { key:'enabled', label:'', w:'0.5fr', align:'right', cell:v => (
-              <span style={{
-                display:'inline-flex', width:32, height:18, borderRadius:10,
-                background: v? HF.accent : HF.border, padding:2, alignItems:'center',
-                justifyContent: v? 'flex-end' : 'flex-start', transition:'all 120ms',
-              }}>
+            { key:'enabled', label:'', w:'0.5fr', align:'right', cell:(v, r) => (
+              <span
+                onClick={(e) => { e.stopPropagation(); toggleJob(r); }}
+                style={{
+                  display:'inline-flex', width:32, height:18, borderRadius:10,
+                  background: v? HF.accent : HF.border, padding:2, alignItems:'center',
+                  justifyContent: v? 'flex-end' : 'flex-start', transition:'all 120ms',
+                  cursor:'pointer',
+                }}>
                 <span style={{width:14, height:14, borderRadius:'50%', background:'#fff', boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/>
               </span>
             )},
-            { key:'_', label:'', w:'40px', align:'right', cell:() => <HFButton size="sm" variant="subtle"><span style={{display:'flex'}}>{HF_ICONS.play}</span></HFButton> },
+            { key:'_', label:'', w:'40px', align:'right', cell:(_v, r) => (
+              <HFButton size="sm" variant="subtle" onClick={(e) => { e.stopPropagation(); runJobNow(r); }}>
+                <span style={{display:'flex'}}>{HF_ICONS.play}</span>
+              </HFButton>
+            )},
           ]}
           rows={filters.filtered}
         />
