@@ -15,7 +15,6 @@ from book_scraper.dashboard.routes import (
 )
 from book_scraper.dashboard.routes import (
     cron,
-    overview,
     prices,
     runs,
     scrape,
@@ -238,12 +237,11 @@ app.mount(
 app.include_router(api_routes.router, prefix="/api")
 
 
-@app.get("/app")
+@app.get("/")
 async def spa_index() -> FileResponse:
     return FileResponse(str(Path(__file__).parent / "static" / "hifi" / "index.html"))
 
 
-app.include_router(overview.router)
 app.include_router(shops.router)
 app.include_router(shop_books.router)
 app.include_router(runs.router)

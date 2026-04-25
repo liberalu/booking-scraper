@@ -38,7 +38,6 @@ def _ensure_shop(db_session: Session) -> None:
 
 
 ROUTES = [
-    "/",
     "/shops",
     "/shops/vaga",
     "/shops/vaga/not-listed",
@@ -267,7 +266,7 @@ def test_api_run_not_found(client: TestClient) -> None:
 
 @pytest.mark.integration
 def test_spa_entry_point(client: TestClient) -> None:
-    resp = client.get("/app")
+    resp = client.get("/")
     assert resp.status_code == 200
     assert b"<html" in resp.content
     assert b"BookScraper Dashboard" in resp.content
