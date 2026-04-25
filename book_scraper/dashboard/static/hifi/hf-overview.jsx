@@ -107,7 +107,7 @@ function HFOverview({ nav, goto }) {
             { key:'shop', label:'Shop', w:'0.8fr', cell: v => <span style={{color: HF.ink}}>{v}</span> },
             { key:'phase', label:'Phase', w:'0.8fr', mono:true, muted:true },
             { key:'status', label:'Status', w:'1fr', cell: v => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={statusTone[v]} pulse={v==='running'}/> <span style={{color: v==='failed'? HF.errInk : HF.ink, fontWeight: v==='running'? 500 : 400}}>{v}</span></span> },
-            { key:'prog', label:'Progress', w:'1.6fr', cell: (v, r) => (
+            { key:'progress', label:'Progress', w:'1.6fr', cell: (v, r) => (
               <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
                 <span style={{flex:1, maxWidth: 200, height: 6, background: HF.subtle, borderRadius: 3, overflow:'hidden'}}>
                   <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? HF.err : r.status==='running'? HF.accent : HF.ink4, borderRadius:3}}/>

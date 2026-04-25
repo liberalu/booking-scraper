@@ -108,6 +108,7 @@ def _run_dict(run: ScrapeRun) -> dict[str, Any]:
         "errors_5xx": run.errors_5xx,
         "elapsed": _elapsed(run),
         "started_ago": _rel(run.started_at),
+        "started": _rel(run.started_at),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         "urls_total": run.urls_total,
@@ -162,6 +163,8 @@ def _url_dict(u: Any) -> dict[str, Any]:
         "status": "error" if u.fail_count >= 3 else "ok",
         "first_seen_at": u.first_seen_at.isoformat() if u.first_seen_at else None,
         "last_seen_ago": _rel(u.last_seen_at),
+        "last_scraped_ago": _rel(u.last_seen_at),
+        "discovered_ago": _rel(u.first_seen_at),
         "book_title": book.title if book else "—",
         "book_id": book.id if book else None,
         "book_score": cls.book_score if cls else None,
@@ -485,11 +488,15 @@ def api_shop_detail(
     stats = get_shop_stats(session, shop.id)
     field_stats = get_shop_field_stats(session, shop.id)
     runs = get_shop_runs(session, shop.id, limit=20)
+    last_run = runs[0] if runs else None
     return {
         "id": shop.id,
         "name": shop.name,
         "base_url": shop.base_url,
         **stats,
+        "books": stats["shop_books"],
+        "last_run_ago": _rel(last_run.started_at if last_run else None),
+        "last_run_status": last_run.status if last_run else "—",
         "field_stats": field_stats,
         "recent_runs": [_run_dict(r) for r in runs],
     }

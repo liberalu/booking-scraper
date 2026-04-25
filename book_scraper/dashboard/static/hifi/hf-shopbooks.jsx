@@ -256,18 +256,18 @@ function HFShopBookDetail({ nav, goto, params }) {
           </div>
         </HFCard>
 
-        <HFCard title="Recent price changes" sub="from price history">
-          {(data.changes && data.changes.length > 0) ? (
+        <HFCard title="Recent price history" sub="from price records">
+          {(priceHistory.length > 0) ? (
             <HFTable
               columns={[
-                { key:'scraped_ago', label:'When', w:'1fr', muted:true, mono:true },
-                { key:'new_price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v != null ? `€${v.toFixed(2)}` : '—'}</span> },
-                { key:'change', label:'Δ', w:'0.6fr', mono:true, align:'right', cell: v => v != null ? <span style={{color: v < 0 ? HF.errInk : v > 0 ? HF.okInk : HF.ink4, fontWeight:500}}>{v > 0 ? '+' : ''}{v.toFixed(2)}</span> : <span style={{color:HF.ink4}}>—</span> },
+                { key:'scraped_at', label:'When', w:'1fr', muted:true, mono:true, cell: v => v ? new Date(v).toLocaleDateString() : '—' },
+                { key:'price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v != null ? `€${v.toFixed(2)}` : '—'}</span> },
+                { key:'in_stock', label:'Stock', w:'0.6fr', align:'right', cell: v => v ? <HFPill tone="ok">in stock</HFPill> : <HFPill tone="neutral">out</HFPill> },
               ]}
-              rows={data.changes.slice(0, 5)}
+              rows={priceHistory.slice(0, 5)}
             />
           ) : (
-            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No price changes yet</div>
+            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No price history yet</div>
           )}
         </HFCard>
       </div>

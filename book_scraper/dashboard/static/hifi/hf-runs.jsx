@@ -118,7 +118,7 @@ function HFRuns({ nav, goto }) {
                 <span style={{color: v==='failed'? HF.errInk : HF.ink, fontWeight: v==='running'? 500 : 400}}>{v}</span>
               </span>
             )},
-            { key:'prog', label:'Progress', w:'1.3fr', sortable:true, sortVal:r=>r.prog, cell: (v, r) => (
+            { key:'progress', label:'Progress', w:'1.3fr', sortable:true, sortVal:r=>r.progress, cell: (v, r) => (
               <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
                 <span style={{flex:1, maxWidth:160, height:5, background:HF.subtle, borderRadius:3, overflow:'hidden'}}>
                   <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? HF.err : r.status==='running'? HF.accent : r.status==='queued'? HF.warn : HF.ink4, borderRadius:3}}/>
@@ -127,7 +127,7 @@ function HFRuns({ nav, goto }) {
               </span>
             )},
             { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell: v => v ? v.toLocaleString() : '—' },
-            { key:'dur', label:'Duration', w:'0.65fr', mono:true, muted:true, align:'right', sortable:true, sortVal:r=>r.dur },
+            { key:'elapsed', label:'Duration', w:'0.65fr', mono:true, muted:true, align:'right', sortable:true, sortVal:r=>r.elapsed },
             { key:'started', label:'Started', w:'0.9fr', muted:true, sortable:true, sortVal:r=>r.startedH },
             { key:'by', label:'Trigger', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
@@ -196,7 +196,7 @@ function HFRunDetail({ nav, goto, params }) {
         <span style={{fontFamily:HF.mono, fontSize:24, fontWeight:600, color:HF.ink}}>Run #{id}</span>
         <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>shop={data.shop} · phase={data.phase} · started {data.started} · triggered by {data.by}</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>shop={data.shop} · phase={data.phase} · started {data.started_ago} · triggered by {data.by}</span>}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('runs');}} style={{color:HF.ink3, textDecoration:'none'}}>Runs</a>
         <span style={{color:HF.ink5}}>/</span>
@@ -209,8 +209,8 @@ function HFRunDetail({ nav, goto, params }) {
     >
       {/* Live metrics strip */}
       <HFKpiStrip items={[
-        { label:'Progress',       value:`${data.prog}%`, delta:<span style={{color:HF.ink3}}>{data.items ? data.items.toLocaleString() + ' items' : '—'}</span> },
-        { label:'Elapsed',        value:data.dur || '—', delta:<span style={{color:HF.ink3}}>duration</span> },
+        { label:'Progress',       value:`${data.progress}%`, delta:<span style={{color:HF.ink3}}>{data.items ? data.items.toLocaleString() + ' items' : '—'}</span> },
+        { label:'Elapsed',        value:data.elapsed || '—', delta:<span style={{color:HF.ink3}}>duration</span> },
         { label:'Items',          value:data.items ? data.items.toLocaleString() : '0', delta:<span style={{color:HF.ink3}}>scraped</span> },
         { label:'Status',         value:data.status, tone: runStatusTone[runStatus] || 'neutral', delta:<span style={{color:HF.ink3}}>current</span> },
       ]}/>
@@ -299,8 +299,8 @@ function HFRunDetail({ nav, goto, params }) {
               ['shop', data.shop || '—'],
               ['phase', data.phase || '—'],
               ['triggered_by', data.by || '—'],
-              ['started', data.started || '—'],
-              ['duration', data.dur || '—'],
+              ['started', data.started_ago || '—'],
+              ['duration', data.elapsed || '—'],
               ['items', data.items != null ? String(data.items) : '—'],
               ['status', data.status || '—'],
             ].map(([k,v], i, arr) => (
