@@ -52,7 +52,7 @@ function HFRuns({ nav, goto }) {
       }
       return true;
     });
-  }, [q, shop, phase, type, status, when, trigger]);
+  }, [allRows, q, shop, phase, type, status, when, trigger]);
 
   const activeCount =
     (shop!=='all'?1:0) + (phase!=='all'?1:0) + (type!=='all'?1:0) +
