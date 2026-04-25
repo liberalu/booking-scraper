@@ -236,7 +236,8 @@ def api_runs(
     status: str = "all",
     when: str = "any",
     q: str = "",
-    limit: int = 50,
+    page: int = 1,
+    per_page: int = 30,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     from datetime import timedelta
@@ -258,7 +259,12 @@ def api_runs(
         if phase == "discover":
             # No literal "discover" enum value — match the variants.
             query = query.filter(phase_text.like("discover\\_%"))
-        elif phase in ("scan", "discover_sitemap", "discover_categories", "discover_full_crawl"):
+        elif phase in (
+            "scan",
+            "discover_sitemap",
+            "discover_categories",
+            "discover_full_crawl",
+        ):
             query = query.filter(ScrapeRun.phase == phase)
         # Unknown phase → silently match nothing rather than 500.
     if status and status != "all":
@@ -275,7 +281,10 @@ def api_runs(
         query = query.filter(or_(*clauses))
 
     total = query.count()
-    runs = query.limit(limit).all()
+    all_time = session.query(func.count(ScrapeRun.id)).scalar() or 0
+    per_page = max(1, min(per_page, 200))
+    page = max(1, page)
+    runs = query.offset((page - 1) * per_page).limit(per_page).all()
 
     running_now = (
         session.query(func.count(ScrapeRun.id))
@@ -303,16 +312,19 @@ def api_runs(
         or 0
     )
 
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
     return {
         "runs": [_run_dict(r) for r in runs],
         "total": total,
-        "limit": limit,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
         "kpis": {
             "running_now": running_now,
             "today_total": today_total,
             "today_ok": today_ok,
             "today_failed": today_failed,
-            "all_time": total,
+            "all_time": all_time,
         },
     }
 

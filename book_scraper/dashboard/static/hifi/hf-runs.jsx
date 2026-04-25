@@ -5,19 +5,27 @@ function HFRuns({ nav, goto }) {
   const statusTone = { running:'ok', completed:'neutral', failed:'err', queued:'warn' };
   const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
 
-  // Filter state — backend handles the actual filtering.
+  // Filter state — backend handles the actual filtering and pagination.
   const [q, setQ] = React.useState('');
   const [shop, setShop]     = React.useState('all');
   const [phase, setPhase]   = React.useState('all');
   const [status, setStatus] = React.useState('all');
   const [when, setWhen]     = React.useState('any');
+  const [page, setPage]     = React.useState(1);
+  const PER_PAGE = 30;
 
-  const [data, setData] = React.useState({ runs: [], total: 0, kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0, all_time: 0 } });
+  // Reset to page 1 whenever a filter changes.
+  React.useEffect(() => { setPage(1); }, [q, shop, phase, status, when]);
+
+  const [data, setData] = React.useState({
+    runs: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
+    kpis: { running_now: 0, today_total: 0, today_ok: 0, today_failed: 0, all_time: 0 },
+  });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({ limit: '50' });
+    const params = new URLSearchParams({ page: String(page), per_page: String(PER_PAGE) });
     if (shop !== 'all') params.set('shop', shop);
     if (phase !== 'all') params.set('phase', phase);
     if (status !== 'all') params.set('status', status);
@@ -30,7 +38,7 @@ function HFRuns({ nav, goto }) {
     load();
     const id = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [q, shop, phase, status, when]);
+  }, [q, shop, phase, status, when, page]);
 
   const allRows = data.runs;
   const filtered = allRows;  // backend already filtered; keep alias for table render
@@ -135,15 +143,52 @@ function HFRuns({ nav, goto }) {
         )}
       </HFCard>
 
-      {/* Footer */}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
-        <span>
-          Showing {data.runs.length.toLocaleString()} of {(data.total || 0).toLocaleString()} match{data.total === 1 ? '' : 'es'}
-          {data.kpis.all_time > (data.total || 0) && (
-            <span style={{color:HF.ink4}}> · {data.kpis.all_time.toLocaleString()} total in DB</span>
+      {/* Pagination footer */}
+      {(data.total || 0) > 0 && (
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+          <span>
+            Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
+            {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
+            {data.kpis.all_time > data.total && (
+              <span style={{color:HF.ink4}}> · {data.kpis.all_time.toLocaleString()} total in DB</span>
+            )}
+          </span>
+          {data.pages > 1 && (
+            <div style={{display:'flex', gap:6, alignItems:'center'}}>
+              <HFButton size="sm" variant="ghost"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={data.page <= 1}>‹ Prev</HFButton>
+              {(() => {
+                const buttons = [];
+                const total = data.pages;
+                const cur = data.page;
+                const push = (n) => buttons.push(
+                  <HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'}
+                    onClick={() => setPage(n)}>{n}</HFButton>
+                );
+                const ell = (k) => buttons.push(
+                  <span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>
+                );
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) push(i);
+                } else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1);
+                  const hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return buttons;
+              })()}
+              <HFButton size="sm" variant="ghost"
+                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                disabled={data.page >= data.pages}>Next ›</HFButton>
+            </div>
           )}
-        </span>
-      </div>
+        </div>
+      )}
     </HFShell>
   );
 }
