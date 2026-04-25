@@ -7,9 +7,11 @@ from book_scraper.db.repo import upsert_shop
 from book_scraper.services.discover import DiscoverService
 
 
-def _config(sitemap_url="https://vaga.lt/sitemap.xml",
-            categories_url="https://vaga.lt/knygos?page={page}",
-            full_crawl_start_url="https://vaga.lt/"):
+def _config(
+    sitemap_url="https://vaga.lt/sitemap.xml",
+    categories_url="https://vaga.lt/knygos?page={page}",
+    full_crawl_start_url="https://vaga.lt/",
+):
     return SimpleNamespace(
         discover=SimpleNamespace(
             sitemap=SimpleNamespace(url=sitemap_url),

@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from book_scraper.db.models import (
@@ -1086,19 +1087,26 @@ def prepare_scrape_url_items(
 
     Persists the work queue to DB so the spider can resume after a crash.
     Uses each DiscoveredUrl.url_type as the item's url_type (defaults to 'product').
+    ON CONFLICT DO NOTHING guards against duplicate inserts if two spiders
+    race to populate the same run.
     """
-    for rec in url_records:
-        session.add(
-            ScrapeUrlItem(
-                run_id=run_id,
-                shop_id=shop_id,
-                discovered_url_id=rec.id,
-                url=rec.url,
-                url_type=rec.url_type or "product",
-                status="pending",
-            )
-        )
-    session.flush()
+    if not url_records:
+        return
+    rows = [
+        {
+            "run_id": run_id,
+            "shop_id": shop_id,
+            "discovered_url_id": rec.id,
+            "url": rec.url,
+            "url_type": rec.url_type or "product",
+            "status": "pending",
+        }
+        for rec in url_records
+    ]
+    stmt = pg_insert(ScrapeUrlItem).values(rows).on_conflict_do_nothing(
+        index_elements=["run_id", "url"]
+    )
+    session.execute(stmt)
 
 
 def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str, Any]]:

@@ -460,7 +460,10 @@ class ScrapeUrlItem(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (Index("ix_scrape_url_items_run_status", "run_id", "status"),)
+    __table_args__ = (
+        Index("ix_scrape_url_items_run_status", "run_id", "status"),
+        UniqueConstraint("run_id", "url", name="uq_scrape_url_items_run_url"),
+    )
 
 
 class ValidationIssue(Base):

@@ -154,9 +154,7 @@ def test_post_cron_rejects_malformed_cron(
     assert list_cron_jobs(db_session) == []
 
 
-def test_post_cron_accepts_valid_args(
-    client: TestClient, db_session: Session
-) -> None:
+def test_post_cron_accepts_valid_args(client: TestClient, db_session: Session) -> None:
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 

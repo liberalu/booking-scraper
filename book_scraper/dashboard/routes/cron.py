@@ -141,9 +141,7 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
     """
     job = get_cron_job(session, job_id)
     if job is None:
-        return HTMLResponse(
-            '<p class="error">Cron job not found</p>', status_code=404
-        )
+        return HTMLResponse('<p class="error">Cron job not found</p>', status_code=404)
 
     # Guard: refuse if a run for this (shop, phase, strategy) is already running.
     # Prevents double-click spawning N concurrent scrapy processes that all
@@ -151,7 +149,9 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
     from book_scraper.db.models import ScrapeRun
 
     run_phase = (
-        f"discover_{job.strategy}" if job.phase == "discover" and job.strategy else job.phase
+        f"discover_{job.strategy}"
+        if job.phase == "discover" and job.strategy
+        else job.phase
     )
     existing = (
         session.query(ScrapeRun)
@@ -165,7 +165,7 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
     if existing is not None:
         return HTMLResponse(
             f'<p class="error">A {run_phase} run for {job.shop.name} is already '
-            f'running (run #{existing.id}). Wait for it to finish or kill it first.</p>',
+            f"running (run #{existing.id}). Wait for it to finish or kill it first.</p>",
             status_code=409,
         )
 

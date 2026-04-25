@@ -24,7 +24,6 @@ from book_scraper.db.repo import (
     upsert_shop,
 )
 
-
 _STRATEGY_URL_TYPE = {
     "sitemap": "sitemap",
     "categories": "category_page",

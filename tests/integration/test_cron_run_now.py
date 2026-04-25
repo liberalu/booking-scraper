@@ -22,9 +22,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def test_post_run_now_invokes_exec_run(
-    client: TestClient, db_session: Session
-) -> None:
+def test_post_run_now_invokes_exec_run(client: TestClient, db_session: Session) -> None:
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     job = create_cron_job(
         db_session,
