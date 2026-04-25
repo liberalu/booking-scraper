@@ -440,11 +440,16 @@ def get_price_history(session: Session, shop_book_id: int) -> list[Price]:
 
 
 def get_price_changes(
-    session: Session, days: int = 7, shop_id: int | None = None
-) -> list[dict[str, Any]]:
+    session: Session,
+    days: int = 7,
+    shop_id: int | None = None,
+    page: int = 1,
+    per_page: int = 30,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return (rows, total) for price changes, paginated by ABS(change)."""
     cutoff = datetime.now(UTC) - timedelta(days=days)
     shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
-    sql = text(f"""
+    cte = f"""
         WITH ranked AS (
             SELECT
                 p.shop_book_id,
@@ -475,18 +480,40 @@ def get_price_changes(
             WHERE r.prev_price IS NOT NULL
               AND r.price != r.prev_price
         )
-        SELECT shop_book_id, title, prev_price, new_price, change,
-               scraped_at
-        FROM changes
-        WHERE rn = 1
-        ORDER BY ABS(change) DESC
-        LIMIT 50
-    """)
+    """
     params: dict[str, Any] = {"cutoff": cutoff}
     if shop_id:
         params["shop_id"] = shop_id
-    rows = session.execute(sql, params).mappings().all()
-    return [dict(r) for r in rows]
+
+    total = (
+        session.execute(
+            text(cte + " SELECT COUNT(*) FROM changes WHERE rn = 1"),
+            params,
+        ).scalar()
+        or 0
+    )
+
+    page = max(1, page)
+    per_page = max(1, min(per_page, 200))
+    offset = (page - 1) * per_page
+    data_sql = text(
+        cte
+        + """
+        SELECT shop_book_id, title, prev_price, new_price, change, scraped_at
+        FROM changes
+        WHERE rn = 1
+        ORDER BY ABS(change) DESC, scraped_at DESC
+        OFFSET :offset LIMIT :limit
+    """
+    )
+    rows = (
+        session.execute(
+            data_sql, {**params, "offset": offset, "limit": per_page}
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows], int(total)
 
 
 def get_inventory_stats(session: Session) -> dict:

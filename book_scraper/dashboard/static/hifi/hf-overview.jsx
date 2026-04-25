@@ -26,11 +26,16 @@ function HFOverview({ nav, goto }) {
 
   const stats = data.stats;
   const kpis = [
-    { label: 'Shop books',      value: stats.total_shop_books.toLocaleString(),  delta: <span style={{color:HF.ink3}}>total</span> },
-    { label: 'Active listings', value: stats.active_shop_books.toLocaleString(), delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.active_shop_books/stats.total_shop_books*100) : 0}% of total</span> },
-    { label: 'With ISBN',       value: stats.with_isbn.toLocaleString(),          delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.with_isbn/stats.total_shop_books*100) : 0}% coverage</span> },
-    { label: 'Price records',   value: stats.total_prices.toLocaleString(),       delta: <span style={{color:HF.ink3}}>total</span>, tone:'ok' },
-    { label: 'Open issues',     value: stats.open_issues.toLocaleString(),        delta: <span style={{color:HF.ink3}}>open</span>, tone: stats.open_issues > 0 ? 'warn' : 'ok' },
+    { label: 'Shop books',      value: stats.total_shop_books.toLocaleString(),  delta: <span style={{color:HF.ink3}}>total</span>,
+      onClick: () => goto('shop-books') },
+    { label: 'Active listings', value: stats.active_shop_books.toLocaleString(), delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.active_shop_books/stats.total_shop_books*100) : 0}% of total</span>,
+      onClick: () => goto('shop-books') },
+    { label: 'With ISBN',       value: stats.with_isbn.toLocaleString(),          delta: <span style={{color:HF.ink3}}>{stats.total_shop_books > 0 ? Math.round(stats.with_isbn/stats.total_shop_books*100) : 0}% coverage</span>,
+      onClick: () => goto('shop-books') },
+    { label: 'Price records',   value: stats.total_prices.toLocaleString(),       delta: <span style={{color:HF.ink3}}>total</span>, tone:'ok',
+      onClick: () => goto('prices') },
+    { label: 'Open issues',     value: stats.open_issues.toLocaleString(),        delta: <span style={{color:HF.ink3}}>open</span>, tone: stats.open_issues > 0 ? 'warn' : 'ok',
+      onClick: () => goto('issues') },
   ];
   const spark = data.activity;
   const completeness = data.completeness.map(c => [c.field.charAt(0).toUpperCase() + c.field.slice(1), c.pct]);

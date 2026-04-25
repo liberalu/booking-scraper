@@ -429,15 +429,19 @@ function HFIssues({ nav, goto }) {
 
 function HFPrices({ nav, goto }) {
   const HF = getHF();
-  const [data, setData] = React.useState({ changes: [] });
+  const [page, setPage] = React.useState(1);
+  const PER_PAGE = 30;
+  const [data, setData] = React.useState({ changes: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1 });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    fetch('/api/prices?days=7')
+    let cancelled = false;
+    fetch(`/api/prices?days=7&page=${page}&per_page=${PER_PAGE}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [page]);
 
   const rows = data.changes.map(c => ({
     id: c.shop_book_id,
@@ -470,7 +474,7 @@ function HFPrices({ nav, goto }) {
       actions={<HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>}
     >
       <HFKpiStrip items={[
-        { label:'Recent changes', value: String(rows.length), delta:<span style={{color:HF.ink3}}>last 7 days</span>, tone:'ok' },
+        { label:'Recent changes', value: (data.total || 0).toLocaleString(), delta:<span style={{color:HF.ink3}}>last 7 days</span>, tone:'ok' },
       ]}/>
 
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
@@ -502,8 +506,7 @@ function HFPrices({ nav, goto }) {
         </HFCard>
       </div>
 
-      <HFCard title="Recent changes" sub="non-zero price movements · last 7 days"
-              action={<a href="#" style={hfLink(HF)}>All changes {HF_ICONS.arrow}</a>}>
+      <HFCard title="Recent changes" sub="non-zero price movements · last 7 days">
         <div style={{padding:`10px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`}}>
           <HFFilterBar right={<>
             <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
@@ -533,6 +536,37 @@ function HFPrices({ nav, goto }) {
         />
         )}
       </HFCard>
+
+      {(data.total || 0) > 0 && (
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+          <span>
+            Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
+            {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} change{data.total === 1 ? '' : 's'}
+          </span>
+          {data.pages > 1 && (
+            <div style={{display:'flex', gap:6, alignItems:'center'}}>
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={data.page <= 1}>‹ Prev</HFButton>
+              {(() => {
+                const buttons = [];
+                const total = data.pages, cur = data.page;
+                const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
+                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>);
+                if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
+                else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return buttons;
+              })()}
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={data.page >= data.pages}>Next ›</HFButton>
+            </div>
+          )}
+        </div>
+      )}
     </HFShell>
   );
 }

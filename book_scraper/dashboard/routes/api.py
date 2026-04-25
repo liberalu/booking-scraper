@@ -776,14 +776,19 @@ def api_issues(
 def api_prices(
     days: int = 7,
     shop: str = "",
+    page: int = 1,
+    per_page: int = 30,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     shop_id = None
-    if shop:
+    if shop and shop != "all":
         s = get_shop_by_name(session, shop)
-        shop_id = s.id if s else None
+        shop_id = s.id if s else -1
 
-    changes = get_price_changes(session, days=days, shop_id=shop_id)
+    changes, total = get_price_changes(
+        session, days=days, shop_id=shop_id, page=page, per_page=per_page
+    )
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
     return {
         "changes": [
             {
@@ -801,5 +806,9 @@ def api_prices(
             }
             for c in changes
         ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
         "days": days,
     }
