@@ -241,7 +241,10 @@ def api_runs(
 ) -> dict[str, Any]:
     from datetime import timedelta
 
-    from sqlalchemy import or_
+    from sqlalchemy import String, cast, or_
+
+    # Phase is a Postgres ENUM — cast to text for ILIKE / LIKE.
+    phase_text = cast(ScrapeRun.phase, String)
 
     query = (
         session.query(ScrapeRun)
@@ -257,7 +260,7 @@ def api_runs(
             query = query.filter(
                 or_(
                     ScrapeRun.phase == "discover",
-                    ScrapeRun.phase.like("discover\\_%"),
+                    phase_text.like("discover\\_%"),
                 )
             )
         else:
@@ -270,7 +273,7 @@ def api_runs(
     if q.strip():
         token = q.strip()
         like = f"%{token}%"
-        clauses = [Shop.name.ilike(like), ScrapeRun.phase.ilike(like)]
+        clauses = [Shop.name.ilike(like), phase_text.ilike(like)]
         if token.isdigit():
             clauses.append(ScrapeRun.id == int(token))
         query = query.filter(or_(*clauses))
