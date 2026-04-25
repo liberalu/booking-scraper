@@ -8,10 +8,14 @@ function HFRuns({ nav, goto }) {
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    fetch('/api/runs?limit=100')
+    let cancelled = false;
+    const load = () => fetch('/api/runs?limit=100')
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    load();
+    const id = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   const allRows = data.runs;

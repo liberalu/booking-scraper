@@ -1,8 +1,7 @@
 # book_scraper/dashboard/routes/api.py
 from __future__ import annotations
 
-import subprocess
-from collections.abc import Callable
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from book_scraper.dashboard.deps import get_db
+from book_scraper.dashboard.deps import get_db, get_docker_client
 from book_scraper.dashboard.queries import (
     ISSUE_DESCRIPTIONS,
     get_all_shops,
@@ -289,48 +288,92 @@ def api_runs(
 
 class NewRunRequest(BaseModel):
     shop: str
-    mode: str = "delta"  # "full" | "delta" | "sample"
-
-
-def _default_run_runner(cmd: list[str]) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(
-        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
-
-_run_subprocess_runner: Callable[[list[str]], subprocess.Popen[bytes]] = (
-    _default_run_runner
-)
-
-
-def set_run_subprocess_runner(
-    runner: Callable[[list[str]], subprocess.Popen[bytes]],
-) -> None:
-    """Test hook: swap the subprocess launcher."""
-    global _run_subprocess_runner
-    _run_subprocess_runner = runner
+    phase: str = "scan"  # "scan" | "discover"
+    strategy: str = ""  # for discover: "sitemap" | "categories" | "full_crawl"
+    mode: str = "delta"  # for scan: "full" | "delta" | "sample"
 
 
 @router.post("/runs")
 def api_create_run(
     req: NewRunRequest, session: Session = Depends(get_db)
 ) -> dict[str, Any]:
+    """Trigger a scrape via docker exec into the scraper container."""
     shop = get_shop_by_name(session, req.shop)
     if not shop:
         raise HTTPException(status_code=404, detail=f"Unknown shop: {req.shop}")
 
-    cmd = ["uv", "run", "scrapy", "crawl", "scan", "-a", f"shop={req.shop}"]
-    if req.mode == "full":
-        cmd.extend(["-a", "rescrape=true"])
-    elif req.mode == "sample":
-        cmd.extend(["-a", "max_urls=10"])
+    if req.phase not in ("scan", "discover"):
+        raise HTTPException(status_code=400, detail=f"Unknown phase: {req.phase}")
 
-    process = _run_subprocess_runner(cmd)
+    run_phase = (
+        f"discover_{req.strategy}"
+        if req.phase == "discover" and req.strategy
+        else req.phase
+    )
+    existing = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == shop.id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status == "running",
+        )
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A {run_phase} run for {shop.name} is already running "
+                f"(run #{existing.id})."
+            ),
+        )
+
+    client = get_docker_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Docker not available")
+
+    project = os.environ.get("COMPOSE_PROJECT_NAME", "book-scraper")
+    containers = client.containers.list(
+        filters={
+            "label": [
+                "com.docker.compose.service=scraper",
+                f"com.docker.compose.project={project}",
+            ]
+        }
+    )
+    if not containers:
+        raise HTTPException(status_code=503, detail="Scraper container not found")
+
+    cmd = [
+        "/app/.venv/bin/scrapy",
+        "crawl",
+        req.phase,
+        "-a",
+        f"shop={req.shop}",
+    ]
+    if req.phase == "discover" and req.strategy:
+        cmd.extend(["-a", f"strategy={req.strategy}"])
+    if req.phase == "scan":
+        if req.mode == "full":
+            cmd.extend(["-a", "rescrape=true"])
+        elif req.mode == "sample":
+            cmd.extend(["-a", "max_urls=10"])
+
+    containers[0].exec_run(
+        cmd,
+        detach=True,
+        workdir="/app",
+        environment={
+            "PYTHONPATH": "/app",
+            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+        },
+    )
     return {
         "status": "started",
         "shop": req.shop,
+        "phase": req.phase,
+        "strategy": req.strategy,
         "mode": req.mode,
-        "pid": getattr(process, "pid", None),
     }
 
 

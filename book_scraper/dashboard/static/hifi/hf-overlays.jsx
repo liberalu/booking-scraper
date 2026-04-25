@@ -324,6 +324,8 @@ function HFCommandK({ open, onClose, goto }) {
 function HFNewRunDialog({ open, onClose, goto }) {
   const HF = getHF();
   const [shop, setShop] = React.useState('');
+  const [phase, setPhase] = React.useState('scan');
+  const [strategy, setStrategy] = React.useState('sitemap');
   const [mode, setMode] = React.useState('delta');
   const [shops, setShops] = React.useState([]);
   const [submitting, setSubmitting] = React.useState(false);
@@ -352,7 +354,7 @@ function HFNewRunDialog({ open, onClose, goto }) {
       const resp = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop, mode }),
+        body: JSON.stringify({ shop, phase, strategy: phase === 'discover' ? strategy : '', mode }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -368,7 +370,7 @@ function HFNewRunDialog({ open, onClose, goto }) {
   };
 
   return (
-    <HFModal open={open} onClose={onClose} width={520}>
+    <HFModal open={open} onClose={onClose} width={540}>
       <HFModalHead title="New run" sub="Trigger a scrape manually" onClose={onClose} icon={HF_ICONS.play}/>
       <HFModalBody>
         <HFField label="Shop" required>
@@ -377,17 +379,42 @@ function HFNewRunDialog({ open, onClose, goto }) {
             label: `${s.name}.lt · ${(s.discovered_urls || 0).toLocaleString()} URLs`,
           }))}/>
         </HFField>
-        <HFField label="Mode" hint={{
-          full:`Re-scrape every known URL (${urlCount.toLocaleString()} items)`,
-          delta:`Resumable scan — only URLs not yet scraped`,
-          sample:`First 10 URLs only (for testing)`,
-        }[mode]}>
-          <HFSegmented value={mode} onChange={setMode} options={[
-            { value:'delta',  label:'Delta' },
-            { value:'full',   label:'Full' },
-            { value:'sample', label:'Sample (10)' },
+        <HFField label="Phase" hint={
+          phase === 'scan'
+            ? 'Scrape product pages for already-discovered URLs'
+            : 'Find new URLs (sitemap / categories / full crawl)'
+        }>
+          <HFSegmented value={phase} onChange={setPhase} options={[
+            { value:'scan',     label:'Scan (products)' },
+            { value:'discover', label:'Discover (URLs)' },
           ]}/>
         </HFField>
+        {phase === 'scan' && (
+          <HFField label="Mode" hint={{
+            full:   `Re-scrape every known URL (${urlCount.toLocaleString()} items)`,
+            delta:  `Resumable scan — only URLs not yet scraped`,
+            sample: `First 10 URLs only (for testing)`,
+          }[mode]}>
+            <HFSegmented value={mode} onChange={setMode} options={[
+              { value:'delta',  label:'Delta' },
+              { value:'full',   label:'Full' },
+              { value:'sample', label:'Sample (10)' },
+            ]}/>
+          </HFField>
+        )}
+        {phase === 'discover' && (
+          <HFField label="Strategy" hint={{
+            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
+            categories: 'Walk category listing pages — also extracts prices',
+            full_crawl: 'Follow every internal link — slowest, most thorough',
+          }[strategy]}>
+            <HFSegmented value={strategy} onChange={setStrategy} options={[
+              { value:'sitemap',    label:'Sitemap' },
+              { value:'categories', label:'Categories' },
+              { value:'full_crawl', label:'Full crawl' },
+            ]}/>
+          </HFField>
+        )}
         {error && (
           <div style={{
             color: HF.errInk, fontSize: 12.5, padding: '8px 10px',
