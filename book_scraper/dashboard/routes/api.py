@@ -57,7 +57,16 @@ def _rel(dt: datetime | None) -> str:
     h = m // 60
     if h < 24:
         return f"{h}h ago"
-    return f"{h // 24}d ago"
+    d = h // 24
+    if d < 7:
+        return f"{d}d ago"
+    w = d // 7
+    if w < 5:
+        return f"{w}w ago"
+    mo = d // 30
+    if mo < 12:
+        return f"{mo}mo ago"
+    return f"{d // 365}y ago"
 
 
 def _elapsed(run: ScrapeRun) -> str:

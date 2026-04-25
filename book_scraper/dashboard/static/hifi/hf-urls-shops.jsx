@@ -251,7 +251,7 @@ function HFShopDetail({ nav, goto, params }) {
       {tab === 'urls' && (
         <HFCard title="URLs for this shop" sub="sample · open the full URLs list to filter further">
           <HFTable
-            onRowClick={r => goto('url-detail', { u:r.u, shop:name, status:r.s, code:r.code })}
+            onRowClick={r => goto('url-detail', { id: r.id })}
             columns={[
               { key:'u', label:'URL', w:'2.5fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.s==='error'? HF.ink4 : HF.ink2, textDecoration: r.s==='error'?'line-through':'none'}}>{v}</span> },
               { key:'kind', label:'Kind', w:'0.7fr', mono:true, muted:true, sortable:true },

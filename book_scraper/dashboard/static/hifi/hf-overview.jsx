@@ -41,7 +41,7 @@ function HFOverview({ nav, goto }) {
 
   return (
     <HFShell
-      collapsed={collapsed} setCollapsed={setCollapsed}
+      collapsed={collapsed} setCollapsed={setCollapsed} setPage={nav.setPage}
       activePage="overview"
       title="Overview"
       subtitle="Health, catalog coverage, and recent scrape activity across all shops."
