@@ -440,26 +440,38 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
 @router.get("/shop-books")
 def api_shop_books(
     page: int = 1,
-    per_page: int = 50,
+    per_page: int = 30,
     search: str = "",
     shop: str = "",
     active: str = "",
     missing_field: str = "",
+    type_filter: str = "",
+    format_filter: str = "",
+    has_isbn: bool = False,
+    sort_by: str = "",
+    sort_order: str = "desc",
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     shop_id = None
-    if shop:
+    if shop and shop != "all":
         s = get_shop_by_name(session, shop)
-        shop_id = s.id if s else None
+        shop_id = s.id if s else -1  # unknown shop → match nothing
 
+    page = max(1, page)
+    per_page = max(1, min(per_page, 200))
     books, total = get_shop_books_page(
         session,
         page=page,
         per_page=per_page,
         search=search,
         shop_id=shop_id,
-        active_filter=active,
-        missing_field=missing_field,
+        active_filter=active if active and active != "all" else "",
+        missing_field=missing_field if missing_field and missing_field != "any" else "",
+        type_filter=type_filter if type_filter and type_filter != "all" else "",
+        format_filter=format_filter if format_filter and format_filter != "all" else "",
+        has_isbn=has_isbn,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
     total_books = session.query(func.count(ShopBook.id)).scalar() or 0
@@ -482,11 +494,13 @@ def api_shop_books(
         or 0
     )
 
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
     return {
         "books": [_book_dict(b) for b in books],
         "total": total,
         "page": page,
         "per_page": per_page,
+        "pages": pages,
         "kpis": {
             "total": total_books,
             "active": active_books,

@@ -61,7 +61,7 @@ function HFOverview({ nav, goto }) {
       {/* Activity + Completeness */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: HF.gap, marginBottom: HF.gap }}>
         <HFCard title="Scrape activity" sub="items scraped per day · last 14 days"
-                action={<a href="#" className="hf-link" style={hfLink(HF)}>View runs {HF_ICONS.arrow}</a>}>
+                action={<a href="#" className="hf-link" style={hfLink(HF)} onClick={(e)=>{e.preventDefault();goto('runs');}}>View runs {HF_ICONS.arrow}</a>}>
           <div style={{ padding: `14px ${HF.cardP}px ${HF.cardP}px` }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
               <span style={{ fontFamily: HF.mono, fontSize: 26, fontWeight: 600, letterSpacing: -0.5, color: HF.ink, fontVariantNumeric:'tabular-nums' }}>9,170</span>
@@ -76,7 +76,7 @@ function HFOverview({ nav, goto }) {
         </HFCard>
 
         <HFCard title="Metadata completeness" sub="field coverage · active listings"
-                action={<a href="#" style={hfLink(HF)}>Filter {HF_ICONS.arrow}</a>}>
+                action={<a href="#" style={hfLink(HF)} onClick={(e)=>{e.preventDefault();goto('shop-books');}}>View books {HF_ICONS.arrow}</a>}>
           <div style={{ padding: `10px ${HF.cardP}px 14px` }}>
             {completeness.map(([field, p], i) => (
               <div key={field} style={{ padding: '8px 0', borderBottom: i < completeness.length - 1 ? `1px solid ${HF.borderFaint}` : 'none' }}>
@@ -99,9 +99,10 @@ function HFOverview({ nav, goto }) {
 
       {/* Recent runs */}
       <HFCard title="Recent runs" sub="live + last 24 hours"
-              action={<a href="#" style={hfLink(HF)}>All runs {HF_ICONS.arrow}</a>}
+              action={<a href="#" style={hfLink(HF)} onClick={(e)=>{e.preventDefault();goto('runs');}}>All runs {HF_ICONS.arrow}</a>}
               style={{ marginBottom: HF.gap }}>
         <HFTable
+          onRowClick={(r) => goto('run-detail', { id: r.id })}
           columns={[
             { key:'id', label:'Run', w:'0.6fr', mono:true, cell: v => <span style={{color: HF.ink, fontWeight:500}}>#{v}</span> },
             { key:'shop', label:'Shop', w:'0.8fr', cell: v => <span style={{color: HF.ink}}>{v}</span> },
@@ -126,10 +127,12 @@ function HFOverview({ nav, goto }) {
       {/* Issue clusters + By shop */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: HF.gap }}>
         <HFCard title="Needs attention" sub="open validation clusters · click to triage"
-                action={<a href="#" style={hfLink(HF)}>All issues {HF_ICONS.arrow}</a>}>
+                action={<a href="#" style={hfLink(HF)} onClick={(e)=>{e.preventDefault();goto('issues');}}>All issues {HF_ICONS.arrow}</a>}>
           <div style={{ padding: `${HF.cardP}px`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {clusters.map(c => (
-              <a key={c.type} href="#" className="hf-row" style={{
+              <a key={c.type} href="#" className="hf-row"
+                 onClick={(e) => { e.preventDefault(); goto('issues', { type: c.type }); }}
+                 style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 12px',
                 borderRadius: 6,
@@ -152,7 +155,9 @@ function HFOverview({ nav, goto }) {
               const sTone = s.last_run_status === 'completed' ? 'ok' : s.last_run_status === 'failed' ? 'err' : 'neutral';
               const sStatus = s.last_run_status === 'completed' ? 'healthy' : s.last_run_status === 'failed' ? 'failing' : s.last_run_status || 'unknown';
               return (
-              <a key={s.name} href="#" style={{
+              <a key={s.name} href="#"
+                 onClick={(e) => { e.preventDefault(); goto('shop-detail', { name: s.name }); }}
+                 style={{
                 display: 'block', textDecoration: 'none', color: HF.ink,
                 padding: '14px 0',
                 borderBottom: i < shopCards.length - 1 ? `1px solid ${HF.borderFaint}` : 'none',
