@@ -12,6 +12,8 @@ from markupsafe import Markup, escape
 from book_scraper.dashboard.deps import templates
 from book_scraper.dashboard.routes import (
     api as api_routes,
+)
+from book_scraper.dashboard.routes import (
     cron,
     overview,
     prices,
