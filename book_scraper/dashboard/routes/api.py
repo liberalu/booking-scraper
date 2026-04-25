@@ -20,7 +20,6 @@ from book_scraper.dashboard.queries import (
     get_price_changes,
     get_price_history,
     get_recent_runs,
-    get_run_detail,
     get_run_issue_summary,
     get_scrape_activity_by_day,
     get_shop_book_changes,
@@ -49,7 +48,7 @@ def _rel(dt: datetime | None) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     delta = datetime.now(UTC) - dt
-    s = int(delta.total_seconds())
+    s = max(0, int(delta.total_seconds()))
     if s < 60:
         return "just now"
     m = s // 60
@@ -162,7 +161,7 @@ def _url_dict(u: Any) -> dict[str, Any]:
         "fail_count": u.fail_count,
         "status": "error" if u.fail_count >= 3 else "ok",
         "first_seen_at": u.first_seen_at.isoformat() if u.first_seen_at else None,
-        "last_seen_ago": _rel(u.first_seen_at),
+        "last_seen_ago": _rel(u.last_seen_at),
         "book_title": book.title if book else "—",
         "book_id": book.id if book else None,
         "book_score": cls.book_score if cls else None,
@@ -275,7 +274,12 @@ def api_runs(
 
 @router.get("/runs/{run_id}")
 def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
-    run = get_run_detail(session, run_id)
+    run = (
+        session.query(ScrapeRun)
+        .options(joinedload(ScrapeRun.shop))
+        .filter(ScrapeRun.id == run_id)
+        .first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     issues = get_run_issue_summary(session, run_id)
@@ -526,6 +530,7 @@ def api_cron_toggle(
         raise HTTPException(status_code=404, detail="Job not found")
     new_enabled = not job.enabled
     toggle_cron_job(session, job_id)
+    session.commit()
     return {"id": job_id, "enabled": new_enabled}
 
 
