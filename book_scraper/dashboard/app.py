@@ -1,6 +1,5 @@
 import difflib
 import re
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -247,13 +246,29 @@ app.mount(
 app.include_router(api_routes.router, prefix="/api")
 
 
-_SPA_BUILD_VERSION = str(int(time.time()))
 _SPA_INDEX_PATH = Path(__file__).parent / "static" / "hifi" / "index.html"
+_SPA_HIFI_DIR = Path(__file__).parent / "static" / "hifi"
+_SPA_SCRIPT_RE = re.compile(
+    r'<script type="text/babel" src="/static/hifi/(hf-[^"]+\.jsx)[^"]*"></script>'
+)
 
 
 def _spa_html() -> HTMLResponse:
+    """Serve the SPA with all JSX content inlined.
+
+    Inlining bypasses every level of browser caching for the JSX modules
+    — each request rebuilds the document from disk, so a dashboard
+    rebuild reaches the browser on the next page load without manual
+    hard-refresh.
+    """
     html = _SPA_INDEX_PATH.read_text(encoding="utf-8")
-    html = html.replace('.jsx"', f'.jsx?v={_SPA_BUILD_VERSION}"')
+
+    def _inline(match: "re.Match[str]") -> str:
+        fname = match.group(1)
+        content = (_SPA_HIFI_DIR / fname).read_text(encoding="utf-8")
+        return f'<script type="text/babel" data-file="{fname}">\n{content}\n</script>'
+
+    html = _SPA_SCRIPT_RE.sub(_inline, html)
     return HTMLResponse(
         html,
         headers={"Cache-Control": "no-cache, must-revalidate"},
