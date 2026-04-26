@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from book_scraper.db.models import (
@@ -20,6 +21,7 @@ from book_scraper.db.models import (
     ShopBookAttribute,
     ShopBookAuthor,
     ShopBookFieldUpdate,
+    UrlClassification,
     ValidationIssue,
 )
 from book_scraper.spiders.vaga.parsers import infer_shop_book_type
@@ -532,6 +534,40 @@ def update_discovered_url_status(
     session.flush()
 
 
+def upsert_url_classification(
+    session: Session,
+    discovered_url_id: int,
+    book_score: int,
+    is_book_product: bool,
+    reasons: list[str],
+) -> None:
+    """Upsert the book classification for a discovered URL.
+
+    Called unconditionally after parse_product_page() — covers both book
+    and non-book results so every scanned URL has a classification row.
+    """
+    stmt = select(UrlClassification).where(
+        UrlClassification.discovered_url_id == discovered_url_id
+    )
+    existing = session.execute(stmt).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if existing is not None:
+        existing.book_score = book_score
+        existing.is_book_product = is_book_product
+        existing.reasons = reasons
+        existing.classified_at = now
+    else:
+        record = UrlClassification(
+            discovered_url_id=discovered_url_id,
+            book_score=book_score,
+            is_book_product=is_book_product,
+            reasons=reasons,
+            classified_at=now,
+        )
+        session.add(record)
+    session.flush()
+
+
 def get_pending_scan_urls(
     session: Session,
     shop_id: int,
@@ -577,12 +613,48 @@ def finish_scrape_run(
     session: Session,
     run_id: int,
     status: str,
+    reason: str | None = None,
 ) -> None:
     run = session.get(ScrapeRun, run_id)
     if run is None:
         return
+    was_running = run.status == "running"
     run.status = status
     run.finished_at = datetime.now(UTC)
+    session.flush()
+    if was_running and status == "failed":
+        record_scrape_run_failed_issue(session, run, reason or "finished_failed")
+
+
+def record_scrape_run_failed_issue(
+    session: Session,
+    run: ScrapeRun,
+    reason: str,
+) -> None:
+    """Insert a `scrape_run_failed` validation issue for a failed run.
+
+    Surfaces failed runs on the validation/issues page so they don't go
+    unnoticed. Idempotent — skips insert if the run already has one.
+    """
+    existing = (
+        session.query(ValidationIssue.id)
+        .filter(
+            ValidationIssue.scrape_run_id == run.id,
+            ValidationIssue.issue == "scrape_run_failed",
+        )
+        .first()
+    )
+    if existing is not None:
+        return
+    issue = ValidationIssue(
+        scrape_run_id=run.id,
+        url=f"run:{run.id}",
+        field="run",
+        issue="scrape_run_failed",
+        raw_value=reason,
+        lifecycle_state="new",
+    )
+    session.add(issue)
     session.flush()
 
 
@@ -590,6 +662,7 @@ def mark_stale_runs_failed(
     session: Session,
     shop_id: int,
     phase: str,
+    reason: str = "stale_pre_scan",
 ) -> int:
     now = datetime.now(UTC)
     stmt = select(ScrapeRun).where(
@@ -601,6 +674,7 @@ def mark_stale_runs_failed(
     for run in stale:
         run.status = "failed"
         run.finished_at = now
+        record_scrape_run_failed_issue(session, run, reason)
     session.flush()
     return len(stale)
 
@@ -645,6 +719,7 @@ def mark_orphan_runs_failed(session: Session) -> int:
     for run in orphans:
         run.status = "failed"
         run.finished_at = now
+        record_scrape_run_failed_issue(session, run, "orphan_on_boot")
     session.flush()
     return len(orphans)
 
@@ -1051,19 +1126,26 @@ def prepare_scrape_url_items(
 
     Persists the work queue to DB so the spider can resume after a crash.
     Uses each DiscoveredUrl.url_type as the item's url_type (defaults to 'product').
+    ON CONFLICT DO NOTHING guards against duplicate inserts if two spiders
+    race to populate the same run.
     """
-    for rec in url_records:
-        session.add(
-            ScrapeUrlItem(
-                run_id=run_id,
-                shop_id=shop_id,
-                discovered_url_id=rec.id,
-                url=rec.url,
-                url_type=rec.url_type or "product",
-                status="pending",
-            )
-        )
-    session.flush()
+    if not url_records:
+        return
+    rows = [
+        {
+            "run_id": run_id,
+            "shop_id": shop_id,
+            "discovered_url_id": rec.id,
+            "url": rec.url,
+            "url_type": rec.url_type or "product",
+            "status": "pending",
+        }
+        for rec in url_records
+    ]
+    stmt = pg_insert(ScrapeUrlItem).values(rows).on_conflict_do_nothing(
+        index_elements=["run_id", "url"]
+    )
+    session.execute(stmt)
 
 
 def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str, Any]]:
@@ -1084,21 +1166,134 @@ def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str
     ]
 
 
-def mark_scrape_url_item_done(session: Session, item_id: int) -> None:
-    """Mark a scrape_url_item as done."""
+def mark_scrape_url_item_processing(
+    session: Session,
+    item_id: int,
+    dispatched_at: float,
+    request_delay_s: float | None = None,
+    delay_source: str | None = None,
+) -> None:
+    """Mark a scrape_url_item in-flight: status=processing + claimed_at.
+
+    Called from HttpxMiddleware.process_request the moment the request
+    goes out, so the dashboard can surface "currently scraping" rows.
+
+    `request_delay_s` and `delay_source` capture the per-request delay
+    telemetry (live observability spec). `delay_source` records where
+    the value came from so the dashboard can label it honestly.
+    """
     item = session.get(ScrapeUrlItem, item_id)
     if item:
-        item.status = "done"
-        item.done_at = datetime.now(UTC)
+        item.status = "processing"
+        item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        if request_delay_s is not None:
+            item.request_delay_s = request_delay_s
+        if delay_source is not None:
+            item.delay_source = delay_source
         session.flush()
 
 
-def mark_scrape_url_item_failed(session: Session, item_id: int) -> None:
-    """Mark a scrape_url_item as failed."""
+def mark_scrape_url_item_response(
+    session: Session,
+    item_id: int,
+    *,
+    success: bool,
+    http_status: int | None,
+    received_at: float | None,
+    response_bytes: int | None = None,
+    error_reason: str | None = None,
+    url_type: str | None = None,
+) -> None:
+    """Immediate per-response write — owns terminal state for an item.
+
+    Sets status to 'done' or 'failed' and stamps done_at, http_status,
+    response_bytes, and error_reason in a single UPDATE on the response.
+    The pre-existing batched flush path no longer writes these columns
+    (live observability spec — ownership split).
+    """
+    item = session.get(ScrapeUrlItem, item_id)
+    if item is None:
+        return
+    item.status = "done" if success else "failed"
+    item.done_at = (
+        datetime.fromtimestamp(received_at, tz=UTC)
+        if received_at is not None
+        else datetime.now(UTC)
+    )
+    if http_status is not None:
+        item.http_status = http_status
+    if error_reason is not None:
+        item.error_reason = error_reason
+    if response_bytes is not None:
+        item.response_bytes = response_bytes
+    if url_type is not None:
+        item.url_type = url_type
+    session.flush()
+
+
+def mark_scrape_url_item_done(
+    session: Session,
+    item_id: int,
+    http_status: int | None = None,
+    error_reason: str | None = None,
+    dispatched_at: float | None = None,
+    received_at: float | None = None,
+    url_type: str | None = None,
+) -> None:
+    """Mark a scrape_url_item as done.
+
+    `received_at` is the unix timestamp captured by the spider when the
+    response actually arrived. We use it to stamp `done_at` rather than
+    `datetime.now(UTC)`, because progress flushes happen in batches —
+    using `now()` would lump every URL in a batch onto the same flush
+    timestamp and inflate measured durations.
+    """
+    item = session.get(ScrapeUrlItem, item_id)
+    if item:
+        item.status = "done"
+        item.done_at = (
+            datetime.fromtimestamp(received_at, tz=UTC)
+            if received_at is not None
+            else datetime.now(UTC)
+        )
+        if dispatched_at is not None and item.claimed_at is None:
+            item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        if http_status is not None:
+            item.http_status = http_status
+        if error_reason is not None:
+            item.error_reason = error_reason
+        if url_type is not None:
+            item.url_type = url_type
+        session.flush()
+
+
+def mark_scrape_url_item_failed(
+    session: Session,
+    item_id: int,
+    http_status: int | None = None,
+    error_reason: str | None = None,
+    dispatched_at: float | None = None,
+    received_at: float | None = None,
+    url_type: str | None = None,
+) -> None:
+    """Mark a scrape_url_item as failed. See `mark_scrape_url_item_done`
+    for the rationale behind `received_at`."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "failed"
-        item.done_at = datetime.now(UTC)
+        item.done_at = (
+            datetime.fromtimestamp(received_at, tz=UTC)
+            if received_at is not None
+            else datetime.now(UTC)
+        )
+        if dispatched_at is not None and item.claimed_at is None:
+            item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        if http_status is not None:
+            item.http_status = http_status
+        if error_reason is not None:
+            item.error_reason = error_reason
+        if url_type is not None:
+            item.url_type = url_type
         session.flush()
 
 

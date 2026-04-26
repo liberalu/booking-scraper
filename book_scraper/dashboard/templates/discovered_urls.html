@@ -9,20 +9,20 @@
         <div class="stat-label">Total URLs</div>
         <div class="stat-value">{{ "{:,}".format(stats.total) }}</div>
     </a>
-    <a href="/urls?status=in_shop_books{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
+    <div class="stat-card">
         <div class="stat-label">In Shop Books</div>
         <div class="stat-value">{{ "{:,}".format(stats.in_shop_books) }}</div>
         <div class="stat-sub">{{ "%.1f"|format(stats.in_shop_books / stats.total * 100) if stats.total else 0 }}%</div>
-    </a>
-    <a href="/urls?status=not_in_shop_books{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
+    </div>
+    <div class="stat-card">
         <div class="stat-label">Not in Shop Books</div>
         <div class="stat-value" style="color: var(--badge-warning-fg);">{{ "{:,}".format(stats.not_in_shop_books) }}</div>
         <div class="stat-sub">{{ "%.1f"|format(stats.not_in_shop_books / stats.total * 100) if stats.total else 0 }}%</div>
-    </a>
-    <a href="/urls?status=failed{% if shop_filter %}&shop={{ shop_filter|urlencode }}{% endif %}" class="stat-card">
+    </div>
+    <div class="stat-card">
         <div class="stat-label">Failed 3+</div>
         <div class="stat-value" style="color: var(--badge-error-fg);">{{ "{:,}".format(stats.failed) }}</div>
-    </a>
+    </div>
 </div>
 
 <form method="get" action="/urls">
@@ -39,22 +39,26 @@
             <option value="category" {{ 'selected' if source_filter == 'category' else '' }}>category</option>
             <option value="full_crawl" {{ 'selected' if source_filter == 'full_crawl' else '' }}>full_crawl</option>
         </select>
-        <select name="status">
-            <option value="">All statuses</option>
-            <option value="not_in_shop_books" {{ 'selected' if status_filter == 'not_in_shop_books' else '' }}>Not in shop books</option>
-            <option value="failed" {{ 'selected' if status_filter == 'failed' else '' }}>Failed 3+</option>
-            <option value="unknown" {{ 'selected' if status_filter == 'unknown' else '' }}>Type: unknown</option>
-            <option value="product" {{ 'selected' if status_filter == 'product' else '' }}>Type: product</option>
-            <option value="non_product" {{ 'selected' if status_filter == 'non_product' else '' }}>Type: non_product</option>
+        <select name="url_type">
+            <option value="">All types</option>
+            <option value="unknown" {{ 'selected' if type_filter == 'unknown' else '' }}>unknown</option>
+            <option value="product" {{ 'selected' if type_filter == 'product' else '' }}>product</option>
+            <option value="non_product" {{ 'selected' if type_filter == 'non_product' else '' }}>non_product</option>
         </select>
+        <select name="is_book">
+            <option value="">All scores</option>
+            <option value="book" {{ 'selected' if is_book_filter == 'book' else '' }}>book</option>
+            <option value="not_book" {{ 'selected' if is_book_filter == 'not_book' else '' }}>not book</option>
+        </select>
+        <input type="number" name="score_min" placeholder="Score ≥" value="{{ score_min_filter }}" style="width:7rem;">
         <input type="search" name="q" placeholder="Search URL..." value="{{ query }}">
         <button type="submit">Filter</button>
     </div>
 </form>
 
-{% set filter_params = "q=" ~ query|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ "&source=" ~ source_filter|urlencode ~ "&status=" ~ status_filter|urlencode %}
+{% set filter_params = "q=" ~ query|urlencode ~ "&shop=" ~ shop_filter|urlencode ~ "&source=" ~ source_filter|urlencode ~ "&url_type=" ~ type_filter|urlencode ~ "&score_min=" ~ score_min_filter|urlencode ~ "&is_book=" ~ is_book_filter|urlencode %}
 
-{% if shop_filter or source_filter or status_filter or query %}
+{% if shop_filter or source_filter or type_filter or query or score_min_filter or is_book_filter %}
 <div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
     {% if shop_filter %}
     <span class="filter-badge">Shop: {{ shop_filter }} <a href="/urls?{{ filter_params|replace('shop=' ~ shop_filter|urlencode, 'shop=') }}">✕</a></span>
@@ -62,8 +66,14 @@
     {% if source_filter %}
     <span class="filter-badge">Source: {{ source_filter }} <a href="/urls?{{ filter_params|replace('&source=' ~ source_filter|urlencode, '') }}">✕</a></span>
     {% endif %}
-    {% if status_filter %}
-    <span class="filter-badge">Status: {{ status_filter }} <a href="/urls?{{ filter_params|replace('&status=' ~ status_filter|urlencode, '') }}">✕</a></span>
+    {% if type_filter %}
+    <span class="filter-badge">Type: {{ type_filter }} <a href="/urls?{{ filter_params|replace('&url_type=' ~ type_filter|urlencode, '') }}">✕</a></span>
+    {% endif %}
+    {% if is_book_filter %}
+    <span class="filter-badge">Book: {{ is_book_filter }} <a href="/urls?{{ filter_params|replace('&is_book=' ~ is_book_filter|urlencode, '') }}">✕</a></span>
+    {% endif %}
+    {% if score_min_filter %}
+    <span class="filter-badge">Score ≥ {{ score_min_filter }} <a href="/urls?{{ filter_params|replace('&score_min=' ~ score_min_filter|urlencode, '') }}">✕</a></span>
     {% endif %}
     {% if query %}
     <span class="filter-badge">Search: {{ query }} <a href="/urls?{{ filter_params|replace('q=' ~ query|urlencode, 'q=') }}">✕</a></span>
@@ -71,20 +81,31 @@
 </div>
 {% endif %}
 
-<p class="text-muted" style="margin-bottom: 1rem;">
-    <strong style="color: var(--text-primary);">{{ "{:,}".format(total) }}</strong> results
-</p>
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+    <p class="text-muted" style="margin:0;">
+        <strong style="color: var(--text-primary);">{{ "{:,}".format(total) }}</strong> results
+    </p>
+    {% if scrape_started %}
+    <span style="color:var(--badge-success-fg); font-size:0.85rem;">✓ Scrape started for {{ scrape_started }} URL(s)</span>
+    {% endif %}
+    <form method="post" action="/scrape/unknown-urls" style="margin:0;">
+        <input type="hidden" name="shop" value="{{ shop_filter }}">
+        <button type="submit" class="btn-secondary" style="font-size:0.82rem; padding:0.25rem 0.75rem;">Scrape unknown</button>
+    </form>
+</div>
 
 {% if urls %}
 <div class="card" style="padding: 0; overflow: hidden;">
     <table class="data-table">
         <thead>
             <tr>
+                <th>ID</th>
                 <th>{{ sort_header('url', 'URL', sort, order, filter_params) }}</th>
                 <th>Shop</th>
                 <th>Shop Book</th>
                 <th>Source</th>
                 <th>Type</th>
+                <th>{{ sort_header('score', 'Score', sort, order, filter_params) }}</th>
                 <th class="text-right">{{ sort_header('fails', 'Fails', sort, order, filter_params) }}</th>
                 <th class="text-right">HTTP</th>
                 <th>{{ sort_header('discovered', 'Discovered', sort, order, filter_params) }}</th>
@@ -93,6 +114,9 @@
         <tbody>
             {% for u in urls %}
             <tr>
+                <td style="white-space:nowrap;">
+                    <a href="/urls/{{ u.id }}" style="font-size:0.85rem;">{{ u.id }}</a>
+                </td>
                 <td class="cell-truncate">
                     <a href="{{ u.url }}" target="_blank" rel="noopener noreferrer">{{ u.url }}</a>
                 </td>
@@ -112,6 +136,18 @@
                     <span class="badge badge-neutral">non_product</span>
                     {% else %}
                     <span class="badge badge-warning">unknown</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.classification %}
+                        {% if u.classification.is_book_product %}
+                        <span class="badge badge-completed">book</span>
+                        {% else %}
+                        <span class="badge badge-warning">not book</span>
+                        {% endif %}
+                        <strong>{{ u.classification.book_score }}</strong>
+                    {% else %}
+                    <span class="text-muted">—</span>
                     {% endif %}
                 </td>
                 <td class="text-right">

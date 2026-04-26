@@ -24,7 +24,6 @@ from book_scraper.db.repo import (
     upsert_shop,
 )
 
-
 _STRATEGY_URL_TYPE = {
     "sitemap": "sitemap",
     "categories": "category_page",
@@ -132,7 +131,7 @@ class DiscoverService:
 
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
-        finish_scrape_run(self.session, run_id, status)
+        finish_scrape_run(self.session, run_id, status, reason=reason)
 
         run_row = self.session.get(ScrapeRun, run_id)
         if run_row is not None:

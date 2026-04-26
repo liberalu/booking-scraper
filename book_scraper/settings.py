@@ -15,8 +15,11 @@ TWISTED_REACTOR = (  # pragma: no cover
 ROBOTSTXT_OBEY = _config.scrapy.robotstxt_obey  # pragma: no cover
 
 # Sensible defaults — override per-spider via -s flag  # pragma: no cover
-CONCURRENT_REQUESTS_PER_DOMAIN = 4  # pragma: no cover
-DOWNLOAD_DELAY = 0.5  # pragma: no cover
+# vaga.lt silently throttles bursts: with 4 concurrent + 0.5s delay,  # pragma: no cover
+# scan run 156 saw ~0.6 responses/min before stall. Drop concurrency  # pragma: no cover
+# to 1 and slow cadence so the server has breathing room.  # pragma: no cover
+CONCURRENT_REQUESTS_PER_DOMAIN = 1  # pragma: no cover
+DOWNLOAD_DELAY = 2.0  # pragma: no cover
 DOWNLOAD_TIMEOUT = 15  # pragma: no cover
 
 # Force fresh TCP connections — vaga.lt silently blocks  # pragma: no cover
@@ -30,13 +33,18 @@ STALL_TIMEOUT = 60  # pragma: no cover
 
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
+    "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover
 }  # pragma: no cover
+
+# Per-run heartbeat tick interval (seconds). Independent of request
+# flow; the dashboard uses staleness to detect crashed scrapers.
+HEARTBEAT_INTERVAL_S = 5.0  # pragma: no cover
 
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
-AUTOTHROTTLE_START_DELAY = 0.5  # pragma: no cover
-AUTOTHROTTLE_MAX_DELAY = 10  # pragma: no cover
-AUTOTHROTTLE_TARGET_CONCURRENCY = 4.0  # pragma: no cover
+AUTOTHROTTLE_START_DELAY = 2.0  # pragma: no cover
+AUTOTHROTTLE_MAX_DELAY = 30  # pragma: no cover
+AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover
 

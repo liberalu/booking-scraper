@@ -58,9 +58,7 @@ def _seed(db_session: Session) -> tuple[int, int]:
 @pytest.mark.integration
 def test_get_issues_page_returns_paginated_rows(db_session: Session) -> None:
     shop_id, run_id = _seed(db_session)
-    rows, total = get_issues_page(
-        db_session, state="open", page=1, per_page=50
-    )
+    rows, total = get_issues_page(db_session, state="open", page=1, per_page=50)
     assert total == 2
     assert len(rows) == 2
     # Newest-first by scrape_runs.started_at then by id

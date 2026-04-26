@@ -8,6 +8,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -19,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sa_text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -348,6 +349,9 @@ class DiscoveredUrl(Base):
         back_populates="discovered_urls"
     )
     last_seen_run: Mapped["ScrapeRun | None"] = relationship()
+    classification: Mapped["UrlClassification | None"] = relationship(
+        back_populates="discovered_url", uselist=False
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -356,6 +360,30 @@ class DiscoveredUrl(Base):
         Index("ix_discovered_urls_shop_type_fail", "shop_id", "url_type", "fail_count"),
         Index("ix_discovered_urls_shop_book_id", "shop_book_id"),
         Index("ix_discovered_urls_last_seen_run_id", "last_seen_run_id"),
+    )
+
+
+class UrlClassification(Base):
+    __tablename__ = "url_classifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    discovered_url_id: Mapped[int] = mapped_column(
+        ForeignKey("discovered_urls.id"), nullable=False, unique=True
+    )
+    book_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_book_product: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reasons: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    classified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    discovered_url: Mapped["DiscoveredUrl"] = relationship(
+        back_populates="classification"
+    )
+
+    __table_args__ = (
+        Index("ix_url_classifications_book_score", "book_score"),
+        Index("ix_url_classifications_is_book_product", "is_book_product"),
     )
 
 
@@ -432,8 +460,21 @@ class ScrapeUrlItem(Base):
     done_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_delay_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delay_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    __table_args__ = (Index("ix_scrape_url_items_run_status", "run_id", "status"),)
+    __table_args__ = (
+        Index("ix_scrape_url_items_run_status", "run_id", "status"),
+        Index("ix_scrape_url_items_shop_claimed_at", "shop_id", "claimed_at"),
+        Index("ix_scrape_url_items_run_done_at", "run_id", "done_at"),
+        UniqueConstraint("run_id", "url", name="uq_scrape_url_items_run_url"),
+    )
 
 
 class ValidationIssue(Base):

@@ -149,9 +149,7 @@ class DiscoverSpider(scrapy.Spider):
             errback=self.handle_start_error,
         )
 
-    def dispatch(
-        self, response: scrapy.http.Response
-    ) -> Generator[Any, None, None]:
+    def dispatch(self, response: scrapy.http.Response) -> Generator[Any, None, None]:
         """Route a downloaded response to the correct parser based on url_type."""
         url_type = response.meta.get("url_type") or "crawl"
         try:
@@ -423,7 +421,11 @@ class DiscoverSpider(scrapy.Spider):
             if data.get("title"):
                 props: dict[str, object] = {}
                 for key in (
-                    "pages", "cover_type", "duration", "narrator", "translator"
+                    "pages",
+                    "cover_type",
+                    "duration",
+                    "narrator",
+                    "translator",
                 ):
                     if data.get(key) is not None:
                         props[key] = data[key]

@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.shop_book_filters import (
@@ -13,15 +13,17 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
     ScrapeRun,
+    ScrapeUrlItem,
     Shop,
     ShopBook,
     ShopBookChange,
     ShopBookFieldUpdate,
+    UrlClassification,
     ValidationIssue,
 )
 
 STALE_HEARTBEAT_MINUTES = 5
-DEAD_RUN_HOURS = 2
+DEAD_RUN_MINUTES = 30
 
 ISSUE_DESCRIPTIONS: dict[str, str] = {
     "missing_price": (
@@ -58,6 +60,10 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
     "field_cleared": (
         "A field that had a value is now missing. Likely a parser regression."
     ),
+    "scrape_run_failed": (
+        "A scrape run ended with status=failed. Inspect the run's detail page"
+        " to see why (stall, kill, orphan on boot, or downstream error)."
+    ),
 }
 
 ISSUE_SEVERITY: dict[str, str] = {
@@ -73,6 +79,7 @@ ISSUE_SEVERITY: dict[str, str] = {
     "attribute_unknown_key": "warning",
     "attribute_invalid_value": "warning",
     "field_cleared": "critical",
+    "scrape_run_failed": "critical",
 }
 
 
@@ -102,7 +109,7 @@ def get_run_health(run: ScrapeRun) -> str:
     if last_activity is None:
         return "dead"
     elapsed = now - last_activity
-    if elapsed > timedelta(hours=DEAD_RUN_HOURS):
+    if elapsed > timedelta(minutes=DEAD_RUN_MINUTES):
         return "dead"
     if elapsed > timedelta(minutes=STALE_HEARTBEAT_MINUTES):
         return "stale"
@@ -110,8 +117,10 @@ def get_run_health(run: ScrapeRun) -> str:
 
 
 def mark_stale_runs(session: Session) -> int:
-    """Mark runs with no heartbeat for over DEAD_RUN_HOURS as failed."""
-    cutoff = datetime.now(UTC) - timedelta(hours=DEAD_RUN_HOURS)
+    """Mark runs with no heartbeat for over DEAD_RUN_MINUTES as failed."""
+    from book_scraper.db.repo import record_scrape_run_failed_issue
+
+    cutoff = datetime.now(UTC) - timedelta(minutes=DEAD_RUN_MINUTES)
     stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
     marked = 0
     for run in stale:
@@ -119,6 +128,7 @@ def mark_stale_runs(session: Session) -> int:
         if last_activity and last_activity < cutoff:
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
+            record_scrape_run_failed_issue(session, run, "heartbeat_timeout")
             marked += 1
     if marked:
         session.commit()
@@ -160,6 +170,278 @@ def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
 
 def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
+
+
+# ─────────────────── Live observability (Stage 2) ────────────────────
+# Live-view thresholds — sharper than the run-list page's STALE/DEAD
+# constants because the live view refreshes every ~2s and operators
+# expect fast feedback. See live observability spec.
+LIVE_DEAD_HEARTBEAT_S = 30
+LIVE_RATE_WINDOW_S = 60
+
+
+def get_run_live_health(run: ScrapeRun) -> str:
+    """Live-view health verdict for a single run.
+
+    Returns 'healthy' | 'stuck' | 'dead' | '' (non-running).
+
+    Combines heartbeat staleness with claimed_at age on the in-flight
+    row(s):
+      - heartbeat stale  → 'dead' (process gone)
+      - heartbeat fresh + an in-flight row's claimed_at older than
+        DOWNLOAD_TIMEOUT × 2 → 'stuck' (alive but hung)
+      - else → 'healthy'
+
+    DOWNLOAD_TIMEOUT is fixed at 15 here to match settings.py without
+    introducing a Scrapy import in the dashboard codepath.
+    """
+    if run.status != "running":
+        return ""
+    now = datetime.now(UTC)
+    last_activity = run.last_heartbeat or run.started_at
+    if last_activity is None:
+        return "dead"
+    if (now - last_activity).total_seconds() > LIVE_DEAD_HEARTBEAT_S:
+        return "dead"
+    return "healthy"  # 'stuck' is decided at the route level, where
+    # we already have the in-flight row data and can compute the
+    # threshold cheaply without re-querying.
+
+
+def get_run_in_flight(session: Session, run_id: int) -> list[dict[str, Any]]:
+    """Currently-processing rows for a run.
+
+    Stable order: oldest claimed_at first, then by id.
+    """
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "processing",
+        )
+        .order_by(ScrapeUrlItem.claimed_at.asc(), ScrapeUrlItem.id.asc())
+        .all()
+    )
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        claimed_at = r.claimed_at
+        claimed_age_s: float | None = None
+        if claimed_at is not None:
+            if claimed_at.tzinfo is None:
+                claimed_at = claimed_at.replace(tzinfo=UTC)
+            claimed_age_s = max(0.0, (now - claimed_at).total_seconds())
+        out.append(
+            {
+                "url": r.url,
+                "claimed_at": (
+                    claimed_at.isoformat() if claimed_at is not None else None
+                ),
+                "claimed_age_s": claimed_age_s,
+                "request_delay_s": r.request_delay_s,
+                "delay_source": r.delay_source,
+                "retry_count": r.retry_count,
+            }
+        )
+    return out
+
+
+def get_run_rate_window(
+    session: Session, run_id: int, seconds: int = LIVE_RATE_WINDOW_S
+) -> dict[str, int]:
+    """Counts of done / failed rows whose done_at is within the window."""
+    cutoff = datetime.now(UTC) - timedelta(seconds=seconds)
+    done = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.done_at.isnot(None),
+            ScrapeUrlItem.done_at > cutoff,
+        )
+        .scalar()
+        or 0
+    )
+    failed = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+            ScrapeUrlItem.done_at.isnot(None),
+            ScrapeUrlItem.done_at > cutoff,
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "window_s": seconds,
+        "done": int(done),
+        "failed": int(failed),
+    }
+
+
+def get_run_recent_failures(
+    session: Session, run_id: int, limit: int = 10
+) -> list[dict[str, Any]]:
+    """Most-recent failed rows for a run."""
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+        )
+        .order_by(ScrapeUrlItem.done_at.desc().nullslast(), ScrapeUrlItem.id.desc())
+        .limit(limit)
+        .all()
+    )
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        done_at = r.done_at
+        done_age_s: float | None = None
+        if done_at is not None:
+            if done_at.tzinfo is None:
+                done_at = done_at.replace(tzinfo=UTC)
+            done_age_s = max(0.0, (now - done_at).total_seconds())
+        out.append(
+            {
+                "url": r.url,
+                "http_status": r.http_status,
+                "error_reason": r.error_reason,
+                "done_at": done_at.isoformat() if done_at is not None else None,
+                "done_age_s": done_age_s,
+            }
+        )
+    return out
+
+
+RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
+
+
+def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
+    """Counts of scrape_url_items per status for a still-running run.
+
+    Returns zeros for finished runs (rows are cleaned up on finish — see
+    `cleanup_scrape_url_items`).
+    """
+    rows = (
+        session.query(ScrapeUrlItem.status, func.count(ScrapeUrlItem.id))
+        .filter(ScrapeUrlItem.run_id == run_id)
+        .group_by(ScrapeUrlItem.status)
+        .all()
+    )
+    counts = dict.fromkeys(RUN_URL_STATUSES, 0)
+    for status, count in rows:
+        counts[status] = count
+    return counts
+
+
+RUN_URL_SORT_KEYS = (
+    "started",  # claimed_at
+    "done",     # done_at
+    "duration", # done_at - claimed_at
+    "status",
+    "http",     # http_status
+    "url_type",
+    "url",
+    "title",
+)
+
+
+def get_run_url_items(
+    session: Session,
+    run_id: int,
+    status: str = "all",
+    page: int = 1,
+    per_page: int = 50,
+    sort: str = "started",
+    order: str = "desc",
+) -> tuple[list[tuple[ScrapeUrlItem, str | None]], int]:
+    """Live URL queue for a run, paginated. Returns ((item, title), total).
+
+    `title` is left-joined from `shop_books` (matched on shop_id + url) and
+    is `None` for URLs that didn't produce a book product.
+    """
+    from sqlalchemy import case
+
+    query = (
+        session.query(ScrapeUrlItem, ShopBook.title)
+        .outerjoin(
+            ShopBook,
+            (ShopBook.shop_id == ScrapeUrlItem.shop_id)
+            & (ShopBook.url == ScrapeUrlItem.url),
+        )
+        .filter(ScrapeUrlItem.run_id == run_id)
+    )
+    if status in RUN_URL_STATUSES:
+        query = query.filter(ScrapeUrlItem.status == status)
+    total = query.count()
+
+    if sort not in RUN_URL_SORT_KEYS:
+        sort = "started"
+    desc = order != "asc"
+
+    sort_col: Any
+    if sort == "started":
+        sort_col = ScrapeUrlItem.claimed_at
+    elif sort == "done":
+        sort_col = ScrapeUrlItem.done_at
+    elif sort == "duration":
+        # Approx duration; rows with no claimed_at sort last via nulls_last.
+        sort_col = ScrapeUrlItem.done_at - ScrapeUrlItem.claimed_at
+    elif sort == "status":
+        # Stable, intuitive order: processing → pending → failed → done.
+        sort_col = case(
+            (ScrapeUrlItem.status == "processing", 0),
+            (ScrapeUrlItem.status == "pending", 1),
+            (ScrapeUrlItem.status == "failed", 2),
+            (ScrapeUrlItem.status == "done", 3),
+            else_=4,
+        )
+    elif sort == "http":
+        sort_col = ScrapeUrlItem.http_status
+    elif sort == "url_type":
+        sort_col = ScrapeUrlItem.url_type
+    elif sort == "title":
+        sort_col = ShopBook.title
+    else:  # url
+        sort_col = ScrapeUrlItem.url
+
+    ordering = sort_col.desc().nulls_last() if desc else sort_col.asc().nulls_last()
+    rows = (
+        query.order_by(ordering, ScrapeUrlItem.id.asc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return [(it, title) for it, title in rows], total
+
+
+def get_run_discovered_urls(
+    session: Session,
+    run_id: int,
+    page: int = 1,
+    per_page: int = 50,
+) -> tuple[list[DiscoveredUrl], int]:
+    """URLs touched by a finished discover run via `last_seen_run_id`.
+
+    Scan runs read directly from `scrape_url_items` now (rows are kept
+    after the run finishes). This helper is only used as the discover-run
+    fallback.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if run is None or not run.phase.startswith("discover"):
+        return [], 0
+    query = session.query(DiscoveredUrl).filter(
+        DiscoveredUrl.last_seen_run_id == run_id
+    )
+    total = query.count()
+    rows = (
+        query.order_by(DiscoveredUrl.last_checked_at.desc().nulls_last())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return rows, total
 
 
 def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]:
@@ -439,11 +721,16 @@ def get_price_history(session: Session, shop_book_id: int) -> list[Price]:
 
 
 def get_price_changes(
-    session: Session, days: int = 7, shop_id: int | None = None
-) -> list[dict[str, Any]]:
+    session: Session,
+    days: int = 7,
+    shop_id: int | None = None,
+    page: int = 1,
+    per_page: int = 30,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return (rows, total) for price changes, paginated by ABS(change)."""
     cutoff = datetime.now(UTC) - timedelta(days=days)
     shop_filter = "AND l.shop_id = :shop_id" if shop_id else ""
-    sql = text(f"""
+    cte = f"""
         WITH ranked AS (
             SELECT
                 p.shop_book_id,
@@ -474,18 +761,40 @@ def get_price_changes(
             WHERE r.prev_price IS NOT NULL
               AND r.price != r.prev_price
         )
-        SELECT shop_book_id, title, prev_price, new_price, change,
-               scraped_at
-        FROM changes
-        WHERE rn = 1
-        ORDER BY ABS(change) DESC
-        LIMIT 50
-    """)
+    """
     params: dict[str, Any] = {"cutoff": cutoff}
     if shop_id:
         params["shop_id"] = shop_id
-    rows = session.execute(sql, params).mappings().all()
-    return [dict(r) for r in rows]
+
+    total = (
+        session.execute(
+            text(cte + " SELECT COUNT(*) FROM changes WHERE rn = 1"),
+            params,
+        ).scalar()
+        or 0
+    )
+
+    page = max(1, page)
+    per_page = max(1, min(per_page, 200))
+    offset = (page - 1) * per_page
+    data_sql = text(
+        cte
+        + """
+        SELECT shop_book_id, title, prev_price, new_price, change, scraped_at
+        FROM changes
+        WHERE rn = 1
+        ORDER BY ABS(change) DESC, scraped_at DESC
+        OFFSET :offset LIMIT :limit
+    """
+    )
+    rows = (
+        session.execute(
+            data_sql, {**params, "offset": offset, "limit": per_page}
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows], int(total)
 
 
 def get_inventory_stats(session: Session) -> dict:
@@ -675,9 +984,7 @@ def get_all_formats(session: Session) -> list[str]:
     return [r[0] for r in rows]
 
 
-def get_attribute_keys(
-    session: Session, shop_id: int | None = None
-) -> list[str]:
+def get_attribute_keys(session: Session, shop_id: int | None = None) -> list[str]:
     """Return distinct attribute keys (sorted) across all shop_books."""
     from book_scraper.db.models import ShopBookAttribute
 
@@ -1141,6 +1448,7 @@ DISCOVERED_URL_SORT_COLUMNS = {
     "url": DiscoveredUrl.url,
     "fails": DiscoveredUrl.fail_count,
     "discovered": DiscoveredUrl.first_seen_at,
+    "score": UrlClassification.book_score,
 }
 
 
@@ -1171,29 +1479,35 @@ def get_discovered_urls_page(
     per_page: int = 50,
     shop_id: int | None = None,
     source: str = "",
-    status: str = "",
+    url_type: str = "",
     search: str = "",
+    score_min: int | None = None,
+    is_book: str = "",
     sort_by: str = "discovered",
     sort_order: str = "desc",
 ) -> tuple[list, int]:
     """Return paginated discovered URLs with filters."""
-    query = session.query(DiscoveredUrl).options(joinedload(DiscoveredUrl.shop))
+    query = (
+        session.query(DiscoveredUrl)
+        .options(joinedload(DiscoveredUrl.shop))
+        .outerjoin(
+            UrlClassification, UrlClassification.discovered_url_id == DiscoveredUrl.id
+        )
+    )
     if shop_id:
         query = query.filter(DiscoveredUrl.shop_id == shop_id)
     if source:
         query = query.filter(DiscoveredUrl.source == source)
+    if url_type:
+        query = query.filter(DiscoveredUrl.url_type == url_type)
     if search:
         query = query.filter(DiscoveredUrl.url.ilike(f"%{search}%"))
-    if status == "not_in_shop_books":
-        query = query.outerjoin(
-            ShopBook,
-            (ShopBook.shop_id == DiscoveredUrl.shop_id)
-            & (ShopBook.url == DiscoveredUrl.url),
-        ).filter(ShopBook.id.is_(None))
-    elif status == "failed":
-        query = query.filter(DiscoveredUrl.fail_count >= 3)
-    elif status in ("unknown", "product", "non_product"):
-        query = query.filter(DiscoveredUrl.url_type == status)
+    if score_min is not None:
+        query = query.filter(UrlClassification.book_score >= score_min)
+    if is_book == "book":
+        query = query.filter(UrlClassification.is_book_product.is_(True))
+    elif is_book == "not_book":
+        query = query.filter(UrlClassification.is_book_product.is_(False))
     total = query.count()
     order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.first_seen_at)
     if sort_order == "asc":
@@ -1202,3 +1516,42 @@ def get_discovered_urls_page(
         query = query.order_by(order_col.desc().nulls_last())
     urls = query.offset((page - 1) * per_page).limit(per_page).all()
     return urls, total
+
+
+def get_scrape_activity_by_day(session: Session, days: int = 14) -> list[int]:
+    """Return items scraped per day for the last N days (oldest first, zeros filled)."""
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    sql = text("""
+        SELECT
+            DATE(started_at AT TIME ZONE 'UTC') AS day,
+            SUM(items_added + items_updated) AS items
+        FROM scrape_runs
+        WHERE started_at >= :cutoff AND status = 'completed'
+        GROUP BY day
+        ORDER BY day
+    """)
+    rows = session.execute(sql, {"cutoff": cutoff}).mappings().all()
+    day_map: dict[str, int] = {str(r["day"]): int(r["items"]) for r in rows}
+    result = []
+    for i in range(days):
+        day = (datetime.now(UTC) - timedelta(days=days - 1 - i)).date()
+        result.append(day_map.get(str(day), 0))
+    return result
+
+
+def get_url_detail(
+    session: Session, url_id: int
+) -> tuple["DiscoveredUrl", "UrlClassification | None"] | None:
+    stmt = (
+        select(DiscoveredUrl)
+        .options(
+            joinedload(DiscoveredUrl.shop),
+            joinedload(DiscoveredUrl.shop_book),
+            joinedload(DiscoveredUrl.classification),
+        )
+        .where(DiscoveredUrl.id == url_id)
+    )
+    url = session.execute(stmt).unique().scalar_one_or_none()
+    if url is None:
+        return None
+    return url, url.classification

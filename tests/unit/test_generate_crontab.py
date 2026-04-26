@@ -8,14 +8,22 @@ def test_build_crontab_lines_skips_disabled():
 
     jobs = [
         SimpleNamespace(
-            id=1, shop=SimpleNamespace(name="vaga"),
-            phase="discover", strategy="sitemap", args="",
-            cron_expression="0 2 * * *", enabled=True,
+            id=1,
+            shop=SimpleNamespace(name="vaga"),
+            phase="discover",
+            strategy="sitemap",
+            args="",
+            cron_expression="0 2 * * *",
+            enabled=True,
         ),
         SimpleNamespace(
-            id=2, shop=SimpleNamespace(name="vaga"),
-            phase="scan", strategy=None, args="",
-            cron_expression="0 3 * * *", enabled=False,
+            id=2,
+            shop=SimpleNamespace(name="vaga"),
+            phase="scan",
+            strategy=None,
+            args="",
+            cron_expression="0 3 * * *",
+            enabled=False,
         ),
     ]
     lines = build_crontab_lines(jobs)
@@ -32,9 +40,13 @@ def test_build_crontab_lines_scan_without_strategy():
 
     jobs = [
         SimpleNamespace(
-            id=1, shop=SimpleNamespace(name="vaga"),
-            phase="scan", strategy=None, args="-a rescrape=true",
-            cron_expression="0 4 * * *", enabled=True,
+            id=1,
+            shop=SimpleNamespace(name="vaga"),
+            phase="scan",
+            strategy=None,
+            args="-a rescrape=true",
+            cron_expression="0 4 * * *",
+            enabled=True,
         ),
     ]
     lines = build_crontab_lines(jobs)

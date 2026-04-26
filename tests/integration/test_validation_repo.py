@@ -15,7 +15,9 @@ def _make_two_issues(db_session: Session) -> tuple[int, int, int]:
     db_session.add(shop)
     db_session.flush()
     run = ScrapeRun(
-        shop_id=shop.id, phase="scan", status="completed",
+        shop_id=shop.id,
+        phase="scan",
+        status="completed",
         started_at=datetime.now(UTC),
     )
     db_session.add(run)
@@ -23,13 +25,17 @@ def _make_two_issues(db_session: Session) -> tuple[int, int, int]:
     db_session.add_all(
         [
             ValidationIssue(
-                scrape_run_id=run.id, url="https://vaga.lt/a",
-                field="title", issue="suspicious_title",
+                scrape_run_id=run.id,
+                url="https://vaga.lt/a",
+                field="title",
+                issue="suspicious_title",
                 lifecycle_state="new",
             ),
             ValidationIssue(
-                scrape_run_id=run.id, url="https://vaga.lt/b",
-                field="price", issue="missing_price",
+                scrape_run_id=run.id,
+                url="https://vaga.lt/b",
+                field="price",
+                issue="missing_price",
                 lifecycle_state="new",
             ),
         ]
@@ -41,9 +47,7 @@ def _make_two_issues(db_session: Session) -> tuple[int, int, int]:
 @pytest.mark.integration
 def test_ack_bulk_respects_issue_type_filter(db_session: Session) -> None:
     _make_two_issues(db_session)
-    updated = acknowledge_validation_issues_bulk(
-        db_session, issue_type="missing_price"
-    )
+    updated = acknowledge_validation_issues_bulk(db_session, issue_type="missing_price")
     assert updated == 1
     remaining_open = (
         db_session.query(ValidationIssue)
@@ -64,9 +68,7 @@ def test_ack_bulk_respects_run_id_filter(db_session: Session) -> None:
 def test_delete_matching_hard_deletes(db_session: Session) -> None:
     _, _, total = _make_two_issues(db_session)
     assert total == 2
-    deleted = delete_validation_issues_matching(
-        db_session, issue_type="missing_price"
-    )
+    deleted = delete_validation_issues_matching(db_session, issue_type="missing_price")
     assert deleted == 1
     remaining = db_session.query(ValidationIssue).count()
     assert remaining == 1
@@ -88,7 +90,9 @@ def test_ack_bulk_filters_by_search_query(db_session: Session) -> None:
     db_session.add(shop)
     db_session.flush()
     run = ScrapeRun(
-        shop_id=shop.id, phase="scan", status="completed",
+        shop_id=shop.id,
+        phase="scan",
+        status="completed",
         started_at=datetime.now(UTC),
     )
     db_session.add(run)
@@ -99,13 +103,18 @@ def test_ack_bulk_filters_by_search_query(db_session: Session) -> None:
     db_session.add_all(
         [
             ValidationIssue(
-                scrape_run_id=run.id, url="https://vaga.lt/x",
-                field="title", issue="suspicious_title",
-                shop_book_id=book.id, lifecycle_state="new",
+                scrape_run_id=run.id,
+                url="https://vaga.lt/x",
+                field="title",
+                issue="suspicious_title",
+                shop_book_id=book.id,
+                lifecycle_state="new",
             ),
             ValidationIssue(
-                scrape_run_id=run.id, url="https://vaga.lt/y",
-                field="price", issue="missing_price",
+                scrape_run_id=run.id,
+                url="https://vaga.lt/y",
+                field="price",
+                issue="missing_price",
                 lifecycle_state="new",
             ),
         ]

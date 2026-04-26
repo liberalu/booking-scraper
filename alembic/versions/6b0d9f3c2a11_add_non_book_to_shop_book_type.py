@@ -18,7 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE shop_book_type ADD VALUE IF NOT EXISTS 'non_book'")
+    # ALTER TYPE ADD VALUE cannot run inside a transaction in PostgreSQL.
+    # Use autocommit_block so the value is committed before any subsequent
+    # migration that references it (e.g. e7d678837069).
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE shop_book_type ADD VALUE IF NOT EXISTS 'non_book'")
 
 
 def downgrade() -> None:

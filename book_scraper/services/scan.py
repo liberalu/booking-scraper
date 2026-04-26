@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
-    cleanup_scrape_url_items,
     create_scrape_run,
     find_resumable_run,
     finish_scrape_run,
@@ -14,13 +13,12 @@ from book_scraper.db.repo import (
     get_urls_already_scraped,
     insert_scrape_url_item,
     mark_cron_job_ran_if_matches,
-    mark_scrape_url_item_done,
-    mark_scrape_url_item_failed,
     mark_stale_runs_failed,
     prepare_scrape_url_items,
     update_discovered_url_status,
     update_scrape_run_progress,
     upsert_shop,
+    upsert_url_classification,
 )
 
 
@@ -133,16 +131,31 @@ class ScanService:
         urls_processed: int,
         url_status_updates: list[dict[str, Any]],
     ) -> None:
-        """Flush queued URL status updates and progress to DB mid-run."""
+        """Flush queued discovered_url + classification updates and run progress.
+
+        Per the live observability spec, this method no longer writes
+        scrape_url_items terminal state — that's owned by the spider's
+        immediate `_mark_response` path. This method now only touches
+        `discovered_urls`, `url_classifications`, and `scrape_runs`
+        aggregate counters.
+        """
         for update in url_status_updates:
-            scrape_item_id = update.pop("scrape_url_item_id", None)
-            scrape_item_success = update.pop("scrape_url_item_success", False)
+            book_score = update.pop("book_score", None)
+            is_book_product = update.pop("is_book_product", None)
+            book_score_reasons = update.pop("book_score_reasons", None)
             update_discovered_url_status(self.session, **update)
-            if scrape_item_id is not None:
-                if scrape_item_success:
-                    mark_scrape_url_item_done(self.session, scrape_item_id)
-                else:
-                    mark_scrape_url_item_failed(self.session, scrape_item_id)
+            if (
+                book_score is not None
+                and is_book_product is not None
+                and update.get("url_id") is not None
+            ):
+                upsert_url_classification(
+                    self.session,
+                    discovered_url_id=update["url_id"],
+                    book_score=book_score,
+                    is_book_product=is_book_product,
+                    reasons=book_score_reasons or [],
+                )
         update_scrape_run_progress(self.session, run_id, urls_processed)
         self.session.commit()
 
@@ -153,21 +166,34 @@ class ScanService:
         url_status_updates: list[dict[str, Any]],
         reason: str,
     ) -> None:
-        """Finalize a scan run: process URL status updates, update progress,
-        mark run as completed/failed."""
+        """Finalize a scan run.
+
+        Same ownership split as `flush_progress`: this drains the batch
+        of `discovered_urls` + classification updates and finalises the
+        run row. Per-URL terminal state on `scrape_url_items` is already
+        owned by the spider's `_mark_response`.
+        """
         for update in url_status_updates:
-            scrape_item_id = update.pop("scrape_url_item_id", None)
-            scrape_item_success = update.pop("scrape_url_item_success", False)
+            book_score = update.pop("book_score", None)
+            is_book_product = update.pop("is_book_product", None)
+            book_score_reasons = update.pop("book_score_reasons", None)
             update_discovered_url_status(self.session, **update)
-            if scrape_item_id is not None:
-                if scrape_item_success:
-                    mark_scrape_url_item_done(self.session, scrape_item_id)
-                else:
-                    mark_scrape_url_item_failed(self.session, scrape_item_id)
+            if (
+                book_score is not None
+                and is_book_product is not None
+                and update.get("url_id") is not None
+            ):
+                upsert_url_classification(
+                    self.session,
+                    discovered_url_id=update["url_id"],
+                    book_score=book_score,
+                    is_book_product=is_book_product,
+                    reasons=book_score_reasons or [],
+                )
 
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
-        finish_scrape_run(self.session, run_id, status)
+        finish_scrape_run(self.session, run_id, status, reason=reason)
 
         # Update matching cron_job's last_run_at (best-effort; no-op if no match).
         run_row = self.session.get(ScrapeRun, run_id)
@@ -176,5 +202,7 @@ class ScanService:
                 self.session, run_row.shop_id, phase="scan", strategy=None
             )
 
-        cleanup_scrape_url_items(self.session, run_id)
+        # NOTE: scrape_url_items rows are kept after the run finishes —
+        # they are the source of truth for per-URL run history, surfaced
+        # on the run detail page. Used to be deleted via cleanup_scrape_url_items.
         self.session.commit()

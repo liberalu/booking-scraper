@@ -61,6 +61,93 @@
 
 <p class="text-muted"><small>Run commands available on the <a href="/shops/{{ run.shop.name }}">{{ run.shop.name }} shop page</a>.</small></p>
 
+{% if url_source == 'live' %}
+<details class="card" style="padding: 0; overflow: hidden;" open>
+    <summary class="card-title" style="padding: 0.75rem 1rem; margin: 0; cursor: pointer; border-bottom: 1px solid var(--border);">
+        URL queue
+        <small class="text-muted">
+            ({{ url_breakdown.pending }} pending,
+            {{ url_breakdown.processing }} processing,
+            {{ url_breakdown.done }} done,
+            {{ url_breakdown.failed }} failed)
+        </small>
+    </summary>
+    <div style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--border);">
+        <a href="?url_status=all">all</a> ·
+        {% for s in url_statuses %}
+        <a href="?url_status={{ s }}"{% if url_status == s %} class="current"{% endif %}>{{ s }} ({{ url_breakdown[s] }})</a>{% if not loop.last %} ·{% endif %}
+        {% endfor %}
+    </div>
+    {% if url_rows %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Claimed</th>
+                <th>Done</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in url_rows %}
+            <tr>
+                <td><a href="{{ item.url }}" target="_blank" rel="noopener" style="word-break: break-all;">{{ item.url }}</a></td>
+                <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+                <td>{{ item.url_type }}</td>
+                <td class="text-muted">{{ item.claimed_at.strftime('%Y-%m-%d %H:%M:%S') if item.claimed_at else '—' }}</td>
+                <td class="text-muted">{{ item.done_at.strftime('%Y-%m-%d %H:%M:%S') if item.done_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if url_total_pages > 1 %}
+    <div class="pagination" style="padding: 0.75rem 1rem;">
+        {% if url_page > 1 %}<a href="?url_status={{ url_status }}&url_page={{ url_page - 1 }}">← Prev</a>{% else %}<span class="disabled">← Prev</span>{% endif %}
+        <span class="current">Page {{ url_page }} of {{ url_total_pages }}</span>
+        {% if url_page < url_total_pages %}<a href="?url_status={{ url_status }}&url_page={{ url_page + 1 }}">Next →</a>{% else %}<span class="disabled">Next →</span>{% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="text-muted" style="padding: 0.75rem 1rem;">No URL items in this filter.</p>
+    {% endif %}
+</details>
+{% elif url_total > 0 %}
+<details class="card" style="padding: 0; overflow: hidden;">
+    <summary class="card-title" style="padding: 0.75rem 1rem; margin: 0; cursor: pointer; border-bottom: 1px solid var(--border);">
+        URLs touched ({{ url_total }})
+        <small class="text-muted">— from discovered_urls (live queue cleaned up at run finish)</small>
+    </summary>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Type</th>
+                <th>HTTP</th>
+                <th>Last checked</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for du in url_rows %}
+            <tr>
+                <td><a href="/urls/{{ du.id }}" style="word-break: break-all;">{{ du.url }}</a></td>
+                <td>{{ du.url_type }}</td>
+                <td>{{ du.last_http_status or '—' }}</td>
+                <td class="text-muted">{{ du.last_checked_at.strftime('%Y-%m-%d %H:%M:%S') if du.last_checked_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if url_total_pages > 1 %}
+    <div class="pagination" style="padding: 0.75rem 1rem;">
+        {% if url_page > 1 %}<a href="?url_page={{ url_page - 1 }}">← Prev</a>{% else %}<span class="disabled">← Prev</span>{% endif %}
+        <span class="current">Page {{ url_page }} of {{ url_total_pages }}</span>
+        {% if url_page < url_total_pages %}<a href="?url_page={{ url_page + 1 }}">Next →</a>{% else %}<span class="disabled">Next →</span>{% endif %}
+    </div>
+    {% endif %}
+</details>
+{% endif %}
+
 {% set total_issues = issue_summary | sum(attribute='count') %}
 {% if issue_summary %}
 <details class="card" style="padding: 0; overflow: hidden;">

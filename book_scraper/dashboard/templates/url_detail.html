@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}URL #{{ url.id }}{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+    <a href="/urls" class="text-muted" style="font-size:0.85rem;">← Discovered URLs</a>
+    <h1 class="page-title" style="margin:0;">URL #{{ url.id }}</h1>
+    <form method="post" action="/scrape/url/{{ url.id }}" style="margin:0; margin-left:auto;">
+        <button type="submit" class="btn-secondary">Scrape this page</button>
+    </form>
+    {% if scraped %}
+    <span style="color:var(--badge-success-fg); font-size:0.85rem;">✓ Scrape started — refresh in a moment to see updated score</span>
+    {% endif %}
+</div>
+
+<!-- Section 1: URL metadata -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <h3 style="margin-top:0;">URL</h3>
+    <p style="font-family:monospace; word-break:break-all; margin-bottom:0.75rem;">
+        {{ url.url }}
+        <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" style="margin-left:0.5rem; font-size:0.85rem;">↗ open</a>
+    </p>
+    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+        {% if url.url_type == 'product' %}
+        <span class="badge badge-completed">product</span>
+        {% elif url.url_type == 'non_product' %}
+        <span class="badge badge-neutral">non_product</span>
+        {% else %}
+        <span class="badge badge-warning">unknown</span>
+        {% endif %}
+        <span class="badge badge-neutral">{{ url.source or '—' }}</span>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:0.5rem 1.5rem;">
+        <div><span class="text-muted" style="font-size:0.8rem;">Discovered</span><br>
+            {{ url.first_seen_at.strftime('%Y-%m-%d') if url.first_seen_at else '—' }}</div>
+        <div><span class="text-muted" style="font-size:0.8rem;">Last checked</span><br>
+            {{ url.last_checked_at.strftime('%Y-%m-%d') if url.last_checked_at else '—' }}</div>
+        <div><span class="text-muted" style="font-size:0.8rem;">HTTP status</span><br>
+            {% if url.last_http_status %}
+            <span class="{{ 'http-error' if url.last_http_status >= 400 else '' }}">{{ url.last_http_status }}</span>
+            {% else %}—{% endif %}</div>
+        <div><span class="text-muted" style="font-size:0.8rem;">Fail count</span><br>
+            <span class="{{ 'http-error' if url.fail_count >= 3 else '' }}">{{ url.fail_count }}</span></div>
+    </div>
+</div>
+
+<!-- Section 2: Linked shop book (only if shop_book exists) -->
+{% if url.shop_book %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <h3 style="margin-top:0;">Linked Shop Book</h3>
+    <div style="display:grid; grid-template-columns: max-content 1fr; gap:0.3rem 1.5rem; margin-bottom:0.75rem;">
+        <span class="text-muted">Title</span><span>{{ url.shop_book.title or '—' }}</span>
+        <span class="text-muted">Author</span><span>{{ url.shop_book.author or '—' }}</span>
+        <span class="text-muted">Type</span>
+        <span><span class="badge badge-neutral">{{ url.shop_book.type or '—' }}</span></span>
+        <span class="text-muted">Active</span><span>{{ 'Yes' if url.shop_book.is_active else 'No' }}</span>
+        <span class="text-muted">Price</span><span>{{ url.shop_book.price ~ ' €' if url.shop_book.price else '—' }}</span>
+    </div>
+    <a href="/shop-books/{{ url.shop_book.id }}" style="font-size:0.85rem;">→ Open shop book #{{ url.shop_book.id }}</a>
+</div>
+{% endif %}
+
+<!-- Section 3: Book score -->
+<div class="card">
+    <h3 style="margin-top:0;">Book Score</h3>
+    {% if classification %}
+    <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+        <span style="font-size:2rem; font-weight:700; color:{{ 'var(--badge-success-fg)' if classification.is_book_product else 'var(--badge-warning-fg)' }};">
+            {{ classification.book_score }}
+        </span>
+        {% if classification.is_book_product %}
+        <span class="badge badge-completed">✓ Classified as book</span>
+        {% else %}
+        <span class="badge badge-warning">✗ Not a book</span>
+        {% endif %}
+    </div>
+    {% if classification.reasons %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-top:0.5rem;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--border,#e5e7eb);">
+                <th style="text-align:left; padding:4px 8px; color:var(--text-muted); font-weight:500;">Criterion</th>
+                <th style="text-align:right; padding:4px 8px; color:var(--text-muted); font-weight:500;">Points</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for reason in classification.reasons %}
+            {% if reason is mapping %}
+                {% set pts = reason.points %}
+                {% set label = reason.key | replace('_', ' ') | title %}
+            {% else %}
+                {% set parts = reason.split(' ', 1) %}
+                {% set pts = parts[0] | int(0) %}
+                {% set label = parts[1] if parts | length > 1 else reason %}
+            {% endif %}
+            {% if pts > 0 %}
+                {% set row_color = 'var(--badge-success-fg)' %}
+                {% set pts_display = '+' ~ pts %}
+            {% elif pts < 0 %}
+                {% set row_color = 'var(--badge-error-fg)' %}
+                {% set pts_display = pts %}
+            {% else %}
+                {% set row_color = 'var(--text-muted)' %}
+                {% set pts_display = '—' %}
+            {% endif %}
+            <tr style="border-bottom:1px solid var(--border,#e5e7eb);">
+                <td style="padding:5px 8px; color:{{ row_color }};">{{ label }}</td>
+                <td style="text-align:right; padding:5px 8px; font-weight:600; color:{{ row_color }};">{{ pts_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">No reasons recorded.</p>
+    {% endif %}
+    <p class="text-muted" style="font-size:0.8rem; margin-top:0.75rem;">
+        Classified {{ classification.classified_at.strftime('%Y-%m-%d %H:%M') if classification.classified_at else '' }}
+    </p>
+    {% else %}
+    <p class="text-muted">Not yet classified — this URL has not been scanned.</p>
+    {% endif %}
+</div>
+{% endblock %}
