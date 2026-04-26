@@ -472,6 +472,178 @@ if (currentStatus !== 'running') {
 
 ---
 
+## P1/P2 — Run-management gaps (operator workflow, beyond just observability)
+
+The earlier UX items (#19–#21) were small surface controls. These are about making the run *lifecycle* something an operator can live with day-to-day, not just observe.
+
+### 22. Schedule / next-run / ETA visibility
+
+**Source:** there's no way to see when the next cron-fired run will happen, when this one will finish, or when the last successful run completed without reading the crontab + scrape_runs table by hand.
+
+**Three small additions, each independently useful:**
+
+- **"Next run in 4h 23m"** badge on the run-list page header. Read from `cron_jobs` (cron_expression → croniter → next firing). One small helper, displayed in the page header.
+- **"Last successful run: 3 hours ago"** badge. `MAX(finished_at) WHERE status='completed' AND shop_id=X`. Pairs with the next-run badge so the operator sees the cadence.
+- **"ETA ~25 min"** on the live view of a running run. Compute `pending_count / current_rate_per_minute`. Displayed alongside the existing rate counter.
+
+**Corner cases:**
+- **First-run bootstrap.** No prior data → ETA is null/unknown rather than "Infinity". Same for "last successful" if no run has succeeded yet.
+- **Throttle-induced stalls.** If `current_rate` drops to 0 (we're in the 220-second silence pattern), ETA goes to infinity. Cap at "—" and flag visually.
+- **Cron schedule changes.** If the operator edits `cron_jobs`, the badge needs to refresh. Recompute on each dashboard fetch (cheap).
+
+**Priority:** P2. Quality-of-life; operator currently has to mentally track "is the scan still going? when did the last one finish?".
+
+**Effort:** ~1 hour total for all three.
+
+---
+
+### 23. Pause / Resume (distinct from Stop)
+
+**Source:** there's no graceful "halt without killing" option. The current Stop button (#20) tears down the spider; a brief "pause for maintenance" requires Stop + Rerun, which fragments the run into multiple `scrape_runs` rows and risks losing in-flight state.
+
+**Use cases:**
+- Operator about to deploy something — pause briefly, deploy, resume.
+- Vaga.lt is having an outage — pause for 10 minutes, resume.
+- Disk space getting low — pause until cleanup completes.
+
+**Implementation:**
+- `POST /api/runs/{id}/pause` — flips `scrape_runs.status` to `'paused'` (new state). The spider polls `status` between requests; on `paused` it sleeps until status returns to `running`.
+- `POST /api/runs/{id}/resume` — flips back to `'running'`.
+- New status badge in the UI: yellow "paused" pill.
+- Heartbeat continues to tick during pause (so the run doesn't look dead).
+
+**Corner cases:**
+- **Pause during a long HTTP request.** The current request finishes (no point cancelling); next one waits on the pause check. Pause latency = roundtrip time of in-flight request, ~2 s. Acceptable.
+- **Pause during `prepare_scan`.** The queue prep finishes; pause kicks in before the first dispatch. Spider's poll loop checks status inside `start()` after queue load.
+- **Crash during pause.** The reaper sees stale heartbeat → marks failed. But heartbeat keeps ticking during pause, so this only triggers on actual crash. ✓
+- **Pause-while-paused / resume-when-running.** Both should be idempotent no-ops, not 4xx. Spec the API as "set state" rather than "transition".
+- **Auto-unpause timeout.** Optional but recommended: if a run sits in `paused` for >1 hour, auto-resume. Prevents forgotten pauses from blocking cron.
+
+**Priority:** P2. Need-to-have for any operator who runs the scraper through a maintenance window. Skip if you don't.
+
+**Effort:** ~3 hours including the new state in the schema, spider poll loop, and UI controls.
+
+---
+
+### 24. Run retention / cleanup policy
+
+**Source:** `scrape_runs` rows accumulate forever; `scrape_url_items` rows stay (post-PR #3 we explicitly stopped deleting them — they're now the source of truth for per-URL history). At ~3,000 rows × 1 run/day × 365 days = ~1.1M rows/year of `scrape_url_items` for a single shop. JSONL log is also append-only (#13).
+
+**Symptom (latent):** disk fills slowly, dashboard queries get slower, backups balloon. Months away, but worth designing now.
+
+**Fix — retention policy in three layers:**
+
+- **`scrape_runs`:** keep all completed/failed runs forever (cheap, valuable for trend analysis — they're hundreds of bytes each).
+- **`scrape_url_items`:** keep last N runs per shop with full per-URL detail; older runs aggregated into `scrape_runs` columns only (urls_total, items_added, etc. — already there). Concretely: a daily cleanup job that DELETEs `scrape_url_items` where `run_id NOT IN (last 30 runs per shop) AND run is terminal AND finished_at < now() - interval '30 days'`.
+- **JSONL log:** logrotate with 14-day retention (already proposed in #13).
+
+**Corner cases:**
+- **Active run protection.** Cleanup must filter `WHERE run.status NOT IN ('running','paused')` to never touch active queues.
+- **Cascade safety.** `scrape_url_items.run_id` is FK to `scrape_runs.id`. Deleting items doesn't affect runs ✓. But `validation_issues.scrape_run_id` exists too — verify deletion order. Probably want to keep validation issues longer (cheap, valuable for trend analysis).
+- **Foreign-key from `discovered_urls`?** Check the schema — if discovered_urls reference scrape_url_items, deletion order matters.
+- **Concurrent run while cleanup runs.** Cleanup wraps deletes in a transaction; if a run is mid-flight, its rows are excluded by the WHERE clause. Lock contention is minimal (different rows).
+
+**Priority:** P2. Not urgent (months runway), but easier to implement before the table hits a million rows than after.
+
+**Effort:** ~2 hours including the cleanup script, cron-installable Postgres job (`pg_cron` extension or a small Python script), and a dashboard "DB size by table" widget so the operator can see it working.
+
+---
+
+### 25. Repeated-failure detection / alerting
+
+**Source:** if 5 consecutive runs for the same shop fail with the same `error_reason`, that's a systemic problem (server-side block, broken parser, expired auth) — not transient. Today the operator only notices when they happen to look. Pairs with #18 (alerting) but is more specific.
+
+**Detection rule:** "N consecutive runs for the same shop+phase ended in `failed` status with the same `error_reason` cluster in the last K hours."
+
+**Where to compute it:**
+- Cheapest: a SQL view + dashboard query, computed on each list-page fetch. No background job.
+- Slightly fancier: a Postgres trigger on `scrape_runs.status` change to terminal that increments a per-shop "consecutive failures" counter, resets on success.
+
+**Surface in UI:**
+- Red banner at the top of the run-list page when a shop has 3+ consecutive failures.
+- Same context surfaced in the per-shop detail page.
+- Optional: tied into #18's Slack hook.
+
+**Corner cases:**
+- **Different error_reason each time.** Genuinely transient — don't alert. The "same cluster" requirement matters.
+- **Cron retries the next day.** A single retry shouldn't reset the counter — only `status='completed'` should. Keep the consecutive count across days.
+- **Manual reruns (#19) interleaved.** A manual rerun that succeeds should reset the counter; a manual rerun that fails should advance it. Same rule as cron.
+- **Threshold tuning.** N=3 vs N=5 changes false-positive rate. Start at 3 with an env-var override.
+
+**Priority:** P1 if you run unattended for >1 day at a time; P2 otherwise.
+
+**Effort:** ~2 hours for the SQL view + UI banner + tests.
+
+---
+
+### 26. Run-list filtering / search
+
+**Source:** the run-list page shows the most recent N runs. Once you have hundreds of runs, finding "all failed runs in the last week for vaga.lt" requires a SQL query.
+
+**Add to the run-list page:**
+- Filter dropdowns: shop, status, phase. Already partly exists in `/api/runs` query params; surface in the React UI.
+- Date range picker: "from"/"to" timestamps.
+- Free-text search across `error_reason` (server-side `ILIKE`).
+- URL-state for filters (so a saved bookmark links to the same view).
+
+**Corner cases:**
+- **Search-as-you-type vs explicit submit.** At a few-hundred-run scale, on-blur or explicit submit is fine. Debounced search-as-you-type at 300 ms is friendlier.
+- **Empty result.** Show "No runs match these filters" with a "Clear filters" button. Don't show a stale list.
+- **Pagination.** Already implemented; verify it composes with filters.
+
+**Priority:** P2. Comfort feature; only matters once the run list gets long.
+
+**Effort:** ~1.5 hours.
+
+---
+
+### 27. Pre-flight checks before starting a run
+
+**Source:** `/scrape` POST and the rerun button (#19) both fire-and-forget a scrapy subprocess with no validation. If the DB is down, migrations are pending, disk is full, or another run is already active for the shop, the subprocess starts then fails 30 s in. Operator sees "run created, then immediately failed" with no useful diagnostic.
+
+**Pre-flight checks** (run synchronously in the POST handler before spawning the subprocess):
+
+| Check | Failure mode if skipped |
+|---|---|
+| DB reachable + migrations up-to-date | Spider crashes on first query |
+| No `running`/`paused` run for this shop+phase | Two concurrent scans = doubled load (#16) |
+| Disk space > 1 GB free on `/var/log` | JSONL log writes fail mid-run |
+| `cron_jobs` row exists (or operator opted out) | Run is one-off; OK but log it |
+| Shop config TOML loads without error | Spider crashes immediately |
+
+If any check fails: return 400 with the specific reason; do not spawn. Operator sees a crisp error message instead of a mysterious failed run.
+
+**Corner cases:**
+- **DB-reachable check is itself a query.** Use `pool_pre_ping` (item #11) — same connection check, free.
+- **"Running" check has its own race.** Two operators clicking at the same instant. Use Postgres advisory lock (item #16) for the actual run-creation transaction.
+- **Disk-space check on a Docker volume.** Use `shutil.disk_usage("/var/log")` from inside the container; the mount point may not be the path the operator expects, document clearly.
+
+**Priority:** P2. Saves a class of "I clicked Scrape and it failed for no reason" debugging.
+
+**Effort:** ~1.5 hours.
+
+---
+
+### 28. Per-rerun config overrides
+
+**Source:** rerun button (#19) currently uses the shop's TOML config as-is. Common operator need: "rerun this with `DOWNLOAD_DELAY=10` to be gentler on the server" or "rerun with a different shop". Currently requires editing TOML and rebuilding.
+
+**Add to the rerun dialog (#19):**
+- A small form: download_delay (number), max_urls (cap), httpx_client_reset_after_requests (number). Pre-filled from the original run / shop config.
+- Submit overrides them as `-s` flags on the spawned scrapy command.
+- The override values are stored on the new `scrape_run` row (new column `config_overrides JSONB`) so post-mortems can see what the operator changed.
+
+**Corner cases:**
+- **Override leaks across runs.** Each rerun creates its own scrape_run with its own config_overrides; cron-fired runs use the TOML default. No persistence across reruns unless the operator edits the TOML.
+- **Invalid override (negative delay, non-integer max_urls).** Validate in the POST handler before spawning. Return 400 with the field-specific error.
+- **Schema migration.** Adding `config_overrides` column to `scrape_runs` is a small migration; old rows have NULL ✓.
+
+**Priority:** P3. Useful but not blocking; the workaround (edit TOML, restart, rerun) takes 30 seconds.
+
+**Effort:** ~2 hours.
+
+---
+
 ## Suggested order of attack (revised)
 
 The corner-case review and operator feedback changed priorities. Highest-leverage first:
@@ -484,12 +656,19 @@ The corner-case review and operator feedback changed priorities. Highest-leverag
 6. **#19 ("Re-run failed" button)** — ~1.5 hours. The operator's most-requested missing button; pairs naturally with #10 (rerun = make a new run that inherits the queue).
 7. **#20 ("Stop" button)** — ~2 hours. Completes the lifecycle control from the UI. Cross-container signal mechanism is the bulk of the effort.
 8. **#16 (advisory lock for cross-process coordination)** — ~1 hour, prevents the cross-worktree zombie pattern.
-9. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
-10. **#13 (logrotate)** — 10 minutes, set-and-forget.
-11. **#12 (absolute log path)** — 5 minutes.
-12. **#5, #6** — small verification tasks, batch them.
-13. **#18 (alerting)** — only if you actually want pager-style notifications.
-14. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
+9. **#25 (repeated-failure detection)** — ~2 hours. Important as soon as you run unattended; cheap to add.
+10. **#22 (schedule + ETA visibility)** — ~1 hour, three small badges. High operator-quality-of-life return.
+11. **#27 (pre-flight checks)** — ~1.5 hours, eliminates a class of "started, then failed for no reason" mysteries.
+12. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
+13. **#24 (retention / cleanup)** — ~2 hours, set-and-forget; do before the DB hits a million rows.
+14. **#23 (pause / resume)** — ~3 hours. Skip if you don't run through maintenance windows.
+15. **#26 (run-list filtering)** — ~1.5 hours. Comfort feature; only matters with hundreds of runs.
+16. **#13 (logrotate)** — 10 minutes, set-and-forget.
+17. **#12 (absolute log path)** — 5 minutes.
+18. **#5, #6** — small verification tasks, batch them.
+19. **#28 (per-rerun config overrides)** — ~2 hours. Workaround is editing TOML; do when that becomes annoying.
+20. **#18 (alerting)** — only if you actually want pager-style notifications. Pairs with #25.
+21. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
 
 Items NOT worth doing right now:
 - **#1 (AUTOTHROTTLE bypass)** is technically still open in the sense that we don't use Scrapy's native AUTOTHROTTLE. But our internal pacing in PR #4+ does the same job functionally. Re-emitting Scrapy signals (option B) would only matter if we wanted Scrapy's stats / extensions to see the requests, which we don't.
@@ -500,3 +679,4 @@ Items NOT worth doing right now:
 **Natural batches that group well:**
 - **Pure-UX bundle (~3.5 hours):** #21 + #19 + #20. Each item changes only the React component + a small API endpoint; ship as one PR.
 - **Reaper/lifecycle bundle (~5 hours):** #11 + #15 + #2-full + #10-partial + #16. They all touch the same set of files (`session.py`, reaper, spider close path, repo helpers). One PR avoids stepping on itself.
+- **Run-management bundle (~5 hours):** #22 + #25 + #27. All touch the dashboard's run-list/detail pages + the `/scrape` POST handler. The schedule badge, the failure-detection banner, and the pre-flight check share the same query layer.
