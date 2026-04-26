@@ -204,6 +204,13 @@ function HFRunDetail({ nav, goto, params }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
+  // URL queue / history state (separate fetch — its own filter & pagination)
+  const [urlStatus, setUrlStatus] = React.useState('all');
+  const [urlPage, setUrlPage] = React.useState(1);
+  const URL_PER_PAGE = 50;
+  const [urlData, setUrlData] = React.useState(null);
+  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus]);
+
   React.useEffect(() => {
     if (!runId) return;
     fetch(`/api/runs/${runId}`)
@@ -211,6 +218,23 @@ function HFRunDetail({ nav, goto, params }) {
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [runId]);
+
+  React.useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    const params = new URLSearchParams({
+      status: urlStatus, page: String(urlPage), per_page: String(URL_PER_PAGE),
+    });
+    const load = () => fetch(`/api/runs/${runId}/urls?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setUrlData(d); })
+      .catch(() => {});
+    load();
+    // Auto-refresh while the run is still live.
+    const isLive = data?.status === 'running';
+    const id = isLive ? setInterval(load, 3000) : null;
+    return () => { cancelled = true; if (id) clearInterval(id); };
+  }, [runId, urlStatus, urlPage, data?.status]);
 
   if (loading || !data) {
     return (
@@ -302,6 +326,81 @@ function HFRunDetail({ nav, goto, params }) {
           </div>
         </HFCard>
       </div>
+
+      {/* URL queue (live) / URL history (finished) */}
+      {urlData && (urlData.source === 'live' || urlData.total > 0) && (
+        <HFCard
+          title={urlData.source === 'live' ? 'URL queue' : 'URLs touched'}
+          sub={urlData.source === 'live'
+            ? `${urlData.breakdown.pending} pending · ${urlData.breakdown.processing} processing · ${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed`
+            : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
+          style={{ marginTop: HF.gap }}
+        >
+          {urlData.source === 'live' && (
+            <div style={{display:'flex', gap:6, padding:`8px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`, flexWrap:'wrap'}}>
+              {['all', ...urlData.statuses].map(s => (
+                <HFButton key={s} size="sm"
+                  variant={urlStatus === s ? 'accent' : 'subtle'}
+                  onClick={() => setUrlStatus(s)}>
+                  {s}{s !== 'all' && ` (${urlData.breakdown[s] ?? 0})`}
+                </HFButton>
+              ))}
+            </div>
+          )}
+          {urlData.rows.length === 0 ? (
+            <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:12.5}}>
+              No URLs in this filter.
+            </div>
+          ) : (
+            <div style={{padding:`4px 0`}}>
+              {urlData.rows.map((u, i) => {
+                const tone = u.status === 'done' ? 'ok'
+                  : u.status === 'failed' ? 'err'
+                  : u.status === 'processing' ? 'accent'
+                  : 'neutral';
+                const httpTone = u.last_http_status && u.last_http_status >= 400 ? 'err'
+                  : u.last_http_status ? 'ok' : 'neutral';
+                return (
+                  <div key={i} style={{
+                    display:'grid',
+                    gridTemplateColumns: urlData.source === 'live' ? '1fr 90px 80px 130px 130px' : '1fr 80px 70px 150px',
+                    padding:`7px ${HF.cardP}px`,
+                    borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                    fontSize:12.5, alignItems:'center', gap:10,
+                  }}>
+                    <a href={u.url} target="_blank" rel="noopener" style={{fontFamily:HF.mono, fontSize:12, color:HF.accentInk, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{u.url}</a>
+                    {urlData.source === 'live' ? (
+                      <>
+                        <HFPill tone={tone} style={{width:'fit-content'}}>{u.status}</HFPill>
+                        <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.done_at ? new Date(u.done_at).toLocaleTimeString() : '—'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <HFPill tone={httpTone} style={{width:'fit-content'}}>{u.last_http_status ?? '—'}</HFPill>
+                        <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.last_checked_at ? new Date(u.last_checked_at).toLocaleString() : '—'}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {urlData.pages > 1 && (
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`, fontSize:12, color:HF.ink3}}>
+              <span>Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs</span>
+              <div style={{display:'flex', gap:6}}>
+                <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
+                  onClick={() => setUrlPage(p => Math.max(1, p - 1))}>‹ Prev</HFButton>
+                <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
+                  onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>Next ›</HFButton>
+              </div>
+            </div>
+          )}
+        </HFCard>
+      )}
 
       {/* Events + Params */}
       <div style={{display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:HF.gap}}>

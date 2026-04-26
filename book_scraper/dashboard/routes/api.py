@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from book_scraper.dashboard.deps import get_db, get_docker_client
 from book_scraper.dashboard.queries import (
     ISSUE_DESCRIPTIONS,
+    RUN_URL_STATUSES,
     get_all_shops,
     get_data_completeness,
     get_discovered_urls_page,
@@ -22,7 +23,10 @@ from book_scraper.dashboard.queries import (
     get_price_changes,
     get_price_history,
     get_recent_runs,
+    get_run_discovered_urls,
     get_run_issue_summary,
+    get_run_url_breakdown,
+    get_run_url_items,
     get_scrape_activity_by_day,
     get_shop_book_changes,
     get_shop_book_issues,
@@ -432,6 +436,76 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
         raise HTTPException(status_code=404, detail="Run not found")
     issues = get_run_issue_summary(session, run_id)
     return {**_run_dict(run), "issues": issues}
+
+
+@router.get("/runs/{run_id}/urls")
+def api_run_urls(
+    run_id: int,
+    status: str = "all",
+    page: int = 1,
+    per_page: int = 50,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """URL queue (live `scrape_url_items`) or history (`discovered_urls`)
+    for a run, with status counts and pagination."""
+    run = session.get(ScrapeRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    breakdown = get_run_url_breakdown(session, run_id)
+    has_live = sum(breakdown.values()) > 0
+    page = max(page, 1)
+    per_page = max(min(per_page, 200), 1)
+
+    if has_live:
+        if status not in {"all", *RUN_URL_STATUSES}:
+            status = "all"
+        items, total = get_run_url_items(
+            session, run_id, status=status, page=page, per_page=per_page
+        )
+        rows = [
+            {
+                "url": it.url,
+                "status": it.status,
+                "url_type": it.url_type,
+                "claimed_at": it.claimed_at.isoformat() if it.claimed_at else None,
+                "done_at": it.done_at.isoformat() if it.done_at else None,
+            }
+            for it in items
+        ]
+        source = "live"
+    else:
+        items_du, total = get_run_discovered_urls(
+            session, run_id, page=page, per_page=per_page
+        )
+        rows = [
+            {
+                "id": du.id,
+                "url": du.url,
+                "url_type": du.url_type,
+                "last_http_status": du.last_http_status,
+                "last_checked_at": (
+                    du.last_checked_at.isoformat() if du.last_checked_at else None
+                ),
+            }
+            for du in items_du
+        ]
+        source = "history"
+        # Status filter is meaningless for history — coerce to "all".
+        status = "all"
+
+    pages = max((total + per_page - 1) // per_page, 1)
+    return {
+        "source": source,
+        "breakdown": breakdown,
+        "status": status,
+        "statuses": list(RUN_URL_STATUSES),
+        "rows": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+    }
 
 
 # ─── Shop Books ──────────────────────────────────────────────────────────────
