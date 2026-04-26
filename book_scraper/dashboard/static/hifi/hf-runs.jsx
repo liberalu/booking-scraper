@@ -318,7 +318,10 @@ function HFLivePanel({ data, HF }) {
             <div style={{color:HF.ink4, fontWeight:600}}>duration</div>
             <div style={{color:HF.ink4, fontWeight:600}}>throttle</div>
             <div style={{color:HF.ink4, fontWeight:600}}>url</div>
-            <div style={{color:HF.ink4, fontWeight:600, textAlign:'right'}}>bytes</div>
+            <div style={{color:HF.ink4, fontWeight:600, textAlign:'right'}}
+                 title="Decompressed page size (what the parser saw). Wire bytes can be much smaller — vaga.lt serves gzipped, ~4× smaller on the wire.">
+              size
+            </div>
             {activity.map((row, i) => {
               const label = DELAY_SOURCE_LABELS[row.delay_source] || {};
               const ok = row.status === 'done';

@@ -156,6 +156,30 @@ Already implemented in `hf-runs.jsx` — verify when a non-vaga shop is added.
 
 ---
 
+## P1 — Just-surfaced (post-throttle-fix)
+
+### 10. vaga.lt rate-limits us after ~100 requests; httpx hangs silently
+
+**Source:** PR #4 smoke run (run 178) hit a 220-second silence after exactly 100 successful responses, followed by `StallDetector` firing.
+
+**Symptom:** scan completes ~100 URLs successfully, then httpx requests hang (no response, no immediate error). My adaptive throttle ratchets `current_delay` to the `AUTOTHROTTLE_MAX_DELAY` ceiling on the first timeout, so subsequent attempts are 30 s sleep + 60 s `HARD_REQUEST_TIMEOUT_S` = 90 s/attempt. After 2–3 back-to-back hangs, `STALL_TIMEOUT = 60 s` (with my throttle's overshoot) makes `StallDetector` fire and the run is correctly marked failed at the spider level — but ~2,400 URLs of the queue remain unprocessed.
+
+**Note from history:** the existing code comment says *"Twisted's HTTP client hangs on some servers (e.g. vaga.lt) after ~120 requests. This middleware intercepts all requests and uses httpx async client, which handles the same requests without issues."* The httpx switch shifted the wall from ~120 to ~100, but the wall is still there. The underlying issue is on the server side, not the client.
+
+**Possible mitigations:**
+- **Connection rotation.** Force httpx to drop and re-open the connection every N requests (we already set `Connection: close`, but maybe httpx is reusing the underlying socket pool anyway). Combine with an explicit `httpx.AsyncClient` reset every ~80 requests.
+- **IP rotation.** Proxy the requests through a rotating-IP service. Heavyweight; only worth it if scrape volume justifies the cost.
+- **Auto-resume on stall.** When `StallDetector` fires, mark the *run* as needing-resume rather than `failed`, and let the next scheduled run pick up the remaining `pending` rows. The existing `find_resumable_run` machinery already supports this — just don't transition to `failed` on `stall_timeout`.
+- **Cool-down + retry the run itself.** After a stall, schedule a fresh run for the same shop in N minutes (vaga.lt's rate limit appears to be transient — a new run after a pause works again).
+
+**Priority:** P1. The scraper currently can't complete a full ~3,000-URL run for vaga.lt in a single attempt without hitting this wall.
+
+**Effort:** auto-resume on stall is the cheapest win — ~1 hour. Connection rotation is ~1 day of investigation. IP rotation is a project.
+
+**Surfaced by:** the live observability work (PR #3) made the stall pattern visible in real time. Without `recent_activity` and the JSONL log, "scan ran for 7 minutes then stopped" would have been the only signal.
+
+---
+
 ## Cleanup
 
 ### 9. Stash on main repo: `pre-PR3-merge: superseded observability draft`
