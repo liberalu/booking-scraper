@@ -622,8 +622,35 @@ def finish_scrape_run(
     run.status = status
     run.finished_at = datetime.now(UTC)
     session.flush()
+    if was_running:
+        abort_processing_scrape_url_items(session, run_id)
     if was_running and status == "failed":
         record_scrape_run_failed_issue(session, run, reason or "finished_failed")
+
+
+def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
+    """Flip any still-`processing` rows to `failed` with reason=run_aborted.
+
+    Called when a run transitions to a terminal state (failed/completed)
+    so in-flight rows don't sit at `processing` indefinitely after the
+    process behind them is gone.
+    """
+    now = datetime.now(UTC)
+    items = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "processing",
+        )
+        .all()
+    )
+    for item in items:
+        item.status = "failed"
+        item.done_at = now
+        if item.error_reason is None:
+            item.error_reason = "run_aborted"
+    session.flush()
+    return len(items)
 
 
 def record_scrape_run_failed_issue(
@@ -675,6 +702,7 @@ def mark_stale_runs_failed(
         run.status = "failed"
         run.finished_at = now
         record_scrape_run_failed_issue(session, run, reason)
+        abort_processing_scrape_url_items(session, run.id)
     session.flush()
     return len(stale)
 
@@ -720,6 +748,7 @@ def mark_orphan_runs_failed(session: Session) -> int:
         run.status = "failed"
         run.finished_at = now
         record_scrape_run_failed_issue(session, run, "orphan_on_boot")
+        abort_processing_scrape_url_items(session, run.id)
     session.flush()
     return len(orphans)
 

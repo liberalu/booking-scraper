@@ -256,11 +256,15 @@ def kill_run(run_id: int, session: Session = Depends(get_db)):
         logger.info("Sent SIGTERM to PID %d (run #%d)", run.pid, run_id)
         return HTMLResponse(f'<p class="success">Sent SIGTERM to PID {run.pid}</p>')
     except ProcessLookupError:
-        from book_scraper.db.repo import record_scrape_run_failed_issue
+        from book_scraper.db.repo import (
+            abort_processing_scrape_url_items,
+            record_scrape_run_failed_issue,
+        )
 
         run.status = "failed"
         run.finished_at = datetime.now(UTC)
         record_scrape_run_failed_issue(session, run, "killed_pid_dead")
+        abort_processing_scrape_url_items(session, run_id)
         session.commit()
         return HTMLResponse(f"<p>Process {run.pid} already dead. Marked as failed.</p>")
     except PermissionError:

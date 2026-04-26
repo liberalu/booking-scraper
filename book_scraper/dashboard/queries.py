@@ -118,7 +118,10 @@ def get_run_health(run: ScrapeRun) -> str:
 
 def mark_stale_runs(session: Session) -> int:
     """Mark runs with no heartbeat for over DEAD_RUN_MINUTES as failed."""
-    from book_scraper.db.repo import record_scrape_run_failed_issue
+    from book_scraper.db.repo import (
+        abort_processing_scrape_url_items,
+        record_scrape_run_failed_issue,
+    )
 
     cutoff = datetime.now(UTC) - timedelta(minutes=DEAD_RUN_MINUTES)
     stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
@@ -129,6 +132,7 @@ def mark_stale_runs(session: Session) -> int:
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
             record_scrape_run_failed_issue(session, run, "heartbeat_timeout")
+            abort_processing_scrape_url_items(session, run.id)
             marked += 1
     if marked:
         session.commit()
