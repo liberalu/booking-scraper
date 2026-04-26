@@ -1166,6 +1166,23 @@ def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str
     ]
 
 
+def mark_scrape_url_item_processing(
+    session: Session,
+    item_id: int,
+    dispatched_at: float,
+) -> None:
+    """Mark a scrape_url_item in-flight: status=processing + claimed_at.
+
+    Called from HttpxMiddleware.process_request the moment the request
+    goes out, so the dashboard can surface "currently scraping" rows.
+    """
+    item = session.get(ScrapeUrlItem, item_id)
+    if item:
+        item.status = "processing"
+        item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        session.flush()
+
+
 def mark_scrape_url_item_done(
     session: Session,
     item_id: int,
