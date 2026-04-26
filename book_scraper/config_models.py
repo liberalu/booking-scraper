@@ -56,6 +56,11 @@ class ScrapingConfig(BaseModel):
     read_timeout: float = 10.0
     hard_timeout: float = 30.0
     batch_timeout: float = 300.0
+    # Tear down + recreate the httpx.AsyncClient every N requests to
+    # bound TIME_WAIT pile-up (client side) and cumulative connection
+    # tracking (server side). vaga.lt walls at ~100; 80 is a safe
+    # default below that. Tune per shop via [scraping] in the TOML.
+    httpx_client_reset_after_requests: int = 80
 
 
 class SitemapConfig(BaseModel):

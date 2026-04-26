@@ -114,7 +114,7 @@ class HttpxMiddleware:  # pragma: no cover
             },
         )
 
-    async def _maybe_reset_client(self) -> None:
+    async def _maybe_reset_client(self, reset_after: int | None = None) -> None:
         """Rotate the httpx.AsyncClient every N requests.
 
         Bounded TIME_WAIT pile-up + bounded server-side state. Holds
@@ -122,12 +122,17 @@ class HttpxMiddleware:  # pragma: no cover
         callers don't see a half-closed client. (With CONCURRENT_
         REQUESTS_PER_DOMAIN = 1 we don't really get concurrent
         callers, but be defensive in case future shops bump it.)
+
+        ``reset_after`` may be supplied per-call (e.g. read from the
+        active spider's shop config) to override the global default.
         """
+        threshold = reset_after if reset_after is not None else self._client_reset_after
+        threshold = max(1, threshold)
         # Read+increment under the same lock to avoid two requests
         # both deciding "I will reset".
         async with self._client_lock:
             self._requests_since_reset += 1
-            if self._requests_since_reset < self._client_reset_after:
+            if self._requests_since_reset < threshold:
                 return
             old = self.client
             self.client = self._make_client()
@@ -240,7 +245,9 @@ class HttpxMiddleware:  # pragma: no cover
         except Exception:
             logger.exception("mark_processing failed for item %d", item_id)
 
-    async def process_request(self, request: Request) -> HtmlResponse:
+    async def process_request(
+        self, request: Request, spider: Any = None
+    ) -> HtmlResponse:
         """Intercept request, pace per-host, then handle with httpx.
 
         The per-host lock is held for the entire HTTP roundtrip so we
@@ -289,7 +296,17 @@ class HttpxMiddleware:  # pragma: no cover
 
             # Rotate the httpx client periodically (TIME_WAIT pile-up
             # + server-side cumulative tracking, see follow-up #10).
-            await self._maybe_reset_client()
+            # The shop's TOML can override the global setting via
+            # `[scraping] httpx_client_reset_after_requests`.
+            reset_after: int | None = None
+            shop_conf = getattr(spider, "conf", None)
+            if shop_conf is not None:
+                scraping = getattr(shop_conf, "scraping", None)
+                if scraping is not None:
+                    reset_after = getattr(
+                        scraping, "httpx_client_reset_after_requests", None
+                    )
+            await self._maybe_reset_client(reset_after)
 
             status_code: int | None = None
             try:

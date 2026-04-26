@@ -18,6 +18,15 @@ class TestShopConfig:
         assert config.shop.base_url == "https://test.lt"
         assert config.scraping.batch_size == 100  # default
         assert config.scraping.download_delay == 1.0  # default
+        assert config.scraping.httpx_client_reset_after_requests == 80  # default
+
+    def test_httpx_client_reset_override(self):
+        data = {
+            "shop": {"name": "fast", "base_url": "https://fast.example"},
+            "scraping": {"httpx_client_reset_after_requests": 200},
+        }
+        config = ShopConfig.model_validate(data)
+        assert config.scraping.httpx_client_reset_after_requests == 200
 
     def test_full_vaga_config(self):
         data = {
