@@ -353,6 +353,35 @@ function HFRunDetail({ nav, goto, params }) {
             </div>
           ) : (
             <div style={{padding:`4px 0`}}>
+              <div style={{
+                display:'grid',
+                gridTemplateColumns: urlData.source === 'live'
+                  ? '1fr 80px 60px 70px 70px 130px'
+                  : '1fr 60px 70px 150px',
+                padding:`8px ${HF.cardP}px`,
+                borderBottom: `1px solid ${HF.border}`,
+                fontSize: 11, fontFamily: HF.mono, fontWeight: 500,
+                color: HF.ink3, textTransform: 'uppercase', letterSpacing: 0.4,
+                gap: 10,
+              }}>
+                {urlData.source === 'live' ? (
+                  <>
+                    <span>Title / URL</span>
+                    <span>Status</span>
+                    <span>HTTP</span>
+                    <span>Type</span>
+                    <span>Duration</span>
+                    <span>Reason / Done</span>
+                  </>
+                ) : (
+                  <>
+                    <span>URL</span>
+                    <span>HTTP</span>
+                    <span>Type</span>
+                    <span>Last checked</span>
+                  </>
+                )}
+              </div>
               {urlData.rows.map((u, i) => {
                 const tone = u.status === 'done' ? 'ok'
                   : u.status === 'failed' ? 'err'
