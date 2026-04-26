@@ -13,7 +13,7 @@ from book_scraper.dashboard.queries import mark_stale_runs
 
 logger = logging.getLogger(__name__)
 
-REAPER_INTERVAL_SECONDS = int(os.environ.get("REAPER_INTERVAL_SECONDS", "300"))
+REAPER_INTERVAL_SECONDS = int(os.environ.get("REAPER_INTERVAL_SECONDS", "30"))
 
 
 async def reaper_loop() -> None:

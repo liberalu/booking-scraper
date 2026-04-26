@@ -411,6 +411,13 @@ class ScrapeRun(Base):
         DateTime(timezone=True), nullable=True
     )
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # When a run is reaped for heartbeat_timeout / stall_timeout, its
+    # pending scrape_url_items are still useful — the next scheduled run
+    # inherits them rather than discarding the work. This flag is set by
+    # the reaper / StallDetector on the failed-but-resumable transition.
+    resumable_after_failure: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa_text("false")
+    )
 
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(

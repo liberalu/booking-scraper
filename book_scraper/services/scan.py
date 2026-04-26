@@ -11,10 +11,12 @@ from book_scraper.db.repo import (
     finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
+    inherit_pending_items,
     insert_scrape_url_item,
     mark_cron_job_ran_if_matches,
     mark_stale_runs_failed,
     prepare_scrape_url_items,
+    try_acquire_scan_lock,
     update_discovered_url_status,
     update_scrape_run_progress,
     upsert_shop,
@@ -28,6 +30,21 @@ class ScanPlan:
     urls_total: int
     urls_skipped: int
     freshness_warnings: list[str] = field(default_factory=list)
+    # Deferred queue-population payload. None when the plan resolves to a
+    # resumable run (queue already populated) or when the lock could not
+    # be acquired. The spider passes the plan back to
+    # `populate_scan_queue` after emitting `run_started`, so that the
+    # heartbeat extension is ticking before the slow row-insert begins.
+    _shop_id: int | None = None
+    _urls_to_scrape: list[Any] | None = None
+    # When the lock for (shop_id, "scan") can't be acquired because
+    # another scrapy process owns the active run, this is True and the
+    # spider should exit cleanly.
+    lock_not_acquired: bool = False
+    # When `find_resumable_run` returned a previously-failed run flagged
+    # `resumable_after_failure`, this carries that run's id; the spider
+    # should re-point its pending items to the new run before yielding.
+    _inherit_from_run_id: int | None = None
 
 
 class ScanService:
@@ -41,13 +58,52 @@ class ScanService:
         shop_config: Any,
         rescrape: bool = False,
     ) -> ScanPlan:
-        """Prepare a scan run.
+        """Prepare a scan run end-to-end (create run + populate queue).
 
-        If a previous 'running' run with pending scrape_url_items exists for
-        this shop, resume it (return its run_id, keep the queue). Otherwise
-        mark stale runs failed, create a new run, and populate the queue.
+        Convenience wrapper kept for callers that don't need the heartbeat
+        blackout fix (tests, non-spider invocations). The spider uses the
+        two-phase API: ``prepare_scan_create_run`` then
+        ``populate_scan_queue``.
+        """
+        plan = self.prepare_scan_create_run(
+            shop_name, base_url, shop_config, rescrape=rescrape
+        )
+        if plan.lock_not_acquired:
+            return plan
+        self.populate_scan_queue(plan)
+        return plan
+
+    def prepare_scan_create_run(
+        self,
+        shop_name: str,
+        base_url: str,
+        shop_config: Any,
+        rescrape: bool = False,
+    ) -> ScanPlan:
+        """Phase 1: acquire the shop+phase lock and create a fresh run row.
+
+        Resolves to either a resumable run (queue already populated, no
+        further work) or a fresh run with a deferred queue (plan carries
+        the URL list for ``populate_scan_queue``).
+
+        Why split: the queue insert can take 30+ seconds on cold cache.
+        Emitting ``run_started`` between phase 1 and phase 2 lets the
+        heartbeat extension tick during the insert, so the reaper does
+        not false-positive on long queue prep.
         """
         shop = upsert_shop(self.session, shop_name, base_url)
+
+        # Acquire advisory lock keyed on (shop_id, "scan"). Held for the
+        # duration of this transaction; released on commit. Two scrapy
+        # processes hitting this concurrently: one wins, one returns
+        # lock_not_acquired and exits cleanly upstream.
+        if not try_acquire_scan_lock(self.session, shop.id, "scan"):
+            return ScanPlan(
+                run_id=0,
+                urls_total=0,
+                urls_skipped=0,
+                lock_not_acquired=True,
+            )
 
         resumable = find_resumable_run(self.session, shop.id, "scan")
         if resumable is not None:
@@ -56,11 +112,28 @@ class ScanService:
                 .filter_by(run_id=resumable.id, status="pending")
                 .count()
             )
+            # Resumable-running run: reuse the row outright.
+            if resumable.status == "running":
+                self.session.commit()
+                return ScanPlan(
+                    run_id=resumable.id,
+                    urls_total=pending_count,
+                    urls_skipped=0,
+                    freshness_warnings=[],
+                )
+            # Resumable-failed run (heartbeat_timeout / stall_timeout):
+            # spawn a fresh run row that inherits the failed run's pending
+            # queue. Old run stays `failed` for postmortem.
+            run = create_scrape_run(
+                self.session, shop.id, "scan", urls_total=pending_count
+            )
+            self.session.commit()
             return ScanPlan(
-                run_id=resumable.id,
+                run_id=run.id,
                 urls_total=pending_count,
                 urls_skipped=0,
                 freshness_warnings=[],
+                _inherit_from_run_id=resumable.id,
             )
 
         mark_stale_runs_failed(self.session, shop.id, "scan")
@@ -87,8 +160,8 @@ class ScanService:
         run = create_scrape_run(
             self.session, shop.id, "scan", urls_total=len(urls_to_scrape)
         )
-        # Persist work queue to DB for crash recovery
-        prepare_scrape_url_items(self.session, shop.id, run.id, urls_to_scrape)
+        # Commit so the run row + heartbeat are visible to the reaper
+        # before the (potentially slow) queue insert begins.
         self.session.commit()
 
         return ScanPlan(
@@ -96,7 +169,31 @@ class ScanService:
             urls_total=len(urls_to_scrape),
             urls_skipped=urls_skipped,
             freshness_warnings=warnings,
+            _shop_id=shop.id,
+            _urls_to_scrape=urls_to_scrape,
         )
+
+    def populate_scan_queue(self, plan: ScanPlan) -> None:
+        """Phase 2: insert scrape_url_items rows for the plan.
+
+        No-op when the plan is for a resumable-running run (queue already
+        populated) or when the lock was not acquired. When the plan
+        carries `_inherit_from_run_id`, re-points pending items from the
+        failed predecessor instead of inserting fresh rows.
+        """
+        if plan.lock_not_acquired:
+            return
+        if plan._inherit_from_run_id is not None:
+            inherit_pending_items(self.session, plan._inherit_from_run_id, plan.run_id)
+            self.session.commit()
+            return
+        if plan._urls_to_scrape is None or plan._shop_id is None:
+            # Resumable-running fast path — queue already there.
+            return
+        prepare_scrape_url_items(
+            self.session, plan._shop_id, plan.run_id, plan._urls_to_scrape
+        )
+        self.session.commit()
 
     def enqueue_new_url(
         self,

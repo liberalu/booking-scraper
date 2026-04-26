@@ -23,7 +23,13 @@ from book_scraper.db.models import (
 )
 
 STALE_HEARTBEAT_MINUTES = 5
+# Coarse "dead" threshold for the run-list page's per-row badge. Kept
+# generous so a momentary heartbeat tick lag does not flag a healthy run.
 DEAD_RUN_MINUTES = 30
+# Fast threshold for the dashboard reaper. The live view's freshness
+# window is ~30s; we wait one extra minute past that before treating the
+# run as dead and transitioning the row, which absorbs ordinary tick jitter.
+DEAD_RUN_SECONDS = 60
 
 ISSUE_DESCRIPTIONS: dict[str, str] = {
     "missing_price": (
@@ -117,13 +123,19 @@ def get_run_health(run: ScrapeRun) -> str:
 
 
 def mark_stale_runs(session: Session) -> int:
-    """Mark runs with no heartbeat for over DEAD_RUN_MINUTES as failed."""
+    """Mark runs with no heartbeat for over DEAD_RUN_SECONDS as failed.
+
+    Reaped runs are flagged ``resumable_after_failure`` so the next
+    scheduled run inherits any pending items rather than dropping them.
+    Pending rows are explicitly NOT touched here; only `processing` rows
+    get aborted via ``abort_processing_scrape_url_items``.
+    """
     from book_scraper.db.repo import (
         abort_processing_scrape_url_items,
         record_scrape_run_failed_issue,
     )
 
-    cutoff = datetime.now(UTC) - timedelta(minutes=DEAD_RUN_MINUTES)
+    cutoff = datetime.now(UTC) - timedelta(seconds=DEAD_RUN_SECONDS)
     stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
     marked = 0
     for run in stale:
@@ -131,6 +143,7 @@ def mark_stale_runs(session: Session) -> int:
         if last_activity and last_activity < cutoff:
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
+            run.resumable_after_failure = True
             record_scrape_run_failed_issue(session, run, "heartbeat_timeout")
             abort_processing_scrape_url_items(session, run.id)
             marked += 1
@@ -283,9 +296,7 @@ def get_run_rate_window(
     }
 
 
-def _row_to_activity_entry(
-    r: "ScrapeUrlItem", now: datetime
-) -> dict[str, Any]:
+def _row_to_activity_entry(r: "ScrapeUrlItem", now: datetime) -> dict[str, Any]:
     """Convert a ScrapeUrlItem into the activity-stream dict shape.
 
     Includes both the `claimed_at` (start) and `done_at` (finish)
@@ -385,10 +396,10 @@ def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
 
 RUN_URL_SORT_KEYS = (
     "started",  # claimed_at
-    "done",     # done_at
-    "duration", # done_at - claimed_at
+    "done",  # done_at
+    "duration",  # done_at - claimed_at
     "status",
-    "http",     # http_status
+    "http",  # http_status
     "url_type",
     "url",
     "title",
@@ -836,9 +847,7 @@ def get_price_changes(
     """
     )
     rows = (
-        session.execute(
-            data_sql, {**params, "offset": offset, "limit": per_page}
-        )
+        session.execute(data_sql, {**params, "offset": offset, "limit": per_page})
         .mappings()
         .all()
     )

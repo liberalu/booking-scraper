@@ -4,7 +4,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -590,6 +591,49 @@ def get_pending_scan_urls(
 # --- Scrape Runs ---
 
 
+def try_acquire_scan_lock(session: Session, shop_id: int, phase: str) -> bool:
+    """Acquire a transaction-scoped advisory lock keyed on (shop_id, phase).
+
+    Returns True if the lock was acquired, False if another transaction
+    already holds it. The lock releases automatically on commit or rollback;
+    callers should hold it across the run-creation transaction so that two
+    scrapy processes hitting `prepare_scan_create_run` concurrently do not
+    both create runs for the same shop+phase.
+    """
+    key2 = abs(hash(phase)) & 0x7FFFFFFF  # 32-bit positive
+    result = session.execute(
+        sa_text("SELECT pg_try_advisory_xact_lock(:k1, :k2)"),
+        {"k1": shop_id, "k2": key2},
+    ).scalar()
+    return bool(result)
+
+
+def inherit_pending_items(
+    session: Session,
+    old_run_id: int,
+    new_run_id: int,
+) -> int:
+    """Re-point pending scrape_url_items from one run to another.
+
+    Used when a previously-`failed` run was flagged
+    `resumable_after_failure`: a fresh run row is created and adopts the
+    failed run's pending queue. The failed run row stays for postmortem.
+    """
+    stmt = (
+        update(ScrapeUrlItem)
+        .where(
+            ScrapeUrlItem.run_id == old_run_id,
+            ScrapeUrlItem.status == "pending",
+        )
+        .values(run_id=new_run_id)
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(stmt)
+    session.flush()
+    rowcount = getattr(result, "rowcount", 0)
+    return int(rowcount) if rowcount is not None else 0
+
+
 def create_scrape_run(
     session: Session,
     shop_id: int,
@@ -633,7 +677,8 @@ def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
 
     Called when a run transitions to a terminal state (failed/completed)
     so in-flight rows don't sit at `processing` indefinitely after the
-    process behind them is gone.
+    process behind them is gone. The `done_at IS NULL` clause makes
+    concurrent reaper passes safe no-ops.
     """
     now = datetime.now(UTC)
     items = (
@@ -641,6 +686,7 @@ def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
         .filter(
             ScrapeUrlItem.run_id == run_id,
             ScrapeUrlItem.status == "processing",
+            ScrapeUrlItem.done_at.is_(None),
         )
         .all()
     )
@@ -712,12 +758,17 @@ def find_resumable_run(
     shop_id: int,
     phase: str,
 ) -> "ScrapeRun | None":
-    """Find a 'running' scrape run with pending scrape_url_items.
+    """Find a resumable scrape run with pending scrape_url_items.
 
-    Such a run was crash-interrupted and can be resumed: the queue still
-    holds unprocessed URLs. Returns None if no resumable run exists.
+    A run is resumable when it has pending items AND either:
+      - status = 'running' (crash-interrupted, queue still owned by the row)
+      - status = 'failed' AND resumable_after_failure = True
+        (reaped for heartbeat_timeout / stall_timeout — the queue was
+        good work that the next scheduled run should adopt)
+
+    Returns None if no resumable run exists.
     """
-    from sqlalchemy import exists
+    from sqlalchemy import and_, exists, or_
 
     has_pending = (
         exists()
@@ -729,7 +780,13 @@ def find_resumable_run(
         .where(
             ScrapeRun.shop_id == shop_id,
             ScrapeRun.phase == phase,
-            ScrapeRun.status == "running",
+            or_(
+                ScrapeRun.status == "running",
+                and_(
+                    ScrapeRun.status == "failed",
+                    ScrapeRun.resumable_after_failure.is_(True),
+                ),
+            ),
             has_pending,
         )
         .order_by(ScrapeRun.started_at.desc())
@@ -740,13 +797,19 @@ def find_resumable_run(
 
 def mark_orphan_runs_failed(session: Session) -> int:
     """Fail every run still flagged 'running'. Call on scraper boot —
-    any row still 'running' belongs to a process the restart killed."""
+    any row still 'running' belongs to a process the restart killed.
+
+    Orphans had a real spider doing real work; flag them
+    ``resumable_after_failure`` so the next scheduled run inherits any
+    pending items rather than dropping them on the floor.
+    """
     now = datetime.now(UTC)
     stmt = select(ScrapeRun).where(ScrapeRun.status == "running")
     orphans = list(session.execute(stmt).scalars().all())
     for run in orphans:
         run.status = "failed"
         run.finished_at = now
+        run.resumable_after_failure = True
         record_scrape_run_failed_issue(session, run, "orphan_on_boot")
         abort_processing_scrape_url_items(session, run.id)
     session.flush()
@@ -778,6 +841,11 @@ def update_scrape_run_progress(
 ) -> None:
     run = session.get(ScrapeRun, run_id)
     if run is None:
+        return
+    # Terminal-state guard: a reaped run is final. Late progress writes
+    # from a spider that hadn't yet noticed the reap must not undo the
+    # transition.
+    if run.status != "running":
         return
     run.urls_processed = urls_processed
     run.last_heartbeat = datetime.now(UTC)
@@ -1171,8 +1239,10 @@ def prepare_scrape_url_items(
         }
         for rec in url_records
     ]
-    stmt = pg_insert(ScrapeUrlItem).values(rows).on_conflict_do_nothing(
-        index_elements=["run_id", "url"]
+    stmt = (
+        pg_insert(ScrapeUrlItem)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=["run_id", "url"])
     )
     session.execute(stmt)
 
@@ -1242,6 +1312,14 @@ def mark_scrape_url_item_response(
     """
     item = session.get(ScrapeUrlItem, item_id)
     if item is None:
+        return
+    # Terminal-state guard: if the run was reaped between dispatch and
+    # response, skip the write. The reaper has already flipped any
+    # `processing` row to `failed/run_aborted` via
+    # `abort_processing_scrape_url_items`; overriding it here would
+    # resurrect the row.
+    run = session.get(ScrapeRun, item.run_id)
+    if run is not None and run.status != "running":
         return
     item.status = "done" if success else "failed"
     item.done_at = (

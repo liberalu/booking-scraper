@@ -190,16 +190,40 @@ class ScanSpider(scrapy.Spider):
 
         try:
             service = ScanService(session)
-            plan = service.prepare_scan(
+            # Phase 1: lock + create run row. Fast: a few SELECTs and a
+            # single INSERT. Returns either a fresh plan (queue not yet
+            # populated) or a resumable plan (queue already there).
+            plan = service.prepare_scan_create_run(
                 self.shop_name,
                 self.conf.shop.base_url,
                 self.conf,
                 rescrape=self._rescrape,
             )
+            if plan.lock_not_acquired:
+                self.logger.warning(
+                    "Another scan run is already active for shop=%s; exiting "
+                    "cleanly. Use the dashboard to inspect the running run.",
+                    self.shop_name,
+                )
+                return
             self._run_id = plan.run_id
 
             for warning in plan.freshness_warnings:
                 self.logger.warning(warning)
+
+            # Emit run_started BEFORE the queue is populated. The
+            # HeartbeatExtension begins ticking immediately, so a slow
+            # `populate_scan_queue` (cold-cache 30+ s row insert) does
+            # not leave `last_heartbeat` frozen at row-creation time
+            # while the reaper threshold ticks past.
+            self.crawler.signals.send_catch_log(
+                signal=run_started,
+                sender=self,
+                run_id=self._run_id,
+            )
+
+            # Phase 2: populate (or inherit) the queue.
+            service.populate_scan_queue(plan)
 
             # Load work queue from DB (supports crash-resume)
             reset_processing_scrape_url_items(session, plan.run_id)
@@ -220,13 +244,6 @@ class ScanSpider(scrapy.Spider):
                 "CONCURRENT_REQUESTS_PER_DOMAIN + DOWNLOAD_DELAY + AUTOTHROTTLE.",
                 total,
                 plan.urls_skipped,
-            )
-
-            # Emit run_started so HeartbeatExtension can begin ticking.
-            self.crawler.signals.send_catch_log(
-                signal=run_started,
-                sender=self,
-                run_id=self._run_id,
             )
 
             for item in url_items:

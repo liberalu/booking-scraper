@@ -90,8 +90,15 @@ class StallDetector:  # pragma: no cover
         )
 
     def _finalize_run_failed(self, run_id: int, reason: str) -> None:
-        """Mark a stalled run failed via a fresh DB session."""
+        """Mark a stalled run failed via a fresh DB session.
+
+        Stalls are recoverable — the underlying queue still has pending
+        URLs that the next scheduled run can adopt. Set
+        ``resumable_after_failure`` so ``find_resumable_run`` picks the
+        run up next time.
+        """
         try:
+            from book_scraper.db.models import ScrapeRun
             from book_scraper.db.repo import finish_scrape_run
             from book_scraper.db.session import get_session_factory
 
@@ -100,6 +107,9 @@ class StallDetector:  # pragma: no cover
             session = session_factory()
             try:
                 finish_scrape_run(session, run_id, "failed", reason=reason)
+                run = session.get(ScrapeRun, run_id)
+                if run is not None:
+                    run.resumable_after_failure = True
                 session.commit()
             finally:
                 session.close()
@@ -137,9 +147,7 @@ class HeartbeatExtension:  # pragma: no cover
         crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
         return ext
 
-    def on_run_started(
-        self, run_id: int, sender: Any = None, **kwargs: Any
-    ) -> None:
+    def on_run_started(self, run_id: int, sender: Any = None, **kwargs: Any) -> None:
         self._run_id = run_id
         # Immediate write so even short runs (faster than the tick
         # interval) get a fresh heartbeat — otherwise a 4-second scan
@@ -187,10 +195,14 @@ class HeartbeatExtension:  # pragma: no cover
             # Apply a per-statement timeout so a hung DB doesn't pile
             # up ticks. SET LOCAL stays scoped to the transaction.
             session.execute(sa_text("SET LOCAL statement_timeout = '2s'"))
+            # Terminal-state guard: don't refresh the heartbeat for a
+            # reaped run. Without this, a tick that fires after the
+            # dashboard reaper transitioned to `failed` would make the
+            # row look alive again on the next reaper pass.
             session.execute(
                 sa_text(
                     "UPDATE scrape_runs SET last_heartbeat = now() "
-                    "WHERE id = :run_id"
+                    "WHERE id = :run_id AND status = 'running'"
                 ),
                 {"run_id": run_id},
             )
