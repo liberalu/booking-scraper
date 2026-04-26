@@ -159,6 +159,7 @@ class ScanService:
                 )
             if scrape_item_id is not None:
                 http_status = update.get("http_status")
+                url_type = update.get("url_type")
                 if scrape_item_success:
                     mark_scrape_url_item_done(
                         self.session,
@@ -166,6 +167,7 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        url_type=url_type,
                     )
                 else:
                     mark_scrape_url_item_failed(
@@ -174,6 +176,7 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        url_type=url_type,
                     )
         update_scrape_run_progress(self.session, run_id, urls_processed)
         self.session.commit()
@@ -212,6 +215,7 @@ class ScanService:
                 )
             if scrape_item_id is not None:
                 http_status = update.get("http_status")
+                url_type = update.get("url_type")
                 if scrape_item_success:
                     mark_scrape_url_item_done(
                         self.session,
@@ -219,6 +223,7 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        url_type=url_type,
                     )
                 else:
                     mark_scrape_url_item_failed(
@@ -227,6 +232,7 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        url_type=url_type,
                     )
 
         status = "completed" if reason == "finished" else "failed"

@@ -275,16 +275,19 @@ class ScanSpider(scrapy.Spider):
         data = self.parsers.parse_product_page(response.text)
 
         if not data.get("is_book_product"):
+            # Page fetched + parsed successfully; the parser just classified
+            # it as not a book (category page, author listing, etc.). That's
+            # a successful scrape outcome, not a failure — record as `done`
+            # with url_type=non_product and no error_reason.
             self._queue_url_status_update(
                 discovered_url_id,
                 http_status=200,
                 url_type="non_product",
                 scrape_url_item_id=scrape_url_item_id,
-                success=False,
+                success=True,
                 book_score=data.get("book_score", 0),
                 is_book_product=False,
                 book_score_reasons=data.get("book_score_reasons", []),
-                error_reason="non_product",
                 dispatched_at=dispatched_at,
             )
             return

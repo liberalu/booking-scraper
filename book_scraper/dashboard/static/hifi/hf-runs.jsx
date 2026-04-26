@@ -205,11 +205,45 @@ function HFRunDetail({ nav, goto, params }) {
   const [loading, setLoading] = React.useState(true);
 
   // URL queue / history state (separate fetch — its own filter & pagination)
-  const [urlStatus, setUrlStatus] = React.useState('all');
-  const [urlPage, setUrlPage] = React.useState(1);
+  // Persisted in the URL query string so reload preserves view.
+  const _initialUrlParams = (() => {
+    const sp = new URLSearchParams(window.location.search);
+    return {
+      status: sp.get('url_status') || 'all',
+      page: Math.max(parseInt(sp.get('url_page') || '1', 10) || 1, 1),
+      sort: sp.get('url_sort') || 'started',
+      order: sp.get('url_order') || 'desc',
+    };
+  })();
+  const [urlStatus, setUrlStatus] = React.useState(_initialUrlParams.status);
+  const [urlPage, setUrlPage] = React.useState(_initialUrlParams.page);
+  const [urlSort, setUrlSort] = React.useState(_initialUrlParams.sort);
+  const [urlOrder, setUrlOrder] = React.useState(_initialUrlParams.order);
   const URL_PER_PAGE = 50;
   const [urlData, setUrlData] = React.useState(null);
-  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus]);
+  // Reset to page 1 when filter or sort changes (but not when paginating).
+  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus, urlSort, urlOrder]);
+
+  // Mirror state into the URL bar without adding history entries.
+  React.useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (urlStatus !== 'all') sp.set('url_status', urlStatus); else sp.delete('url_status');
+    if (urlPage !== 1) sp.set('url_page', String(urlPage)); else sp.delete('url_page');
+    if (urlSort !== 'started') sp.set('url_sort', urlSort); else sp.delete('url_sort');
+    if (urlOrder !== 'desc') sp.set('url_order', urlOrder); else sp.delete('url_order');
+    const qs = sp.toString();
+    const url = window.location.pathname + (qs ? '?' + qs : '');
+    window.history.replaceState(null, '', url);
+  }, [urlStatus, urlPage, urlSort, urlOrder]);
+
+  const toggleSort = (key) => {
+    if (urlSort === key) {
+      setUrlOrder(urlOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setUrlSort(key);
+      setUrlOrder('desc');
+    }
+  };
 
   React.useEffect(() => {
     if (!runId) return;
@@ -223,7 +257,11 @@ function HFRunDetail({ nav, goto, params }) {
     if (!runId) return;
     let cancelled = false;
     const params = new URLSearchParams({
-      status: urlStatus, page: String(urlPage), per_page: String(URL_PER_PAGE),
+      status: urlStatus,
+      page: String(urlPage),
+      per_page: String(URL_PER_PAGE),
+      sort: urlSort,
+      order: urlOrder,
     });
     const load = () => fetch(`/api/runs/${runId}/urls?${params.toString()}`)
       .then(r => r.json())
@@ -234,7 +272,7 @@ function HFRunDetail({ nav, goto, params }) {
     const isLive = data?.status === 'running';
     const id = isLive ? setInterval(load, 3000) : null;
     return () => { cancelled = true; if (id) clearInterval(id); };
-  }, [runId, urlStatus, urlPage, data?.status]);
+  }, [runId, urlStatus, urlPage, urlSort, urlOrder, data?.status]);
 
   if (loading || !data) {
     return (
@@ -356,7 +394,7 @@ function HFRunDetail({ nav, goto, params }) {
               <div style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '1fr 80px 60px 70px 70px 130px'
+                  ? '1fr 80px 60px 100px 80px 80px 130px'
                   : '1fr 60px 70px 150px',
                 padding:`8px ${HF.cardP}px`,
                 borderBottom: `1px solid ${HF.border}`,
@@ -364,23 +402,44 @@ function HFRunDetail({ nav, goto, params }) {
                 color: HF.ink3, textTransform: 'uppercase', letterSpacing: 0.4,
                 gap: 10,
               }}>
-                {urlData.source === 'live' ? (
-                  <>
-                    <span>Title / URL</span>
-                    <span>Status</span>
-                    <span>HTTP</span>
-                    <span>Type</span>
-                    <span>Duration</span>
-                    <span>Reason / Done</span>
-                  </>
-                ) : (
-                  <>
-                    <span>URL</span>
-                    <span>HTTP</span>
-                    <span>Type</span>
-                    <span>Last checked</span>
-                  </>
-                )}
+                {(() => {
+                  const SortHdr = ({ k, children, align }) => {
+                    const active = urlSort === k;
+                    const arrow = active ? (urlOrder === 'asc' ? ' ▲' : ' ▼') : '';
+                    return (
+                      <span
+                        onClick={() => toggleSort(k)}
+                        style={{
+                          cursor: 'pointer',
+                          color: active ? HF.accentInk : HF.ink3,
+                          userSelect: 'none',
+                          textAlign: align || 'left',
+                        }}
+                        title={`Sort by ${k}`}
+                      >
+                        {children}{arrow}
+                      </span>
+                    );
+                  };
+                  return urlData.source === 'live' ? (
+                    <>
+                      <SortHdr k="title">Title / URL</SortHdr>
+                      <SortHdr k="status">Status</SortHdr>
+                      <SortHdr k="http">HTTP</SortHdr>
+                      <SortHdr k="started">Started</SortHdr>
+                      <SortHdr k="url_type">Type</SortHdr>
+                      <SortHdr k="duration">Duration</SortHdr>
+                      <SortHdr k="done">Done</SortHdr>
+                    </>
+                  ) : (
+                    <>
+                      <span>URL</span>
+                      <span>HTTP</span>
+                      <span>Type</span>
+                      <span>Last checked</span>
+                    </>
+                  );
+                })()}
               </div>
               {urlData.rows.map((u, i) => {
                 const tone = u.status === 'done' ? 'ok'
@@ -398,7 +457,7 @@ function HFRunDetail({ nav, goto, params }) {
                   <div key={i} style={{
                     display:'grid',
                     gridTemplateColumns: urlData.source === 'live'
-                      ? '1fr 80px 60px 70px 70px 130px'
+                      ? '1fr 80px 60px 100px 80px 80px 130px'
                       : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
@@ -414,6 +473,7 @@ function HFRunDetail({ nav, goto, params }) {
                       <>
                         <HFPill tone={tone} style={{width:'fit-content'}}>{u.status}</HFPill>
                         <HFPill tone={httpTone} style={{width:'fit-content'}}>{http ?? '—'}</HFPill>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11, color:u.error_reason ? HF.errInk : HF.ink4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.error_reason || ''}>{u.error_reason || (u.done_at ? new Date(u.done_at).toLocaleTimeString() : '—')}</span>

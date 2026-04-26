@@ -193,18 +193,34 @@ def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
     return counts
 
 
+RUN_URL_SORT_KEYS = (
+    "started",  # claimed_at
+    "done",     # done_at
+    "duration", # done_at - claimed_at
+    "status",
+    "http",     # http_status
+    "url_type",
+    "url",
+    "title",
+)
+
+
 def get_run_url_items(
     session: Session,
     run_id: int,
     status: str = "all",
     page: int = 1,
     per_page: int = 50,
+    sort: str = "started",
+    order: str = "desc",
 ) -> tuple[list[tuple[ScrapeUrlItem, str | None]], int]:
     """Live URL queue for a run, paginated. Returns ((item, title), total).
 
     `title` is left-joined from `shop_books` (matched on shop_id + url) and
     is `None` for URLs that didn't produce a book product.
     """
+    from sqlalchemy import case
+
     query = (
         session.query(ScrapeUrlItem, ShopBook.title)
         .outerjoin(
@@ -217,12 +233,40 @@ def get_run_url_items(
     if status in RUN_URL_STATUSES:
         query = query.filter(ScrapeUrlItem.status == status)
     total = query.count()
-    rows = (
-        query.order_by(
-            # processing first, then pending, then done/failed by most-recent
-            ScrapeUrlItem.claimed_at.desc().nulls_last(),
-            ScrapeUrlItem.id.asc(),
+
+    if sort not in RUN_URL_SORT_KEYS:
+        sort = "started"
+    desc = order != "asc"
+
+    sort_col: Any
+    if sort == "started":
+        sort_col = ScrapeUrlItem.claimed_at
+    elif sort == "done":
+        sort_col = ScrapeUrlItem.done_at
+    elif sort == "duration":
+        # Approx duration; rows with no claimed_at sort last via nulls_last.
+        sort_col = ScrapeUrlItem.done_at - ScrapeUrlItem.claimed_at
+    elif sort == "status":
+        # Stable, intuitive order: processing → pending → failed → done.
+        sort_col = case(
+            (ScrapeUrlItem.status == "processing", 0),
+            (ScrapeUrlItem.status == "pending", 1),
+            (ScrapeUrlItem.status == "failed", 2),
+            (ScrapeUrlItem.status == "done", 3),
+            else_=4,
         )
+    elif sort == "http":
+        sort_col = ScrapeUrlItem.http_status
+    elif sort == "url_type":
+        sort_col = ScrapeUrlItem.url_type
+    elif sort == "title":
+        sort_col = ShopBook.title
+    else:  # url
+        sort_col = ScrapeUrlItem.url
+
+    ordering = sort_col.desc().nulls_last() if desc else sort_col.asc().nulls_last()
+    rows = (
+        query.order_by(ordering, ScrapeUrlItem.id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

@@ -444,6 +444,8 @@ def api_run_urls(
     status: str = "all",
     page: int = 1,
     per_page: int = 50,
+    sort: str = "started",
+    order: str = "desc",
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """URL queue (live `scrape_url_items`) or history (`discovered_urls`)
@@ -460,8 +462,16 @@ def api_run_urls(
     if has_live:
         if status not in {"all", *RUN_URL_STATUSES}:
             status = "all"
+        if order not in ("asc", "desc"):
+            order = "desc"
         items, total = get_run_url_items(
-            session, run_id, status=status, page=page, per_page=per_page
+            session,
+            run_id,
+            status=status,
+            page=page,
+            per_page=per_page,
+            sort=sort,
+            order=order,
         )
         rows = []
         for it, title in items:
@@ -511,6 +521,8 @@ def api_run_urls(
         "breakdown": breakdown,
         "status": status,
         "statuses": list(RUN_URL_STATUSES),
+        "sort": sort,
+        "order": order,
         "rows": rows,
         "total": total,
         "page": page,

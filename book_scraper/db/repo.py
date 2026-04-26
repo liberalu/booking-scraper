@@ -1172,6 +1172,7 @@ def mark_scrape_url_item_done(
     http_status: int | None = None,
     error_reason: str | None = None,
     dispatched_at: float | None = None,
+    url_type: str | None = None,
 ) -> None:
     """Mark a scrape_url_item as done."""
     item = session.get(ScrapeUrlItem, item_id)
@@ -1184,6 +1185,8 @@ def mark_scrape_url_item_done(
             item.http_status = http_status
         if error_reason is not None:
             item.error_reason = error_reason
+        if url_type is not None:
+            item.url_type = url_type
         session.flush()
 
 
@@ -1193,6 +1196,7 @@ def mark_scrape_url_item_failed(
     http_status: int | None = None,
     error_reason: str | None = None,
     dispatched_at: float | None = None,
+    url_type: str | None = None,
 ) -> None:
     """Mark a scrape_url_item as failed."""
     item = session.get(ScrapeUrlItem, item_id)
@@ -1205,6 +1209,8 @@ def mark_scrape_url_item_failed(
             item.http_status = http_status
         if error_reason is not None:
             item.error_reason = error_reason
+        if url_type is not None:
+            item.url_type = url_type
         session.flush()
 
 
