@@ -1,11 +1,13 @@
 # Live Observability — Follow-up Tasks
 
-**Date:** 2026-04-26
+**Date:** 2026-04-26 (amended after corner-case review)
 **Spec:** `docs/superpowers/specs/2026-04-26-live-scrape-observability-design.md`
 **Plan:** `docs/superpowers/plans/2026-04-26-live-scrape-observability-plan.md`
-**Shipped in:** PR #3 (commits `0ac3256`, `9762a6b`, `193fa29`) + `b934f0f` (abort-processing-on-terminal)
+**Shipped in:** PR #3 (commits `0ac3256`, `9762a6b`, `193fa29`) + PR #4 (throttle fix) + PR #5 (UI label / docs) + PR #6 (httpx client rotation) + PR #7 (per-shop reset config) + `b934f0f` (abort-processing-on-terminal)
 
-The observability work landed end-to-end. These items came up during implementation, Stage 0 verification, and the post-merge zombie-run incident (run 173). Each is out of scope for the observability spec but worth tracking.
+The observability work landed end-to-end. These items came up during implementation, Stage 0 verification, the post-merge zombie-run incident (run 173), the post-throttle-fix stall (run 178), and a corner-case review of the shipped code.
+
+Items numbered 1–10 are from the original write-up. Items 11–18 surfaced during the corner-case review and are likely the more impactful next steps.
 
 ---
 
@@ -52,13 +54,21 @@ The observability work landed end-to-end. These items came up during implementat
 **Fix:** couple them. If the live view treats heartbeat-stale-by-30s as "dead", that's also when the reaper should mark the row failed and abort processing rows.
 
 Concretely:
-- Reduce `DEAD_RUN_MINUTES` from 30 → 1–2 minutes (or split: keep 30 for the run-list "stale" badge, add a faster `DEAD_RUN_SECONDS = 60` threshold for actual reaping)
-- Make the dashboard background reaper run more frequently (e.g., every 30 s) so the gap between detection and DB transition is small
-- Or: have the live view *itself* trigger the reap when it sees a dead run (more invasive — the live view would need to mutate state, which it currently doesn't)
+- Split thresholds explicitly: keep `DEAD_RUN_MINUTES = 30` only for the run-list page's coarse "stale" badge; add `DEAD_RUN_SECONDS = 60` for the reaper's actual transition. Live view stays at 30 s as the visual signal, reaper acts at 60 s. The 30 s gap absorbs heartbeat-tick lag.
+- Run the dashboard background reaper every 30 s (currently it appears to run on demand only — confirm + fix).
+- Don't have the live view mutate state itself. Polling endpoints should be read-only; mixing read + write makes them harder to test and prone to N concurrent dashboards racing on the same row.
+
+**Corner cases the simple fix misses:**
+- **Spider-vs-reaper race.** The reaper marks a run `failed` based on stale heartbeat; meanwhile the spider that "looked dead" was just blocked on a slow synchronous parse and resumes 5 s later. It then writes to a run row that's already `failed`. **Fix:** every spider write that touches `scrape_runs.status` or `scrape_url_items` for a run should re-check the run's status under the same transaction and abort if it's terminal. Cheapest: add a `WHERE status = 'running'` clause to the heartbeat UPDATE; add a guard in `_mark_response` that no-ops on terminal runs.
+- **Heartbeat ticks after reaper marks failed.** Heartbeat extension keeps writing `last_heartbeat` even after the reaper transitioned the run to `failed`. The status stays `failed` (we only update last_heartbeat) but the row looks "alive" again, which can confuse a second reaper pass. **Fix:** heartbeat extension UPDATE must include `WHERE status = 'running'`.
+- **Concurrent reaper runs (multi-process safety).** If two dashboard processes run reapers simultaneously (current setup has 3+ dashboards from other worktrees), both could try to fail the same run. The UPDATE is naturally idempotent if the WHERE clause filters on `status='running'`, but the abort-processing helper isn't — it stamps `done_at = now()`, which would be re-stamped by the second reaper. **Fix:** add `AND done_at IS NULL` to `abort_processing_scrape_url_items` so the second reaper is a no-op.
+- **Slow `prepare_scan` on cold cache.** `create_scrape_run` flips status to `running` immediately, but `prepare_scrape_url_items` can take 30+ s on first run (~3,000 row inserts). During this time the heartbeat extension hasn't started yet (it waits for `run_started`, which fires AFTER `_run_id` is assigned and the queue is loaded). A reaper with a 60 s threshold could mark the run dead before the spider's first request ever goes out. **Fix:** emit `run_started` immediately after `create_scrape_run` returns (before queue prep), so heartbeat ticks during queue setup. OR: have `create_scrape_run` set `last_heartbeat = now()` (it already does) and the reaper's age check uses `max(last_heartbeat, started_at)`, so a young run with just `started_at` set isn't reaped.
+- **Timezone drift.** Comparing `last_heartbeat` (timezone-aware) against `now()` requires both to be UTC. Existing code is mostly careful but not consistently. A test that pins it would prevent a regression.
+- **Reap-then-resume contract.** After reaper marks a run `failed`, the next scheduled scan should resume from the queue. `find_resumable_run` looks for `status='running'` runs only — it won't pick up the `failed` one's pending rows. The `pending` rows of run 173 are still there (~2,800 of them), but no future run sees them. **Fix:** when reaper transitions to `failed` due to stall (vs. genuine failure), a new run should inherit the queue. Already partly addressed by item #10's auto-resume idea.
 
 **Priority:** P1. It's the difference between "the dashboard told me my run died and the data is consistent" vs. "the dashboard told me my run died but the queue still thinks it's running for 28 more minutes."
 
-**Effort:** ~30 minutes for the threshold tweak + reaper cadence change. Validate with a forced-kill test.
+**Effort:** the simple version (split thresholds + 30 s reaper cadence) is ~30 minutes. The full corner-case fix (status-guard on heartbeat + WHERE clauses + queue inheritance) is ~3 hours. Worth doing the full version — partial fix leaves real bugs.
 
 ---
 
@@ -101,6 +111,11 @@ Concretely:
 **Context:** `HeartbeatExtension` uses `SET LOCAL statement_timeout = '2s'` to ensure a hung Postgres can't pile up ticks. SQLAlchemy + psycopg2/asyncpg may or may not surface the timeout as a clean exception depending on driver. We assumed it works; never proved it.
 
 **Test:** simulate a slow query (`pg_sleep(5)` injected into the heartbeat path), confirm the heartbeat tick fails fast at 2 s and the next tick still fires.
+
+**Corner cases:**
+- **Connection pool reuse.** `SET LOCAL` is scoped to the transaction. Each heartbeat tick gets a fresh transaction (we commit after the UPDATE), so the timeout is correctly applied each time. ✓
+- **Stale connection in pool — see new item #11.** If the connection is dead before we `SET LOCAL`, the SET itself fails. The exception path swallows it; next tick gets a different connection. As long as `pool_pre_ping` is on, this is fine. With `pool_pre_ping = False` (current state), a dead connection silently fails the heartbeat indefinitely until the pool eventually evicts it.
+- **Driver-level timeout vs SET LOCAL.** psycopg2's `connect_timeout` and statement_timeout are separate. A connection that's hung in the OS-level TCP layer (server stopped responding mid-handshake) waits up to `connect_timeout` first. Combined with the 2 s statement timeout, a tick could take up to ~10 s in worst case. Acceptable but worth knowing.
 
 **Priority:** P2. Defensive — only matters if Postgres ever genuinely hangs.
 
@@ -190,10 +205,208 @@ Local stash created during the PR #3 merge to preserve a stale local draft of th
 
 ---
 
-## Suggested order of attack
+## P0 / P1 — Surfaced by corner-case review
 
-1. **#2 (live view ↔ reaper coupling)** — small, isolated, eliminates zombie-run confusion immediately.
-2. **#1 (AUTOTHROTTLE bypass)** — bigger, but unblocks #7 and fixes a real safety issue. Option A first; consider C as a longer-term cleanup.
-3. **#4 (unit tests)** — close the test-coverage gap before more code lands on top.
-4. **#5, #6** — small verification tasks, batch them with #4.
-5. **#7** — only after #1 lands and there's real `autothrottle_slot` data to design from.
+These weren't in the original write-up. Several are root causes of bugs we already chased; landing the fixes preemptively would close the underlying class of issues, not just specific symptoms.
+
+### 11. SQLAlchemy engine has no `pool_pre_ping` — stale connections silently fail
+
+**Source:** root cause of run 178's `psycopg2.OperationalError: server closed the connection unexpectedly` mid-run. Engine config in `book_scraper/db/session.py` sets `connect_args` for `idle_in_transaction_session_timeout` but does NOT enable `pool_pre_ping`.
+
+**Symptom:** SQLAlchemy's pool keeps connections warm for reuse. Postgres or any intermediate (firewall, NAT, kernel TCP timeout) can drop an idle connection silently. The next time SQLAlchemy hands that connection out, the first query gets `OperationalError: server closed the connection unexpectedly`. The exception bubbles up, the spider's pipeline dies mid-write, the run is marked `failed` for what looks like a Postgres outage but is actually just a stale TCP socket.
+
+**Why it's bigger than just the heartbeat:** every per-response `mark_scrape_url_item_response` opens a session, every flush_progress, every dashboard query. All of them are exposed.
+
+**Fix (one-liner):**
+```python
+return create_engine(
+    sync_url,
+    pool_pre_ping=True,   # validate connection before checkout
+    pool_recycle=300,     # close idle connections after 5 min
+    connect_args={"options": "-c idle_in_transaction_session_timeout=300000"},
+)
+```
+
+`pool_pre_ping` issues a tiny `SELECT 1` before handing out a pooled connection. If it fails, the connection is dropped and a fresh one is created. ~1 ms overhead per checkout, eliminates this entire failure class. `pool_recycle=300` proactively rotates connections every 5 min so they don't go stale to begin with.
+
+**Corner case:** the dashboard's FastAPI engine may be configured separately. Check `book_scraper/dashboard/deps.py` for `get_engine` or similar — apply the same options there.
+
+**Priority:** P1. The `OperationalError` we saw is a textbook symptom; this is one of the most common SQLAlchemy production gotchas. Should have been there from day one.
+
+**Effort:** 5 minutes for the engine config + 5 minutes to verify on a long-running scan.
+
+---
+
+### 12. JSONL events log path is CWD-relative
+
+**Source:** `book_scraper/event_log.py` defaults to `Path("logs/scrapy_events.log")`.
+
+**Symptom:** if scrapy is invoked from a directory other than the project root (e.g., from a cron job that doesn't `cd /app` first, or via Docker exec from `/`), `logs/scrapy_events.log` is created next to wherever scrapy happened to start. We've been "lucky" because cron does `cd /app` and the dashboard subprocess inherits CWD. One mis-configured cron line and events vanish into a tmp directory.
+
+**Fix:** resolve to an absolute path at module load time, anchored to the project root:
+
+```python
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent  # book_scraper/event_log.py → repo root
+_DEFAULT_LOG_PATH = Path(
+    os.environ.get("SCRAPY_EVENTS_LOG", _PROJECT_ROOT / "logs" / "scrapy_events.log")
+)
+```
+
+The env var override stays in place for tests / staging.
+
+**Priority:** P2. Latent failure; will only bite when something changes the invocation path.
+
+**Effort:** 5 minutes.
+
+---
+
+### 13. JSONL log has no rotation — appends forever
+
+**Source:** `event_log.py` opens with mode `"a"` and writes one line per response. No rotation, no size cap.
+
+**Math:** at 1 req/s a record is ~250 bytes → ~22 MB/day → ~660 MB/month → multi-GB/year. Eventually fills the volume.
+
+**Fix options:**
+- **Logrotate.** Add `/etc/logrotate.d/scrapy_events` to the scraper Dockerfile (daily, keep 14, compress). Standard, no code change.
+- **Python `RotatingFileHandler`.** Wrap the writer in a logging.handlers.RotatingFileHandler with `maxBytes=100MB`, `backupCount=10`. Application-level, more portable.
+- **Switch to logging module entirely.** The current code uses raw `path.open("a")`. Routing through stdlib `logging` would let the existing log config (already in `settings.py`) handle rotation. Cleanest but requires re-plumbing.
+
+**Recommended:** logrotate. Zero code change, OS-standard, works the same whether scrapy is run via cron or interactively.
+
+**Corner case:** rotation while a write is in progress. Logrotate uses `copytruncate` or a SIGHUP signal. We don't handle SIGHUP; copytruncate is safe (writer keeps appending to the new file via the same fd; old file gets truncated). Use `copytruncate`.
+
+**Priority:** P2. Disk-fill is months away; not urgent but should be set up before the first multi-week scrape.
+
+**Effort:** 10 minutes (logrotate) or ~1 hour (`RotatingFileHandler` + tests).
+
+---
+
+### 14. Concurrent JSONL writes are not guaranteed atomic for large records
+
+**Source:** `event_log.log_response_event` opens the file, writes one line, closes. Multiple async coroutines (or worse, multiple OS processes — dashboard subprocess + cron-fired scan) can write simultaneously.
+
+**Symptom:** POSIX guarantees atomic appends only for writes < `PIPE_BUF` (4 KB on Linux). Our records average ~250 bytes — safe. But a record with a long URL or `error_reason` could exceed 4 KB on Windows or non-Linux. Two concurrent writes could interleave bytes, corrupting both records.
+
+**Fix:** add an `asyncio.Lock` (or `threading.Lock` for cross-thread; `multiprocessing.Lock` for cross-process). Easiest: one global lock in `event_log.py` since the function is called from the spider's event loop. Multi-process is unlikely in our setup but worth noting.
+
+```python
+_write_lock = asyncio.Lock()  # or threading.Lock for sync paths
+
+async def log_response_event(...):
+    async with _write_lock:
+        # write
+```
+
+Wait — `log_response_event` is currently sync, called from spider's `_mark_response`. If the spider is async-only, switch the lock. If it can be called from sync paths (e.g., `closed()`), use threading.
+
+Easier alternative: open in `O_APPEND | O_DSYNC` mode and accept the kernel's append guarantee for typical record sizes. POSIX `O_APPEND` is atomic for any size if the filesystem supports it (ext4 does on Linux). Cross-process, cross-thread safe.
+
+**Priority:** P3. No reports of corruption yet; record sizes are well below the safe threshold. Worth adding as belt-and-braces before a high-throughput shop is added.
+
+**Effort:** 15 minutes.
+
+---
+
+### 15. Heartbeat blackout window during slow `prepare_scan`
+
+**Source:** code-path review while writing item #2's corner cases.
+
+**Symptom:** sequence is:
+1. `create_scrape_run` — DB row created with `status='running'`, `last_heartbeat=now()`.
+2. `prepare_scrape_url_items` — inserts ~3,000 rows into `scrape_url_items`. Takes 5–30 s on cold cache.
+3. Spider yields its first request — `run_started` signal fires, heartbeat extension starts ticking.
+
+Between step 1 and step 3 is a heartbeat blackout — `last_heartbeat` is fixed at the timestamp from step 1. If a reaper with a 60 s threshold polls during a slow step 2, the run looks dead (no fresh heartbeat for 30+ s) and gets failed prematurely.
+
+**Fix:** emit `run_started` immediately after `create_scrape_run`, before `prepare_scrape_url_items`. Heartbeat ticks during queue prep. The sole prerequisite for `run_started` is that `_run_id` is set, which happens at step 1 — there's no reason to wait until step 3.
+
+**Alternative:** the reaper could compute "age" as `now() - max(last_heartbeat, started_at)` and require the run to be at least 60 s old (instead of just stale-by-60s). Same effect, slightly cleaner.
+
+**Priority:** P1. Becomes urgent once item #2 lands and the reaper runs every 30 s with a 60 s threshold — that's exactly when this race becomes visible.
+
+**Effort:** 15 minutes.
+
+---
+
+### 16. Multi-shop concurrent scans against the same shop double the load
+
+**Source:** code review of `HttpxMiddleware`'s per-host lock.
+
+**Symptom:** the per-host lock is per-`HttpxMiddleware` instance. Each Scrapy process gets its own instance. If two Scrapy processes both scrape vaga.lt simultaneously (e.g., dashboard fires a /scrape POST while cron runs the scheduled scan), each holds its own lock — vaga.lt sees 2× the request rate.
+
+**Fix:** the `find_resumable_run` mechanism already prevents two `running` runs for the same shop+phase from co-existing. Surface it as a hard guard in `prepare_scan`: if a `running` run already exists, exit cleanly with a clear log message instead of just resuming. Today the second invocation tries to resume the first run's queue, which is correct but the two scrapy processes both write to the same run — they're not coordinated.
+
+Concrete fix: in `prepare_scan`, after `find_resumable_run`, also lock-check. If another process is already running, exit early. Use Postgres advisory locks (`pg_try_advisory_xact_lock`) for cross-process serialization — single-machine, no extra infra.
+
+**Priority:** P2. We've already seen this happen (run 173 was created by some cross-worktree subprocess while run 172 was being killed). Symptom = doubled effective load on vaga.lt = sooner stall.
+
+**Effort:** ~1 hour (advisory lock + integration test).
+
+---
+
+### 17. Spider's `_progress_session` is long-lived without recycle
+
+**Source:** code review of `book_scraper/spiders/scan.py`.
+
+**Symptom:** the spider creates `_progress_session` on first response and reuses it for all subsequent flushes + final close. Sessions hold a connection from the pool. With our throttle (1 req/s) and 50-response batch, the session is "active" for ~100 s between flushes — well within `idle_in_transaction_session_timeout`. But on a long run (hours) the connection ages and could go stale (same root cause as item #11).
+
+**Fix:** combination of #11 (`pool_pre_ping=True`) + a defensive recreate every N flushes:
+
+```python
+def _flush_progress(self):
+    if self._progress_session is not None and self._urls_responded % 500 == 0:
+        self._progress_session.close()
+        self._progress_session = None
+    if self._progress_session is None:
+        ...
+```
+
+Or: just rely on item #11 — `pool_pre_ping` makes recycling unnecessary because dead connections are caught at checkout.
+
+**Priority:** P3. Subsumed by #11 in practice. Worth mentioning so we don't forget the long-lived session exists.
+
+**Effort:** 0 if #11 lands; 15 minutes for explicit recycle if needed.
+
+---
+
+### 18. No alerting / on-call signal for stalled runs
+
+**Source:** the live view shows stalls in real time, but the operator has to be looking at the dashboard. Run 178's stall sat un-noticed for 30+ minutes until the operator (you) happened to refresh.
+
+**Fix:** when the dashboard's reaper transitions a run to `failed` *because of stall_timeout* (vs. natural completion or other failures), emit a notification. Cheapest implementations:
+- **Slack webhook.** One env var (`SLACK_WEBHOOK_URL`), one POST per stall. Free, instant, ignores quiet hours.
+- **Email via SMTP.** Slightly heavier; needs SMTP creds.
+- **macOS notification (local).** Native `osascript` — only works when the operator's machine is alive, but trivial to set up for local dev.
+- **GitHub issue.** `gh issue create` from the reaper. Permanent record but heavyweight.
+
+**Recommended:** Slack webhook. The `recent_activity` JSON has all the context the message needs (last URL, last error, run id, heartbeat age).
+
+**Corner case:** notification storms. If the reaper transitions 5 zombie runs at once (say, after a long power outage), don't send 5 messages. De-dupe by run_id and rate-limit (e.g., max 1 stall notification per 10 min).
+
+**Priority:** P2 if scrape continuity matters; P3 if the operator checks the dashboard daily. Up to you.
+
+**Effort:** ~1 hour for Slack with de-dupe + rate limit.
+
+---
+
+## Suggested order of attack (revised)
+
+The corner-case review changed priorities. Highest-leverage first:
+
+1. **#11 (`pool_pre_ping`)** — 5 minutes, eliminates the stale-connection failure class, retroactively explains run 178's `OperationalError`. Pure win.
+2. **#15 (heartbeat blackout during prepare_scan)** — 15 minutes, prerequisite for item #2 to be safe.
+3. **#2 (live view ↔ reaper coupling)** — full corner-case version (~3 hours), eliminates zombie runs cleanly. Don't ship the simple version — it leaves the spider-vs-reaper race in.
+4. **#10 partial (auto-resume on stall)** — ~1 hour. Combined with the throttle fix already in PR #6, this means a stall doesn't lose ~2,400 URLs of work. Independently valuable.
+5. **#16 (advisory lock for cross-process coordination)** — ~1 hour, prevents the cross-worktree zombie pattern.
+6. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
+7. **#13 (logrotate)** — 10 minutes, set-and-forget.
+8. **#12 (absolute log path)** — 5 minutes.
+9. **#5, #6** — small verification tasks, batch them.
+10. **#18 (alerting)** — only if you actually want pager-style notifications.
+11. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
+
+Items NOT worth doing right now:
+- **#1 (AUTOTHROTTLE bypass)** is technically still open in the sense that we don't use Scrapy's native AUTOTHROTTLE. But our internal pacing in PR #4+ does the same job functionally. Re-emitting Scrapy signals (option B) would only matter if we wanted Scrapy's stats / extensions to see the requests, which we don't.
+- **#3 (boot reconcile)** is subsumed by #2 once that lands properly.
+- **#14 (atomic JSONL writes)** is genuinely speculative; defer until we see corruption.
+- **#17 (long-lived session recycle)** is subsumed by #11.
