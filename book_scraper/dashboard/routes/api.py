@@ -24,7 +24,11 @@ from book_scraper.dashboard.queries import (
     get_price_history,
     get_recent_runs,
     get_run_discovered_urls,
+    get_run_in_flight,
     get_run_issue_summary,
+    get_run_live_health,
+    get_run_rate_window,
+    get_run_recent_failures,
     get_run_url_breakdown,
     get_run_url_items,
     get_scrape_activity_by_day,
@@ -479,6 +483,56 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     issues = get_run_issue_summary(session, run_id)
     terminal = _run_terminal_counts(session, [run_id]).get(run_id)
     return {**_run_dict(run, terminal_count=terminal), "issues": issues}
+
+
+@router.get("/runs/{run_id}/live")
+def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Live observability snapshot for a single run.
+
+    Polled by HFRunDetail every ~2s while the run is 'running'.
+    Everything is derived from scrape_url_items + scrape_runs — no
+    new tables, no in-memory state.
+
+    Health verdict: 'dead' if heartbeat > 30s old; 'stuck' if heartbeat
+    fresh but an in-flight row's claimed_at exceeds DOWNLOAD_TIMEOUT*2
+    (= 30s); 'healthy' otherwise. See live observability spec.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    now = datetime.now(UTC)
+    last_heartbeat = run.last_heartbeat
+    if last_heartbeat is not None and last_heartbeat.tzinfo is None:
+        last_heartbeat = last_heartbeat.replace(tzinfo=UTC)
+    last_heartbeat_age_s: float | None = None
+    if last_heartbeat is not None:
+        last_heartbeat_age_s = max(0.0, (now - last_heartbeat).total_seconds())
+
+    in_flight = get_run_in_flight(session, run_id)
+    rate = get_run_rate_window(session, run_id)
+    recent_failures = get_run_recent_failures(session, run_id, limit=10)
+
+    health = get_run_live_health(run)
+    # Refine to 'stuck' when heartbeat is fresh but the oldest in-flight
+    # row has been claimed for longer than 2× the network timeout.
+    hung_threshold_s = 30.0  # DOWNLOAD_TIMEOUT (15) × 2
+    if health == "healthy":
+        for row in in_flight:
+            age = row.get("claimed_age_s") or 0.0
+            if age > hung_threshold_s:
+                health = "stuck"
+                break
+
+    return {
+        "run_id": run_id,
+        "status": run.status,
+        "health": health,
+        "last_heartbeat_age_s": last_heartbeat_age_s,
+        "in_flight": in_flight,
+        "rate": rate,
+        "recent_failures": recent_failures,
+    }
 
 
 @router.get("/runs/{run_id}/urls")

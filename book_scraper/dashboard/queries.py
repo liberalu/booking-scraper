@@ -172,6 +172,148 @@ def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
 
 
+# ─────────────────── Live observability (Stage 2) ────────────────────
+# Live-view thresholds — sharper than the run-list page's STALE/DEAD
+# constants because the live view refreshes every ~2s and operators
+# expect fast feedback. See live observability spec.
+LIVE_DEAD_HEARTBEAT_S = 30
+LIVE_RATE_WINDOW_S = 60
+
+
+def get_run_live_health(run: ScrapeRun) -> str:
+    """Live-view health verdict for a single run.
+
+    Returns 'healthy' | 'stuck' | 'dead' | '' (non-running).
+
+    Combines heartbeat staleness with claimed_at age on the in-flight
+    row(s):
+      - heartbeat stale  → 'dead' (process gone)
+      - heartbeat fresh + an in-flight row's claimed_at older than
+        DOWNLOAD_TIMEOUT × 2 → 'stuck' (alive but hung)
+      - else → 'healthy'
+
+    DOWNLOAD_TIMEOUT is fixed at 15 here to match settings.py without
+    introducing a Scrapy import in the dashboard codepath.
+    """
+    if run.status != "running":
+        return ""
+    now = datetime.now(UTC)
+    last_activity = run.last_heartbeat or run.started_at
+    if last_activity is None:
+        return "dead"
+    if (now - last_activity).total_seconds() > LIVE_DEAD_HEARTBEAT_S:
+        return "dead"
+    return "healthy"  # 'stuck' is decided at the route level, where
+    # we already have the in-flight row data and can compute the
+    # threshold cheaply without re-querying.
+
+
+def get_run_in_flight(session: Session, run_id: int) -> list[dict[str, Any]]:
+    """Currently-processing rows for a run.
+
+    Stable order: oldest claimed_at first, then by id.
+    """
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "processing",
+        )
+        .order_by(ScrapeUrlItem.claimed_at.asc(), ScrapeUrlItem.id.asc())
+        .all()
+    )
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        claimed_at = r.claimed_at
+        claimed_age_s: float | None = None
+        if claimed_at is not None:
+            if claimed_at.tzinfo is None:
+                claimed_at = claimed_at.replace(tzinfo=UTC)
+            claimed_age_s = max(0.0, (now - claimed_at).total_seconds())
+        out.append(
+            {
+                "url": r.url,
+                "claimed_at": (
+                    claimed_at.isoformat() if claimed_at is not None else None
+                ),
+                "claimed_age_s": claimed_age_s,
+                "request_delay_s": r.request_delay_s,
+                "delay_source": r.delay_source,
+                "retry_count": r.retry_count,
+            }
+        )
+    return out
+
+
+def get_run_rate_window(
+    session: Session, run_id: int, seconds: int = LIVE_RATE_WINDOW_S
+) -> dict[str, int]:
+    """Counts of done / failed rows whose done_at is within the window."""
+    cutoff = datetime.now(UTC) - timedelta(seconds=seconds)
+    done = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.done_at.isnot(None),
+            ScrapeUrlItem.done_at > cutoff,
+        )
+        .scalar()
+        or 0
+    )
+    failed = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+            ScrapeUrlItem.done_at.isnot(None),
+            ScrapeUrlItem.done_at > cutoff,
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "window_s": seconds,
+        "done": int(done),
+        "failed": int(failed),
+    }
+
+
+def get_run_recent_failures(
+    session: Session, run_id: int, limit: int = 10
+) -> list[dict[str, Any]]:
+    """Most-recent failed rows for a run."""
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+        )
+        .order_by(ScrapeUrlItem.done_at.desc().nullslast(), ScrapeUrlItem.id.desc())
+        .limit(limit)
+        .all()
+    )
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        done_at = r.done_at
+        done_age_s: float | None = None
+        if done_at is not None:
+            if done_at.tzinfo is None:
+                done_at = done_at.replace(tzinfo=UTC)
+            done_age_s = max(0.0, (now - done_at).total_seconds())
+        out.append(
+            {
+                "url": r.url,
+                "http_status": r.http_status,
+                "error_reason": r.error_reason,
+                "done_at": done_at.isoformat() if done_at is not None else None,
+                "done_age_s": done_age_s,
+            }
+        )
+    return out
+
+
 RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
 
 

@@ -196,6 +196,120 @@ function HFRuns({ nav, goto }) {
   );
 }
 
+// ───────────────────────────── Live panel ─────────────────────────────
+// Honest UI: never says "AutoThrottle delay" — see live observability spec.
+// On this codebase Gate A failed (HttpxMiddleware bypasses Scrapy's
+// downloader path and AUTOTHROTTLE never updates the slot delay), so
+// `delay_source` is always 'httpx_observed'.
+
+const DELAY_SOURCE_LABELS = {
+  autothrottle_slot: { suffix: 'verified',
+    title: 'Adaptive throttle delay from AUTOTHROTTLE; verified by Gate A.' },
+  httpx_observed:    { suffix: 'observed',
+    title: 'Wall-clock wait between request scheduling and dispatch. Includes engine queue time, not purely AUTOTHROTTLE.' },
+  configured_delay:  { suffix: 'static',
+    title: 'Configured DOWNLOAD_DELAY; not adaptive.' },
+};
+
+function _fmtDelay(seconds) {
+  if (seconds == null) return '—';
+  const s = Number(seconds);
+  if (!Number.isFinite(s)) return '—';
+  if (s < 0.001) return '<1 ms';
+  if (s < 1) return `${(s * 1000).toFixed(0)} ms`;
+  return `${s.toFixed(2)} s`;
+}
+
+function _fmtAge(seconds) {
+  if (seconds == null) return '—';
+  const s = Math.max(0, Number(seconds));
+  if (!Number.isFinite(s)) return '—';
+  if (s < 1) return '<1s';
+  if (s < 60) return `${s.toFixed(0)}s`;
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return r ? `${m}m ${r}s` : `${m}m`;
+}
+
+function HFLivePanel({ data, HF }) {
+  const inFlight = data.in_flight || [];
+  const rate = data.rate || { window_s: 60, done: 0, failed: 0 };
+  const failures = data.recent_failures || [];
+  const health = data.health || '';
+  const healthTone = (
+    health === 'healthy' ? 'ok' :
+    health === 'stuck'   ? 'warn' :
+    health === 'dead'    ? 'err'  : 'neutral'
+  );
+  const reqPerMin = rate.window_s > 0
+    ? Math.round((rate.done / rate.window_s) * 60)
+    : 0;
+
+  return (
+    <HFCard
+      title="Live"
+      sub={`refreshed every 2s · health: ${health || 'unknown'}`}
+      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={health==='healthy'} size={6}/> {health || '—'}</HFPill>}
+    >
+      <div style={{padding:`12px ${HF.cardP}px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap}}>
+        {/* Now fetching */}
+        <div>
+          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Now fetching</div>
+          {inFlight.length === 0 ? (
+            <div style={{fontFamily:HF.mono, fontSize:12, color:HF.ink3, padding:'8px 0'}}>idle — no requests in flight</div>
+          ) : inFlight.map((row, i) => {
+            const label = DELAY_SOURCE_LABELS[row.delay_source] || {};
+            return (
+              <div key={i} style={{padding:'8px 0', borderTop: i ? `1px solid ${HF.borderFaint}` : 'none'}}>
+                <div style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink, wordBreak:'break-all', marginBottom:4}}>{row.url}</div>
+                <div style={{display:'flex', gap:14, fontSize:11.5, color:HF.ink3, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', flexWrap:'wrap'}}>
+                  <span>claimed {_fmtAge(row.claimed_age_s)} ago</span>
+                  <span title={label.title || ''}>
+                    dispatch delay: {_fmtDelay(row.request_delay_s)}
+                    {label.suffix ? ` (${label.suffix})` : ''}
+                  </span>
+                  {row.retry_count > 0 && <span>retries: {row.retry_count}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Rate */}
+        <div style={{display:'grid', gridTemplateRows:'auto auto', gap:8}}>
+          <div>
+            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Rate (last {rate.window_s}s)</div>
+            <div style={{display:'flex', gap:18, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums'}}>
+              <div>
+                <div style={{fontSize:22, fontWeight:600, color:HF.ink}}>{rate.done}</div>
+                <div style={{fontSize:11, color:HF.ink3}}>done · ~{reqPerMin}/min</div>
+              </div>
+              <div>
+                <div style={{fontSize:22, fontWeight:600, color: rate.failed > 0 ? HF.errInk : HF.ink}}>{rate.failed}</div>
+                <div style={{fontSize:11, color:HF.ink3}}>failed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {failures.length > 0 && (
+        <div style={{padding:`0 ${HF.cardP}px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`}}>
+          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, padding:'12px 0 6px'}}>Recent failures</div>
+          {failures.slice(0, 5).map((f, i) => (
+            <div key={i} style={{display:'flex', gap:12, fontFamily:HF.mono, fontSize:12, color:HF.ink3, padding:'4px 0', borderTop: i ? `1px solid ${HF.borderFaint}` : 'none', alignItems:'baseline', flexWrap:'wrap'}}>
+              <span style={{color: f.http_status && f.http_status >= 500 ? HF.errInk : HF.warnInk, minWidth:36, fontVariantNumeric:'tabular-nums'}}>{f.http_status ?? '—'}</span>
+              <span style={{flex:1, color:HF.ink, wordBreak:'break-all'}}>{f.url}</span>
+              <span style={{color:HF.ink4}}>{f.error_reason || ''}</span>
+              <span style={{color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{_fmtAge(f.done_age_s)} ago</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </HFCard>
+  );
+}
+
 // ───────────────────────────── Run Detail ─────────────────────────────
 
 function HFRunDetail({ nav, goto, params }) {
@@ -252,6 +366,22 @@ function HFRunDetail({ nav, goto, params }) {
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [runId]);
+
+  // Live observability — poll /api/runs/{id}/live every 2s while running.
+  const [liveData, setLiveData] = React.useState(null);
+  React.useEffect(() => {
+    if (!runId) return;
+    const isLive = data?.status === 'running';
+    if (!isLive) { setLiveData(null); return; }
+    let cancelled = false;
+    const load = () => fetch(`/api/runs/${runId}/live`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setLiveData(d); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [runId, data?.status]);
 
   React.useEffect(() => {
     if (!runId) return;
@@ -318,6 +448,11 @@ function HFRunDetail({ nav, goto, params }) {
         { label:'Items',          value:data.items ? data.items.toLocaleString() : '0', delta:<span style={{color:HF.ink3}}>scraped</span> },
         { label:'Status',         value:data.status, tone: runStatusTone[runStatus] || 'neutral', delta:<span style={{color:HF.ink3}}>current</span> },
       ]}/>
+
+      {/* Live panel — only rendered while the run is 'running' */}
+      {liveData && (
+        <HFLivePanel data={liveData} HF={HF}/>
+      )}
 
       {/* Phase pipeline + Throughput */}
       <div style={{display:'grid', gridTemplateColumns:'1.55fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
