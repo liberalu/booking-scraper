@@ -368,11 +368,23 @@ function HFRunDetail({ nav, goto, params }) {
   }, [runId]);
 
   // Live observability — poll /api/runs/{id}/live every 2s while running.
+  // Once we've polled at least once, treat the live endpoint as the
+  // source of truth for status (the parent /api/runs/{id} fetch is
+  // one-shot and would otherwise keep us polling a terminal run forever).
   const [liveData, setLiveData] = React.useState(null);
   React.useEffect(() => {
-    if (!runId) return;
-    const isLive = data?.status === 'running';
-    if (!isLive) { setLiveData(null); return; }
+    if (!runId || !data) return;
+    const currentStatus = liveData?.status ?? data.status;
+    if (currentStatus !== 'running') {
+      // Run reached terminal state — stop polling and hide the live panel.
+      if (liveData) setLiveData(null);
+      // Mirror the terminal status into `data` so the KPI strip / pill
+      // reflect it without requiring a page refresh.
+      if (liveData?.status && data.status !== liveData.status) {
+        setData(d => d ? { ...d, status: liveData.status } : d);
+      }
+      return;
+    }
     let cancelled = false;
     const load = () => fetch(`/api/runs/${runId}/live`)
       .then(r => r.ok ? r.json() : null)
@@ -381,7 +393,7 @@ function HFRunDetail({ nav, goto, params }) {
     load();
     const id = setInterval(load, 2000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [runId, data?.status]);
+  }, [runId, data?.status, liveData?.status]);
 
   React.useEffect(() => {
     if (!runId) return;
