@@ -94,15 +94,53 @@ def _elapsed(run: ScrapeRun) -> str:
     return f"{s}s"
 
 
-def _progress(run: ScrapeRun) -> int:
+def _progress(run: ScrapeRun, terminal_count: int | None = None) -> int:
+    """Return progress as a percentage (0–100).
+
+    `terminal_count` is the number of `scrape_url_items` rows in
+    terminal state (done | failed) for this run. When provided, progress
+    is `terminal / urls_total` — counts non-product fetches and 4xx/5xx
+    as progress, since the work for that URL is finished. Falls back to
+    `urls_processed / urls_total` when caller didn't fetch the
+    breakdown (cheaper for list endpoints that don't need the
+    finer-grained number).
+    """
     if run.status == "completed":
         return 100
-    if run.urls_total and run.urls_total > 0:
-        return min(99, int(run.urls_processed / run.urls_total * 100))
-    return 0
+    if not (run.urls_total and run.urls_total > 0):
+        return 0
+    processed = (
+        terminal_count if terminal_count is not None else run.urls_processed
+    )
+    return min(99, int(processed / run.urls_total * 100))
 
 
-def _run_dict(run: ScrapeRun) -> dict[str, Any]:
+def _run_terminal_counts(
+    session: Session, run_ids: list[int]
+) -> dict[int, int]:
+    """Bulk-fetch `done + failed` counts for a batch of runs."""
+    if not run_ids:
+        return {}
+    from book_scraper.db.models import ScrapeUrlItem
+
+    rows = (
+        session.query(
+            ScrapeUrlItem.run_id,
+            func.count(ScrapeUrlItem.id),
+        )
+        .filter(
+            ScrapeUrlItem.run_id.in_(run_ids),
+            ScrapeUrlItem.status.in_(("done", "failed")),
+        )
+        .group_by(ScrapeUrlItem.run_id)
+        .all()
+    )
+    return {run_id: count for run_id, count in rows}
+
+
+def _run_dict(
+    run: ScrapeRun, terminal_count: int | None = None
+) -> dict[str, Any]:
     started_h = 0.0
     if run.started_at:
         start = run.started_at
@@ -114,7 +152,7 @@ def _run_dict(run: ScrapeRun) -> dict[str, Any]:
         "shop": run.shop.name,
         "phase": run.phase,
         "status": run.status,
-        "progress": _progress(run),
+        "progress": _progress(run, terminal_count),
         "items": run.items_added + run.items_updated,
         "items_added": run.items_added,
         "items_updated": run.items_updated,
@@ -217,10 +255,13 @@ def api_overview(session: Session = Depends(get_db)) -> dict[str, Any]:
             }
         )
 
+    terminal = _run_terminal_counts(session, [r.id for r in recent_runs])
     return {
         "stats": {**stats, "open_issues": open_issues},
         "completeness": [{"field": c["field"], "pct": c["pct"]} for c in completeness],
-        "recent_runs": [_run_dict(r) for r in recent_runs],
+        "recent_runs": [
+            _run_dict(r, terminal_count=terminal.get(r.id)) for r in recent_runs
+        ],
         "issue_clusters": issue_clusters[:6],
         "shops": shop_cards,
         "activity": activity,
@@ -317,8 +358,9 @@ def api_runs(
     )
 
     pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    terminal = _run_terminal_counts(session, [r.id for r in runs])
     return {
-        "runs": [_run_dict(r) for r in runs],
+        "runs": [_run_dict(r, terminal_count=terminal.get(r.id)) for r in runs],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -435,7 +477,8 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     issues = get_run_issue_summary(session, run_id)
-    return {**_run_dict(run), "issues": issues}
+    terminal = _run_terminal_counts(session, [run_id]).get(run_id)
+    return {**_run_dict(run, terminal_count=terminal), "issues": issues}
 
 
 @router.get("/runs/{run_id}/urls")
@@ -749,6 +792,7 @@ def api_shop_detail(
     field_stats = get_shop_field_stats(session, shop.id)
     runs = get_shop_runs(session, shop.id, limit=20)
     last_run = runs[0] if runs else None
+    terminal = _run_terminal_counts(session, [r.id for r in runs])
     return {
         "id": shop.id,
         "name": shop.name,
@@ -758,7 +802,9 @@ def api_shop_detail(
         "last_run_ago": _rel(last_run.started_at if last_run else None),
         "last_run_status": last_run.status if last_run else "—",
         "field_stats": field_stats,
-        "recent_runs": [_run_dict(r) for r in runs],
+        "recent_runs": [
+            _run_dict(r, terminal_count=terminal.get(r.id)) for r in runs
+        ],
     }
 
 
