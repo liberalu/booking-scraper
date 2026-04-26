@@ -421,23 +421,31 @@ Server-side behavior options:
 
 **Source:** operator workflow gap. When a scan is going badly (high error rate, looking-stuck-but-not-yet-stalled, operator changed their mind) there's no UI to stop it cleanly. Existing code has a `kill_run` route per `b934f0f`'s commit message ("the kill_run route's PID-already-dead branch") but it's not surfaced in the React UI.
 
-**Fix:** add a "Stop" button on the run detail page, visible only when `data.status === 'running'`. POSTs to the existing `kill_run` route (or `/api/runs/{id}/stop` for naming consistency with `rerun`).
+**Fix:** add a "Stop" button on the run detail page, visible only when `data.status === 'running'`. POSTs to `/api/runs/{id}/stop`.
+
+**Design principle:** lifecycle mutations live in the DB, not in process/PID mechanics. The Stop endpoint mutates `scrape_runs.status` to `'stopping'` (new state); the spider polls its own status between requests and exits cleanly when it sees `stopping`. SIGTERM signaling is an *optimization* (faster shutdown when the dispatcher process is reachable), not the control plane.
 
 Server-side flow:
-1. Look up the run's `pid` column.
-2. If the PID is alive: `os.kill(pid, signal.SIGTERM)` — gives the spider's `closed()` callback a chance to run, which writes `finished_at` and aborts processing rows cleanly. Wait up to 10 s for graceful shutdown.
-3. If the PID is dead OR doesn't shut down in 10 s: directly transition to `failed` and call `abort_processing_scrape_url_items` (b934f0f). This is the "PID-already-dead branch" mentioned in the commit.
+1. Atomic UPDATE: `SET status='stopping' WHERE id=:run_id AND status='running'` — idempotent, race-safe (item #2's terminal-state-guard pattern).
+2. Spider's per-request poll (item #23 reuses this primitive): between requests, query `SELECT status FROM scrape_runs WHERE id=:run_id`. If `stopping`, exit `start()` cleanly. Spider's `closed()` callback transitions `stopping → failed` (or a new `stopped` state) and runs `abort_processing_scrape_url_items`.
+3. Optimization: `os.kill(pid, signal.SIGTERM)` if the dashboard happens to be in the same PID namespace as the scraper (uncommon — typically not). Documented as best-effort; the DB poll is the contract.
+4. If the spider doesn't transition within 60 s (heartbeat went stale, process died, whatever): the existing reaper (item #2) marks it `failed` with `error_reason='stop_timeout'`. No special-cased dashboard timeout logic; reuse the lifecycle invariants.
+
+**Why this is cleaner than PID-signaling:**
+- **Cross-container/cross-host already works.** The DB is the universal channel. No control sockets, no NOTIFY plumbing, no PID-namespace gymnastics. A worktree's dashboard, the docker scraper, a cron-fired host process — all see the same `scrape_runs.status` column.
+- **Crash safety.** If the dashboard dies between issuing kill and confirming, the spider still transitions on its own poll. SIGTERM-based control loses this — kill issued, dashboard crashes before logging, did the spider receive it? Unknown.
+- **Single source of truth.** The same UPDATE the operator triggers is what the reaper would have eventually issued anyway. No two paths to fail-the-run.
 
 **Corner cases:**
-- **Cross-container PID.** The scraper container has its own PID namespace. `os.kill` from the dashboard container can't reach it. Two options: (a) signal via Postgres NOTIFY that the spider polls for, or (b) have the scraper expose a tiny HTTP control socket the dashboard can call. Option (b) is closer to standard ops practice. (a) avoids new ports.
-- **Cron-spawned runs.** Cron's scrapy process inherits cron's PID namespace; same cross-container issue.
-- **Host-spawned runs (worktree dashboards).** The PID is on the HOST, not in the docker network. The dashboard's `os.kill` would need to operate on the host PID, which only works if dashboard runs on host (uvicorn ports 8001/8111/8112 from other worktrees) — not when it's in docker.
-- **Race with natural completion.** Operator clicks Stop just as the spider finishes its last URL. The kill arrives, spider's already-running `closed()` callback is racing with the kill signal handler. Use `WHERE status = 'running'` in the kill path's UPDATE so a concurrent `closed()` writing `status='completed'` wins idempotently.
-- **Click-spam.** Disable the button in the UI for 5 s after click; second click while pending is a no-op.
+- **Race with natural completion.** Operator clicks Stop just as the spider finishes its last URL. UPDATE includes `WHERE status='running'`; if `closed()` already wrote `status='completed'`, the operator's UPDATE is a no-op and returns 200 with the latest status. UI shows "already completed" gracefully.
+- **Spider's poll cadence.** Polling on every request is fine at 1 req/s — adds one cheap SELECT per dispatch (~1 ms with `pool_pre_ping`). At higher rates, batch the poll (e.g., every N requests, or piggyback on the heartbeat tick which already runs every 5 s).
+- **`stopping` vs `stopped` vs `failed`.** Choosing the post-stop terminal state. Use `failed` with `error_reason='stopped_by_operator'` to keep the existing failed/completed dichotomy; introducing `stopped` as a peer to those is more states + more code paths for a cosmetic distinction.
+- **Click-spam.** Disable the button in the UI for 5 s after click; the UPDATE is idempotent so second clicks are 200 no-ops.
+- **Pause + Stop interaction.** If a paused run (item #23) is stopped, the spider unblocks its pause-poll, sees `stopping`, exits. No special handling.
 
 **Priority:** P1. Combined with #19, this gives the operator full lifecycle control from the UI.
 
-**Effort:** ~2 hours including the cross-container signal mechanism (Postgres NOTIFY is the cheaper option — spider listens via a background task, kill route INSERTs/NOTIFY's, signal handler raises a custom exception caught in spider's main loop).
+**Effort:** ~1.5 hours (down from the original 2 h estimate — DB-mediated mechanism is simpler than the cross-container signal plumbing). The new `stopping` state needs the spider's poll loop, an enum value, and the API route.
 
 ---
 
@@ -644,39 +652,59 @@ If any check fails: return 400 with the specific reason; do not spawn. Operator 
 
 ---
 
-## Suggested order of attack (revised)
+## Suggested order of attack (revised — two tracks)
 
-The corner-case review and operator feedback changed priorities. Highest-leverage first:
+**Design principle, applied throughout:** *lifecycle mutations live in the database, not in process or PID mechanics.* Status transitions, kill signals, pause/resume, "is this run still active" checks — all read and write `scrape_runs.status` (and related columns) under transaction guards. Process-level mechanisms (SIGTERM, PID lookups, in-memory state) are optimisations on top of that contract, never the source of truth. Cross-container, cross-worktree, cross-host: the DB is the universal channel.
 
-1. **#11 (`pool_pre_ping`)** — 5 minutes, eliminates the stale-connection failure class, retroactively explains run 178's `OperationalError`. Pure win.
-2. **#21 (live view stays static on terminal status)** — 30 minutes, pure UX. Cheap and immediately observable.
-3. **#15 (heartbeat blackout during prepare_scan)** — 15 minutes, prerequisite for item #2 to be safe.
-4. **#2 (live view ↔ reaper coupling)** — full corner-case version (~3 hours), eliminates zombie runs cleanly. Don't ship the simple version — it leaves the spider-vs-reaper race in.
-5. **#10 partial (auto-resume on stall)** — ~1 hour. Combined with the throttle fix already in PR #6, this means a stall doesn't lose ~2,400 URLs of work. Independently valuable.
-6. **#19 ("Re-run failed" button)** — ~1.5 hours. The operator's most-requested missing button; pairs naturally with #10 (rerun = make a new run that inherits the queue).
-7. **#20 ("Stop" button)** — ~2 hours. Completes the lifecycle control from the UI. Cross-container signal mechanism is the bulk of the effort.
-8. **#16 (advisory lock for cross-process coordination)** — ~1 hour, prevents the cross-worktree zombie pattern.
-9. **#25 (repeated-failure detection)** — ~2 hours. Important as soon as you run unattended; cheap to add.
-10. **#22 (schedule + ETA visibility)** — ~1 hour, three small badges. High operator-quality-of-life return.
-11. **#27 (pre-flight checks)** — ~1.5 hours, eliminates a class of "started, then failed for no reason" mysteries.
-12. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
-13. **#24 (retention / cleanup)** — ~2 hours, set-and-forget; do before the DB hits a million rows.
-14. **#23 (pause / resume)** — ~3 hours. Skip if you don't run through maintenance windows.
-15. **#26 (run-list filtering)** — ~1.5 hours. Comfort feature; only matters with hundreds of runs.
-16. **#13 (logrotate)** — 10 minutes, set-and-forget.
-17. **#12 (absolute log path)** — 5 minutes.
+That principle drives the ordering: stability first (the DB lifecycle invariants), then operator controls layered on top.
+
+### Track A — Stability foundation (lifecycle bundle)
+
+Land these together, in this order, as one or two PRs. They establish: *one active worker owns a shop+phase, heartbeats are trustworthy, stale runs are failed promptly, terminal runs stop accepting writes, stalls don't strand the queue.*
+
+1. **#11 (`pool_pre_ping` + `pool_recycle`)** — 5 min. Stale connection failures (run 178's `OperationalError`) gone. Prerequisite for everything else: every fix below assumes DB writes don't sporadically die.
+2. **#16 (advisory lock — single active scan per shop+phase)** — 1 h. *Promoted from later in the list.* Without this, two processes can attach to the same queue and the rest of the lifecycle work papers over symptoms instead of fixing the cause. Cheap insurance; belongs in the lifecycle bundle.
+3. **#15 (heartbeat blackout fix)** — 15 min. Emit `run_started` immediately after `create_scrape_run` so the heartbeat ticks during `prepare_scrape_url_items`. Prerequisite for #2 to not false-positive on long queue prep.
+4. **#2 (full reaper coupling with terminal-state guards)** — 3 h. Splits thresholds (live view at 30 s, reaper at 60 s), adds `WHERE status='running'` guards on every spider write so a reaped run can't be resurrected, queue inheritance on `stall_timeout`. Don't ship the "simple" version — it leaves the race in.
+5. **#10 partial (auto-resume on stall)** — 1 h. When `StallDetector` fires, the run's pending rows stay queued for the next scheduled run instead of being abandoned.
+
+After Track A lands, the invariant holds: **at most one process owns a shop+phase, the heartbeat is the truth about liveness, and terminal state in the DB is final.**
+
+### Track B — Operator controls
+
+Layer on top of Track A. Each item assumes the lifecycle invariants are sound — without Track A, these create more weird states than they fix.
+
+6. **#21 (live view stays static on terminal)** — 30 min. Pure UX, immediately observable. Operator-requested.
+7. **#19 ("Re-run failed" button)** — 1.5 h. Pairs naturally with #10 (rerun creates a new run that inherits the failed run's queue).
+8. **#20 ("Stop" button)** — 1.5 h. **DB-mediated** (status `→ 'stopping'`, spider polls between requests). SIGTERM is an optimisation, not the control plane. See item #20's revised design notes.
+9. **#27 (pre-flight checks)** — 1.5 h. *Promoted from later.* Validates *before* spawning a subprocess: DB reachable, no concurrent run, disk space, config loads. Prevents bad runs cleanly; matters more than the schedule/ETA niceties below because it stops symptoms at the source.
+10. **#25 (repeated-failure detection)** — 2 h. Banner on the run-list page when N consecutive runs failed with the same `error_reason` cluster. Essential for unattended operation.
+
+### Track C — Quality of life
+
+These polish the experience but don't change correctness. Do when Tracks A/B are stable.
+
+11. **#22 (schedule + ETA visibility)** — 1 h. "Next run in 4h", "ETA ~25 min". Three small badges.
+12. **#4 (unit tests)** — 2 h. Lock in Track A's design from regressing.
+13. **#24 (retention / cleanup)** — 2 h. Set-and-forget; do before the DB hits a million rows.
+14. **#23 (pause / resume)** — 3 h. Skip if you don't run through maintenance windows. Reuses #20's DB-poll primitive.
+15. **#26 (run-list filtering)** — 1.5 h. Comfort feature; only matters with hundreds of runs.
+16. **#13 (logrotate)** — 10 min, set-and-forget.
+17. **#12 (absolute log path)** — 5 min.
 18. **#5, #6** — small verification tasks, batch them.
-19. **#28 (per-rerun config overrides)** — ~2 hours. Workaround is editing TOML; do when that becomes annoying.
+19. **#28 (per-rerun config overrides)** — 2 h. Do when editing TOML becomes annoying.
 20. **#18 (alerting)** — only if you actually want pager-style notifications. Pairs with #25.
-21. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
+21. **#7 (throttle retry)** — only after #1 actually surfaces real `autothrottle_slot` data (not just our internal `'autothrottle'` source). Currently the precondition isn't met.
 
-Items NOT worth doing right now:
-- **#1 (AUTOTHROTTLE bypass)** is technically still open in the sense that we don't use Scrapy's native AUTOTHROTTLE. But our internal pacing in PR #4+ does the same job functionally. Re-emitting Scrapy signals (option B) would only matter if we wanted Scrapy's stats / extensions to see the requests, which we don't.
-- **#3 (boot reconcile)** is subsumed by #2 once that lands properly.
-- **#14 (atomic JSONL writes)** is genuinely speculative; defer until we see corruption.
-- **#17 (long-lived session recycle)** is subsumed by #11.
+### Items NOT worth doing right now
 
-**Natural batches that group well:**
-- **Pure-UX bundle (~3.5 hours):** #21 + #19 + #20. Each item changes only the React component + a small API endpoint; ship as one PR.
-- **Reaper/lifecycle bundle (~5 hours):** #11 + #15 + #2-full + #10-partial + #16. They all touch the same set of files (`session.py`, reaper, spider close path, repo helpers). One PR avoids stepping on itself.
-- **Run-management bundle (~5 hours):** #22 + #25 + #27. All touch the dashboard's run-list/detail pages + the `/scrape` POST handler. The schedule badge, the failure-detection banner, and the pre-flight check share the same query layer.
+- **#1 (AUTOTHROTTLE bypass).** Functionally closed by PR #4's internal pacing. Re-emitting Scrapy signals (option B) would only matter if we wanted Scrapy's stats / extensions to see the requests, which we don't.
+- **#3 (boot reconcile).** Subsumed by #2 — once the dashboard reaper transitions stale runs aggressively, boot-time reconcile is redundant.
+- **#14 (atomic JSONL writes).** Speculative; defer until we see corruption.
+- **#17 (long-lived session recycle).** Subsumed by #11 — `pool_pre_ping` makes stale-connection recycling unnecessary.
+
+### Natural PR batches
+
+- **Track A bundle (~5.5 h, one PR):** #11 + #16 + #15 + #2 + #10. They all touch the same files (`session.py`, the reaper, spider close path, repo helpers). Ship together so the lifecycle invariants land coherently — partial Track A is worse than no Track A.
+- **Track B bundle (~5 h, one PR):** #21 + #19 + #20 + #27 + #25. Dashboard React + a few small API routes. Pre-flight (#27) and failure detection (#25) share the same query layer as the Track B controls.
+- **Track C is à la carte** — each item is independent and small enough to ship on its own.
