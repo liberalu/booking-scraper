@@ -6,6 +6,7 @@ client, which handles the same requests without issues.
 """
 
 import logging  # pragma: no cover
+import time  # pragma: no cover
 
 import httpx  # pragma: no cover
 from scrapy import Request, signals  # pragma: no cover
@@ -39,8 +40,12 @@ class HttpxMiddleware:  # pragma: no cover
     async def process_request(self, request: Request) -> HtmlResponse:
         """Intercept request and handle with httpx.
 
-        Returning a Response skips Twisted's downloader entirely.
+        Returning a Response skips Twisted's downloader entirely. Because
+        of that, Scrapy's `request_reached_downloader` signal never fires,
+        so we stamp the dispatch time directly on `request.meta` here —
+        the spider reads it back as the per-URL "started_at".
         """
+        request.meta["dispatched_at"] = time.time()
         try:
             response = await self.client.get(str(request.url))
             # httpx auto-decompresses gzip, so remove Content-Encoding

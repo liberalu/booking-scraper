@@ -1,4 +1,3 @@
-import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -59,20 +58,7 @@ class ScanSpider(scrapy.Spider):
     def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
         spider = super().from_crawler(crawler, *args, **kwargs)
         crawler.signals.connect(spider.spider_idle, signal=signals.spider_idle)
-        crawler.signals.connect(
-            spider._on_request_reached_downloader,
-            signal=signals.request_reached_downloader,
-        )
         return spider
-
-    def _on_request_reached_downloader(self, request, spider) -> None:  # type: ignore[no-untyped-def]
-        """Stamp the moment Scrapy actually dispatches the request.
-
-        This is the per-URL "started_at" — duration is measured from here
-        until parse_product/handle_error fires. Stored on request.meta so
-        the response handler can forward it to flush_progress.
-        """
-        request.meta["dispatched_at"] = time.time()
 
     def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
         """When the main queue drains, check for new items queued mid-run
