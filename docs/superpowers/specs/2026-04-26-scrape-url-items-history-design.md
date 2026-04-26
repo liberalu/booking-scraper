@@ -1,6 +1,7 @@
 # Per-URL Run History via `scrape_url_items`
 
-**Status:** Implemented — commit `b4386c8` (migration `7c441ea07eb2`)
+**Status:** Implemented — commits `b4386c8` (migration `7c441ea07eb2`) +
+`39bac1d` (`claimed_at` populated via `HttpxMiddleware.process_request`).
 **Date:** 2026-04-26
 
 ## Problem
@@ -62,6 +63,18 @@ The existing columns on the table fully describe the per-URL timeline:
 `created_at` (queued), `claimed_at` (request dispatched), `done_at`
 (response or final failure recorded), `status`, `url_type`. Duration is
 computed at read time as `done_at - claimed_at` — no stored column.
+
+`claimed_at` is stamped by `HttpxMiddleware.process_request` (in
+`book_scraper/download_handler.py`), which writes
+`request.meta["dispatched_at"] = time.time()` immediately before the
+outgoing httpx call. The spider reads it back in `parse_product` /
+`handle_error` and threads it through `flush_progress` →
+`mark_scrape_url_item_done|failed`, which sets `claimed_at` on the row
+if not already set. The middleware is the right hook because it
+short-circuits Scrapy's built-in downloader by returning a `Response`,
+which means signal-based hooks like `request_reached_downloader` do
+NOT fire — so the natural-looking signal approach silently leaves
+`claimed_at` null on every row.
 
 ## Behaviour changes
 
@@ -203,14 +216,6 @@ the dashboard issues today.
 - **An `error_reason` enum.** Free-form text is intentional. Keeps the
   spider unconstrained; cardinality is low in practice; no migration
   needed when a new failure mode is added.
-
-## Known gap
-
-`claimed_at` is never set in the current spider implementation — items
-go directly `pending → done|failed` without a `processing` transition.
-That makes `duration_ms` always `null` in the API. Fix is small (stamp
-`request.meta["claimed_at"]` at dispatch, write it through
-`flush_progress`) and tracked separately.
 
 ## Test surface
 
