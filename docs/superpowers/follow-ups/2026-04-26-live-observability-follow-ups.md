@@ -389,24 +389,114 @@ Or: just rely on item #11 — `pool_pre_ping` makes recycling unnecessary becaus
 
 ---
 
+## P1/P2 — UX gaps surfaced from real use
+
+These came up after watching the dashboard during real scrapes — operator workflows the current UI doesn't support yet.
+
+### 19. "Re-run failed run" button
+
+**Source:** operator workflow gap. When a run fails (stall, error, etc.) there's no way to re-trigger it from the dashboard — operator either waits for cron or shells in to run `scrapy crawl scan` manually.
+
+**Fix:** add a "Re-run" button on the run detail page, visible only when `data.status === 'failed'`. POSTs to a new endpoint `POST /api/runs/{id}/rerun`.
+
+Server-side behavior options:
+- **Resume from queue** (preferred when failure was a stall, queue still has pending rows) — create a new `scrape_run`, mark the old run's pending rows under the new `run_id`, fire a fresh scrapy subprocess. Reuses the queue, doesn't waste the work that succeeded.
+- **Restart from scratch** — call `prepare_scan` from clean state. Simpler, slower (re-discovers URLs).
+- **Operator chooses** — radio in a small confirm dialog: "resume queue" vs "fresh discover".
+
+**Corner cases:**
+- **Already-running run for the same shop.** Reject with 409 — the existing run is still doing work, re-running creates contention. Surface the existing run id in the error message.
+- **Concurrent rerun clicks.** Idempotency: hash the `run_id` into a Postgres advisory lock, second click within N seconds gets 409.
+- **Stale dashboard view.** If the operator clicks rerun on a run that another process already reran, return the new run id rather than failing — the operator's intent is satisfied.
+- **Auth.** No auth in the dashboard today. If this gets exposed externally, add a simple shared-secret header before shipping.
+- **Subprocess stdout.** The existing `/scrape` POST uses `subprocess.Popen` fire-and-forget. Same pattern is fine; output goes to `scrapy_errors.log` + the JSONL events log.
+
+**Priority:** P1. Currently the only way to retry a failed run is shell access — that's a real gap.
+
+**Effort:** ~1.5 hours. Most of it is the API endpoint + the queue-inheritance logic. The UI is a single button + confirm dialog.
+
+---
+
+### 20. "Stop run" button (kill running scan)
+
+**Source:** operator workflow gap. When a scan is going badly (high error rate, looking-stuck-but-not-yet-stalled, operator changed their mind) there's no UI to stop it cleanly. Existing code has a `kill_run` route per `b934f0f`'s commit message ("the kill_run route's PID-already-dead branch") but it's not surfaced in the React UI.
+
+**Fix:** add a "Stop" button on the run detail page, visible only when `data.status === 'running'`. POSTs to the existing `kill_run` route (or `/api/runs/{id}/stop` for naming consistency with `rerun`).
+
+Server-side flow:
+1. Look up the run's `pid` column.
+2. If the PID is alive: `os.kill(pid, signal.SIGTERM)` — gives the spider's `closed()` callback a chance to run, which writes `finished_at` and aborts processing rows cleanly. Wait up to 10 s for graceful shutdown.
+3. If the PID is dead OR doesn't shut down in 10 s: directly transition to `failed` and call `abort_processing_scrape_url_items` (b934f0f). This is the "PID-already-dead branch" mentioned in the commit.
+
+**Corner cases:**
+- **Cross-container PID.** The scraper container has its own PID namespace. `os.kill` from the dashboard container can't reach it. Two options: (a) signal via Postgres NOTIFY that the spider polls for, or (b) have the scraper expose a tiny HTTP control socket the dashboard can call. Option (b) is closer to standard ops practice. (a) avoids new ports.
+- **Cron-spawned runs.** Cron's scrapy process inherits cron's PID namespace; same cross-container issue.
+- **Host-spawned runs (worktree dashboards).** The PID is on the HOST, not in the docker network. The dashboard's `os.kill` would need to operate on the host PID, which only works if dashboard runs on host (uvicorn ports 8001/8111/8112 from other worktrees) — not when it's in docker.
+- **Race with natural completion.** Operator clicks Stop just as the spider finishes its last URL. The kill arrives, spider's already-running `closed()` callback is racing with the kill signal handler. Use `WHERE status = 'running'` in the kill path's UPDATE so a concurrent `closed()` writing `status='completed'` wins idempotently.
+- **Click-spam.** Disable the button in the UI for 5 s after click; second click while pending is a no-op.
+
+**Priority:** P1. Combined with #19, this gives the operator full lifecycle control from the UI.
+
+**Effort:** ~2 hours including the cross-container signal mechanism (Postgres NOTIFY is the cheaper option — spider listens via a background task, kill route INSERTs/NOTIFY's, signal handler raises a custom exception caught in spider's main loop).
+
+---
+
+### 21. Live view shouldn't hide when run reaches terminal state — keep it static
+
+**Source:** operator feedback. After PR #4 (commit `22d28f2`) the live panel disappears when the run transitions to `failed` / `completed`. Operator wants the panel to stay visible — the last "Now Fetching" + Recent activity is exactly what they want for a postmortem.
+
+**Current behavior** (`hf-runs.jsx`'s polling effect):
+```jsx
+if (currentStatus !== 'running') {
+  if (liveData) setLiveData(null);   // ← hides the panel
+  ...
+}
+```
+
+**Desired behavior:**
+- Keep `liveData` populated with the last snapshot.
+- Stop polling (no point).
+- Render the panel with the last known state.
+- Adjust the title / subtitle: "Live · refreshed every 2s · health: dead" → "Final state · health: <last>" or similar — make it clear the data is frozen.
+- Health pill shows the final health (e.g., "dead" or empty for cleanly-completed runs).
+
+**Corner cases:**
+- **Initial-load on a finished run.** When the page loads against an already-completed run, `data.status === 'completed'` from the parent fetch. The polling effect should still issue ONE fetch to populate `liveData`, then stop. Currently the gate is `!== 'running'` → returns immediately, so the panel stays empty. Fix: do one final fetch when transitioning to (or starting in) terminal state, then stop polling.
+- **Status mirroring (from PR #4's polling fix).** Currently when `liveData.status` flips terminal, we both null `liveData` AND mirror status into `data`. Keep the mirror; drop the null.
+- **Rate counter and "now fetching" fields.** On a terminal run, "Now fetching" should clearly read "—" or "no requests in flight". The live API correctly returns `in_flight: []` once the run ends, so this is automatic — just don't hide the panel.
+- **Recent activity table shows old data forever.** That's the point. Maybe label the timestamps as "X minutes ago" with a footnote that the run is no longer active.
+
+**Priority:** P2. Pure UX improvement; the operator can already see this data on /runs/<id>/urls page, but the live panel's pre-baked summary is more readable.
+
+**Effort:** ~30 minutes. Mostly: do one final fetch on terminal-status transition (for the case where the page loads against a finished run), don't null `liveData`, swap the panel title.
+
+---
+
 ## Suggested order of attack (revised)
 
-The corner-case review changed priorities. Highest-leverage first:
+The corner-case review and operator feedback changed priorities. Highest-leverage first:
 
 1. **#11 (`pool_pre_ping`)** — 5 minutes, eliminates the stale-connection failure class, retroactively explains run 178's `OperationalError`. Pure win.
-2. **#15 (heartbeat blackout during prepare_scan)** — 15 minutes, prerequisite for item #2 to be safe.
-3. **#2 (live view ↔ reaper coupling)** — full corner-case version (~3 hours), eliminates zombie runs cleanly. Don't ship the simple version — it leaves the spider-vs-reaper race in.
-4. **#10 partial (auto-resume on stall)** — ~1 hour. Combined with the throttle fix already in PR #6, this means a stall doesn't lose ~2,400 URLs of work. Independently valuable.
-5. **#16 (advisory lock for cross-process coordination)** — ~1 hour, prevents the cross-worktree zombie pattern.
-6. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
-7. **#13 (logrotate)** — 10 minutes, set-and-forget.
-8. **#12 (absolute log path)** — 5 minutes.
-9. **#5, #6** — small verification tasks, batch them.
-10. **#18 (alerting)** — only if you actually want pager-style notifications.
-11. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
+2. **#21 (live view stays static on terminal status)** — 30 minutes, pure UX. Cheap and immediately observable.
+3. **#15 (heartbeat blackout during prepare_scan)** — 15 minutes, prerequisite for item #2 to be safe.
+4. **#2 (live view ↔ reaper coupling)** — full corner-case version (~3 hours), eliminates zombie runs cleanly. Don't ship the simple version — it leaves the spider-vs-reaper race in.
+5. **#10 partial (auto-resume on stall)** — ~1 hour. Combined with the throttle fix already in PR #6, this means a stall doesn't lose ~2,400 URLs of work. Independently valuable.
+6. **#19 ("Re-run failed" button)** — ~1.5 hours. The operator's most-requested missing button; pairs naturally with #10 (rerun = make a new run that inherits the queue).
+7. **#20 ("Stop" button)** — ~2 hours. Completes the lifecycle control from the UI. Cross-container signal mechanism is the bulk of the effort.
+8. **#16 (advisory lock for cross-process coordination)** — ~1 hour, prevents the cross-worktree zombie pattern.
+9. **#4 (unit tests)** — ~2 hours, locks in the design from regressing as we land the above.
+10. **#13 (logrotate)** — 10 minutes, set-and-forget.
+11. **#12 (absolute log path)** — 5 minutes.
+12. **#5, #6** — small verification tasks, batch them.
+13. **#18 (alerting)** — only if you actually want pager-style notifications.
+14. **#7 (throttle retry)** — only after #1 lands and there's real `autothrottle_slot` data. Currently all rows have `delay_source='autothrottle'` (our internal pacing, not Scrapy's), so the precondition still isn't met.
 
 Items NOT worth doing right now:
 - **#1 (AUTOTHROTTLE bypass)** is technically still open in the sense that we don't use Scrapy's native AUTOTHROTTLE. But our internal pacing in PR #4+ does the same job functionally. Re-emitting Scrapy signals (option B) would only matter if we wanted Scrapy's stats / extensions to see the requests, which we don't.
 - **#3 (boot reconcile)** is subsumed by #2 once that lands properly.
 - **#14 (atomic JSONL writes)** is genuinely speculative; defer until we see corruption.
 - **#17 (long-lived session recycle)** is subsumed by #11.
+
+**Natural batches that group well:**
+- **Pure-UX bundle (~3.5 hours):** #21 + #19 + #20. Each item changes only the React component + a small API endpoint; ship as one PR.
+- **Reaper/lifecycle bundle (~5 hours):** #11 + #15 + #2-full + #10-partial + #16. They all touch the same set of files (`session.py`, reaper, spider close path, repo helpers). One PR avoids stepping on itself.
