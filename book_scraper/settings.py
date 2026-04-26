@@ -33,7 +33,12 @@ STALL_TIMEOUT = 60  # pragma: no cover
 
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
+    "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover
 }  # pragma: no cover
+
+# Per-run heartbeat tick interval (seconds). Independent of request
+# flow; the dashboard uses staleness to detect crashed scrapers.
+HEARTBEAT_INTERVAL_S = 5.0  # pragma: no cover
 
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover

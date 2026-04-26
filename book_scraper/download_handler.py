@@ -62,13 +62,23 @@ class HttpxMiddleware:  # pragma: no cover
         crawler.signals.connect(mw._close, signal=signals.spider_closed)
         return mw
 
-    def _mark_processing(self, item_id: int, dispatched_at: float) -> None:
+    def _mark_processing(
+        self,
+        item_id: int,
+        dispatched_at: float,
+        request_delay_s: float | None,
+        delay_source: str | None,
+    ) -> None:
         """Best-effort: flip scrape_url_items.status to 'processing'.
 
         Sync SQLAlchemy in an async context — briefly blocks the event
-        loop, but with CONCURRENT_REQUESTS_PER_DOMAIN=1 and ~2s between
-        requests there's no contention and the write is sub-10ms. Failure
-        here must NOT stop the request, so we swallow exceptions.
+        loop, but with CONCURRENT_REQUESTS_PER_DOMAIN=1 there's no
+        contention and the write is sub-10ms. Failure here must NOT
+        stop the request, so we swallow exceptions.
+
+        Also records `request_delay_s` and `delay_source` per the live
+        observability spec — the only chance to capture pre-send delay,
+        because by the time the spider sees the response it's gone.
         """
         if not self.database_url:
             return
@@ -81,7 +91,13 @@ class HttpxMiddleware:  # pragma: no cover
 
             session = self._session_factory()
             try:
-                mark_scrape_url_item_processing(session, item_id, dispatched_at)
+                mark_scrape_url_item_processing(
+                    session,
+                    item_id,
+                    dispatched_at,
+                    request_delay_s=request_delay_s,
+                    delay_source=delay_source,
+                )
                 session.commit()
             finally:
                 session.close()
@@ -95,12 +111,34 @@ class HttpxMiddleware:  # pragma: no cover
         of that, Scrapy's `request_reached_downloader` signal never fires,
         so we stamp the dispatch time directly on `request.meta` here —
         the spider reads it back as the per-URL "started_at".
+
+        Pre-send delay capture: the spider stamps `scheduled_at` (a
+        time.monotonic() value) when yielding the request. We compute
+        the wall-clock interval here. Per Gate A's findings on this
+        codebase (slot=None on every request, AUTOTHROTTLE bypassed by
+        the httpx return path) the value's source is always
+        'httpx_observed' — see the live observability spec.
         """
         dispatched_at = time.time()
         request.meta["dispatched_at"] = dispatched_at
+        scheduled_at = request.meta.get("scheduled_at")
+        request_delay_s: float | None = None
+        delay_source: str | None = None
+        if isinstance(scheduled_at, (int, float)):
+            request_delay_s = max(0.0, time.monotonic() - float(scheduled_at))
+            delay_source = "httpx_observed"
+        # Stamp on meta so the spider can include them in the JSONL
+        # event log without re-reading from the DB.
+        request.meta["request_delay_s"] = request_delay_s
+        request.meta["delay_source"] = delay_source
         item_id = request.meta.get("scrape_url_item_id")
         if item_id is not None:
-            self._mark_processing(item_id, dispatched_at)
+            self._mark_processing(
+                item_id,
+                dispatched_at,
+                request_delay_s,
+                delay_source,
+            )
         try:
             response = await asyncio.wait_for(
                 self.client.get(str(request.url)),

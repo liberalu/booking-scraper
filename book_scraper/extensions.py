@@ -105,3 +105,95 @@ class StallDetector:  # pragma: no cover
                 session.close()
         except Exception:
             logger.exception("Failed to mark run %d failed on stall", run_id)
+
+
+class HeartbeatExtension:  # pragma: no cover
+    """Tick `scrape_runs.last_heartbeat` every N seconds while a run is live.
+
+    Hooks into the custom `run_started` signal (not `spider_opened`)
+    because `_run_id` is assigned inside `start()`, after spider_opened
+    has already fired. See the live observability spec.
+
+    Independent of request flow, so a request hung in the downloader
+    doesn't make the process look dead. Stops on `spider_closed`.
+    """
+
+    def __init__(self, crawler: Crawler, interval: float):
+        self.crawler = crawler
+        self.interval = interval
+        self._run_id: int | None = None
+        self._task: Any = None
+        self._session_factory: Any = None
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "HeartbeatExtension":
+        from book_scraper.signals import run_started
+
+        interval = crawler.settings.getfloat("HEARTBEAT_INTERVAL_S", 5.0)
+        if interval <= 0:
+            raise NotConfigured
+        ext = cls(crawler, interval)
+        crawler.signals.connect(ext.on_run_started, signal=run_started)
+        crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
+        return ext
+
+    def on_run_started(
+        self, run_id: int, sender: Any = None, **kwargs: Any
+    ) -> None:
+        self._run_id = run_id
+        # Immediate write so even short runs (faster than the tick
+        # interval) get a fresh heartbeat — otherwise a 4-second scan
+        # would leave the dashboard reading the stale value from
+        # create_scrape_run.
+        try:
+            self._write_heartbeat(run_id)
+        except Exception:
+            logger.exception("Initial heartbeat write failed for run %d", run_id)
+        self._schedule_next()
+
+    def spider_closed(self) -> None:
+        if self._task is not None and self._task.active():
+            self._task.cancel()
+        self._task = None
+
+    def _schedule_next(self) -> None:
+        from twisted.internet import reactor
+
+        self._task = reactor.callLater(  # type: ignore[attr-defined]
+            self.interval, self._tick
+        )
+
+    def _tick(self) -> None:
+        if self._run_id is None:
+            logger.warning("HeartbeatExtension tick before run_id; skipping")
+            self._schedule_next()
+            return
+        try:
+            self._write_heartbeat(self._run_id)
+        except Exception:
+            logger.exception("Heartbeat write failed for run %d", self._run_id)
+        self._schedule_next()
+
+    def _write_heartbeat(self, run_id: int) -> None:
+        from sqlalchemy import text as sa_text
+
+        from book_scraper.db.session import get_session_factory
+
+        if self._session_factory is None:
+            database_url = self.crawler.settings.get("DATABASE_URL")
+            self._session_factory = get_session_factory(database_url)
+        session = self._session_factory()
+        try:
+            # Apply a per-statement timeout so a hung DB doesn't pile
+            # up ticks. SET LOCAL stays scoped to the transaction.
+            session.execute(sa_text("SET LOCAL statement_timeout = '2s'"))
+            session.execute(
+                sa_text(
+                    "UPDATE scrape_runs SET last_heartbeat = now() "
+                    "WHERE id = :run_id"
+                ),
+                {"run_id": run_id},
+            )
+            session.commit()
+        finally:
+            session.close()

@@ -1170,17 +1170,65 @@ def mark_scrape_url_item_processing(
     session: Session,
     item_id: int,
     dispatched_at: float,
+    request_delay_s: float | None = None,
+    delay_source: str | None = None,
 ) -> None:
     """Mark a scrape_url_item in-flight: status=processing + claimed_at.
 
     Called from HttpxMiddleware.process_request the moment the request
     goes out, so the dashboard can surface "currently scraping" rows.
+
+    `request_delay_s` and `delay_source` capture the per-request delay
+    telemetry (live observability spec). `delay_source` records where
+    the value came from so the dashboard can label it honestly.
     """
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "processing"
         item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        if request_delay_s is not None:
+            item.request_delay_s = request_delay_s
+        if delay_source is not None:
+            item.delay_source = delay_source
         session.flush()
+
+
+def mark_scrape_url_item_response(
+    session: Session,
+    item_id: int,
+    *,
+    success: bool,
+    http_status: int | None,
+    received_at: float | None,
+    response_bytes: int | None = None,
+    error_reason: str | None = None,
+    url_type: str | None = None,
+) -> None:
+    """Immediate per-response write — owns terminal state for an item.
+
+    Sets status to 'done' or 'failed' and stamps done_at, http_status,
+    response_bytes, and error_reason in a single UPDATE on the response.
+    The pre-existing batched flush path no longer writes these columns
+    (live observability spec — ownership split).
+    """
+    item = session.get(ScrapeUrlItem, item_id)
+    if item is None:
+        return
+    item.status = "done" if success else "failed"
+    item.done_at = (
+        datetime.fromtimestamp(received_at, tz=UTC)
+        if received_at is not None
+        else datetime.now(UTC)
+    )
+    if http_status is not None:
+        item.http_status = http_status
+    if error_reason is not None:
+        item.error_reason = error_reason
+    if response_bytes is not None:
+        item.response_bytes = response_bytes
+    if url_type is not None:
+        item.url_type = url_type
+    session.flush()
 
 
 def mark_scrape_url_item_done(

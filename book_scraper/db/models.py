@@ -8,6 +8,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -461,10 +462,17 @@ class ScrapeUrlItem(Base):
     )
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_delay_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delay_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         Index("ix_scrape_url_items_run_status", "run_id", "status"),
         Index("ix_scrape_url_items_shop_claimed_at", "shop_id", "claimed_at"),
+        Index("ix_scrape_url_items_run_done_at", "run_id", "done_at"),
         UniqueConstraint("run_id", "url", name="uq_scrape_url_items_run_url"),
     )
 
