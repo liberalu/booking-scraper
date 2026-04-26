@@ -197,19 +197,32 @@ function HFRuns({ nav, goto }) {
 }
 
 // ───────────────────────────── Live panel ─────────────────────────────
-// Honest UI: never says "AutoThrottle delay" — see live observability spec.
-// On this codebase Gate A failed (HttpxMiddleware bypasses Scrapy's
-// downloader path and AUTOTHROTTLE never updates the slot delay), so
-// `delay_source` is always 'httpx_observed'.
+// Honest UI: the suffix tells the operator how trustworthy the number
+// is, based on how it was measured. See live observability spec.
 
 const DELAY_SOURCE_LABELS = {
+  autothrottle:      { suffix: 'autothrottle',
+    title: 'Adaptive delay enforced inside HttpxMiddleware. Drifts toward response_latency / TARGET_CONCURRENCY, bounded by DOWNLOAD_DELAY (floor) and AUTOTHROTTLE_MAX_DELAY (ceiling).' },
   autothrottle_slot: { suffix: 'verified',
-    title: 'Adaptive throttle delay from AUTOTHROTTLE; verified by Gate A.' },
-  httpx_observed:    { suffix: 'observed',
-    title: 'Wall-clock wait between request scheduling and dispatch. Includes engine queue time, not purely AUTOTHROTTLE.' },
+    title: 'Adaptive throttle delay read from Scrapy AUTOTHROTTLE slot.' },
   configured_delay:  { suffix: 'static',
-    title: 'Configured DOWNLOAD_DELAY; not adaptive.' },
+    title: 'Static DOWNLOAD_DELAY enforced inside HttpxMiddleware (AUTOTHROTTLE disabled).' },
+  httpx_observed:    { suffix: 'observed',
+    title: 'Pre-fix legacy value: wall-clock wait between schedule and dispatch (engine queue time, not actual throttling).' },
 };
+
+function _fmtClockTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    const ms = String(d.getMilliseconds()).padStart(3, '0');
+    return `${hh}:${mm}:${ss}.${ms}`;
+  } catch (e) { return '—'; }
+}
 
 function _fmtDelay(seconds) {
   if (seconds == null) return '—';
@@ -234,7 +247,7 @@ function _fmtAge(seconds) {
 function HFLivePanel({ data, HF }) {
   const inFlight = data.in_flight || [];
   const rate = data.rate || { window_s: 60, done: 0, failed: 0 };
-  const failures = data.recent_failures || [];
+  const activity = data.recent_activity || [];
   const health = data.health || '';
   const healthTone = (
     health === 'healthy' ? 'ok' :
@@ -263,9 +276,9 @@ function HFLivePanel({ data, HF }) {
               <div key={i} style={{padding:'8px 0', borderTop: i ? `1px solid ${HF.borderFaint}` : 'none'}}>
                 <div style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink, wordBreak:'break-all', marginBottom:4}}>{row.url}</div>
                 <div style={{display:'flex', gap:14, fontSize:11.5, color:HF.ink3, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', flexWrap:'wrap'}}>
-                  <span>claimed {_fmtAge(row.claimed_age_s)} ago</span>
+                  <span title={row.claimed_at || ''}>started {_fmtClockTime(row.claimed_at)} · {_fmtAge(row.claimed_age_s)} ago</span>
                   <span title={label.title || ''}>
-                    dispatch delay: {_fmtDelay(row.request_delay_s)}
+                    throttle: {_fmtDelay(row.request_delay_s)}
                     {label.suffix ? ` (${label.suffix})` : ''}
                   </span>
                   {row.retry_count > 0 && <span>retries: {row.retry_count}</span>}
@@ -293,17 +306,42 @@ function HFLivePanel({ data, HF }) {
         </div>
       </div>
 
-      {failures.length > 0 && (
+      {activity.length > 0 && (
         <div style={{padding:`0 ${HF.cardP}px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`}}>
-          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, padding:'12px 0 6px'}}>Recent failures</div>
-          {failures.slice(0, 5).map((f, i) => (
-            <div key={i} style={{display:'flex', gap:12, fontFamily:HF.mono, fontSize:12, color:HF.ink3, padding:'4px 0', borderTop: i ? `1px solid ${HF.borderFaint}` : 'none', alignItems:'baseline', flexWrap:'wrap'}}>
-              <span style={{color: f.http_status && f.http_status >= 500 ? HF.errInk : HF.warnInk, minWidth:36, fontVariantNumeric:'tabular-nums'}}>{f.http_status ?? '—'}</span>
-              <span style={{flex:1, color:HF.ink, wordBreak:'break-all'}}>{f.url}</span>
-              <span style={{color:HF.ink4}}>{f.error_reason || ''}</span>
-              <span style={{color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{_fmtAge(f.done_age_s)} ago</span>
-            </div>
-          ))}
+          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, padding:'12px 0 6px'}}>
+            Recent activity (last {activity.length})
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'auto auto auto auto auto 1fr auto', columnGap:14, rowGap:4, fontFamily:HF.mono, fontSize:11.5, fontVariantNumeric:'tabular-nums', color:HF.ink3}}>
+            <div style={{color:HF.ink4, fontWeight:600}}>status</div>
+            <div style={{color:HF.ink4, fontWeight:600}}>started</div>
+            <div style={{color:HF.ink4, fontWeight:600}}>finished</div>
+            <div style={{color:HF.ink4, fontWeight:600}}>duration</div>
+            <div style={{color:HF.ink4, fontWeight:600}}>throttle</div>
+            <div style={{color:HF.ink4, fontWeight:600}}>url</div>
+            <div style={{color:HF.ink4, fontWeight:600, textAlign:'right'}}>bytes</div>
+            {activity.map((row, i) => {
+              const label = DELAY_SOURCE_LABELS[row.delay_source] || {};
+              const ok = row.status === 'done';
+              const statusColor = ok ? HF.okInk : (row.http_status && row.http_status >= 500 ? HF.errInk : HF.warnInk);
+              return (
+                <React.Fragment key={i}>
+                  <div style={{color:statusColor}} title={row.error_reason || ''}>
+                    {ok ? `${row.http_status ?? 200}` : `${row.http_status ?? 'err'}`}
+                  </div>
+                  <div title={row.claimed_at || ''}>{_fmtClockTime(row.claimed_at)}</div>
+                  <div title={row.done_at || ''}>{_fmtClockTime(row.done_at)}</div>
+                  <div>{_fmtDelay(row.duration_s)}</div>
+                  <div title={label.title || ''}>
+                    {_fmtDelay(row.request_delay_s)}{label.suffix ? ` ${label.suffix.charAt(0)}` : ''}
+                  </div>
+                  <div style={{color:HF.ink, wordBreak:'break-all', overflow:'hidden', textOverflow:'ellipsis'}}>{row.url}</div>
+                  <div style={{textAlign:'right', color:HF.ink3}}>
+                    {row.response_bytes != null ? `${(row.response_bytes/1024).toFixed(1)}k` : '—'}
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       )}
     </HFCard>

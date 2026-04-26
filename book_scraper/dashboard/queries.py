@@ -283,6 +283,42 @@ def get_run_rate_window(
     }
 
 
+def _row_to_activity_entry(
+    r: "ScrapeUrlItem", now: datetime
+) -> dict[str, Any]:
+    """Convert a ScrapeUrlItem into the activity-stream dict shape.
+
+    Includes both the `claimed_at` (start) and `done_at` (finish)
+    timestamps as ISO strings, the derived duration in seconds, and
+    the throttle delay we imposed before dispatch (with its source).
+    """
+    claimed_at = r.claimed_at
+    if claimed_at is not None and claimed_at.tzinfo is None:
+        claimed_at = claimed_at.replace(tzinfo=UTC)
+    done_at = r.done_at
+    if done_at is not None and done_at.tzinfo is None:
+        done_at = done_at.replace(tzinfo=UTC)
+    duration_s: float | None = None
+    if claimed_at is not None and done_at is not None:
+        duration_s = max(0.0, (done_at - claimed_at).total_seconds())
+    done_age_s: float | None = None
+    if done_at is not None:
+        done_age_s = max(0.0, (now - done_at).total_seconds())
+    return {
+        "url": r.url,
+        "status": r.status,
+        "http_status": r.http_status,
+        "error_reason": r.error_reason,
+        "claimed_at": claimed_at.isoformat() if claimed_at is not None else None,
+        "done_at": done_at.isoformat() if done_at is not None else None,
+        "duration_s": duration_s,
+        "done_age_s": done_age_s,
+        "request_delay_s": r.request_delay_s,
+        "delay_source": r.delay_source,
+        "response_bytes": r.response_bytes,
+    }
+
+
 def get_run_recent_failures(
     session: Session, run_id: int, limit: int = 10
 ) -> list[dict[str, Any]]:
@@ -298,24 +334,32 @@ def get_run_recent_failures(
         .all()
     )
     now = datetime.now(UTC)
-    out: list[dict[str, Any]] = []
-    for r in rows:
-        done_at = r.done_at
-        done_age_s: float | None = None
-        if done_at is not None:
-            if done_at.tzinfo is None:
-                done_at = done_at.replace(tzinfo=UTC)
-            done_age_s = max(0.0, (now - done_at).total_seconds())
-        out.append(
-            {
-                "url": r.url,
-                "http_status": r.http_status,
-                "error_reason": r.error_reason,
-                "done_at": done_at.isoformat() if done_at is not None else None,
-                "done_age_s": done_age_s,
-            }
+    return [_row_to_activity_entry(r, now) for r in rows]
+
+
+def get_run_recent_activity(
+    session: Session, run_id: int, limit: int = 20
+) -> list[dict[str, Any]]:
+    """Most-recent done OR failed rows for a run, newest first.
+
+    Returns full timing detail: start (claimed_at), finish (done_at),
+    duration, throttle delay applied, response bytes. Used by the live
+    panel so an operator can see exactly when each request started and
+    finished, not just relative ages.
+    """
+    rows = (
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status.in_(("done", "failed")),
+            ScrapeUrlItem.done_at.isnot(None),
         )
-    return out
+        .order_by(ScrapeUrlItem.done_at.desc(), ScrapeUrlItem.id.desc())
+        .limit(limit)
+        .all()
+    )
+    now = datetime.now(UTC)
+    return [_row_to_activity_entry(r, now) for r in rows]
 
 
 RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
