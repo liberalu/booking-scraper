@@ -1166,21 +1166,39 @@ def get_pending_scrape_url_items(session: Session, run_id: int) -> list[dict[str
     ]
 
 
-def mark_scrape_url_item_done(session: Session, item_id: int) -> None:
+def mark_scrape_url_item_done(
+    session: Session,
+    item_id: int,
+    http_status: int | None = None,
+    error_reason: str | None = None,
+) -> None:
     """Mark a scrape_url_item as done."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "done"
         item.done_at = datetime.now(UTC)
+        if http_status is not None:
+            item.http_status = http_status
+        if error_reason is not None:
+            item.error_reason = error_reason
         session.flush()
 
 
-def mark_scrape_url_item_failed(session: Session, item_id: int) -> None:
+def mark_scrape_url_item_failed(
+    session: Session,
+    item_id: int,
+    http_status: int | None = None,
+    error_reason: str | None = None,
+) -> None:
     """Mark a scrape_url_item as failed."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "failed"
         item.done_at = datetime.now(UTC)
+        if http_status is not None:
+            item.http_status = http_status
+        if error_reason is not None:
+            item.error_reason = error_reason
         session.flush()
 
 

@@ -224,30 +224,18 @@ def get_run_discovered_urls(
     page: int = 1,
     per_page: int = 50,
 ) -> tuple[list[DiscoveredUrl], int]:
-    """URLs touched by a finished run.
+    """URLs touched by a finished discover run via `last_seen_run_id`.
 
-    Discover runs stamp `last_seen_run_id` on every URL they upsert, so we
-    use that. Scan runs only update `last_checked_at` / `last_http_status`,
-    so we fall back to a shop-scoped time window between the run's started
-    / finished timestamps. Used after scrape_url_items has been cleaned up.
+    Scan runs read directly from `scrape_url_items` now (rows are kept
+    after the run finishes). This helper is only used as the discover-run
+    fallback.
     """
     run = session.get(ScrapeRun, run_id)
-    if run is None:
+    if run is None or not run.phase.startswith("discover"):
         return [], 0
-
-    if run.phase.startswith("discover"):
-        query = session.query(DiscoveredUrl).filter(
-            DiscoveredUrl.last_seen_run_id == run_id
-        )
-    else:
-        end = run.finished_at or datetime.now(UTC)
-        query = session.query(DiscoveredUrl).filter(
-            DiscoveredUrl.shop_id == run.shop_id,
-            DiscoveredUrl.last_checked_at.isnot(None),
-            DiscoveredUrl.last_checked_at >= run.started_at,
-            DiscoveredUrl.last_checked_at <= end,
-        )
-
+    query = session.query(DiscoveredUrl).filter(
+        DiscoveredUrl.last_seen_run_id == run_id
+    )
     total = query.count()
     rows = (
         query.order_by(DiscoveredUrl.last_checked_at.desc().nulls_last())

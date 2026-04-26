@@ -358,12 +358,19 @@ function HFRunDetail({ nav, goto, params }) {
                   : u.status === 'failed' ? 'err'
                   : u.status === 'processing' ? 'accent'
                   : 'neutral';
-                const httpTone = u.last_http_status && u.last_http_status >= 400 ? 'err'
-                  : u.last_http_status ? 'ok' : 'neutral';
+                const http = u.http_status ?? u.last_http_status;
+                const httpTone = http && http >= 400 ? 'err' : http ? 'ok' : 'neutral';
+                const fmtDur = (ms) => {
+                  if (ms == null) return '—';
+                  if (ms < 1000) return `${ms}ms`;
+                  return `${(ms / 1000).toFixed(1)}s`;
+                };
                 return (
                   <div key={i} style={{
                     display:'grid',
-                    gridTemplateColumns: urlData.source === 'live' ? '1fr 90px 80px 130px 130px' : '1fr 80px 70px 150px',
+                    gridTemplateColumns: urlData.source === 'live'
+                      ? '1fr 80px 60px 70px 70px 130px'
+                      : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
                     fontSize:12.5, alignItems:'center', gap:10,
@@ -372,9 +379,10 @@ function HFRunDetail({ nav, goto, params }) {
                     {urlData.source === 'live' ? (
                       <>
                         <HFPill tone={tone} style={{width:'fit-content'}}>{u.status}</HFPill>
+                        <HFPill tone={httpTone} style={{width:'fit-content'}}>{http ?? '—'}</HFPill>
                         <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.done_at ? new Date(u.done_at).toLocaleTimeString() : '—'}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:u.error_reason ? HF.errInk : HF.ink4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.error_reason || ''}>{u.error_reason || (u.done_at ? new Date(u.done_at).toLocaleTimeString() : '—')}</span>
                       </>
                     ) : (
                       <>

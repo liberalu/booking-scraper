@@ -459,9 +459,12 @@ class ScrapeUrlItem(Base):
     done_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_scrape_url_items_run_status", "run_id", "status"),
+        Index("ix_scrape_url_items_shop_claimed_at", "shop_id", "claimed_at"),
         UniqueConstraint("run_id", "url", name="uq_scrape_url_items_run_url"),
     )
 

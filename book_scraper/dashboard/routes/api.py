@@ -463,18 +463,29 @@ def api_run_urls(
         items, total = get_run_url_items(
             session, run_id, status=status, page=page, per_page=per_page
         )
-        rows = [
-            {
-                "url": it.url,
-                "status": it.status,
-                "url_type": it.url_type,
-                "claimed_at": it.claimed_at.isoformat() if it.claimed_at else None,
-                "done_at": it.done_at.isoformat() if it.done_at else None,
-            }
-            for it in items
-        ]
+        rows = []
+        for it in items:
+            duration_ms: int | None = None
+            if it.claimed_at and it.done_at:
+                duration_ms = int(
+                    (it.done_at - it.claimed_at).total_seconds() * 1000
+                )
+            rows.append(
+                {
+                    "url": it.url,
+                    "status": it.status,
+                    "url_type": it.url_type,
+                    "claimed_at": it.claimed_at.isoformat() if it.claimed_at else None,
+                    "done_at": it.done_at.isoformat() if it.done_at else None,
+                    "http_status": it.http_status,
+                    "error_reason": it.error_reason,
+                    "duration_ms": duration_ms,
+                }
+            )
         source = "live"
     else:
+        # Discover-run history fallback (last_seen_run_id). Scan runs always
+        # have live rows now (cleanup_scrape_url_items was removed).
         items_du, total = get_run_discovered_urls(
             session, run_id, page=page, per_page=per_page
         )
@@ -491,7 +502,6 @@ def api_run_urls(
             for du in items_du
         ]
         source = "history"
-        # Status filter is meaningless for history — coerce to "all".
         status = "all"
 
     pages = max((total + per_page - 1) // per_page, 1)

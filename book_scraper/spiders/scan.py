@@ -224,6 +224,7 @@ class ScanSpider(scrapy.Spider):
                 increment_fail=True,
                 scrape_url_item_id=scrape_url_item_id,
                 success=False,
+                error_reason=f"http_{response.status}",
             )
             return
         if 500 <= response.status < 600:
@@ -241,6 +242,7 @@ class ScanSpider(scrapy.Spider):
                 increment_fail=True,
                 scrape_url_item_id=scrape_url_item_id,
                 success=False,
+                error_reason=f"http_{response.status}",
             )
             return
 
@@ -279,6 +281,7 @@ class ScanSpider(scrapy.Spider):
                 book_score=data.get("book_score", 0),
                 is_book_product=False,
                 book_score_reasons=data.get("book_score_reasons", []),
+                error_reason="non_product",
             )
             return
 
@@ -341,6 +344,7 @@ class ScanSpider(scrapy.Spider):
                 url,
                 str(http_status),
             )
+            error_reason = f"http_{http_status}"
         elif http_status and 500 <= http_status < 600:
             self._errors_5xx += 1
             self._report_validation(
@@ -349,6 +353,7 @@ class ScanSpider(scrapy.Spider):
                 url,
                 str(http_status),
             )
+            error_reason = f"http_{http_status}"
         else:
             error_type = type(failure.value).__name__
             self._report_validation(
@@ -357,6 +362,7 @@ class ScanSpider(scrapy.Spider):
                 url,
                 error_type,
             )
+            error_reason = f"request_error:{error_type}"
         self._error_count += 1
 
         self._queue_url_status_update(
@@ -365,6 +371,7 @@ class ScanSpider(scrapy.Spider):
             increment_fail=True,
             scrape_url_item_id=scrape_url_item_id,
             success=False,
+            error_reason=error_reason,
         )
 
     def _report_validation(
@@ -399,6 +406,7 @@ class ScanSpider(scrapy.Spider):
         book_score: int | None = None,
         is_book_product: bool | None = None,
         book_score_reasons: list[str] | None = None,
+        error_reason: str | None = None,
     ) -> None:
         """Queue a URL status update and flush periodically."""
         if url_id is None and scrape_url_item_id is None:
@@ -412,6 +420,7 @@ class ScanSpider(scrapy.Spider):
         if scrape_url_item_id is not None:
             update["scrape_url_item_id"] = scrape_url_item_id
             update["scrape_url_item_success"] = success
+            update["scrape_url_item_error_reason"] = error_reason
         if book_score is not None and is_book_product is not None:
             update["book_score"] = book_score
             update["is_book_product"] = is_book_product

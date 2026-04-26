@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
-    cleanup_scrape_url_items,
     create_scrape_run,
     find_resumable_run,
     finish_scrape_run,
@@ -138,6 +137,7 @@ class ScanService:
         for update in url_status_updates:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
+            scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
             book_score = update.pop("book_score", None)
             is_book_product = update.pop("is_book_product", None)
             book_score_reasons = update.pop("book_score_reasons", None)
@@ -155,10 +155,21 @@ class ScanService:
                     reasons=book_score_reasons or [],
                 )
             if scrape_item_id is not None:
+                http_status = update.get("http_status")
                 if scrape_item_success:
-                    mark_scrape_url_item_done(self.session, scrape_item_id)
+                    mark_scrape_url_item_done(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                    )
                 else:
-                    mark_scrape_url_item_failed(self.session, scrape_item_id)
+                    mark_scrape_url_item_failed(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                    )
         update_scrape_run_progress(self.session, run_id, urls_processed)
         self.session.commit()
 
@@ -174,6 +185,7 @@ class ScanService:
         for update in url_status_updates:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
+            scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
             book_score = update.pop("book_score", None)
             is_book_product = update.pop("is_book_product", None)
             book_score_reasons = update.pop("book_score_reasons", None)
@@ -191,10 +203,21 @@ class ScanService:
                     reasons=book_score_reasons or [],
                 )
             if scrape_item_id is not None:
+                http_status = update.get("http_status")
                 if scrape_item_success:
-                    mark_scrape_url_item_done(self.session, scrape_item_id)
+                    mark_scrape_url_item_done(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                    )
                 else:
-                    mark_scrape_url_item_failed(self.session, scrape_item_id)
+                    mark_scrape_url_item_failed(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                    )
 
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
@@ -207,5 +230,7 @@ class ScanService:
                 self.session, run_row.shop_id, phase="scan", strategy=None
             )
 
-        cleanup_scrape_url_items(self.session, run_id)
+        # NOTE: scrape_url_items rows are kept after the run finishes —
+        # they are the source of truth for per-URL run history, surfaced
+        # on the run detail page. Used to be deleted via cleanup_scrape_url_items.
         self.session.commit()
