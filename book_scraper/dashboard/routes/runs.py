@@ -9,13 +9,17 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
 from book_scraper.dashboard.queries import (
+    RUN_URL_STATUSES,
     get_recent_runs,
     get_run_changed_fields,
     get_run_detail,
+    get_run_discovered_urls,
     get_run_health,
     get_run_issue_summary,
     get_run_price_changes,
     get_run_shop_books,
+    get_run_url_breakdown,
+    get_run_url_items,
     mark_stale_runs,
 )
 
@@ -73,8 +77,17 @@ def runs_list(request: Request, session: Session = Depends(get_db)):
     )
 
 
+_RUN_URLS_PER_PAGE = 50
+
+
 @router.get("/runs/{run_id}")
-def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)):
+def run_detail(
+    run_id: int,
+    request: Request,
+    url_status: str = "all",
+    url_page: int = 1,
+    session: Session = Depends(get_db),
+):
     run = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
@@ -98,6 +111,31 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             old_p, new_p = price_changes[sb.id]
             entries.append(("price", old_p, new_p))
         changed_info[sb.id] = entries
+
+    if url_status not in {"all", *RUN_URL_STATUSES}:
+        url_status = "all"
+    page = max(url_page, 1)
+
+    url_breakdown = get_run_url_breakdown(session, run_id)
+    has_live_items = sum(url_breakdown.values()) > 0
+
+    if has_live_items:
+        url_rows, url_total = get_run_url_items(
+            session,
+            run_id,
+            status=url_status,
+            page=page,
+            per_page=_RUN_URLS_PER_PAGE,
+        )
+        url_source = "live"
+    else:
+        url_rows, url_total = get_run_discovered_urls(
+            session, run_id, page=page, per_page=_RUN_URLS_PER_PAGE
+        )
+        url_source = "history"
+
+    url_total_pages = max((url_total + _RUN_URLS_PER_PAGE - 1) // _RUN_URLS_PER_PAGE, 1)
+
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -110,6 +148,14 @@ def run_detail(run_id: int, request: Request, session: Session = Depends(get_db)
             "changed": changed,
             "unchanged": unchanged,
             "changed_info": changed_info,
+            "url_breakdown": url_breakdown,
+            "url_rows": url_rows,
+            "url_total": url_total,
+            "url_page": page,
+            "url_total_pages": url_total_pages,
+            "url_status": url_status,
+            "url_source": url_source,
+            "url_statuses": list(RUN_URL_STATUSES),
         },
     )
 
@@ -210,8 +256,11 @@ def kill_run(run_id: int, session: Session = Depends(get_db)):
         logger.info("Sent SIGTERM to PID %d (run #%d)", run.pid, run_id)
         return HTMLResponse(f'<p class="success">Sent SIGTERM to PID {run.pid}</p>')
     except ProcessLookupError:
+        from book_scraper.db.repo import record_scrape_run_failed_issue
+
         run.status = "failed"
         run.finished_at = datetime.now(UTC)
+        record_scrape_run_failed_issue(session, run, "killed_pid_dead")
         session.commit()
         return HTMLResponse(f"<p>Process {run.pid} already dead. Marked as failed.</p>")
     except PermissionError:

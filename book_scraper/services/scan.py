@@ -198,7 +198,7 @@ class ScanService:
 
         status = "completed" if reason == "finished" else "failed"
         update_scrape_run_progress(self.session, run_id, urls_processed)
-        finish_scrape_run(self.session, run_id, status)
+        finish_scrape_run(self.session, run_id, status, reason=reason)
 
         # Update matching cron_job's last_run_at (best-effort; no-op if no match).
         run_row = self.session.get(ScrapeRun, run_id)

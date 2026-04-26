@@ -613,12 +613,48 @@ def finish_scrape_run(
     session: Session,
     run_id: int,
     status: str,
+    reason: str | None = None,
 ) -> None:
     run = session.get(ScrapeRun, run_id)
     if run is None:
         return
+    was_running = run.status == "running"
     run.status = status
     run.finished_at = datetime.now(UTC)
+    session.flush()
+    if was_running and status == "failed":
+        record_scrape_run_failed_issue(session, run, reason or "finished_failed")
+
+
+def record_scrape_run_failed_issue(
+    session: Session,
+    run: ScrapeRun,
+    reason: str,
+) -> None:
+    """Insert a `scrape_run_failed` validation issue for a failed run.
+
+    Surfaces failed runs on the validation/issues page so they don't go
+    unnoticed. Idempotent — skips insert if the run already has one.
+    """
+    existing = (
+        session.query(ValidationIssue.id)
+        .filter(
+            ValidationIssue.scrape_run_id == run.id,
+            ValidationIssue.issue == "scrape_run_failed",
+        )
+        .first()
+    )
+    if existing is not None:
+        return
+    issue = ValidationIssue(
+        scrape_run_id=run.id,
+        url=f"run:{run.id}",
+        field="run",
+        issue="scrape_run_failed",
+        raw_value=reason,
+        lifecycle_state="new",
+    )
+    session.add(issue)
     session.flush()
 
 
@@ -626,6 +662,7 @@ def mark_stale_runs_failed(
     session: Session,
     shop_id: int,
     phase: str,
+    reason: str = "stale_pre_scan",
 ) -> int:
     now = datetime.now(UTC)
     stmt = select(ScrapeRun).where(
@@ -637,6 +674,7 @@ def mark_stale_runs_failed(
     for run in stale:
         run.status = "failed"
         run.finished_at = now
+        record_scrape_run_failed_issue(session, run, reason)
     session.flush()
     return len(stale)
 
@@ -681,6 +719,7 @@ def mark_orphan_runs_failed(session: Session) -> int:
     for run in orphans:
         run.status = "failed"
         run.finished_at = now
+        record_scrape_run_failed_issue(session, run, "orphan_on_boot")
     session.flush()
     return len(orphans)
 

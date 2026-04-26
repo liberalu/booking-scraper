@@ -815,7 +815,8 @@ a.stat-card:hover,
 }
 
 .badge-success,
-.badge-completed {
+.badge-completed,
+.badge-done {
     background: var(--badge-success-bg);
     color: var(--badge-success-fg);
 }
@@ -827,9 +828,15 @@ a.stat-card:hover,
 }
 
 .badge-running,
-.badge-active {
+.badge-active,
+.badge-processing {
     background: var(--badge-running-bg);
     color: var(--badge-running-fg);
+}
+
+.badge-pending {
+    background: var(--badge-neutral-bg);
+    color: var(--badge-neutral-fg);
 }
 
 .badge-warning {

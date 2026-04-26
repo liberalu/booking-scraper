@@ -13,6 +13,7 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
     ScrapeRun,
+    ScrapeUrlItem,
     Shop,
     ShopBook,
     ShopBookChange,
@@ -22,7 +23,7 @@ from book_scraper.db.models import (
 )
 
 STALE_HEARTBEAT_MINUTES = 5
-DEAD_RUN_HOURS = 2
+DEAD_RUN_MINUTES = 30
 
 ISSUE_DESCRIPTIONS: dict[str, str] = {
     "missing_price": (
@@ -59,6 +60,10 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
     "field_cleared": (
         "A field that had a value is now missing. Likely a parser regression."
     ),
+    "scrape_run_failed": (
+        "A scrape run ended with status=failed. Inspect the run's detail page"
+        " to see why (stall, kill, orphan on boot, or downstream error)."
+    ),
 }
 
 ISSUE_SEVERITY: dict[str, str] = {
@@ -74,6 +79,7 @@ ISSUE_SEVERITY: dict[str, str] = {
     "attribute_unknown_key": "warning",
     "attribute_invalid_value": "warning",
     "field_cleared": "critical",
+    "scrape_run_failed": "critical",
 }
 
 
@@ -103,7 +109,7 @@ def get_run_health(run: ScrapeRun) -> str:
     if last_activity is None:
         return "dead"
     elapsed = now - last_activity
-    if elapsed > timedelta(hours=DEAD_RUN_HOURS):
+    if elapsed > timedelta(minutes=DEAD_RUN_MINUTES):
         return "dead"
     if elapsed > timedelta(minutes=STALE_HEARTBEAT_MINUTES):
         return "stale"
@@ -111,8 +117,10 @@ def get_run_health(run: ScrapeRun) -> str:
 
 
 def mark_stale_runs(session: Session) -> int:
-    """Mark runs with no heartbeat for over DEAD_RUN_HOURS as failed."""
-    cutoff = datetime.now(UTC) - timedelta(hours=DEAD_RUN_HOURS)
+    """Mark runs with no heartbeat for over DEAD_RUN_MINUTES as failed."""
+    from book_scraper.db.repo import record_scrape_run_failed_issue
+
+    cutoff = datetime.now(UTC) - timedelta(minutes=DEAD_RUN_MINUTES)
     stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
     marked = 0
     for run in stale:
@@ -120,6 +128,7 @@ def mark_stale_runs(session: Session) -> int:
         if last_activity and last_activity < cutoff:
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
+            record_scrape_run_failed_issue(session, run, "heartbeat_timeout")
             marked += 1
     if marked:
         session.commit()
@@ -161,6 +170,76 @@ def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
 
 def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
+
+
+RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
+
+
+def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
+    """Counts of scrape_url_items per status for a still-running run.
+
+    Returns zeros for finished runs (rows are cleaned up on finish — see
+    `cleanup_scrape_url_items`).
+    """
+    rows = (
+        session.query(ScrapeUrlItem.status, func.count(ScrapeUrlItem.id))
+        .filter(ScrapeUrlItem.run_id == run_id)
+        .group_by(ScrapeUrlItem.status)
+        .all()
+    )
+    counts = dict.fromkeys(RUN_URL_STATUSES, 0)
+    for status, count in rows:
+        counts[status] = count
+    return counts
+
+
+def get_run_url_items(
+    session: Session,
+    run_id: int,
+    status: str = "all",
+    page: int = 1,
+    per_page: int = 50,
+) -> tuple[list[ScrapeUrlItem], int]:
+    """Live URL queue for a running run, paginated. Returns (rows, total)."""
+    query = session.query(ScrapeUrlItem).filter(ScrapeUrlItem.run_id == run_id)
+    if status in RUN_URL_STATUSES:
+        query = query.filter(ScrapeUrlItem.status == status)
+    total = query.count()
+    rows = (
+        query.order_by(
+            # processing first, then pending, then done/failed by most-recent
+            ScrapeUrlItem.claimed_at.desc().nulls_last(),
+            ScrapeUrlItem.id.asc(),
+        )
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return rows, total
+
+
+def get_run_discovered_urls(
+    session: Session,
+    run_id: int,
+    page: int = 1,
+    per_page: int = 50,
+) -> tuple[list[DiscoveredUrl], int]:
+    """URLs touched by a finished run (via discovered_urls.last_seen_run_id).
+
+    Used as a fallback for completed/failed runs once scrape_url_items has
+    been cleaned up.
+    """
+    query = session.query(DiscoveredUrl).filter(
+        DiscoveredUrl.last_seen_run_id == run_id
+    )
+    total = query.count()
+    rows = (
+        query.order_by(DiscoveredUrl.last_checked_at.desc().nulls_last())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return rows, total
 
 
 def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]:

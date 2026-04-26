@@ -71,6 +71,15 @@ class StallDetector:  # pragma: no cover
             if engine is None:
                 logger.warning("Skipping stall shutdown because no engine is active")
                 return
+
+            # Belt-and-suspenders: directly mark the run failed in a fresh
+            # session before closing the spider. The close path can fail
+            # (PendingRollbackError if the pipeline session is poisoned)
+            # leaving the run zombie-running. This guarantees finalisation.
+            run_id = getattr(spider, "_run_id", None)
+            if run_id is not None:
+                self._finalize_run_failed(run_id, "stall_timeout")
+
             engine.close_spider(spider, "stall_timeout")
             return
 
@@ -79,3 +88,20 @@ class StallDetector:  # pragma: no cover
         self._task = reactor.callLater(  # type: ignore[attr-defined]
             self._check_interval, self._check_stall
         )
+
+    def _finalize_run_failed(self, run_id: int, reason: str) -> None:
+        """Mark a stalled run failed via a fresh DB session."""
+        try:
+            from book_scraper.db.repo import finish_scrape_run
+            from book_scraper.db.session import get_session_factory
+
+            database_url = self.crawler.settings.get("DATABASE_URL")
+            session_factory = get_session_factory(database_url)
+            session = session_factory()
+            try:
+                finish_scrape_run(session, run_id, "failed", reason=reason)
+                session.commit()
+            finally:
+                session.close()
+        except Exception:
+            logger.exception("Failed to mark run %d failed on stall", run_id)
