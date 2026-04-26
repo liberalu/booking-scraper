@@ -62,6 +62,7 @@ def _add_url(
     error_reason: str | None = None,
     request_delay_s: float | None = None,
     delay_source: str | None = None,
+    response_bytes: int | None = None,
 ) -> ScrapeUrlItem:
     discovered = DiscoveredUrl(
         shop_id=shop.id,
@@ -86,6 +87,7 @@ def _add_url(
         error_reason=error_reason,
         request_delay_s=request_delay_s,
         delay_source=delay_source,
+        response_bytes=response_bytes,
     )
     db_session.add(item)
     db_session.flush()
@@ -112,6 +114,7 @@ def test_live_route_empty_run_returns_zeros(
     assert body["in_flight"] == []
     assert body["rate"] == {"window_s": 60, "done": 0, "failed": 0}
     assert body["recent_failures"] == []
+    assert body["recent_activity"] == []
 
 
 def test_live_route_reports_in_flight_with_telemetry(
@@ -207,6 +210,54 @@ def test_live_route_returns_recent_done_and_failed_counts(
     assert failure["url"] == "https://vaga.lt/f1"
     assert failure["http_status"] == 503
     assert failure["error_reason"] == "http_503"
+
+
+def test_live_route_recent_activity_includes_timing_and_throttle(
+    client: TestClient, db_session: Session
+) -> None:
+    """recent_activity surfaces start time, finish time, duration,
+    throttle delay, and source for done+failed rows newest-first."""
+    shop, run = _seed_run(db_session)
+    now = datetime.now(UTC)
+    claimed_done = now - timedelta(seconds=12)
+    done_at = now - timedelta(seconds=10)
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/done1",
+        status="done", claimed_at=claimed_done, done_at=done_at,
+        request_delay_s=2.34, delay_source="autothrottle",
+        response_bytes=18432, http_status=200,
+    )
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/fail1",
+        status="failed", claimed_at=now - timedelta(seconds=8),
+        done_at=now - timedelta(seconds=6),
+        request_delay_s=4.5, delay_source="autothrottle",
+        http_status=503, error_reason="http_503",
+    )
+    # processing rows must NOT appear in recent_activity
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/inflight",
+        status="processing", claimed_at=now - timedelta(seconds=1),
+    )
+    db_session.commit()
+
+    body = client.get(f"/api/runs/{run.id}/live").json()
+    activity = body["recent_activity"]
+    assert len(activity) == 2
+    # newest first by done_at
+    assert activity[0]["url"] == "https://vaga.lt/fail1"
+    assert activity[0]["status"] == "failed"
+    assert activity[0]["http_status"] == 503
+    assert activity[0]["error_reason"] == "http_503"
+    assert activity[0]["delay_source"] == "autothrottle"
+    assert activity[0]["request_delay_s"] == 4.5
+    assert activity[0]["claimed_at"] is not None
+    assert activity[0]["done_at"] is not None
+    assert activity[0]["duration_s"] is not None and activity[0]["duration_s"] >= 0
+    assert activity[1]["url"] == "https://vaga.lt/done1"
+    assert activity[1]["status"] == "done"
+    assert activity[1]["response_bytes"] == 18432
+    assert activity[1]["delay_source"] == "autothrottle"
 
 
 def test_live_route_works_for_finished_run(

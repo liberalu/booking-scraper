@@ -28,6 +28,7 @@ from book_scraper.dashboard.queries import (
     get_run_issue_summary,
     get_run_live_health,
     get_run_rate_window,
+    get_run_recent_activity,
     get_run_recent_failures,
     get_run_url_breakdown,
     get_run_url_items,
@@ -512,6 +513,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
     in_flight = get_run_in_flight(session, run_id)
     rate = get_run_rate_window(session, run_id)
     recent_failures = get_run_recent_failures(session, run_id, limit=10)
+    recent_activity = get_run_recent_activity(session, run_id, limit=20)
 
     health = get_run_live_health(run)
     # Refine to 'stuck' when heartbeat is fresh but the oldest in-flight
@@ -532,6 +534,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
         "in_flight": in_flight,
         "rate": rate,
         "recent_failures": recent_failures,
+        "recent_activity": recent_activity,
     }
 
 
