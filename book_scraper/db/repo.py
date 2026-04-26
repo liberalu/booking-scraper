@@ -1171,12 +1171,15 @@ def mark_scrape_url_item_done(
     item_id: int,
     http_status: int | None = None,
     error_reason: str | None = None,
+    dispatched_at: float | None = None,
 ) -> None:
     """Mark a scrape_url_item as done."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "done"
         item.done_at = datetime.now(UTC)
+        if dispatched_at is not None and item.claimed_at is None:
+            item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:
             item.http_status = http_status
         if error_reason is not None:
@@ -1189,12 +1192,15 @@ def mark_scrape_url_item_failed(
     item_id: int,
     http_status: int | None = None,
     error_reason: str | None = None,
+    dispatched_at: float | None = None,
 ) -> None:
     """Mark a scrape_url_item as failed."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "failed"
         item.done_at = datetime.now(UTC)
+        if dispatched_at is not None and item.claimed_at is None:
+            item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:
             item.http_status = http_status
         if error_reason is not None:

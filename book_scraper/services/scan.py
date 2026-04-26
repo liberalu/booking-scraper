@@ -138,6 +138,9 @@ class ScanService:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
             scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
+            scrape_item_dispatched_at = update.pop(
+                "scrape_url_item_dispatched_at", None
+            )
             book_score = update.pop("book_score", None)
             is_book_product = update.pop("is_book_product", None)
             book_score_reasons = update.pop("book_score_reasons", None)
@@ -162,6 +165,7 @@ class ScanService:
                         scrape_item_id,
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
                     )
                 else:
                     mark_scrape_url_item_failed(
@@ -169,6 +173,7 @@ class ScanService:
                         scrape_item_id,
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
                     )
         update_scrape_run_progress(self.session, run_id, urls_processed)
         self.session.commit()
@@ -186,6 +191,9 @@ class ScanService:
             scrape_item_id = update.pop("scrape_url_item_id", None)
             scrape_item_success = update.pop("scrape_url_item_success", False)
             scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
+            scrape_item_dispatched_at = update.pop(
+                "scrape_url_item_dispatched_at", None
+            )
             book_score = update.pop("book_score", None)
             is_book_product = update.pop("is_book_product", None)
             book_score_reasons = update.pop("book_score_reasons", None)
@@ -210,6 +218,7 @@ class ScanService:
                         scrape_item_id,
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
                     )
                 else:
                     mark_scrape_url_item_failed(
@@ -217,6 +226,7 @@ class ScanService:
                         scrape_item_id,
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
                     )
 
         status = "completed" if reason == "finished" else "failed"

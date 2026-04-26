@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -58,7 +59,20 @@ class ScanSpider(scrapy.Spider):
     def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
         spider = super().from_crawler(crawler, *args, **kwargs)
         crawler.signals.connect(spider.spider_idle, signal=signals.spider_idle)
+        crawler.signals.connect(
+            spider._on_request_reached_downloader,
+            signal=signals.request_reached_downloader,
+        )
         return spider
+
+    def _on_request_reached_downloader(self, request, spider) -> None:  # type: ignore[no-untyped-def]
+        """Stamp the moment Scrapy actually dispatches the request.
+
+        This is the per-URL "started_at" — duration is measured from here
+        until parse_product/handle_error fires. Stored on request.meta so
+        the response handler can forward it to flush_progress.
+        """
+        request.meta["dispatched_at"] = time.time()
 
     def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
         """When the main queue drains, check for new items queued mid-run
@@ -207,6 +221,7 @@ class ScanSpider(scrapy.Spider):
     ) -> Generator[ShopBookItem, None, None]:
         discovered_url_id = response.meta.get("discovered_url_id")
         scrape_url_item_id = response.meta.get("scrape_url_item_id")
+        dispatched_at = response.meta.get("dispatched_at")
 
         url = response.url.split("?")[0]
         if 400 <= response.status < 500:
@@ -225,6 +240,7 @@ class ScanSpider(scrapy.Spider):
                 scrape_url_item_id=scrape_url_item_id,
                 success=False,
                 error_reason=f"http_{response.status}",
+                dispatched_at=dispatched_at,
             )
             return
         if 500 <= response.status < 600:
@@ -243,6 +259,7 @@ class ScanSpider(scrapy.Spider):
                 scrape_url_item_id=scrape_url_item_id,
                 success=False,
                 error_reason=f"http_{response.status}",
+                dispatched_at=dispatched_at,
             )
             return
 
@@ -282,6 +299,7 @@ class ScanSpider(scrapy.Spider):
                 is_book_product=False,
                 book_score_reasons=data.get("book_score_reasons", []),
                 error_reason="non_product",
+                dispatched_at=dispatched_at,
             )
             return
 
@@ -321,6 +339,7 @@ class ScanSpider(scrapy.Spider):
             book_score=data.get("book_score", 0),
             is_book_product=True,
             book_score_reasons=data.get("book_score_reasons", []),
+            dispatched_at=dispatched_at,
         )
 
         self._urls_processed += 1
@@ -331,6 +350,7 @@ class ScanSpider(scrapy.Spider):
         request = failure.request
         discovered_url_id = request.meta.get("discovered_url_id")
         scrape_url_item_id = request.meta.get("scrape_url_item_id")
+        dispatched_at = request.meta.get("dispatched_at")
         url = str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
@@ -372,6 +392,7 @@ class ScanSpider(scrapy.Spider):
             scrape_url_item_id=scrape_url_item_id,
             success=False,
             error_reason=error_reason,
+            dispatched_at=dispatched_at,
         )
 
     def _report_validation(
@@ -407,6 +428,7 @@ class ScanSpider(scrapy.Spider):
         is_book_product: bool | None = None,
         book_score_reasons: list[str] | None = None,
         error_reason: str | None = None,
+        dispatched_at: float | None = None,
     ) -> None:
         """Queue a URL status update and flush periodically."""
         if url_id is None and scrape_url_item_id is None:
@@ -421,6 +443,7 @@ class ScanSpider(scrapy.Spider):
             update["scrape_url_item_id"] = scrape_url_item_id
             update["scrape_url_item_success"] = success
             update["scrape_url_item_error_reason"] = error_reason
+            update["scrape_url_item_dispatched_at"] = dispatched_at
         if book_score is not None and is_book_product is not None:
             update["book_score"] = book_score
             update["is_book_product"] = is_book_product
