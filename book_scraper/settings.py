@@ -40,6 +40,12 @@ EXTENSIONS = {  # pragma: no cover
 # flow; the dashboard uses staleness to detect crashed scrapers.
 HEARTBEAT_INTERVAL_S = 5.0  # pragma: no cover
 
+# Periodic httpx.AsyncClient reset. vaga.lt (and likely others)
+# silently stop responding after ~100 requests on the same client —
+# TIME_WAIT pile-up client-side, server-side cumulative tracking, or
+# both. Reset before either wall.
+HTTPX_CLIENT_RESET_AFTER_REQUESTS = 80  # pragma: no cover
+
 # AutoThrottle — adapts speed based on server response  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
 AUTOTHROTTLE_START_DELAY = 2.0  # pragma: no cover

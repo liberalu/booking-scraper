@@ -72,16 +72,11 @@ class HttpxMiddleware:  # pragma: no cover
         autothrottle_start_delay: float,
         autothrottle_max_delay: float,
         autothrottle_target_concurrency: float,
+        client_reset_after_requests: int,
     ):
-        self.client = httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=True,
-            headers={
-                "User-Agent": user_agent,
-                "Connection": "close",
-                **_BROWSER_HEADERS,
-            },
-        )
+        self._timeout = timeout
+        self._user_agent = user_agent
+        self.client = self._make_client()
         self.database_url = database_url
         self._session_factory: Any = None
         # Throttling configuration
@@ -97,6 +92,53 @@ class HttpxMiddleware:  # pragma: no cover
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._host_last_dispatch: dict[str, float] = {}
         self._host_current_delay: dict[str, float] = {}
+        # Client-rotation: vaga.lt (and likely others) silently stop
+        # responding after ~100 requests on the same httpx.AsyncClient
+        # instance. Cause is connection-level — TIME_WAIT pile-up on
+        # the client side from `Connection: close`, server-side
+        # cumulative tracking, or both. Tear the client down and
+        # recreate it before we hit either wall. See follow-up #10
+        # in docs/superpowers/follow-ups/2026-04-26-live-observability-follow-ups.md.
+        self._client_reset_after = max(1, client_reset_after_requests)
+        self._requests_since_reset = 0
+        self._client_lock = asyncio.Lock()  # serialises client swap
+
+    def _make_client(self) -> "httpx.AsyncClient":
+        return httpx.AsyncClient(
+            timeout=self._timeout,
+            follow_redirects=True,
+            headers={
+                "User-Agent": self._user_agent,
+                "Connection": "close",
+                **_BROWSER_HEADERS,
+            },
+        )
+
+    async def _maybe_reset_client(self) -> None:
+        """Rotate the httpx.AsyncClient every N requests.
+
+        Bounded TIME_WAIT pile-up + bounded server-side state. Holds
+        a tiny critical section to swap-and-close so concurrent
+        callers don't see a half-closed client. (With CONCURRENT_
+        REQUESTS_PER_DOMAIN = 1 we don't really get concurrent
+        callers, but be defensive in case future shops bump it.)
+        """
+        # Read+increment under the same lock to avoid two requests
+        # both deciding "I will reset".
+        async with self._client_lock:
+            self._requests_since_reset += 1
+            if self._requests_since_reset < self._client_reset_after:
+                return
+            old = self.client
+            self.client = self._make_client()
+            self._requests_since_reset = 0
+        # Close the old client outside the lock — aclose() awaits
+        # outstanding requests, which we don't have, but no need to
+        # block the next dispatch on it.
+        try:
+            await old.aclose()
+        except Exception:
+            logger.exception("httpx client aclose failed during reset")
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "HttpxMiddleware":
@@ -111,6 +153,9 @@ class HttpxMiddleware:  # pragma: no cover
             autothrottle_max_delay=s.getfloat("AUTOTHROTTLE_MAX_DELAY", 30.0),
             autothrottle_target_concurrency=s.getfloat(
                 "AUTOTHROTTLE_TARGET_CONCURRENCY", 1.0
+            ),
+            client_reset_after_requests=s.getint(
+                "HTTPX_CLIENT_RESET_AFTER_REQUESTS", 80
             ),
         )
         crawler.signals.connect(mw._close, signal=signals.spider_closed)
@@ -241,6 +286,10 @@ class HttpxMiddleware:  # pragma: no cover
                     sleep_for,
                     delay_source,
                 )
+
+            # Rotate the httpx client periodically (TIME_WAIT pile-up
+            # + server-side cumulative tracking, see follow-up #10).
+            await self._maybe_reset_client()
 
             status_code: int | None = None
             try:
