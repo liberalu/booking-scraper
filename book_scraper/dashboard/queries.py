@@ -129,6 +129,12 @@ def mark_stale_runs(session: Session) -> int:
     scheduled run inherits any pending items rather than dropping them.
     Pending rows are explicitly NOT touched here; only `processing` rows
     get aborted via ``abort_processing_scrape_url_items``.
+
+    Also reaps runs stuck in `stopping` whose heartbeat has gone stale —
+    that means the spider observed the operator-requested stop but its
+    `closed()` callback never ran (process crash mid-shutdown). The
+    error reason is recorded as `stop_timeout` so the postmortem
+    distinguishes it from ordinary heartbeat death.
     """
     from book_scraper.db.repo import (
         abort_processing_scrape_url_items,
@@ -136,15 +142,22 @@ def mark_stale_runs(session: Session) -> int:
     )
 
     cutoff = datetime.now(UTC) - timedelta(seconds=DEAD_RUN_SECONDS)
-    stale = session.query(ScrapeRun).filter(ScrapeRun.status == "running").all()
+    stale = (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.status.in_(("running", "stopping")))
+        .all()
+    )
     marked = 0
     for run in stale:
         last_activity = run.last_heartbeat or run.started_at
         if last_activity and last_activity < cutoff:
+            reason = (
+                "stop_timeout" if run.status == "stopping" else "heartbeat_timeout"
+            )
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
             run.resumable_after_failure = True
-            record_scrape_run_failed_issue(session, run, "heartbeat_timeout")
+            record_scrape_run_failed_issue(session, run, reason)
             abort_processing_scrape_url_items(session, run.id)
             marked += 1
     if marked:
@@ -183,6 +196,87 @@ def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:
         .limit(limit)
         .all()
     )
+
+
+# Threshold for the repeated-failure banner. N consecutive terminal runs
+# of the same shop+phase ending in `failed` with the same `error_reason`
+# trigger the banner. 3 catches systemic problems early without flagging
+# transient flakes.
+REPEATED_FAILURE_THRESHOLD = 3
+
+
+def get_repeated_failures(
+    session: Session, threshold: int = REPEATED_FAILURE_THRESHOLD
+) -> list[dict[str, Any]]:
+    """Detect shop+phase combinations whose last `threshold` terminal
+    runs all ended in `failed` with the same recorded error_reason.
+
+    A genuinely transient failure (different reason each time) does not
+    trigger the banner. A success in the window resets the streak.
+
+    Returns one dict per affected (shop, phase): `shop`, `phase`,
+    `count` (consecutive failures), `error_reason` (the shared cluster),
+    `latest_run_id` (most recent failed run's id, for deep-link).
+    """
+    from book_scraper.db.models import Shop
+
+    # Pull the last `threshold` terminal runs per (shop, phase). We
+    # do this in Python to keep the SQL portable and the logic
+    # readable; volume is low (handful of shops × handful of phases).
+    pairs = (
+        session.query(ScrapeRun.shop_id, ScrapeRun.phase)
+        .filter(ScrapeRun.status.in_(("completed", "failed")))
+        .group_by(ScrapeRun.shop_id, ScrapeRun.phase)
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for shop_id, phase in pairs:
+        recent = (
+            session.query(ScrapeRun)
+            .filter(
+                ScrapeRun.shop_id == shop_id,
+                ScrapeRun.phase == phase,
+                ScrapeRun.status.in_(("completed", "failed")),
+            )
+            .order_by(ScrapeRun.finished_at.desc().nullslast())
+            .limit(threshold)
+            .all()
+        )
+        if len(recent) < threshold:
+            continue
+        if not all(r.status == "failed" for r in recent):
+            continue
+        # Pull the recorded reason cluster from validation_issues
+        # (`record_scrape_run_failed_issue` writes one row per failed run).
+        ids = [r.id for r in recent]
+        reasons = (
+            session.query(ValidationIssue.scrape_run_id, ValidationIssue.raw_value)
+            .filter(
+                ValidationIssue.scrape_run_id.in_(ids),
+                ValidationIssue.issue == "scrape_run_failed",
+            )
+            .all()
+        )
+        reason_by_run = {r[0]: r[1] for r in reasons}
+        observed = {reason_by_run.get(r.id) for r in recent}
+        observed.discard(None)
+        if len(observed) != 1:
+            # Different reasons → genuinely transient; don't alert.
+            continue
+        shared_reason = next(iter(observed))
+        shop_name = (
+            session.query(Shop.name).filter(Shop.id == shop_id).scalar() or "?"
+        )
+        out.append(
+            {
+                "shop": shop_name,
+                "phase": phase,
+                "count": threshold,
+                "error_reason": shared_reason,
+                "latest_run_id": recent[0].id,
+            }
+        )
+    return out
 
 
 def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:

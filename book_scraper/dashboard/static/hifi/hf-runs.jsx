@@ -40,6 +40,19 @@ function HFRuns({ nav, goto }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [q, shop, phase, status, when, page]);
 
+  // Repeated-failure banner — refresh on the same cadence as the runs list.
+  const [repeatedFailures, setRepeatedFailures] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = () => fetch('/api/runs/repeated-failures')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setRepeatedFailures(d.items || []); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   const allRows = data.runs;
   const filtered = allRows;  // backend already filtered; keep alias for table render
 
@@ -58,6 +71,25 @@ function HFRuns({ nav, goto }) {
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> New run</HFButton>
       </>}
     >
+      {/* Repeated-failure banner — shows shops whose last N terminal
+          runs all failed with the same error_reason. */}
+      {repeatedFailures.length > 0 && (
+        <div style={{margin:`0 0 ${HF.gap}px`, padding:'12px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, color:HF.ink}}>
+          <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:6}}>
+            <span style={{color:'#ef4444', fontWeight:600}}>● Repeated failures detected</span>
+            <span style={{fontSize:12, color:HF.ink3}}>The last {repeatedFailures[0].count} runs for these shops failed with the same reason — likely systemic, not transient.</span>
+          </div>
+          <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+            {repeatedFailures.map((rf, i) => (
+              <a key={i} href="#" onClick={e=>{e.preventDefault(); goto('run-detail',{id:rf.latest_run_id});}}
+                 style={{padding:'4px 10px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:HF.ink, textDecoration:'none', fontFamily:HF.mono, fontSize:12.5}}>
+                {rf.shop}/{rf.phase} <span style={{color:HF.ink3}}>·</span> {rf.error_reason}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Summary strip — clickable filter shortcuts */}
       <HFKpiStrip items={[
         { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span>,
@@ -258,11 +290,16 @@ function HFLivePanel({ data, HF }) {
     ? Math.round((rate.done / rate.window_s) * 60)
     : 0;
 
+  const isLive = data?.status === 'running' || data?.status === 'stopping';
+  const panelTitle = isLive ? 'Live' : 'Final state';
+  const panelSub = isLive
+    ? `refreshed every 2s · health: ${health || 'unknown'}`
+    : `frozen at run end · last health: ${health || 'unknown'}`;
   return (
     <HFCard
-      title="Live"
-      sub={`refreshed every 2s · health: ${health || 'unknown'}`}
-      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={health==='healthy'} size={6}/> {health || '—'}</HFPill>}
+      title={panelTitle}
+      sub={panelSub}
+      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={isLive && health==='healthy'} size={6}/> {health || '—'}</HFPill>}
     >
       <div style={{padding:`12px ${HF.cardP}px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap}}>
         {/* Now fetching */}
@@ -416,13 +453,23 @@ function HFRunDetail({ nav, goto, params }) {
   React.useEffect(() => {
     if (!runId || !data) return;
     const currentStatus = liveData?.status ?? data.status;
-    if (currentStatus !== 'running') {
-      // Run reached terminal state — stop polling and hide the live panel.
-      if (liveData) setLiveData(null);
-      // Mirror the terminal status into `data` so the KPI strip / pill
-      // reflect it without requiring a page refresh.
+    const isActive = currentStatus === 'running' || currentStatus === 'stopping';
+    if (!isActive) {
+      // Run reached terminal state. Mirror the status into `data` for
+      // pills/KPIs, then do ONE final fetch to populate `liveData` if we
+      // never polled (e.g. page loaded against an already-finished run).
+      // Keep the panel rendered with the last known state — operators
+      // want the post-mortem snapshot, not a blank panel.
       if (liveData?.status && data.status !== liveData.status) {
         setData(d => d ? { ...d, status: liveData.status } : d);
+      }
+      if (!liveData) {
+        let cancelled = false;
+        fetch(`/api/runs/${runId}/live`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (!cancelled && d) setLiveData(d); })
+          .catch(() => {});
+        return () => { cancelled = true; };
       }
       return;
     }
@@ -475,7 +522,32 @@ function HFRunDetail({ nav, goto, params }) {
   const phases = [];
 
   const runStatus = data.status || 'completed';
-  const runStatusTone = { running: 'ok', completed: 'neutral', failed: 'err' };
+  const runStatusTone = {
+    running: 'ok', stopping: 'warn', completed: 'neutral', failed: 'err',
+  };
+
+  const [actionPending, setActionPending] = React.useState(false);
+  const [actionError, setActionError] = React.useState(null);
+  const stopRun = React.useCallback(() => {
+    if (actionPending) return;
+    if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/stop`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(d => { setData(prev => prev ? {...prev, status: d.status} : prev); })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending]);
+  const rerunRun = React.useCallback(() => {
+    if (actionPending) return;
+    if (!confirm(`Re-run #${id}? A new run will be created for the same shop+phase.`)) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/rerun`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(_d => { goto('runs'); })  // back to list — new run will appear
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending, goto]);
 
   return (
     <HFShell {...nav} activePage="runs"
@@ -491,9 +563,22 @@ function HFRunDetail({ nav, goto, params }) {
       </>}
       actions={<>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
-        <HFButton variant="danger"><span style={{display:'flex'}}>{HF_ICONS.stop}</span> Stop run</HFButton>
+        {(runStatus === 'running' || runStatus === 'stopping') && (
+          <HFButton variant="danger" disabled={actionPending || runStatus === 'stopping'} onClick={stopRun}>
+            <span style={{display:'flex'}}>{HF_ICONS.stop}</span>
+            {runStatus === 'stopping' ? 'Stopping…' : 'Stop run'}
+          </HFButton>
+        )}
+        {(runStatus === 'failed' || runStatus === 'completed') && (
+          <HFButton disabled={actionPending} onClick={rerunRun}>Re-run</HFButton>
+        )}
       </>}
     >
+      {actionError && (
+        <div style={{margin:`0 0 ${HF.gap}px`, padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:6, color:HF.ink, fontSize:13}}>
+          <strong style={{color:'#ef4444'}}>Action failed:</strong> {actionError}
+        </div>
+      )}
       {/* Live metrics strip */}
       <HFKpiStrip items={[
         { label:'Progress',       value:`${data.progress}%`, delta:<span style={{color:HF.ink3}}>{data.items ? data.items.toLocaleString() + ' items' : '—'}</span> },

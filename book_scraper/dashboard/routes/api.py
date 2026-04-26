@@ -23,6 +23,7 @@ from book_scraper.dashboard.queries import (
     get_price_changes,
     get_price_history,
     get_recent_runs,
+    get_repeated_failures,
     get_run_discovered_urls,
     get_run_in_flight,
     get_run_issue_summary,
@@ -279,6 +280,18 @@ def api_overview(session: Session = Depends(get_db)) -> dict[str, Any]:
 _WHEN_BOUNDS_HOURS = {"1h": 1, "24h": 24, "7d": 168, "30d": 720}
 
 
+@router.get("/runs/repeated-failures")
+def api_repeated_failures(
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Detect (shop, phase) combinations whose last N terminal runs all
+    failed with the same `error_reason`. Surfaces a top-of-page banner
+    on the run-list view so unattended operation doesn't silently rot.
+    """
+    items = get_repeated_failures(session)
+    return {"items": items}
+
+
 @router.get("/runs")
 def api_runs(
     shop: str = "all",
@@ -387,41 +400,63 @@ class NewRunRequest(BaseModel):
     mode: str = "delta"  # for scan: "full" | "delta" | "sample"
 
 
-@router.post("/runs")
-def api_create_run(
-    req: NewRunRequest, session: Session = Depends(get_db)
-) -> dict[str, Any]:
-    """Trigger a scrape via docker exec into the scraper container."""
-    shop = get_shop_by_name(session, req.shop)
+def _preflight_checks(
+    session: Session, shop_name: str, run_phase: str
+) -> tuple[Shop, ScrapeRun | None]:
+    """Validate prerequisites before spawning scrapy. Raises HTTPException
+    on the first failed check; returns (shop, existing_active_run_or_None).
+
+    Checks:
+    - shop exists in DB
+    - shop config TOML loads
+    - no `running` or `stopping` run for the same shop+phase
+
+    DB reachability is implicit: pool_pre_ping (Track A #11) validates
+    every connection at checkout, so a stale socket triggers an
+    OperationalError on the first SELECT below rather than mid-run.
+    """
+    shop = get_shop_by_name(session, shop_name)
     if not shop:
-        raise HTTPException(status_code=404, detail=f"Unknown shop: {req.shop}")
+        raise HTTPException(status_code=404, detail=f"Unknown shop: {shop_name}")
 
-    if req.phase not in ("scan", "discover"):
-        raise HTTPException(status_code=400, detail=f"Unknown phase: {req.phase}")
+    # Shop config TOML must load — validates the parser/spider can boot.
+    try:
+        from book_scraper.config import load_shop_config
 
-    run_phase = (
-        f"discover_{req.strategy}"
-        if req.phase == "discover" and req.strategy
-        else req.phase
-    )
+        load_shop_config(shop_name)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Shop config failed to load: {exc}",
+        ) from exc
+
+    # No active run for the same shop+phase. `stopping` is also active —
+    # firing a second run while the first is still tearing down would
+    # double the load on the target.
     existing = (
         session.query(ScrapeRun)
         .filter(
             ScrapeRun.shop_id == shop.id,
             ScrapeRun.phase == run_phase,
-            ScrapeRun.status == "running",
+            ScrapeRun.status.in_(("running", "stopping")),
         )
         .first()
     )
-    if existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"A {run_phase} run for {shop.name} is already running "
-                f"(run #{existing.id})."
-            ),
-        )
+    return shop, existing
 
+
+def _spawn_scrapy_in_container(
+    *,
+    phase: str,
+    shop: str,
+    strategy: str = "",
+    mode: str = "delta",
+) -> None:
+    """Fire-and-forget a `scrapy crawl` inside the scraper container.
+
+    Raises HTTPException(503) if the docker client or scraper container
+    is unreachable.
+    """
     client = get_docker_client()
     if client is None:
         raise HTTPException(status_code=503, detail="Docker not available")
@@ -438,19 +473,13 @@ def api_create_run(
     if not containers:
         raise HTTPException(status_code=503, detail="Scraper container not found")
 
-    cmd = [
-        "/app/.venv/bin/scrapy",
-        "crawl",
-        req.phase,
-        "-a",
-        f"shop={req.shop}",
-    ]
-    if req.phase == "discover" and req.strategy:
-        cmd.extend(["-a", f"strategy={req.strategy}"])
-    if req.phase == "scan":
-        if req.mode == "full":
+    cmd = ["/app/.venv/bin/scrapy", "crawl", phase, "-a", f"shop={shop}"]
+    if phase == "discover" and strategy:
+        cmd.extend(["-a", f"strategy={strategy}"])
+    if phase == "scan":
+        if mode == "full":
             cmd.extend(["-a", "rescrape=true"])
-        elif req.mode == "sample":
+        elif mode == "sample":
             cmd.extend(["-a", "max_urls=10"])
 
     containers[0].exec_run(
@@ -459,8 +488,38 @@ def api_create_run(
         workdir="/app",
         environment={
             "PYTHONPATH": "/app",
-            "DATABASE_URL": "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper",
+            "DATABASE_URL": (
+                "postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper"
+            ),
         },
+    )
+
+
+@router.post("/runs")
+def api_create_run(
+    req: NewRunRequest, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Trigger a scrape via docker exec into the scraper container."""
+    if req.phase not in ("scan", "discover"):
+        raise HTTPException(status_code=400, detail=f"Unknown phase: {req.phase}")
+
+    run_phase = (
+        f"discover_{req.strategy}"
+        if req.phase == "discover" and req.strategy
+        else req.phase
+    )
+    shop, existing = _preflight_checks(session, req.shop, run_phase)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A {run_phase} run for {shop.name} is already "
+                f"{existing.status} (run #{existing.id})."
+            ),
+        )
+
+    _spawn_scrapy_in_container(
+        phase=req.phase, shop=req.shop, strategy=req.strategy, mode=req.mode
     )
     return {
         "status": "started",
@@ -469,6 +528,93 @@ def api_create_run(
         "strategy": req.strategy,
         "mode": req.mode,
     }
+
+
+@router.post("/runs/{run_id}/stop")
+def api_stop_run(
+    run_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Request a clean stop of an active run.
+
+    DB-mediated: flips `status` from 'running' to 'stopping' under a
+    race-safe UPDATE. The spider's HeartbeatExtension observes the
+    transition on its next tick and exits cleanly; the spider's
+    `closed()` callback transitions to 'failed' with
+    error_reason='stopped_by_operator'. If the spider never sees the
+    transition (e.g. process died), the dashboard reaper marks the
+    run failed via heartbeat_timeout after DEAD_RUN_SECONDS.
+
+    Idempotent: clicking on an already-stopping/terminal run is a 200
+    no-op carrying the current status.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status == "running":
+        run.status = "stopping"
+        session.commit()
+    return {"run_id": run_id, "status": run.status}
+
+
+@router.post("/runs/{run_id}/rerun")
+def api_rerun_run(
+    run_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Re-fire a failed run.
+
+    Flags the failed run `resumable_after_failure=True` so Track A's
+    `find_resumable_run` picks it up; the new scrapy subprocess then
+    inherits the original run's pending queue via
+    `inherit_pending_items`. Old run row stays for postmortem; new run
+    gets its own id.
+    """
+    run = (
+        session.query(ScrapeRun)
+        .options(joinedload(ScrapeRun.shop))
+        .filter(ScrapeRun.id == run_id)
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status not in ("failed", "completed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only terminal runs can be re-run; status={run.status!r}",
+        )
+
+    # Pre-flight first so we surface DB / config / concurrent-run
+    # problems before firing the subprocess.
+    shop, existing = _preflight_checks(session, run.shop.name, run.phase)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A {run.phase} run for {shop.name} is already "
+                f"{existing.status} (run #{existing.id})."
+            ),
+        )
+
+    # Mark the failed run resumable so the new scrapy process adopts
+    # its queue. completed runs have no pending items, so the flag is
+    # harmless.
+    if run.status == "failed":
+        run.resumable_after_failure = True
+        session.commit()
+
+    # Phase form: `scan` or `discover_<strategy>` or `discover` plain.
+    phase: str
+    strategy: str
+    if run.phase.startswith("discover_"):
+        phase = "discover"
+        strategy = run.phase[len("discover_") :]
+    else:
+        phase = run.phase
+        strategy = ""
+
+    _spawn_scrapy_in_container(
+        phase=phase, shop=run.shop.name, strategy=strategy, mode="delta"
+    )
+    return {"status": "started", "rerun_of": run_id, "shop": run.shop.name}
 
 
 @router.get("/runs/{run_id}")

@@ -300,6 +300,11 @@ scrape_phase_enum = Enum(
 
 scrape_status_enum = Enum(
     "running",
+    # Operator-requested stop is in flight: the spider's heartbeat tick
+    # observes this transition and exits cleanly. The spider's `closed()`
+    # flips the row to `failed` with `error_reason='stopped_by_operator'`,
+    # so `stopping` is always transient.
+    "stopping",
     "completed",
     "failed",
     name="scrape_status",

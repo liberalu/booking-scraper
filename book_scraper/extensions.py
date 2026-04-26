@@ -177,12 +177,40 @@ class HeartbeatExtension:  # pragma: no cover
             self._schedule_next()
             return
         try:
-            self._write_heartbeat(self._run_id)
+            status = self._write_heartbeat(self._run_id)
         except Exception:
             logger.exception("Heartbeat write failed for run %d", self._run_id)
+            status = None
+        # Operator-requested stop: the dashboard flipped status to
+        # 'stopping'. Tear the spider down cleanly. The spider's
+        # `closed()` callback transitions the row to 'failed' with
+        # error_reason='stopped_by_operator'.
+        if status == "stopping":
+            self._signal_stop()
+            return
         self._schedule_next()
 
-    def _write_heartbeat(self, run_id: int) -> None:
+    def _signal_stop(self) -> None:
+        spider = getattr(self.crawler, "spider", None)
+        engine = getattr(self.crawler, "engine", None)
+        if spider is None or engine is None:
+            logger.warning(
+                "Heartbeat saw 'stopping' for run %d but spider/engine missing",
+                self._run_id,
+            )
+            return
+        logger.info(
+            "Run %d transitioned to 'stopping' — closing spider", self._run_id
+        )
+        engine.close_spider(spider, "stopped_by_operator")
+
+    def _write_heartbeat(self, run_id: int) -> str | None:
+        """Tick the heartbeat and report the run's current status.
+
+        Returns the row's `status` after the UPDATE, so the caller can
+        notice an operator-requested stop ('stopping') and tear the
+        spider down. Returns None if the row vanished.
+        """
         from sqlalchemy import text as sa_text
 
         from book_scraper.db.session import get_session_factory
@@ -206,6 +234,11 @@ class HeartbeatExtension:  # pragma: no cover
                 ),
                 {"run_id": run_id},
             )
+            current_status = session.execute(
+                sa_text("SELECT status FROM scrape_runs WHERE id = :run_id"),
+                {"run_id": run_id},
+            ).scalar()
             session.commit()
+            return str(current_status) if current_status is not None else None
         finally:
             session.close()
