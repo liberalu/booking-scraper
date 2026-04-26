@@ -1,5 +1,7 @@
+import asyncio
 import difflib
 import re
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup, escape
 
 from book_scraper.dashboard.deps import templates
+from book_scraper.dashboard.reaper import reaper_loop
 from book_scraper.dashboard.routes import (
     api as api_routes,
 )
@@ -226,7 +229,18 @@ templates.env.filters["markdown"] = _render_description
 templates.env.filters["relative_time"] = _relative_time
 templates.env.globals["change_diff"] = _change_diff
 
-app = FastAPI(title="Book Scraper Dashboard")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    task = asyncio.create_task(reaper_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title="Book Scraper Dashboard", lifespan=_lifespan)
 
 
 @app.middleware("http")
