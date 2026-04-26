@@ -5,6 +5,7 @@ requests. This middleware intercepts all requests and uses httpx async
 client, which handles the same requests without issues.
 """
 
+import asyncio  # pragma: no cover
 import logging  # pragma: no cover
 import time  # pragma: no cover
 
@@ -14,6 +15,25 @@ from scrapy.crawler import Crawler  # pragma: no cover
 from scrapy.http import HtmlResponse  # pragma: no cover
 
 logger = logging.getLogger(__name__)  # pragma: no cover
+
+# Browser-shaped headers. vaga.lt's TTFB is ~3× higher for non-browser
+# UAs (verified empirically: 0.76s for Chrome UA, 2.02s for Scrapy UA on
+# the same URL/connection). Sending plausible browser headers prevents
+# the server from serving the degraded path.
+_BROWSER_HEADERS = {  # pragma: no cover
+    "Accept": (  # pragma: no cover
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"  # pragma: no cover
+        "image/avif,image/webp,*/*;q=0.8"  # pragma: no cover
+    ),  # pragma: no cover
+    "Accept-Language": "lt,en;q=0.9",  # pragma: no cover
+}  # pragma: no cover
+
+# Hard ceiling on total per-request wall time. httpx's per-stage read
+# timeout resets on every chunk, so a server that trickles bytes can
+# stretch a single request indefinitely — we've observed 5-min outliers.
+# This wraps the whole request in asyncio.wait_for so anything past
+# this fails fast as a TimeoutError and the spider moves on.
+HARD_REQUEST_TIMEOUT_S = 60.0  # pragma: no cover
 
 
 class HttpxMiddleware:  # pragma: no cover
@@ -26,6 +46,7 @@ class HttpxMiddleware:  # pragma: no cover
             headers={
                 "User-Agent": user_agent,
                 "Connection": "close",
+                **_BROWSER_HEADERS,
             },
         )
 
@@ -47,7 +68,10 @@ class HttpxMiddleware:  # pragma: no cover
         """
         request.meta["dispatched_at"] = time.time()
         try:
-            response = await self.client.get(str(request.url))
+            response = await asyncio.wait_for(
+                self.client.get(str(request.url)),
+                timeout=HARD_REQUEST_TIMEOUT_S,
+            )
             # httpx auto-decompresses gzip, so remove Content-Encoding
             # to prevent Scrapy's HttpCompressionMiddleware from
             # trying to decompress again.
@@ -61,7 +85,7 @@ class HttpxMiddleware:  # pragma: no cover
                 request=request,
                 encoding=response.encoding or "utf-8",
             )
-        except httpx.TimeoutException:
+        except (httpx.TimeoutException, TimeoutError):
             logger.warning("httpx timeout for %s", request.url)
             raise
 

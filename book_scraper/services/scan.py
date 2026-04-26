@@ -141,61 +141,8 @@ class ScanService:
             scrape_item_dispatched_at = update.pop(
                 "scrape_url_item_dispatched_at", None
             )
-            book_score = update.pop("book_score", None)
-            is_book_product = update.pop("is_book_product", None)
-            book_score_reasons = update.pop("book_score_reasons", None)
-            update_discovered_url_status(self.session, **update)
-            if (
-                book_score is not None
-                and is_book_product is not None
-                and update.get("url_id") is not None
-            ):
-                upsert_url_classification(
-                    self.session,
-                    discovered_url_id=update["url_id"],
-                    book_score=book_score,
-                    is_book_product=is_book_product,
-                    reasons=book_score_reasons or [],
-                )
-            if scrape_item_id is not None:
-                http_status = update.get("http_status")
-                url_type = update.get("url_type")
-                if scrape_item_success:
-                    mark_scrape_url_item_done(
-                        self.session,
-                        scrape_item_id,
-                        http_status=http_status,
-                        error_reason=scrape_item_error_reason,
-                        dispatched_at=scrape_item_dispatched_at,
-                        url_type=url_type,
-                    )
-                else:
-                    mark_scrape_url_item_failed(
-                        self.session,
-                        scrape_item_id,
-                        http_status=http_status,
-                        error_reason=scrape_item_error_reason,
-                        dispatched_at=scrape_item_dispatched_at,
-                        url_type=url_type,
-                    )
-        update_scrape_run_progress(self.session, run_id, urls_processed)
-        self.session.commit()
-
-    def finish_scan(
-        self,
-        run_id: int,
-        urls_processed: int,
-        url_status_updates: list[dict[str, Any]],
-        reason: str,
-    ) -> None:
-        """Finalize a scan run: process URL status updates, update progress,
-        mark run as completed/failed."""
-        for update in url_status_updates:
-            scrape_item_id = update.pop("scrape_url_item_id", None)
-            scrape_item_success = update.pop("scrape_url_item_success", False)
-            scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
-            scrape_item_dispatched_at = update.pop(
-                "scrape_url_item_dispatched_at", None
+            scrape_item_received_at = update.pop(
+                "scrape_url_item_received_at", None
             )
             book_score = update.pop("book_score", None)
             is_book_product = update.pop("is_book_product", None)
@@ -223,6 +170,7 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        received_at=scrape_item_received_at,
                         url_type=url_type,
                     )
                 else:
@@ -232,6 +180,68 @@ class ScanService:
                         http_status=http_status,
                         error_reason=scrape_item_error_reason,
                         dispatched_at=scrape_item_dispatched_at,
+                        received_at=scrape_item_received_at,
+                        url_type=url_type,
+                    )
+        update_scrape_run_progress(self.session, run_id, urls_processed)
+        self.session.commit()
+
+    def finish_scan(
+        self,
+        run_id: int,
+        urls_processed: int,
+        url_status_updates: list[dict[str, Any]],
+        reason: str,
+    ) -> None:
+        """Finalize a scan run: process URL status updates, update progress,
+        mark run as completed/failed."""
+        for update in url_status_updates:
+            scrape_item_id = update.pop("scrape_url_item_id", None)
+            scrape_item_success = update.pop("scrape_url_item_success", False)
+            scrape_item_error_reason = update.pop("scrape_url_item_error_reason", None)
+            scrape_item_dispatched_at = update.pop(
+                "scrape_url_item_dispatched_at", None
+            )
+            scrape_item_received_at = update.pop(
+                "scrape_url_item_received_at", None
+            )
+            book_score = update.pop("book_score", None)
+            is_book_product = update.pop("is_book_product", None)
+            book_score_reasons = update.pop("book_score_reasons", None)
+            update_discovered_url_status(self.session, **update)
+            if (
+                book_score is not None
+                and is_book_product is not None
+                and update.get("url_id") is not None
+            ):
+                upsert_url_classification(
+                    self.session,
+                    discovered_url_id=update["url_id"],
+                    book_score=book_score,
+                    is_book_product=is_book_product,
+                    reasons=book_score_reasons or [],
+                )
+            if scrape_item_id is not None:
+                http_status = update.get("http_status")
+                url_type = update.get("url_type")
+                if scrape_item_success:
+                    mark_scrape_url_item_done(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
+                        received_at=scrape_item_received_at,
+                        url_type=url_type,
+                    )
+                else:
+                    mark_scrape_url_item_failed(
+                        self.session,
+                        scrape_item_id,
+                        http_status=http_status,
+                        error_reason=scrape_item_error_reason,
+                        dispatched_at=scrape_item_dispatched_at,
+                        received_at=scrape_item_received_at,
                         url_type=url_type,
                     )
 

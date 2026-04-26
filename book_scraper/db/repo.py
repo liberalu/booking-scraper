@@ -1172,13 +1172,25 @@ def mark_scrape_url_item_done(
     http_status: int | None = None,
     error_reason: str | None = None,
     dispatched_at: float | None = None,
+    received_at: float | None = None,
     url_type: str | None = None,
 ) -> None:
-    """Mark a scrape_url_item as done."""
+    """Mark a scrape_url_item as done.
+
+    `received_at` is the unix timestamp captured by the spider when the
+    response actually arrived. We use it to stamp `done_at` rather than
+    `datetime.now(UTC)`, because progress flushes happen in batches —
+    using `now()` would lump every URL in a batch onto the same flush
+    timestamp and inflate measured durations.
+    """
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "done"
-        item.done_at = datetime.now(UTC)
+        item.done_at = (
+            datetime.fromtimestamp(received_at, tz=UTC)
+            if received_at is not None
+            else datetime.now(UTC)
+        )
         if dispatched_at is not None and item.claimed_at is None:
             item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:
@@ -1196,13 +1208,19 @@ def mark_scrape_url_item_failed(
     http_status: int | None = None,
     error_reason: str | None = None,
     dispatched_at: float | None = None,
+    received_at: float | None = None,
     url_type: str | None = None,
 ) -> None:
-    """Mark a scrape_url_item as failed."""
+    """Mark a scrape_url_item as failed. See `mark_scrape_url_item_done`
+    for the rationale behind `received_at`."""
     item = session.get(ScrapeUrlItem, item_id)
     if item:
         item.status = "failed"
-        item.done_at = datetime.now(UTC)
+        item.done_at = (
+            datetime.fromtimestamp(received_at, tz=UTC)
+            if received_at is not None
+            else datetime.now(UTC)
+        )
         if dispatched_at is not None and item.claimed_at is None:
             item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:

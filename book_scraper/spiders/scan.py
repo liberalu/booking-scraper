@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
@@ -208,6 +209,7 @@ class ScanSpider(scrapy.Spider):
         discovered_url_id = response.meta.get("discovered_url_id")
         scrape_url_item_id = response.meta.get("scrape_url_item_id")
         dispatched_at = response.meta.get("dispatched_at")
+        received_at = time.time()
 
         url = response.url.split("?")[0]
         if 400 <= response.status < 500:
@@ -227,6 +229,7 @@ class ScanSpider(scrapy.Spider):
                 success=False,
                 error_reason=f"http_{response.status}",
                 dispatched_at=dispatched_at,
+                received_at=received_at,
             )
             return
         if 500 <= response.status < 600:
@@ -246,6 +249,7 @@ class ScanSpider(scrapy.Spider):
                 success=False,
                 error_reason=f"http_{response.status}",
                 dispatched_at=dispatched_at,
+                received_at=received_at,
             )
             return
 
@@ -289,6 +293,7 @@ class ScanSpider(scrapy.Spider):
                 is_book_product=False,
                 book_score_reasons=data.get("book_score_reasons", []),
                 dispatched_at=dispatched_at,
+                received_at=received_at,
             )
             return
 
@@ -329,6 +334,7 @@ class ScanSpider(scrapy.Spider):
             is_book_product=True,
             book_score_reasons=data.get("book_score_reasons", []),
             dispatched_at=dispatched_at,
+            received_at=received_at,
         )
 
         self._urls_processed += 1
@@ -340,6 +346,7 @@ class ScanSpider(scrapy.Spider):
         discovered_url_id = request.meta.get("discovered_url_id")
         scrape_url_item_id = request.meta.get("scrape_url_item_id")
         dispatched_at = request.meta.get("dispatched_at")
+        received_at = time.time()
         url = str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
@@ -382,6 +389,7 @@ class ScanSpider(scrapy.Spider):
             success=False,
             error_reason=error_reason,
             dispatched_at=dispatched_at,
+            received_at=received_at,
         )
 
     def _report_validation(
@@ -418,6 +426,7 @@ class ScanSpider(scrapy.Spider):
         book_score_reasons: list[str] | None = None,
         error_reason: str | None = None,
         dispatched_at: float | None = None,
+        received_at: float | None = None,
     ) -> None:
         """Queue a URL status update and flush periodically."""
         if url_id is None and scrape_url_item_id is None:
@@ -433,6 +442,7 @@ class ScanSpider(scrapy.Spider):
             update["scrape_url_item_success"] = success
             update["scrape_url_item_error_reason"] = error_reason
             update["scrape_url_item_dispatched_at"] = dispatched_at
+            update["scrape_url_item_received_at"] = received_at
         if book_score is not None and is_book_product is not None:
             update["book_score"] = book_score
             update["is_book_product"] = is_book_product
