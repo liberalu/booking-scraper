@@ -464,7 +464,7 @@ def api_run_urls(
             session, run_id, status=status, page=page, per_page=per_page
         )
         rows = []
-        for it in items:
+        for it, title in items:
             duration_ms: int | None = None
             if it.claimed_at and it.done_at:
                 duration_ms = int(
@@ -473,6 +473,7 @@ def api_run_urls(
             rows.append(
                 {
                     "url": it.url,
+                    "title": title,
                     "status": it.status,
                     "url_type": it.url_type,
                     "claimed_at": it.claimed_at.isoformat() if it.claimed_at else None,

@@ -375,7 +375,12 @@ function HFRunDetail({ nav, goto, params }) {
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
                     fontSize:12.5, alignItems:'center', gap:10,
                   }}>
-                    <a href={u.url} target="_blank" rel="noopener" style={{fontFamily:HF.mono, fontSize:12, color:HF.accentInk, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{u.url}</a>
+                    <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
+                      {u.title && (
+                        <span style={{fontSize:12.5, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.title}>{u.title}</span>
+                      )}
+                      <a href={u.url} target="_blank" rel="noopener" style={{fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.accentInk, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{u.url}</a>
+                    </span>
                     {urlData.source === 'live' ? (
                       <>
                         <HFPill tone={tone} style={{width:'fit-content'}}>{u.status}</HFPill>

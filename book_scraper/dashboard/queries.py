@@ -199,9 +199,21 @@ def get_run_url_items(
     status: str = "all",
     page: int = 1,
     per_page: int = 50,
-) -> tuple[list[ScrapeUrlItem], int]:
-    """Live URL queue for a running run, paginated. Returns (rows, total)."""
-    query = session.query(ScrapeUrlItem).filter(ScrapeUrlItem.run_id == run_id)
+) -> tuple[list[tuple[ScrapeUrlItem, str | None]], int]:
+    """Live URL queue for a run, paginated. Returns ((item, title), total).
+
+    `title` is left-joined from `shop_books` (matched on shop_id + url) and
+    is `None` for URLs that didn't produce a book product.
+    """
+    query = (
+        session.query(ScrapeUrlItem, ShopBook.title)
+        .outerjoin(
+            ShopBook,
+            (ShopBook.shop_id == ScrapeUrlItem.shop_id)
+            & (ShopBook.url == ScrapeUrlItem.url),
+        )
+        .filter(ScrapeUrlItem.run_id == run_id)
+    )
     if status in RUN_URL_STATUSES:
         query = query.filter(ScrapeUrlItem.status == status)
     total = query.count()
@@ -215,7 +227,7 @@ def get_run_url_items(
         .limit(per_page)
         .all()
     )
-    return rows, total
+    return [(it, title) for it, title in rows], total
 
 
 def get_run_discovered_urls(
