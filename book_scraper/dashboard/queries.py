@@ -502,6 +502,7 @@ def get_run_rate_window(
         session.query(func.count(ScrapeUrlItem.id))
         .filter(
             ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "done",
             ScrapeUrlItem.done_at.isnot(None),
             ScrapeUrlItem.done_at > cutoff,
         )

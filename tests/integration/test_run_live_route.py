@@ -203,7 +203,11 @@ def test_live_route_returns_recent_done_and_failed_counts(
     db_session.commit()
 
     body = client.get(f"/api/runs/{run.id}/live").json()
-    assert body["rate"]["done"] == 3  # all 3 within last 60s
+    # `done` counts only status='done' rows (2 in window).
+    # `failed` counts only status='failed' rows (1 in window).
+    # Failed rows must NOT also be counted under `done` — that double-count
+    # made the throughput legend show identical done/failed values.
+    assert body["rate"]["done"] == 2
     assert body["rate"]["failed"] == 1
     assert len(body["recent_failures"]) == 1
     failure = body["recent_failures"][0]

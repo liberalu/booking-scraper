@@ -300,6 +300,7 @@ function _fmtDelay(seconds) {
   if (seconds == null) return '—';
   const s = Number(seconds);
   if (!Number.isFinite(s)) return '—';
+  if (s === 0) return '0 ms';
   if (s < 0.001) return '<1 ms';
   if (s < 1) return `${(s * 1000).toFixed(0)} ms`;
   return `${s.toFixed(2)} s`;
@@ -374,11 +375,19 @@ function HFRunDetail({ nav, goto, params }) {
 
   React.useEffect(() => {
     if (!runId) return;
-    fetch(`/api/runs/${runId}`)
+    let cancelled = false;
+    const load = () => fetch(`/api/runs/${runId}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [runId]);
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    load();
+    // Re-poll while the run is alive so elapsed / errors / items / urls_processed
+    // stay current. Stops as soon as the status flips to a terminal value.
+    const status = data?.status;
+    const isActive = status === 'running' || status === 'paused' || status === 'stopping';
+    const timer = isActive ? setInterval(load, 2000) : null;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [runId, data?.status]);
 
   // Live observability — poll /api/runs/{id}/live every 2s while running.
   // Once we've polled at least once, treat the live endpoint as the
@@ -574,6 +583,20 @@ function HFRunDetail({ nav, goto, params }) {
   const tabAllCount = (urlData?.total ?? 0)
     || (Object.values(tabCounts).reduce((a, b) => a + (b || 0), 0));
 
+  // ── Progress numerator + error count ──
+  // The run row's `urls_processed` and `error_count` counters lag the
+  // actual queue state (spider-driven, reaped/aborted rows often
+  // missed). Prefer breakdown.done+failed when we have it — that's the
+  // honest "what really happened" number. Falls back to the run row.
+  const terminalCount =
+    (tabCounts.done ?? 0) + (tabCounts.failed ?? 0);
+  const progressNumerator = terminalCount > 0
+    ? terminalCount
+    : (data.urls_processed ?? 0);
+  const errorCount = (tabCounts.failed ?? 0) > 0
+    ? (tabCounts.failed ?? 0)
+    : (data.errors ?? 0);
+
   return (
     <HFShell {...nav} activePage="runs"
       title={<span style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
@@ -622,13 +645,15 @@ function HFRunDetail({ nav, goto, params }) {
         { label:'Progress', value:`${data.progress}%`,
           delta:<span style={{color:HF.ink3}}>
             {data.urls_total
-              ? `${(data.urls_processed ?? 0).toLocaleString()} of ${data.urls_total.toLocaleString()}`
+              ? `${progressNumerator.toLocaleString()} of ${data.urls_total.toLocaleString()}`
               : (data.items ? `${data.items.toLocaleString()} items` : '—')}
           </span> },
         { label:'Elapsed', value:data.elapsed || '—',
           delta:<span style={{color:HF.ink3}}>duration</span> },
-        { label:'Errors', value:String(data.errors ?? 0),
-          delta:<span style={{color:HF.ink3}}>{data.errors_4xx ?? 0} · {data.errors_5xx ?? 0}</span> },
+        { label:'Errors', value:String(errorCount),
+          delta:<span style={{color:HF.ink3}}>
+            {(data.errors_4xx ?? 0)} · 4xx{'  '}{(data.errors_5xx ?? 0)} · 5xx
+          </span> },
         { label:'Workers', value:String(workerCount),
           delta:<span style={{color:HF.ink3}}>in flight</span> },
       ]}/>
@@ -692,7 +717,7 @@ function HFRunDetail({ nav, goto, params }) {
                 </>
               ) : (
                 <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 12.5}}>
-                  idle — no requests in flight
+                  {liveData ? 'between requests · waiting for next dispatch…' : 'loading…'}
                 </div>
               )}
             </div>
@@ -815,42 +840,64 @@ function HFRunDetail({ nav, goto, params }) {
         </HFCard>
       )}
 
-      {/* Throughput chart — done legend (failed shown when polled) */}
-      <HFCard
-        title="Throughput"
-        sub="items / minute · 2s samples"
-        action={<div style={{display:'flex', gap:14, fontFamily:HF.mono, fontSize:11.5}}>
-          <span style={{display:'flex', alignItems:'center', gap:5}}>
-            <span style={{width:8, height:8, borderRadius:2, background:HF.ok}}/>
-            <span style={{color:HF.ink3}}>done</span>
-            <span style={{color:HF.ink2, fontWeight:600}}>
-              {throughputHistory.length > 0 ? `${throughputHistory[throughputHistory.length-1]}/min` : '—'}
-            </span>
-          </span>
-          <span style={{display:'flex', alignItems:'center', gap:5}}>
-            <span style={{width:8, height:8, borderRadius:2, background:HF.err}}/>
-            <span style={{color:HF.ink3}}>failed</span>
-            <span style={{color: rateFailed > 0 ? HF.errInk : HF.ink3, fontWeight:600}}>
-              {rateFailed > 0 ? `${Math.round((rateFailed/liveRate.window_s)*60)}/min` : '0/min'}
-            </span>
-          </span>
-        </div>}
-        style={{marginBottom: HF.gap}}
-      >
-        <div style={{padding: HF.cardP}}>
-          {throughputHistory.length > 1 ? (
-            <HFAreaChart data={throughputHistory} h={140}/>
-          ) : (
-            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
-              {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
+      {/* Throughput chart — done/min, with Y-axis ticks scaled to history */}
+      {(() => {
+        const ratePerMinFailed = liveRate.window_s > 0
+          ? Math.round((rateFailed / liveRate.window_s) * 60) : 0;
+        // Scale the Y-axis to the rolling max so spikes don't pin the chart.
+        const peak = Math.max(0, ...throughputHistory, ratePerMinFailed);
+        // Round up to a clean multiple of 5 (min of 5).
+        const yMax = Math.max(5, Math.ceil(peak / 5) * 5);
+        const yTicks = [yMax, Math.round(yMax * 0.75), Math.round(yMax / 2), Math.round(yMax / 4), 0];
+        const sampleAgeS = (n) => Math.round(n * 2);
+        return (
+          <HFCard
+            title="Throughput"
+            sub={`items / minute · 2s samples · last ${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m window`}
+            action={<div style={{display:'flex', gap:14, fontFamily:HF.mono, fontSize:11.5}}>
+              <span style={{display:'flex', alignItems:'center', gap:5}}>
+                <span style={{width:8, height:8, borderRadius:2, background:HF.ok}}/>
+                <span style={{color:HF.ink3}}>done</span>
+                <span style={{color:HF.ink2, fontWeight:600}}>
+                  {throughputHistory.length > 0 ? `${throughputHistory[throughputHistory.length-1]}/min` : '—'}
+                </span>
+              </span>
+              <span style={{display:'flex', alignItems:'center', gap:5}}>
+                <span style={{width:8, height:8, borderRadius:2, background:HF.err}}/>
+                <span style={{color:HF.ink3}}>failed</span>
+                <span style={{color: rateFailed > 0 ? HF.errInk : HF.ink3, fontWeight:600}}>
+                  {ratePerMinFailed}/min
+                </span>
+              </span>
+            </div>}
+            style={{marginBottom: HF.gap}}
+          >
+            <div style={{padding: HF.cardP}}>
+              <div style={{display:'grid', gridTemplateColumns:'34px 1fr', gap: 8}}>
+                <div style={{display:'flex', flexDirection:'column', justifyContent:'space-between', alignItems:'flex-end', fontFamily:HF.mono, fontSize:10.5, color:HF.ink4, fontVariantNumeric:'tabular-nums', height: 140, paddingRight: 4}}>
+                  {yTicks.map(v => <span key={v}>{v}</span>)}
+                </div>
+                <div style={{minWidth: 0}}>
+                  {throughputHistory.length > 1 ? (
+                    <HFAreaChart data={throughputHistory} h={140}/>
+                  ) : (
+                    <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
+                      {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
+                    </div>
+                  )}
+                  <div style={{display:'flex', justifyContent:'space-between', fontFamily:HF.mono, fontSize:10.5, color:HF.ink4, fontVariantNumeric:'tabular-nums', marginTop: 6}}>
+                    <span>−{sampleAgeS(throughputHistory.length)}s</span>
+                    <span>−{sampleAgeS(Math.floor(throughputHistory.length * 3 / 4))}s</span>
+                    <span>−{sampleAgeS(Math.floor(throughputHistory.length / 2))}s</span>
+                    <span>−{sampleAgeS(Math.floor(throughputHistory.length / 4))}s</span>
+                    <span>now</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-          <div style={{display:'flex', justifyContent:'space-between', fontFamily:HF.mono, fontSize:10.5, color:HF.ink4, fontVariantNumeric:'tabular-nums', marginTop: 6}}>
-            <span>{throughputHistory.length >= THROUGHPUT_MAX_SAMPLES ? `−${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m` : `${throughputHistory.length} samples`}</span>
-            <span>now</span>
-          </div>
-        </div>
-      </HFCard>
+          </HFCard>
+        );
+      })()}
 
       {/* History card — tabbed URL queue / discovered URL history */}
       {urlData && (urlData.source === 'live' || urlData.total > 0) && (
