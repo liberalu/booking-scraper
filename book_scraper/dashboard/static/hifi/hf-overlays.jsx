@@ -865,24 +865,31 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
 }
 
 // ══════════════════════════════ Rate Settings dialog ══════════════════════════════
-function HFRateSettingsDialog({ open, onClose, shopName, initialSettings = {} }) {
+function HFRateSettingsDialog({ open, onClose, shopName }) {
   const HF = getHF();
-  // Initialise from props — this component only mounts after data has loaded.
-  const [delay, setDelay] = React.useState(initialSettings.download_delay ?? '2.0');
-  const [concurrent, setConcurrent] = React.useState(initialSettings.concurrent_requests_per_domain ?? '1');
+  const [delay, setDelay] = React.useState('');
+  const [concurrent, setConcurrent] = React.useState('');
+  const [loadingSettings, setLoadingSettings] = React.useState(false);
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
-  // Re-sync when the modal reopens (e.g. after saving and the parent refreshes).
+  // Fetch current settings from DB each time the modal opens.
   React.useEffect(() => {
-    if (open) {
-      setDelay(initialSettings.download_delay ?? '2.0');
-      setConcurrent(initialSettings.concurrent_requests_per_domain ?? '1');
-      setError('');
-      setSaved(false);
-    }
-  }, [open, initialSettings.download_delay, initialSettings.concurrent_requests_per_domain]);
+    if (!open || !shopName) return;
+    setLoadingSettings(true);
+    setError('');
+    setSaved(false);
+    fetch(`/api/shops/${shopName}`)
+      .then(r => r.json())
+      .then(d => {
+        const s = d.rate_settings || {};
+        setDelay(s.download_delay ?? '2.0');
+        setConcurrent(s.concurrent_requests_per_domain ?? '1');
+        setLoadingSettings(false);
+      })
+      .catch(() => { setDelay('2.0'); setConcurrent('1'); setLoadingSettings(false); });
+  }, [open, shopName]);
 
   function validate() {
     const d = parseFloat(delay);
@@ -914,12 +921,17 @@ function HFRateSettingsDialog({ open, onClose, shopName, initialSettings = {} })
     <HFModal open={open} onClose={onClose} width={440}>
       <HFModalHead title="Rate settings" sub={`Crawl pacing for ${shopName}`} onClose={onClose} icon={HF_ICONS.settings}/>
       <HFModalBody>
-        <HFField label="Download delay (seconds)" hint="Minimum pause between requests. Range: 0.1 – 60 s.">
-          <HFInput type="number" value={delay} onChange={setDelay} min="0.1" max="60" step="0.1" mono autoFocus/>
-        </HFField>
-        <HFField label="Concurrent requests per domain" hint="Max in-flight requests at once. Range: 1 – 16.">
-          <HFInput type="number" value={concurrent} onChange={setConcurrent} min="1" max="16" step="1" mono/>
-        </HFField>
+        {loadingSettings
+          ? <div style={{color: HF.ink3, fontSize: 13, padding: '8px 0'}}>Loading…</div>
+          : <>
+          <HFField label="Download delay (seconds)" hint="Minimum pause between requests. Range: 0.1 – 60 s.">
+            <HFInput type="number" value={delay} onChange={setDelay} min="0.1" max="60" step="0.1" mono autoFocus/>
+          </HFField>
+          <HFField label="Concurrent requests per domain" hint="Max in-flight requests at once. Range: 1 – 16.">
+            <HFInput type="number" value={concurrent} onChange={setConcurrent} min="1" max="16" step="1" mono/>
+          </HFField>
+          </>
+        }
         {error && (
           <div style={{
             color: HF.errInk, fontSize: 12.5, padding: '8px 10px',

@@ -354,7 +354,6 @@ function HFShopDetail({ nav, goto, params }) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         shopName={name}
-        initialSettings={data.rate_settings || {}}
       />
 
     </HFShell>
