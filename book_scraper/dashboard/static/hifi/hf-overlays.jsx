@@ -864,6 +864,84 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
   );
 }
 
+// ══════════════════════════════ Rate Settings dialog ══════════════════════════════
+function HFRateSettingsDialog({ open, onClose, shopName, initialSettings = {} }) {
+  const HF = getHF();
+  const [delay, setDelay] = React.useState('');
+  const [concurrent, setConcurrent] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setDelay(initialSettings.download_delay ?? '2.0');
+      setConcurrent(initialSettings.concurrent_requests_per_domain ?? '1');
+      setError('');
+      setSaved(false);
+    }
+  }, [open]);
+
+  function validate() {
+    const d = parseFloat(delay);
+    const c = parseInt(concurrent, 10);
+    if (isNaN(d) || d < 0.1 || d > 60) return 'Download delay must be 0.1–60 s.';
+    if (isNaN(c) || c < 1 || c > 16) return 'Concurrent requests must be 1–16.';
+    return null;
+  }
+
+  function save() {
+    const err = validate();
+    if (err) { setError(err); return; }
+    setError(''); setSaving(true);
+    const body = new URLSearchParams({ download_delay: delay, concurrent_requests_per_domain: concurrent });
+    fetch(`/shops/${shopName}/rate-settings`, {
+      method: 'POST', body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+      .then(r => r.text().then(t => ({ ok: r.ok, text: t })))
+      .then(({ ok, text }) => {
+        setSaving(false);
+        if (ok) { setSaved(true); setTimeout(onClose, 900); }
+        else setError(text.replace(/<[^>]+>/g, '') || 'Save failed.');
+      })
+      .catch(e => { setSaving(false); setError(e.message); });
+  }
+
+  return (
+    <HFModal open={open} onClose={onClose} width={440}>
+      <HFModalHead title="Rate settings" sub={`Crawl pacing for ${shopName}`} onClose={onClose} icon={HF_ICONS.settings}/>
+      <HFModalBody>
+        <HFField label="Download delay (seconds)" hint="Minimum pause between requests. Range: 0.1 – 60 s.">
+          <HFInput type="number" value={delay} onChange={setDelay} min="0.1" max="60" step="0.1" mono autoFocus/>
+        </HFField>
+        <HFField label="Concurrent requests per domain" hint="Max in-flight requests at once. Range: 1 – 16.">
+          <HFInput type="number" value={concurrent} onChange={setConcurrent} min="1" max="16" step="1" mono/>
+        </HFField>
+        {error && (
+          <div style={{
+            color: HF.errInk, fontSize: 12.5, padding: '8px 10px',
+            background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
+          }}>{error}</div>
+        )}
+        {saved && (
+          <div style={{
+            color: HF.okInk, fontSize: 12.5, padding: '8px 10px',
+            background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: 6,
+          }}>Saved. Changes take effect on the next crawl.</div>
+        )}
+      </HFModalBody>
+      <HFModalFoot>
+        <HFButton onClick={onClose}>Cancel</HFButton>
+        <HFButton variant="primary" onClick={save} disabled={saving || saved}>
+          <span style={{ display: 'flex' }}>{HF_ICONS.settings}</span>
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+        </HFButton>
+      </HFModalFoot>
+    </HFModal>
+  );
+}
+
 // ══════════════════════════════ Exports ══════════════════════════════
 Object.assign(window, {
   HFModal, HFModalHead, HFModalBody, HFModalFoot,
@@ -871,4 +949,5 @@ Object.assign(window, {
   HFCommandK, HFNewRunDialog, HFNewScheduleDialog,
   HFAddURLDialog, HFAddShopDialog, HFAddBookDialog,
   HFParserPicker, HFSettings, HFAvatarMenu,
+  HFRateSettingsDialog,
 });

@@ -203,6 +203,7 @@ function HFShopDetail({ nav, goto, params }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState('overview');
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!shopName) return;
@@ -240,7 +241,7 @@ function HFShopDetail({ nav, goto, params }) {
         <span style={{color:HF.ink, fontWeight:500}}>{name}</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.settings}</span> Settings</HFButton>
+        <HFButton onClick={() => setSettingsOpen(true)}><span style={{display:'flex'}}>{HF_ICONS.settings}</span> Settings</HFButton>
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> Run now</HFButton>
       </>}
     >
@@ -258,7 +259,6 @@ function HFShopDetail({ nav, goto, params }) {
             { id:'urls',     label:'URLs', count:21170 },
             { id:'books',    label:'Books', count:15420 },
             { id:'parser',   label:'Parser config' },
-            { id:'settings', label:'Settings' },
           ]}/>
         </div>
       </HFCard>
@@ -350,54 +350,14 @@ function HFShopDetail({ nav, goto, params }) {
           />
         </HFCard>
       )}
-      {tab === 'settings' && <HFRateSettingsPanel shopName={name} initialSettings={data.rate_settings || {}}/>}
+      <HFRateSettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        shopName={name}
+        initialSettings={data.rate_settings || {}}
+      />
 
     </HFShell>
-  );
-}
-
-function HFRateSettingsPanel({ shopName, initialSettings }) {
-  const HF = getHF();
-  const [delay, setDelay] = React.useState(initialSettings.download_delay ?? '2.0');
-  const [concurrent, setConcurrent] = React.useState(initialSettings.concurrent_requests_per_domain ?? '1');
-  const [status, setStatus] = React.useState(null); // null | 'saving' | 'saved' | 'error'
-
-  function save() {
-    setStatus('saving');
-    const body = new URLSearchParams({ download_delay: delay, concurrent_requests_per_domain: concurrent });
-    fetch(`/shops/${shopName}/rate-settings`, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-      .then(r => r.text().then(t => ({ ok: r.ok, text: t })))
-      .then(({ ok, text }) => setStatus(ok ? 'saved' : 'error:' + text))
-      .catch(e => setStatus('error:' + e.message));
-  }
-
-  const labelStyle = { fontSize: 13, color: HF.ink3, fontWeight: 500, display: 'block', marginBottom: 6 };
-  const inputStyle = { fontFamily: HF.mono, fontSize: 14, background: HF.surface, border: `1px solid ${HF.border}`, borderRadius: 6, padding: '7px 10px', color: HF.ink, outline: 'none', width: '100%' };
-
-  return (
-    <HFCard title="Rate Settings" sub="Applied at the start of each crawl. Changes take effect on the next run.">
-      <div style={{ padding: `${HF.cardP}px`, display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 480 }}>
-        <div>
-          <label style={labelStyle}>Download delay (seconds)</label>
-          <input type="number" style={inputStyle} value={delay} min="0.1" max="60" step="0.1"
-            onChange={e => { setDelay(e.target.value); setStatus(null); }}/>
-          <div style={{ fontSize: 12, color: HF.ink4, marginTop: 5 }}>Min time between requests. Range: 0.1 – 60 s.</div>
-        </div>
-        <div>
-          <label style={labelStyle}>Concurrent requests per domain</label>
-          <input type="number" style={inputStyle} value={concurrent} min="1" max="16" step="1"
-            onChange={e => { setConcurrent(e.target.value); setStatus(null); }}/>
-          <div style={{ fontSize: 12, color: HF.ink4, marginTop: 5 }}>Max in-flight requests at once. Range: 1 – 16.</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <HFButton variant="primary" onClick={save} disabled={status === 'saving'}>
-            {status === 'saving' ? 'Saving…' : 'Save'}
-          </HFButton>
-          {status === 'saved' && <span style={{ fontSize: 13, color: HF.okInk }}>Saved.</span>}
-          {status && status.startsWith('error') && <span style={{ fontSize: 13, color: HF.errInk }}>Failed to save.</span>}
-        </div>
-      </div>
-    </HFCard>
   );
 }
 
