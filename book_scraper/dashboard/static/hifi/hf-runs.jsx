@@ -409,8 +409,8 @@ function HFRunDetail({ nav, goto, params }) {
   })();
   const _initialUrlParamsFull = (() => {
     const sp = new URLSearchParams(window.location.search);
-    const pp = parseInt(sp.get('url_per_page') || '50', 10);
-    return { perPage: [25, 50, 100].includes(pp) ? pp : 50 };
+    const pp = parseInt(sp.get('url_per_page') || '10', 10);
+    return { perPage: [10, 25, 50, 100].includes(pp) ? pp : 10 };
   })();
   const [urlStatus, setUrlStatus] = React.useState(_initialUrlParams.status);
   const [urlPage, setUrlPage] = React.useState(_initialUrlParams.page);
@@ -428,7 +428,7 @@ function HFRunDetail({ nav, goto, params }) {
     if (urlPage !== 1) sp.set('url_page', String(urlPage)); else sp.delete('url_page');
     if (urlSort !== 'started') sp.set('url_sort', urlSort); else sp.delete('url_sort');
     if (urlOrder !== 'desc') sp.set('url_order', urlOrder); else sp.delete('url_order');
-    if (urlPerPage !== 50) sp.set('url_per_page', String(urlPerPage)); else sp.delete('url_per_page');
+    if (urlPerPage !== 10) sp.set('url_per_page', String(urlPerPage)); else sp.delete('url_per_page');
     const qs = sp.toString();
     const url = window.location.pathname + (qs ? '?' + qs : '');
     window.history.replaceState(null, '', url);
@@ -693,7 +693,7 @@ function HFRunDetail({ nav, goto, params }) {
             </div>
             <div style={{display:'flex', alignItems:'center', gap:6, fontSize:12, color:HF.ink4}}>
               <span>Per page:</span>
-              {[25, 50, 100].map(n => (
+              {[10, 25, 50, 100].map(n => (
                 <HFButton key={n} size="sm"
                   variant={urlPerPage === n ? 'accent' : 'subtle'}
                   onClick={() => setUrlPerPage(n)}>
