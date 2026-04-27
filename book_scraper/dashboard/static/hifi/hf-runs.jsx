@@ -459,6 +459,7 @@ function HFRunDetail({ nav, goto, params }) {
   const id = data?.id ?? runId;
   const [actionPending, setActionPending] = React.useState(false);
   const [actionError, setActionError] = React.useState(null);
+  const [expandedFailure, setExpandedFailure] = React.useState(-1);
   const stopRun = React.useCallback(() => {
     if (actionPending || !id) return;
     if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
@@ -507,8 +508,6 @@ function HFRunDetail({ nav, goto, params }) {
     );
   }
 
-  const [expandedFailure, setExpandedFailure] = React.useState(-1);
-
   const runStatus = data.status || 'completed';
   const runStatusTone = {
     running: 'ok', stopping: 'warn', paused: 'warn', completed: 'neutral', failed: 'err',
@@ -522,7 +521,10 @@ function HFRunDetail({ nav, goto, params }) {
   );
 
   // ── Worker / in-flight ──
-  const inFlight = liveData?.in_flight || [];
+  // Stale `processing` rows linger in the DB after a reaped failure, so
+  // ignore in_flight for terminal runs to avoid a misleading worker count.
+  const isTerminalForLive = runStatus === 'completed' || runStatus === 'failed';
+  const inFlight = isTerminalForLive ? [] : (liveData?.in_flight || []);
   const inFlightFirst = inFlight[0];
   const workerCount = inFlight.length;
 
@@ -537,7 +539,7 @@ function HFRunDetail({ nav, goto, params }) {
   // ── Failure grouping (client-side, from liveData.recent_failures) ──
   // recent_failures is capped at 10 — enough for a representative group view.
   // RECURRING / NEW badges are not computed here (would need a cross-run query).
-  const failureGroups = React.useMemo(() => {
+  const failureGroups = (() => {
     const src = liveData?.recent_failures || [];
     if (src.length === 0) return [];
     const groups = {};
@@ -557,7 +559,7 @@ function HFRunDetail({ nav, goto, params }) {
       if (g.examples.length < 3 && r.url) g.examples.push(r.url);
     }
     return Object.values(groups).sort((a, b) => b.count - a.count);
-  }, [liveData?.recent_failures]);
+  })();
 
   // ── Health pill (in-flight panel header) ──
   const liveHealth = liveData?.health || null;
