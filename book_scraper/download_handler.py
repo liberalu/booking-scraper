@@ -87,9 +87,13 @@ class HttpxMiddleware:  # pragma: no cover
         self._autothrottle_target_concurrency = max(
             0.1, autothrottle_target_concurrency
         )
-        # Per-host throttling state. Lock serialises per-host dispatch
-        # (1 request in flight per host); state dicts track timing.
-        self._host_locks: dict[str, asyncio.Lock] = {}
+        # Per-host throttling state.
+        # _host_slots: Semaphore caps in-flight requests to _max_concurrency.
+        # _host_dispatch_locks: Lock serialises timing/sleep so concurrent
+        #   coroutines don't all read last_dispatch=0 and race to fire.
+        self._max_concurrency: int = 1
+        self._host_slots: dict[str, asyncio.Semaphore] = {}
+        self._host_dispatch_locks: dict[str, asyncio.Lock] = {}
         self._host_last_dispatch: dict[str, float] = {}
         self._host_current_delay: dict[str, float] = {}
         # Client-rotation: vaga.lt (and likely others) silently stop
@@ -102,6 +106,10 @@ class HttpxMiddleware:  # pragma: no cover
         self._client_reset_after = max(1, client_reset_after_requests)
         self._requests_since_reset = 0
         self._client_lock = asyncio.Lock()  # serialises client swap
+        # Old clients are retired here rather than immediately closed so
+        # in-flight requests (concurrent > 1) can finish normally.
+        # The list is drained at spider_closed.
+        self._retired_clients: list["httpx.AsyncClient"] = []
 
     def _make_client(self) -> "httpx.AsyncClient":
         return httpx.AsyncClient(
@@ -137,13 +145,9 @@ class HttpxMiddleware:  # pragma: no cover
             old = self.client
             self.client = self._make_client()
             self._requests_since_reset = 0
-        # Close the old client outside the lock — aclose() awaits
-        # outstanding requests, which we don't have, but no need to
-        # block the next dispatch on it.
-        try:
-            await old.aclose()
-        except Exception:
-            logger.exception("httpx client aclose failed during reset")
+        # Retire instead of closing immediately: in-flight requests on `old`
+        # can finish normally. The list is drained at spider_closed.
+        self._retired_clients.append(old)
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "HttpxMiddleware":
@@ -164,19 +168,84 @@ class HttpxMiddleware:  # pragma: no cover
             ),
         )
         crawler.signals.connect(mw._close, signal=signals.spider_closed)
+        crawler.signals.connect(mw.spider_opened, signal=signals.spider_opened)
         return mw
+
+    def spider_opened(self, spider: Any) -> None:
+        """Read per-shop rate settings from DB and apply them before any requests."""
+        shop_name = getattr(spider, "shop_name", None)
+        if not shop_name or not self.database_url:
+            return
+        try:
+            if self._session_factory is None:
+                from book_scraper.db.session import get_session_factory
+
+                self._session_factory = get_session_factory(self.database_url)
+            from book_scraper.db.models import Shop, ShopSettings
+
+            session = self._session_factory()
+            try:
+                rows = (
+                    session.query(ShopSettings)
+                    .join(Shop, Shop.id == ShopSettings.shop_id)
+                    .filter(Shop.name == shop_name)
+                    .all()
+                )
+            finally:
+                session.close()
+            if not rows:
+                return
+            raw = {r.key: (r.value, r.type) for r in rows}
+        except Exception:
+            logger.exception(
+                "spider_opened: failed to read rate settings for %s", shop_name
+            )
+            return
+
+        def _cast(key: str, default: float | int) -> float | int:
+            entry = raw.get(key)
+            if entry is None:
+                return default
+            val, type_hint = entry
+            try:
+                return float(val) if type_hint == "float" else int(val)
+            except (ValueError, TypeError):
+                return default
+
+        download_delay = max(
+            0.1, min(60.0, float(_cast("download_delay", self._download_delay)))
+        )
+        concurrency = max(
+            1,
+            min(16, int(_cast("concurrent_requests_per_domain", self._max_concurrency))),
+        )
+        self._download_delay = download_delay
+        self._autothrottle_start = download_delay
+        self._autothrottle_max = max(self._autothrottle_max, download_delay)
+        self._max_concurrency = concurrency
+        self._host_slots.clear()
+        self._host_dispatch_locks.clear()
+        self._host_last_dispatch.clear()
+        self._host_current_delay.clear()
+        logger.info(
+            "HttpxMiddleware: rate settings for %s — download_delay=%.2fs concurrent=%d",
+            shop_name,
+            self._download_delay,
+            self._max_concurrency,
+        )
 
     def _host_key(self, url: str) -> str:
         host = urlparse(url).hostname
         return host or "default"
 
-    def _get_lock(self, host: str) -> asyncio.Lock:
-        lock = self._host_locks.get(host)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._host_locks[host] = lock
+    def _get_slot(self, host: str) -> tuple[asyncio.Semaphore, asyncio.Lock]:
+        slot = self._host_slots.get(host)
+        if slot is None:
+            slot = asyncio.Semaphore(self._max_concurrency)
+            self._host_slots[host] = slot
+            self._host_dispatch_locks[host] = asyncio.Lock()
             self._host_current_delay[host] = self._autothrottle_start
-        return lock
+        return slot, self._host_dispatch_locks[host]
 
     def _adjust_delay(
         self,
@@ -250,54 +319,49 @@ class HttpxMiddleware:  # pragma: no cover
     ) -> HtmlResponse:
         """Intercept request, pace per-host, then handle with httpx.
 
-        The per-host lock is held for the entire HTTP roundtrip so we
-        get true `CONCURRENT_REQUESTS_PER_DOMAIN = 1` semantics. The
-        sleep before dispatch is the adaptive delay computed by the
-        previous response.
-
-        We stamp `dispatched_at` (post-sleep, immediately before the
-        HTTP call) and `request_delay_s` (the actual sleep duration)
-        on `request.meta` so the spider can include them in the JSONL
-        event log.
+        The Semaphore limits concurrent in-flight requests per host to
+        _max_concurrency. The inner dispatch_lock serialises timing/sleep so
+        concurrent coroutines don't race on last_dispatch. The dispatch_lock
+        is released before the HTTP call so in-flight requests can overlap.
         """
         host = self._host_key(str(request.url))
-        lock = self._get_lock(host)
-        async with lock:
-            # Compute and apply the throttle delay BEFORE dispatch.
-            current_delay = self._host_current_delay.get(
-                host, self._autothrottle_start
-            )
-            last_dispatch = self._host_last_dispatch.get(host, 0.0)
-            now_mono = time.monotonic()
-            sleep_for = max(0.0, last_dispatch + current_delay - now_mono)
-            if sleep_for > 0:
-                await asyncio.sleep(sleep_for)
-
-            # Now actually dispatch.
-            dispatched_at = time.time()
-            dispatched_mono = time.monotonic()
-            self._host_last_dispatch[host] = dispatched_mono
-
-            request.meta["dispatched_at"] = dispatched_at
-            request.meta["request_delay_s"] = sleep_for
-            delay_source = (
-                "autothrottle" if self._autothrottle_enabled else "configured_delay"
-            )
-            request.meta["delay_source"] = delay_source
-
-            item_id = request.meta.get("scrape_url_item_id")
-            if item_id is not None:
-                self._mark_processing(
-                    item_id,
-                    dispatched_at,
-                    sleep_for,
-                    delay_source,
+        slot, dispatch_lock = self._get_slot(host)
+        async with slot:
+            async with dispatch_lock:
+                # Compute and apply the throttle delay BEFORE dispatch.
+                current_delay = self._host_current_delay.get(
+                    host, self._autothrottle_start
                 )
+                last_dispatch = self._host_last_dispatch.get(host, 0.0)
+                now_mono = time.monotonic()
+                sleep_for = max(0.0, last_dispatch + current_delay - now_mono)
+                if sleep_for > 0:
+                    await asyncio.sleep(sleep_for)
+
+                dispatched_at = time.time()
+                dispatched_mono = time.monotonic()
+                self._host_last_dispatch[host] = dispatched_mono
+
+                request.meta["dispatched_at"] = dispatched_at
+                request.meta["request_delay_s"] = sleep_for
+                delay_source = (
+                    "autothrottle" if self._autothrottle_enabled else "configured_delay"
+                )
+                request.meta["delay_source"] = delay_source
+
+                item_id = request.meta.get("scrape_url_item_id")
+                if item_id is not None:
+                    self._mark_processing(
+                        item_id,
+                        dispatched_at,
+                        sleep_for,
+                        delay_source,
+                    )
+
+            # dispatch_lock released — timing serialised, HTTP call can overlap.
 
             # Rotate the httpx client periodically (TIME_WAIT pile-up
             # + server-side cumulative tracking, see follow-up #10).
-            # The shop's TOML can override the global setting via
-            # `[scraping] httpx_client_reset_after_requests`.
             reset_after: int | None = None
             shop_conf = getattr(spider, "conf", None)
             if shop_conf is not None:
@@ -339,3 +403,9 @@ class HttpxMiddleware:  # pragma: no cover
 
     async def _close(self) -> None:
         await self.client.aclose()
+        for old in self._retired_clients:
+            try:
+                await old.aclose()
+            except Exception:
+                logger.exception("httpx retired client aclose failed")
+        self._retired_clients.clear()

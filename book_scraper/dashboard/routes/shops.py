@@ -2,7 +2,7 @@ import logging
 import threading
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -17,8 +17,25 @@ from book_scraper.dashboard.queries import (
     get_shop_stats,
     mark_stale_runs,
 )
+from book_scraper.db.models import ShopSettings
 
 logger = logging.getLogger(__name__)
+
+
+def _upsert_setting(
+    session: Session, shop_id: int, key: str, value: str, type_hint: str
+) -> None:
+    existing = (
+        session.query(ShopSettings)
+        .filter(ShopSettings.shop_id == shop_id, ShopSettings.key == key)
+        .first()
+    )
+    if existing is not None:
+        existing.value = value
+        existing.type = type_hint
+    else:
+        session.add(ShopSettings(shop_id=shop_id, key=key, value=value, type=type_hint))
+
 
 router = APIRouter()
 
@@ -95,12 +112,14 @@ def shop_detail(shop_name: str, request: Request, session: Session = Depends(get
     field_stats = get_shop_field_stats(session, shop.id)
     runs = get_shop_runs(session, shop.id)
     run_health = {run.id: get_run_health(run) for run in runs}
+    shop_settings = {s.key: s.value for s in shop.settings}
     return templates.TemplateResponse(
         request,
         "shop_detail.html",
         {
             "active_page": "shops",
             "shop": shop,
+            "shop_settings": shop_settings,
             "stats": stats,
             "field_stats": field_stats,
             "runs": runs,
@@ -223,6 +242,37 @@ def scrape_single_url(shop_name: str, url: str = "") -> HTMLResponse:
     )
     t.start()
     return HTMLResponse(f'<p class="success">Scraping {url}</p>')
+
+
+@router.post("/shops/{shop_name}/rate-settings")
+def update_rate_settings(
+    shop_name: str,
+    download_delay: float = Form(...),
+    concurrent_requests_per_domain: int = Form(...),
+    session: Session = Depends(get_db),
+) -> HTMLResponse:
+    shop = get_shop_by_name(session, shop_name)
+    if shop is None:
+        return HTMLResponse('<p class="error">Shop not found</p>', status_code=404)
+    if not (0.1 <= download_delay <= 60.0):
+        return HTMLResponse(
+            '<p class="error">download_delay must be 0.1–60 s</p>', status_code=400
+        )
+    if not (1 <= concurrent_requests_per_domain <= 16):
+        return HTMLResponse(
+            '<p class="error">concurrent_requests_per_domain must be 1–16</p>',
+            status_code=400,
+        )
+    _upsert_setting(session, shop.id, "download_delay", str(download_delay), "float")
+    _upsert_setting(
+        session,
+        shop.id,
+        "concurrent_requests_per_domain",
+        str(concurrent_requests_per_domain),
+        "int",
+    )
+    session.commit()
+    return HTMLResponse('<p class="success">Saved.</p>')
 
 
 @router.get("/shops/{shop_name}/not-listed")

@@ -275,3 +275,46 @@ def test_spa_entry_point(client: TestClient) -> None:
     assert resp.status_code == 200
     assert b"<html" in resp.content
     assert b"BookScraper Dashboard" in resp.content
+
+
+@pytest.mark.integration
+def test_update_rate_settings_persists(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db.models import ShopSettings
+
+    response = client.post(
+        "/shops/vaga/rate-settings",
+        data={"download_delay": "1.5", "concurrent_requests_per_domain": "2"},
+    )
+    assert response.status_code == 200
+    assert "Saved" in response.text
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").first()
+    assert shop is not None
+    db_session.expire(shop)
+    rows = (
+        db_session.query(ShopSettings)
+        .filter(ShopSettings.shop_id == shop.id)
+        .all()
+    )
+    settings = {r.key: r.value for r in rows}
+    assert settings.get("download_delay") == "1.5"
+    assert settings.get("concurrent_requests_per_domain") == "2"
+
+
+@pytest.mark.integration
+def test_update_rate_settings_validates_bounds(
+    client: TestClient, db_session: Session
+) -> None:
+    response = client.post(
+        "/shops/vaga/rate-settings",
+        data={"download_delay": "0.0", "concurrent_requests_per_domain": "1"},
+    )
+    assert response.status_code == 400
+
+    response = client.post(
+        "/shops/vaga/rate-settings",
+        data={"download_delay": "1.0", "concurrent_requests_per_domain": "0"},
+    )
+    assert response.status_code == 400

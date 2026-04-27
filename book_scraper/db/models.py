@@ -49,6 +49,27 @@ class Shop(Base):
     base_url: Mapped[str] = mapped_column(String, nullable=False)
 
     shop_books: Mapped[list["ShopBook"]] = relationship(back_populates="shop")
+    settings: Mapped[list["ShopSettings"]] = relationship(
+        back_populates="shop", cascade="all, delete-orphan"
+    )
+
+
+class ShopSettings(Base):
+    __tablename__ = "shop_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_id: Mapped[int] = mapped_column(
+        ForeignKey("shops.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default="str")
+
+    shop: Mapped["Shop"] = relationship(back_populates="settings")
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "key", name="uq_shop_settings_shop_key"),
+    )
 
 
 match_status_enum = Enum(
