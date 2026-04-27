@@ -270,10 +270,8 @@ function HFRuns({ nav, goto }) {
   );
 }
 
-// ───────────────────────────── Live panel ─────────────────────────────
-// Honest UI: the suffix tells the operator how trustworthy the number
-// is, based on how it was measured. See live observability spec.
-
+// Honest UI: the suffix tells the operator how trustworthy the throttle
+// number is, based on how it was measured. See live observability spec.
 const DELAY_SOURCE_LABELS = {
   autothrottle:      { suffix: 'autothrottle',
     title: 'Adaptive delay enforced inside HttpxMiddleware. Drifts toward response_latency / TARGET_CONCURRENCY, bounded by DOWNLOAD_DELAY (floor) and AUTOTHROTTLE_MAX_DELAY (ceiling).' },
@@ -318,133 +316,6 @@ function _fmtAge(seconds) {
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 
-function HFLivePanel({ data, HF }) {
-  const inFlight = data.in_flight || [];
-  const rate = data.rate || { window_s: 60, done: 0, failed: 0 };
-  const activity = data.recent_activity || [];
-  const health = data.health || '';
-  const healthTone = (
-    health === 'healthy' ? 'ok' :
-    health === 'stuck'   ? 'warn' :
-    health === 'dead'    ? 'err'  : 'neutral'
-  );
-  const reqPerMin = rate.window_s > 0
-    ? Math.round((rate.done / rate.window_s) * 60)
-    : 0;
-
-  const isLive = data?.status === 'running' || data?.status === 'stopping' || data?.status === 'paused';
-  const panelTitle = data?.status === 'paused' ? 'Paused' : isLive ? 'Live' : 'Final state';
-  const panelSub = data?.status === 'paused'
-    ? `paused by operator · health: ${health || 'unknown'}`
-    : isLive
-      ? `refreshed every 2s · health: ${health || 'unknown'}`
-      : `frozen at run end · last health: ${health || 'unknown'}`;
-  return (
-    <HFCard
-      title={panelTitle}
-      sub={panelSub}
-      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={isLive && health==='healthy' && data?.status !== 'paused'} size={6}/> {health || '—'}</HFPill>}
-    >
-      <div style={{padding:`12px ${HF.cardP}px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap}}>
-        {/* Now fetching */}
-        <div>
-          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Now fetching</div>
-          {inFlight.length === 0 ? (
-            <div style={{fontFamily:HF.mono, fontSize:12, color:HF.ink3, padding:'8px 0'}}>idle — no requests in flight</div>
-          ) : inFlight.map((row, i) => {
-            const label = DELAY_SOURCE_LABELS[row.delay_source] || {};
-            return (
-              <div key={i} style={{padding:'8px 0', borderTop: i ? `1px solid ${HF.borderFaint}` : 'none'}}>
-                <div style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink, wordBreak:'break-all', marginBottom:4}}>{row.url}</div>
-                <div style={{display:'flex', gap:14, fontSize:11.5, color:HF.ink3, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', flexWrap:'wrap'}}>
-                  <span title={row.claimed_at || ''}>started {_fmtClockTime(row.claimed_at)} · {_fmtAge(row.claimed_age_s)} ago</span>
-                  <span title={label.title || ''}>
-                    throttle: {_fmtDelay(row.request_delay_s)}
-                    {label.suffix ? ` (${label.suffix})` : ''}
-                  </span>
-                  {row.retry_count > 0 && <span>retries: {row.retry_count}</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Rate + ETA */}
-        <div style={{display:'grid', gridTemplateRows:'auto auto', gap:8}}>
-          <div>
-            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Rate (last {rate.window_s}s)</div>
-            <div style={{display:'flex', gap:18, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums'}}>
-              <div>
-                <div style={{fontSize:22, fontWeight:600, color:HF.ink}}>{rate.done}</div>
-                <div style={{fontSize:11, color:HF.ink3}}>done · ~{reqPerMin}/min</div>
-              </div>
-              <div>
-                <div style={{fontSize:22, fontWeight:600, color: rate.failed > 0 ? HF.errInk : HF.ink}}>{rate.failed}</div>
-                <div style={{fontSize:11, color:HF.ink3}}>failed</div>
-              </div>
-            </div>
-          </div>
-          {data.eta_min != null && (
-            <div>
-              <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>ETA</div>
-              <div style={{fontFamily:HF.mono, fontVariantNumeric:'tabular-nums'}}>
-                <span style={{fontSize:18, fontWeight:600, color: data.eta_min <= 5 ? HF.okInk : HF.ink}}>
-                  {data.eta_min === 0 ? '<1' : data.eta_min}m
-                </span>
-                <span style={{fontSize:11, color:HF.ink3, marginLeft:6}}>remaining</span>
-              </div>
-            </div>
-          )}
-          {data.status === 'running' && data.eta_min == null && reqPerMin === 0 && (
-            <div style={{fontSize:11, color:HF.warnInk, fontFamily:HF.mono}}>stalled — rate: 0/min</div>
-          )}
-        </div>
-      </div>
-
-      {activity.length > 0 && (
-        <div style={{padding:`0 ${HF.cardP}px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`}}>
-          <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, padding:'12px 0 6px'}}>
-            Recent activity (last {activity.length})
-          </div>
-          <div style={{display:'grid', gridTemplateColumns:'auto auto auto auto auto 1fr auto', columnGap:14, rowGap:4, fontFamily:HF.mono, fontSize:11.5, fontVariantNumeric:'tabular-nums', color:HF.ink3}}>
-            <div style={{color:HF.ink4, fontWeight:600}}>status</div>
-            <div style={{color:HF.ink4, fontWeight:600}}>started</div>
-            <div style={{color:HF.ink4, fontWeight:600}}>finished</div>
-            <div style={{color:HF.ink4, fontWeight:600}}>duration</div>
-            <div style={{color:HF.ink4, fontWeight:600}}>throttle</div>
-            <div style={{color:HF.ink4, fontWeight:600}}>url</div>
-            <div style={{color:HF.ink4, fontWeight:600, textAlign:'right'}}
-                 title="Decompressed page size (what the parser saw). Wire bytes can be much smaller — vaga.lt serves gzipped, ~4× smaller on the wire.">
-              size
-            </div>
-            {activity.map((row, i) => {
-              const label = DELAY_SOURCE_LABELS[row.delay_source] || {};
-              const ok = row.status === 'done';
-              const statusColor = ok ? HF.okInk : (row.http_status && row.http_status >= 500 ? HF.errInk : HF.warnInk);
-              return (
-                <React.Fragment key={i}>
-                  <div style={{color:statusColor}} title={row.error_reason || ''}>
-                    {ok ? `${row.http_status ?? 200}` : `${row.http_status ?? 'err'}`}
-                  </div>
-                  <div title={row.claimed_at || ''}>{_fmtClockTime(row.claimed_at)}</div>
-                  <div title={row.done_at || ''}>{_fmtClockTime(row.done_at)}</div>
-                  <div>{_fmtDelay(row.duration_s)}</div>
-                  <div title={label.title || ''}>
-                    {_fmtDelay(row.request_delay_s)}{label.suffix ? ` ${label.suffix.charAt(0)}` : ''}
-                  </div>
-                  <div style={{color:HF.ink, wordBreak:'break-all', overflow:'hidden', textOverflow:'ellipsis'}}>{row.url}</div>
-                  <div style={{textAlign:'right', color:HF.ink3}}>
-                    {row.response_bytes != null ? `${(row.response_bytes/1024).toFixed(1)}k` : '—'}
-                  </div>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </HFCard>
-  );
-}
 
 // ───────────────────────────── Run Detail ─────────────────────────────
 
@@ -636,20 +507,81 @@ function HFRunDetail({ nav, goto, params }) {
     );
   }
 
-  const timeline = [];
-
-  const phases = [];
+  const [expandedFailure, setExpandedFailure] = React.useState(-1);
 
   const runStatus = data.status || 'completed';
   const runStatusTone = {
     running: 'ok', stopping: 'warn', paused: 'warn', completed: 'neutral', failed: 'err',
   };
+  const isTerminal = runStatus === 'completed' || runStatus === 'failed';
+  const closeReason = data.close_reason || null;
+  const closeReasonTone = (
+    runStatus === 'failed' ? 'err' :
+    runStatus === 'completed' && closeReason === 'completed_with_errors' ? 'warn' :
+    runStatus === 'completed' ? 'ok' : 'neutral'
+  );
+
+  // ── Worker / in-flight ──
+  const inFlight = liveData?.in_flight || [];
+  const inFlightFirst = inFlight[0];
+  const workerCount = inFlight.length;
+
+  // ── Rate (last 60s) ──
+  const liveRate = liveData?.rate || { window_s: 60, done: 0, failed: 0 };
+  const rateDone = liveRate.done || 0;
+  const rateFailed = liveRate.failed || 0;
+  const rateTotal = rateDone + rateFailed;
+  const failPct = rateTotal > 0 ? Math.round((rateFailed / rateTotal) * 100) : 0;
+  const ratePerMin = liveRate.window_s > 0 ? Math.round((rateDone / liveRate.window_s) * 60) : 0;
+
+  // ── Failure grouping (client-side, from liveData.recent_failures) ──
+  // recent_failures is capped at 10 — enough for a representative group view.
+  // RECURRING / NEW badges are not computed here (would need a cross-run query).
+  const failureGroups = React.useMemo(() => {
+    const src = liveData?.recent_failures || [];
+    if (src.length === 0) return [];
+    const groups = {};
+    for (const r of src) {
+      const reason = r.error_reason || 'unknown';
+      if (!groups[reason]) {
+        groups[reason] = {
+          reason,
+          http: r.http_status ?? null,
+          examples: [],
+          count: 0,
+          firstSeenAt: r.done_at || r.claimed_at || null,
+        };
+      }
+      const g = groups[reason];
+      g.count += 1;
+      if (g.examples.length < 3 && r.url) g.examples.push(r.url);
+    }
+    return Object.values(groups).sort((a, b) => b.count - a.count);
+  }, [liveData?.recent_failures]);
+
+  // ── Health pill (in-flight panel header) ──
+  const liveHealth = liveData?.health || null;
+  const healthTone = (
+    liveHealth === 'healthy' ? 'ok' :
+    liveHealth === 'stuck'   ? 'warn' :
+    liveHealth === 'dead'    ? 'err'  : 'neutral'
+  );
+
+  // ── Tabs for History card map straight onto urlStatus ──
+  const tabCounts = urlData?.breakdown || {};
+  const tabAllCount = (urlData?.total ?? 0)
+    || (Object.values(tabCounts).reduce((a, b) => a + (b || 0), 0));
 
   return (
     <HFShell {...nav} activePage="runs"
-      title={<span style={{display:'flex', alignItems:'center', gap:12}}>
+      title={<span style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
         <span style={{fontFamily:HF.mono, fontSize:24, fontWeight:600, color:HF.ink}}>Run #{id}</span>
         <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
+        {isTerminal && closeReason && (
+          <HFPill tone={closeReasonTone} title={`close_reason: ${closeReason}`}>
+            <span style={{fontFamily:HF.mono, fontSize:11}}>{closeReason}</span>
+          </HFPill>
+        )}
       </span>}
       subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>shop={data.shop} · phase={data.phase} · started {data.started_ago} · triggered by {data.by}</span>}
       breadcrumb={<>
@@ -658,7 +590,7 @@ function HFRunDetail({ nav, goto, params }) {
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>#{id}</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
+        <HFButton disabled><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
         {runStatus === 'running' && (
           <HFButton disabled={actionPending} onClick={pauseRun}>⏸ Pause</HFButton>
         )}
@@ -672,7 +604,9 @@ function HFRunDetail({ nav, goto, params }) {
           </HFButton>
         )}
         {(runStatus === 'failed' || runStatus === 'completed') && (
-          <HFButton disabled={actionPending} onClick={rerunRun}>Re-run</HFButton>
+          <HFButton variant="primary" disabled={actionPending} onClick={rerunRun}>
+            <span style={{display:'flex'}}>{HF_ICONS.play}</span> Re-run
+          </HFButton>
         )}
       </>}
     >
@@ -681,109 +615,266 @@ function HFRunDetail({ nav, goto, params }) {
           <strong style={{color:'#ef4444'}}>Action failed:</strong> {actionError}
         </div>
       )}
-      {/* Live metrics strip */}
+      {/* KPI strip — Progress · Elapsed · Errors · Workers */}
       <HFKpiStrip items={[
-        { label:'Progress',       value:`${data.progress}%`, delta:<span style={{color:HF.ink3}}>{data.items ? data.items.toLocaleString() + ' items' : '—'}</span> },
-        { label:'Elapsed',        value:data.elapsed || '—', delta:<span style={{color:HF.ink3}}>duration</span> },
-        { label:'Items',          value:data.items ? data.items.toLocaleString() : '0', delta:<span style={{color:HF.ink3}}>scraped</span> },
-        { label:'Status',         value:data.status, tone: runStatusTone[runStatus] || 'neutral', delta:<span style={{color:HF.ink3}}>current</span> },
+        { label:'Progress', value:`${data.progress}%`,
+          delta:<span style={{color:HF.ink3}}>
+            {data.urls_total
+              ? `${(data.urls_processed ?? 0).toLocaleString()} of ${data.urls_total.toLocaleString()}`
+              : (data.items ? `${data.items.toLocaleString()} items` : '—')}
+          </span> },
+        { label:'Elapsed', value:data.elapsed || '—',
+          delta:<span style={{color:HF.ink3}}>duration</span> },
+        { label:'Errors', value:String(data.errors ?? 0),
+          delta:<span style={{color:HF.ink3}}>{data.errors_4xx ?? 0} · {data.errors_5xx ?? 0}</span> },
+        { label:'Workers', value:String(workerCount),
+          delta:<span style={{color:HF.ink3}}>in flight</span> },
       ]}/>
 
-      {/* Live panel — only rendered while the run is 'running' */}
-      {liveData && (
-        <HFLivePanel data={liveData} HF={HF}/>
+      {/* In-flight card — what's happening RIGHT NOW (only when live) */}
+      {liveData && (runStatus === 'running' || runStatus === 'paused' || runStatus === 'stopping') && (
+        <HFCard
+          title="In flight"
+          sub={`${workerCount} ${workerCount === 1 ? 'URL' : 'URLs'} · ${liveData.eta_min != null ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m` : 'live'}`}
+          action={liveHealth ? <HFPill tone={healthTone}><HFDot tone={healthTone} pulse={liveHealth==='healthy'} size={6}/> health: {liveHealth}</HFPill> : null}
+          style={{marginBottom: HF.gap}}
+        >
+          <div style={{padding: HF.cardP, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: HF.gap, alignItems:'stretch'}}>
+            {/* Active fetch tile */}
+            <div style={{
+              background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
+              borderRadius: HF.r2, padding: '14px 16px',
+              display:'flex', flexDirection:'column', gap: 8, position:'relative', overflow:'hidden',
+              minHeight: 90,
+            }}>
+              {inFlightFirst ? (
+                <>
+                  <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 2}}>
+                    <HFDot tone="accent" pulse size={7}/>
+                    <span style={{fontSize: 10.5, fontWeight: 600, color: HF.accentInk, letterSpacing: 0.6, textTransform:'uppercase'}}>
+                      Now fetching
+                    </span>
+                    <span style={{flex: 1}}/>
+                    <span style={{fontFamily: HF.mono, fontSize: 22, fontWeight: 600, color: HF.accentInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                      {_fmtAge(inFlightFirst.claimed_age_s)}
+                    </span>
+                  </div>
+                  <div style={{display:'flex', alignItems:'center', gap: 8, minWidth:0}}>
+                    <span style={{
+                      fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 500,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex: 1,
+                    }} title={inFlightFirst.url}>{inFlightFirst.url}</span>
+                    <HFExtLink href={inFlightFirst.url} size={13}/>
+                  </div>
+                  {(() => {
+                    const lbl = DELAY_SOURCE_LABELS[inFlightFirst.delay_source] || {};
+                    return (
+                      <div style={{display:'flex', gap: 16, fontFamily: HF.mono, fontSize: 11.5, color: HF.ink3, marginTop: 2, flexWrap:'wrap'}}>
+                        <span>claimed <span style={{color: HF.ink2}}>{_fmtClockTime(inFlightFirst.claimed_at)}</span></span>
+                        <span title={lbl.title || ''}>
+                          throttle <span style={{color: HF.warnInk}}>{_fmtDelay(inFlightFirst.request_delay_s)}</span>
+                          {lbl.suffix ? <span style={{color: HF.ink4}}> · {lbl.suffix}</span> : null}
+                        </span>
+                        {inFlightFirst.retry_count > 0 && (
+                          <span>retries <span style={{color: HF.ink2}}>{inFlightFirst.retry_count}</span></span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div style={{
+                    position:'absolute', left:0, right:0, bottom:0, height: 3,
+                    background: HF.accentSoft2,
+                  }}>
+                    <div style={{width:'40%', height:'100%', background: HF.accent, animation:'hfSweep 1.6s ease-in-out infinite'}}/>
+                  </div>
+                </>
+              ) : (
+                <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 12.5}}>
+                  idle — no requests in flight
+                </div>
+              )}
+            </div>
+
+            {/* Rate (last 60s) — done vs failed */}
+            <div style={{display:'flex', flexDirection:'column', gap: 10}}>
+              <div style={{fontSize: 10.5, fontWeight: 600, color: HF.ink4, letterSpacing: 0.6, textTransform:'uppercase'}}>
+                Rate · last {liveRate.window_s}s
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, flex: 1}}>
+                <div style={{
+                  background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: HF.r2,
+                  padding: '10px 12px',
+                }}>
+                  <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: HF.okInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                    {rateDone}
+                  </div>
+                  <div style={{fontFamily: HF.mono, fontSize: 11, color: HF.okInk, marginTop: 5}}>
+                    done · {ratePerMin}/min
+                  </div>
+                </div>
+                <div style={{
+                  background: rateFailed > 0 ? HF.errSoft : HF.subtle,
+                  border: `1px solid ${rateFailed > 0 ? HF.errBorder : HF.border}`, borderRadius: HF.r2,
+                  padding: '10px 12px',
+                }}>
+                  <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: rateFailed > 0 ? HF.errInk : HF.ink3, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                    {rateFailed}
+                  </div>
+                  <div style={{fontFamily: HF.mono, fontSize: 11, color: rateFailed > 0 ? HF.errInk : HF.ink3, marginTop: 5}}>
+                    failed{rateTotal > 0 ? ` · ${failPct}% rate` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </HFCard>
       )}
 
-      {/* Phase pipeline + Throughput */}
-      <div style={{display:'grid', gridTemplateColumns:'1.55fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
-        <HFCard title="Pipeline" sub="phase-by-phase">
-          <div style={{padding:`14px ${HF.cardP}px ${HF.cardP}px`}}>
-            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-              {phases.map((p, i) => {
-                const tone = p.status==='ok'?'ok':p.status==='running'?'accent':p.status==='fail'?'err':'neutral';
-                const bg = p.status==='ok'? HF.okSoft : p.status==='running'? HF.accentSoft : HF.subtle;
-                const bd = p.status==='ok'? HF.okBorder : p.status==='running'? HF.accentBorder : HF.border;
-                const fg = p.status==='pending'? HF.ink4 : HF.ink;
-                return (
-                  <div key={p.name} style={{flex:1, minWidth:0}}>
-                    <div style={{
-                      background:bg, border:`1px solid ${bd}`, borderRadius:6,
-                      padding:'10px 12px', position:'relative',
-                    }}>
-                      <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:6}}>
-                        <HFDot tone={tone} pulse={p.status==='running'} size={7}/>
-                        <span style={{fontFamily:HF.mono, fontSize:12, color:fg, fontWeight:500}}>{p.name}</span>
-                      </div>
-                      <div style={{fontFamily:HF.mono, fontSize:11, color:HF.ink3, fontVariantNumeric:'tabular-nums'}}>{p.dur}</div>
-                      {p.items > 0 && <div style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', marginTop:2}}>{p.items.toLocaleString()} items</div>}
-                      {p.status==='running' && (
-                        <div style={{position:'absolute', left:0, right:0, bottom:0, height:3, background:HF.accentSoft2, borderRadius:'0 0 5px 5px', overflow:'hidden'}}>
-                          <div style={{width:`${p.prog}%`, height:'100%', background:HF.accent}}/>
-                        </div>
+      {/* Failures card — grouped by error_reason from recent_failures */}
+      {failureGroups.length > 0 && (
+        <HFCard
+          title="Failures"
+          sub={`${failureGroups.reduce((a, g) => a + g.count, 0)} recent failure${failureGroups.reduce((a, g) => a + g.count, 0) === 1 ? '' : 's'} · grouped by reason`}
+          action={<>
+            <HFButton size="sm" variant="subtle" disabled>Retry all</HFButton>
+            <HFButton size="sm" variant="subtle" disabled>Open issue</HFButton>
+          </>}
+          style={{marginBottom: HF.gap}}
+        >
+          <div style={{padding: 0}}>
+            {failureGroups.map((g, i) => {
+              const isHttpErr = g.http != null && g.http >= 500;
+              const tone = isHttpErr ? 'err' : 'warn';
+              const tonebg = tone === 'err' ? HF.errSoft : HF.warnSoft;
+              const tonefg = tone === 'err' ? HF.errInk : HF.warnInk;
+              const toneb  = tone === 'err' ? HF.errBorder : HF.warnBorder;
+              const open = expandedFailure === i;
+              return (
+                <div key={g.reason} style={{
+                  borderTop: i === 0 ? 'none' : `1px solid ${HF.borderFaint}`,
+                }}>
+                  <div style={{
+                    padding: `10px ${HF.cardP}px`,
+                    display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
+                    cursor: 'pointer',
+                    background: open ? HF.subtle : 'transparent',
+                  }} onClick={() => setExpandedFailure(open ? -1 : i)}>
+                    <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0}}>
+                      <span style={{
+                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        width: 14, height: 14, color: HF.ink4, fontSize: 10,
+                        transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms',
+                      }}>▶</span>
+                      {g.http != null && (
+                        <span style={{
+                          display:'inline-flex', alignItems:'center', justifyContent:'center',
+                          height: 22, padding: '0 8px',
+                          background: tonebg, color: tonefg, border: `1px solid ${toneb}`,
+                          borderRadius: 4, fontFamily: HF.mono, fontSize: 11.5, fontWeight: 600,
+                        }}>{g.http}</span>
                       )}
+                      <span style={{fontFamily: HF.mono, fontSize: 12.5, color: HF.ink, fontWeight: 600}}>
+                        {g.reason}
+                      </span>
+                      <span style={{fontFamily: HF.mono, fontSize: 11.5, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
+                        × {g.count}
+                      </span>
+                    </div>
+                    <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
+                      <HFButton size="sm" disabled>Retry group</HFButton>
+                      <HFButton size="sm" variant="subtle" disabled>Open parser</HFButton>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </HFCard>
-
-        <HFCard title="Throughput" sub="items / minute · 2s samples"
-                action={throughputHistory.length > 0
-                  ? <span style={{fontFamily:HF.mono, fontSize:12, color:HF.accentInk, fontVariantNumeric:'tabular-nums'}}>{throughputHistory[throughputHistory.length-1]}/min</span>
-                  : <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>waiting…</span>}>
-          <div style={{padding:`${HF.cardP}px`}}>
-            {throughputHistory.length > 1
-              ? <HFAreaChart data={throughputHistory} h={120}/>
-              : <div style={{height:120, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
-                  {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
+                  {open && (
+                    <div style={{padding: `4px ${HF.cardP}px 14px`, paddingLeft: HF.cardP + 24}}>
+                      <div style={{display:'flex', flexDirection:'column', gap: 3, marginBottom: 8}}>
+                        {g.examples.map((u, j) => (
+                          <div key={j} style={{fontFamily: HF.mono, fontSize: 11.5, color: HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                            <span style={{color: HF.ink5, marginRight: 6}}>·</span>{u}
+                          </div>
+                        ))}
+                        {g.count > g.examples.length && (
+                          <a href="#" onClick={(e)=>{e.preventDefault(); setUrlStatus('failed');}} style={{
+                            fontFamily: HF.mono, fontSize: 11.5, color: HF.accentInk,
+                            textDecoration: 'none', marginLeft: 12, marginTop: 2,
+                          }}>+ {g.count - g.examples.length} more (view in History)</a>
+                        )}
+                      </div>
+                      <div style={{display:'flex', gap: 6}}>
+                        <HFButton size="sm" variant="subtle" disabled>Skip permanently</HFButton>
+                        <HFButton size="sm" variant="subtle" onClick={() => setUrlStatus('failed')}>View all {g.count}</HFButton>
+                      </div>
+                    </div>
+                  )}
                 </div>
-            }
-            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:6, fontVariantNumeric:'tabular-nums'}}>
-              <span>{throughputHistory.length >= THROUGHPUT_MAX_SAMPLES ? `-${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m` : `${throughputHistory.length} samples`}</span>
-              <span>now</span>
-            </div>
+              );
+            })}
           </div>
         </HFCard>
-      </div>
+      )}
 
-      {/* URL queue (live) / URL history (finished) */}
+      {/* Throughput chart — done legend (failed shown when polled) */}
+      <HFCard
+        title="Throughput"
+        sub="items / minute · 2s samples"
+        action={<div style={{display:'flex', gap:14, fontFamily:HF.mono, fontSize:11.5}}>
+          <span style={{display:'flex', alignItems:'center', gap:5}}>
+            <span style={{width:8, height:8, borderRadius:2, background:HF.ok}}/>
+            <span style={{color:HF.ink3}}>done</span>
+            <span style={{color:HF.ink2, fontWeight:600}}>
+              {throughputHistory.length > 0 ? `${throughputHistory[throughputHistory.length-1]}/min` : '—'}
+            </span>
+          </span>
+          <span style={{display:'flex', alignItems:'center', gap:5}}>
+            <span style={{width:8, height:8, borderRadius:2, background:HF.err}}/>
+            <span style={{color:HF.ink3}}>failed</span>
+            <span style={{color: rateFailed > 0 ? HF.errInk : HF.ink3, fontWeight:600}}>
+              {rateFailed > 0 ? `${Math.round((rateFailed/liveRate.window_s)*60)}/min` : '0/min'}
+            </span>
+          </span>
+        </div>}
+        style={{marginBottom: HF.gap}}
+      >
+        <div style={{padding: HF.cardP}}>
+          {throughputHistory.length > 1 ? (
+            <HFAreaChart data={throughputHistory} h={140}/>
+          ) : (
+            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
+              {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
+            </div>
+          )}
+          <div style={{display:'flex', justifyContent:'space-between', fontFamily:HF.mono, fontSize:10.5, color:HF.ink4, fontVariantNumeric:'tabular-nums', marginTop: 6}}>
+            <span>{throughputHistory.length >= THROUGHPUT_MAX_SAMPLES ? `−${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m` : `${throughputHistory.length} samples`}</span>
+            <span>now</span>
+          </div>
+        </div>
+      </HFCard>
+
+      {/* History card — tabbed URL queue / discovered URL history */}
       {urlData && (urlData.source === 'live' || urlData.total > 0) && (
         <HFCard
-          title={urlData.source === 'live' ? 'URL queue' : 'URLs touched'}
+          title="History"
           sub={urlData.source === 'live'
-            ? `${urlData.breakdown.pending} pending · ${urlData.breakdown.processing} processing · ${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed`
+            ? `${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed · ${urlData.breakdown.pending.toLocaleString()} pending`
             : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
-          style={{ marginTop: HF.gap }}
+          style={{ marginBottom: HF.gap }}
         >
-          {/* Filter bar: status pills + per-page selector */}
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:`8px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`, flexWrap:'wrap', gap:8}}>
-            <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
-              {urlData.source === 'live'
-                ? ['all', ...urlData.statuses].map(s => (
-                    <HFButton key={s} size="sm"
-                      variant={urlStatus === s ? 'accent' : 'subtle'}
-                      onClick={() => setUrlStatus(s)}>
-                      {s}{s !== 'all' && ` (${urlData.breakdown[s] ?? 0})`}
-                    </HFButton>
-                  ))
-                : <span style={{fontSize:12, color:HF.ink4, fontFamily:HF.mono}}>
-                    Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs
-                  </span>
-              }
+          {urlData.source === 'live' && (
+            <div style={{padding:`12px ${HF.cardP}px 0`}}>
+              <HFTabs
+                active={urlStatus}
+                onChange={setUrlStatus}
+                tabs={[
+                  { id:'all',        label:'all',        count: tabAllCount },
+                  { id:'pending',    label:'pending',    count: tabCounts.pending ?? 0 },
+                  { id:'processing', label:'processing', count: tabCounts.processing ?? 0 },
+                  { id:'done',       label:'done',       count: tabCounts.done ?? 0 },
+                  { id:'failed',     label:'failed',     count: tabCounts.failed ?? 0 },
+                ]}
+              />
             </div>
-            <div style={{display:'flex', alignItems:'center', gap:6, fontSize:12, color:HF.ink4}}>
-              <span>Per page:</span>
-              {[10, 25, 50, 100].map(n => (
-                <HFButton key={n} size="sm"
-                  variant={urlPerPage === n ? 'accent' : 'subtle'}
-                  onClick={() => setUrlPerPage(n)}>
-                  {n}
-                </HFButton>
-              ))}
-            </div>
-          </div>
+          )}
+
           {urlData.rows.length === 0 ? (
             <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:12.5}}>
               No URLs in this filter.
@@ -793,7 +884,7 @@ function HFRunDetail({ nav, goto, params }) {
               <div style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '1fr 80px 60px 100px 80px 80px 130px'
+                  ? '1fr 130px 90px 80px 80px'
                   : '1fr 60px 70px 150px',
                 padding:`8px ${HF.cardP}px`,
                 borderBottom: `1px solid ${HF.border}`,
@@ -822,13 +913,11 @@ function HFRunDetail({ nav, goto, params }) {
                   };
                   return urlData.source === 'live' ? (
                     <>
-                      <SortHdr k="title">Title / URL</SortHdr>
+                      <SortHdr k="title">URL</SortHdr>
                       <SortHdr k="status">Status</SortHdr>
-                      <SortHdr k="http">HTTP</SortHdr>
                       <SortHdr k="started">Started</SortHdr>
                       <SortHdr k="url_type">Type</SortHdr>
-                      <SortHdr k="duration">Duration</SortHdr>
-                      <SortHdr k="done">Done</SortHdr>
+                      <SortHdr k="duration" align="right">Duration</SortHdr>
                     </>
                   ) : (
                     <>
@@ -852,30 +941,51 @@ function HFRunDetail({ nav, goto, params }) {
                   if (ms < 1000) return `${ms}ms`;
                   return `${(ms / 1000).toFixed(1)}s`;
                 };
+                const statusCell = (() => {
+                  if (urlData.source !== 'live') return null;
+                  if (u.status === 'failed') {
+                    return (
+                      <span style={{display:'inline-flex', flexDirection:'column', gap:2, lineHeight:1.2}}>
+                        <HFPill tone="err" style={{width:'fit-content'}}>failed{http ? ` · ${http}` : ''}</HFPill>
+                        {u.error_reason && (
+                          <span style={{fontFamily:HF.mono, fontSize:10.5, color:HF.errInk, paddingLeft:2}}>{u.error_reason}</span>
+                        )}
+                      </span>
+                    );
+                  }
+                  if (u.status === 'processing') {
+                    return <HFPill tone="accent" style={{width:'fit-content'}}><HFDot tone="accent" pulse size={6}/>processing</HFPill>;
+                  }
+                  if (u.status === 'pending') {
+                    return <HFPill tone="neutral" style={{width:'fit-content'}}>pending</HFPill>;
+                  }
+                  return <HFPill tone="ok" style={{width:'fit-content'}}>{http ? `done · ${http}` : 'done'}</HFPill>;
+                })();
                 return (
                   <div key={i} style={{
                     display:'grid',
                     gridTemplateColumns: urlData.source === 'live'
-                      ? '1fr 80px 60px 100px 80px 80px 130px'
+                      ? '1fr 130px 90px 80px 80px'
                       : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
                     fontSize:12.5, alignItems:'center', gap:10,
                   }}>
-                    <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
-                      {u.title && (
-                        <span style={{fontSize:12.5, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.title}>{u.title}</span>
-                      )}
-                      <a href={u.url} target="_blank" rel="noopener" style={{fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.accentInk, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{u.url}</a>
+                    <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                      <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0, flex:1}}>
+                        {u.title && (
+                          <span style={{fontSize:12.5, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.title}>{u.title}</span>
+                        )}
+                        <span style={{fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.url}>{u.url}</span>
+                      </span>
+                      <HFExtLink href={u.url}/>
                     </span>
                     {urlData.source === 'live' ? (
                       <>
-                        <HFPill tone={tone} style={{width:'fit-content'}}>{u.status}</HFPill>
-                        <HFPill tone={httpTone} style={{width:'fit-content'}}>{http ?? '—'}</HFPill>
+                        {statusCell}
                         <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:u.error_reason ? HF.errInk : HF.ink4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.error_reason || ''}>{u.error_reason || (u.done_at ? new Date(u.done_at).toLocaleTimeString() : '—')}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', textAlign:'right'}}>{fmtDur(u.duration_ms)}</span>
                       </>
                     ) : (
                       <>
@@ -889,78 +999,67 @@ function HFRunDetail({ nav, goto, params }) {
               })}
             </div>
           )}
-          {urlData.pages > 1 && (
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`, fontSize:12, color:HF.ink3}}>
-              <span>Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs</span>
-              <div style={{display:'flex', gap:6}}>
-                <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
-                  onClick={() => setUrlPage(p => Math.max(1, p - 1))}>‹ Prev</HFButton>
-                <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
-                  onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>Next ›</HFButton>
-              </div>
+
+          <div style={{
+            display:'flex', justifyContent:'space-between', alignItems:'center',
+            padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
+            fontSize:12, color:HF.ink3, flexWrap:'wrap', gap:8,
+          }}>
+            <span style={{fontFamily:HF.mono}}>
+              Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs
+            </span>
+            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+              <span style={{color:HF.ink4, fontSize:12}}>Per page:</span>
+              {[10, 25, 50, 100].map(n => (
+                <HFButton key={n} size="sm"
+                  variant={urlPerPage === n ? 'accent' : 'subtle'}
+                  onClick={() => setUrlPerPage(n)}>
+                  {n}
+                </HFButton>
+              ))}
+              <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
+                onClick={() => setUrlPage(p => Math.max(1, p - 1))}>‹ Prev</HFButton>
+              <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
+                onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>Next ›</HFButton>
             </div>
-          )}
+          </div>
         </HFCard>
       )}
 
-      {/* Events + Params */}
-      <div style={{display:'grid', gridTemplateColumns:'1.7fr 1fr', gap:HF.gap}}>
-        <HFCard title="Event stream" sub="most recent 10 events · live"
-                action={<HFButton size="sm" variant="subtle"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>}>
-          <div style={{padding:`4px 0`}}>
-            {timeline.map((e, i) => {
-              const tonebg = e.tone==='ok'? HF.okSoft : e.tone==='warn'? HF.warnSoft : e.tone==='accent'? HF.accentSoft : HF.subtle;
-              const toneink = e.tone==='ok'? HF.okInk : e.tone==='warn'? HF.warnInk : e.tone==='accent'? HF.accentInk : HF.ink2;
-              const toneb = e.tone==='ok'? HF.okBorder : e.tone==='warn'? HF.warnBorder : e.tone==='accent'? HF.accentBorder : HF.border;
-              return (
-                <div key={i} style={{
-                  display:'grid', gridTemplateColumns:'86px 180px 1fr',
-                  padding:`8px ${HF.cardP}px`,
-                  borderBottom: i < timeline.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-                  fontSize:12.5, alignItems:'center', gap:10,
-                }}>
-                  <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{e.t}</span>
-                  <span style={{
-                    display:'inline-flex', alignItems:'center',
-                    padding:'1px 8px', borderRadius:4,
-                    background:tonebg, border:`1px solid ${toneb}`, color:toneink,
-                    fontFamily:HF.mono, fontSize:11, fontWeight:500,
-                    width:'fit-content', whiteSpace:'nowrap',
-                  }}>{e.ev}</span>
-                  <span style={{color:HF.ink2, fontFamily:HF.mono, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{e.msg}</span>
-                </div>
-              );
-            })}
-          </div>
-        </HFCard>
-
-        <HFCard title="Parameters">
-          <div style={{padding:`4px 0`}}>
-            {[
-              ['run_id', `#${id}`],
-              ['shop', data.shop || '—'],
-              ['phase', data.phase || '—'],
-              ['triggered_by', data.by || '—'],
-              ['started', data.started_ago || '—'],
-              ['duration', data.elapsed || '—'],
-              ['items', data.items != null ? String(data.items) : '—'],
-              ['status', data.status || '—'],
-            ].map(([k,v], i, arr) => (
-              <div key={k} style={{
-                display:'grid', gridTemplateColumns:'120px 1fr',
-                padding:`7px ${HF.cardP}px`,
-                borderBottom: i < arr.length - 1 ? `1px solid ${HF.borderFaint}` : 'none',
-                fontSize:12.5,
-              }}>
-                <span style={{fontFamily:HF.mono, color:HF.ink3}}>{k}</span>
-                <span style={{fontFamily:HF.mono, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
-              </div>
-            ))}
-          </div>
-        </HFCard>
-      </div>
+      {/* Parameters */}
+      <HFCard title="Parameters">
+        <div style={{padding:`4px 0`}}>
+          {[
+            ['run_id', `#${id}`],
+            ['shop', data.shop || '—'],
+            ['phase', data.phase || '—'],
+            ['triggered_by', data.by || '—'],
+            ['started', data.started_ago || '—'],
+            ['duration', data.elapsed || '—'],
+            ['urls_processed', data.urls_total
+              ? `${(data.urls_processed ?? 0).toLocaleString()} / ${data.urls_total.toLocaleString()}`
+              : String(data.urls_processed ?? 0)],
+            ['items_added', String(data.items_added ?? 0)],
+            ['items_updated', String(data.items_updated ?? 0)],
+            ['errors', `${data.errors ?? 0} (${data.errors_4xx ?? 0} · 4xx, ${data.errors_5xx ?? 0} · 5xx)`],
+            ['status', data.status || '—'],
+            ...(closeReason ? [['close_reason', closeReason]] : []),
+          ].map(([k,v], i, arr) => (
+            <div key={k} style={{
+              display:'grid', gridTemplateColumns:'160px 1fr',
+              padding:`7px ${HF.cardP}px`,
+              borderBottom: i < arr.length - 1 ? `1px solid ${HF.borderFaint}` : 'none',
+              fontSize:12.5,
+            }}>
+              <span style={{fontFamily:HF.mono, color:HF.ink3}}>{k}</span>
+              <span style={{fontFamily:HF.mono, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </HFCard>
     </HFShell>
   );
 }
+
 
 Object.assign(window, { HFRuns, HFRunDetail });

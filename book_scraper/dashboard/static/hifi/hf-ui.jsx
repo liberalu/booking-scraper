@@ -527,8 +527,37 @@ const hfLink = (HF) => ({
   display: 'inline-flex', alignItems: 'center', gap: 4,
 });
 
+// "Open in new tab" icon link — pairs with mono URL text inside table cells.
+// Stops row-click propagation so clicking the icon doesn't also open the row.
+function HFExtLink({ href, title = 'Open in new tab', size = 12 }) {
+  const HF = getHF();
+  const [hover, setHover] = React.useState(false);
+  return (
+    <a
+      href={href || '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={title}
+      aria-label={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 18, height: 18, flexShrink: 0,
+        color: hover ? HF.accentInk : HF.ink4,
+        textDecoration: 'none', borderRadius: 3,
+        background: hover ? HF.bg : 'transparent',
+        transition: 'color 120ms, background 120ms',
+      }}
+    >
+      <HFIcon d={<><path d="M6 3 H3 V13 H13 V10 M9 3 H13 V7 M13 3 L8 8"/></>} size={size} sw={1.6}/>
+    </a>
+  );
+}
+
 Object.assign(window, {
   HFButton, HFPill, HFDot, HFFilterBar, HFFilter, HFSearch,
   HFTable, HFTabs, HFAreaChart, HFBarChart, HFSparkBars,
-  HFKpiTile, HFKpiStrip, HFCard, hfLink,
+  HFKpiTile, HFKpiStrip, HFCard, hfLink, HFExtLink,
 });

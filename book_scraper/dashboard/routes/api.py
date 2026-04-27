@@ -24,6 +24,7 @@ from book_scraper.dashboard.queries import (
     get_price_history,
     get_recent_runs,
     get_repeated_failures,
+    get_run_close_reason,
     get_run_discovered_urls,
     get_run_eta,
     get_run_in_flight,
@@ -683,7 +684,12 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
         raise HTTPException(status_code=404, detail="Run not found")
     issues = get_run_issue_summary(session, run_id)
     terminal = _run_terminal_counts(session, [run_id]).get(run_id)
-    return {**_run_dict(run, terminal_count=terminal), "issues": issues}
+    close_reason = get_run_close_reason(session, run)
+    return {
+        **_run_dict(run, terminal_count=terminal),
+        "issues": issues,
+        "close_reason": close_reason,
+    }
 
 
 @router.get("/runs/{run_id}/live")

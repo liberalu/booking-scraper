@@ -380,6 +380,35 @@ def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
 
 
+def get_run_close_reason(session: Session, run: ScrapeRun) -> str | None:
+    """Why the run reached its current state.
+
+    Returns None for non-terminal runs. For terminal runs:
+      - completed + no errors  → 'completed_ok'
+      - completed + errors     → 'completed_with_errors'
+      - failed                 → reason text from the run's
+        `scrape_run_failed` validation issue (heartbeat_timeout,
+        stall_timeout, stop_timeout, stopped_by_operator, orphan_on_boot,
+        finished_failed, …) or 'failed' if the issue row is missing.
+    """
+    if run.status == "completed":
+        return "completed_with_errors" if run.error_count > 0 else "completed_ok"
+    if run.status == "failed":
+        row = (
+            session.query(ValidationIssue.raw_value)
+            .filter(
+                ValidationIssue.scrape_run_id == run.id,
+                ValidationIssue.issue == "scrape_run_failed",
+            )
+            .order_by(ValidationIssue.id.desc())
+            .first()
+        )
+        if row and row[0]:
+            return str(row[0])
+        return "failed"
+    return None
+
+
 # ─────────────────── Live observability (Stage 2) ────────────────────
 # Live-view thresholds — sharper than the run-list page's STALE/DEAD
 # constants because the live view refreshes every ~2s and operators
@@ -1335,220 +1364,6 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
         .all()
     )
 
-
-def get_run_changed_fields(
-    session: Session, run_id: int, shop_book_ids: list[int]
-) -> dict[int, list[tuple[str, str | None, str | None]]]:
-    """Return {shop_book_id: [(field, old_value, new_value), ...]} for this run."""
-    if not shop_book_ids:
-        return {}
-    rows = (
-        session.query(
-            ShopBookChange.shop_book_id,
-            ShopBookChange.field,
-            ShopBookChange.old_value,
-            ShopBookChange.new_value,
-        )
-        .filter(
-            ShopBookChange.scrape_run_id == run_id,
-            ShopBookChange.shop_book_id.in_(shop_book_ids),
-        )
-        .all()
-    )
-    result: dict[int, list[tuple[str, str | None, str | None]]] = {}
-    for row in rows:
-        result.setdefault(row.shop_book_id, []).append(
-            (row.field, row.old_value, row.new_value)
-        )
-    return result
-
-
-def get_run_price_changes(
-    session: Session, run_id: int, shop_book_ids: list[int]
-) -> dict[int, tuple[str, str]]:
-    """Return old/new prices for price-changed shop books in a run."""
-    if not shop_book_ids:
-        return {}
-    cur_rows = (
-        session.query(Price.shop_book_id, Price.price)
-        .filter(Price.scrape_run_id == run_id, Price.shop_book_id.in_(shop_book_ids))
-        .all()
-    )
-    cur_map = {r.shop_book_id: r.price for r in cur_rows}
-    if not cur_map:
-        return {}
-    # Per-book cutoff: earliest scraped_at for this book within the run
-    run_prices = (
-        session.query(
-            Price.shop_book_id,
-            func.min(Price.scraped_at).label("run_scraped_at"),
-        )
-        .filter(Price.scrape_run_id == run_id, Price.shop_book_id.in_(shop_book_ids))
-        .group_by(Price.shop_book_id)
-        .subquery()
-    )
-    prev_rows = (
-        session.query(Price.shop_book_id, Price.price)
-        .join(run_prices, Price.shop_book_id == run_prices.c.shop_book_id)
-        .filter(
-            Price.scrape_run_id != run_id,
-            Price.scraped_at < run_prices.c.run_scraped_at,
-        )
-        .distinct(Price.shop_book_id)
-        .order_by(Price.shop_book_id, Price.scraped_at.desc())
-        .all()
-    )
-    prev_map = {r.shop_book_id: r.price for r in prev_rows}
-    return {
-        sb_id: (str(prev_map[sb_id]), str(cur_map[sb_id]))
-        for sb_id in shop_book_ids
-        if sb_id in cur_map and sb_id in prev_map and cur_map[sb_id] != prev_map[sb_id]
-    }
-
-
-def get_run_shop_books(
-    session: Session, run_id: int
-) -> tuple[list[ShopBook], list[ShopBook], list[ShopBook], set[int]]:
-    """Get shop_books created, changed, and unchanged in a specific run.
-
-    Uses the prices table (append-only, keyed by scrape_run_id) to find
-    shop_books touched by the run.  A shop_book whose first_seen_at falls within
-    the run window *and* whose earliest price row belongs to this run is
-    counted as "created".  Among existing shop_books, those with field changes
-    (in shop_book_changes) or price changes are "changed"; the rest are
-    "unchanged".
-
-    Falls back to the legacy last_run_id column when no price rows reference
-    the run (e.g. discover-only runs that don't insert prices).
-    """
-    # All shop_book IDs that have a price row for this run
-    price_shop_book_ids = (
-        session.query(Price.shop_book_id)
-        .filter(Price.scrape_run_id == run_id)
-        .distinct()
-        .subquery()
-    )
-
-    shop_books_in_run = (
-        session.query(ShopBook)
-        .filter(ShopBook.id.in_(session.query(price_shop_book_ids.c.shop_book_id)))
-        .order_by(ShopBook.title)
-        .all()
-    )
-
-    if not shop_books_in_run:
-        # Fallback: legacy last_run_id (works for the most recent run only)
-        created = (
-            session.query(ShopBook)
-            .filter(
-                ShopBook.last_run_id == run_id,
-                ShopBook.last_run_action == "created",
-            )
-            .order_by(ShopBook.title)
-            .all()
-        )
-        rest = (
-            session.query(ShopBook)
-            .filter(
-                ShopBook.last_run_id == run_id,
-                ShopBook.last_run_action == "updated",
-            )
-            .order_by(ShopBook.title)
-            .all()
-        )
-        shop_books_in_run = created + rest
-    else:
-        created = [
-            shop_book
-            for shop_book in shop_books_in_run
-            if shop_book.last_run_id == run_id
-            and shop_book.last_run_action == "created"
-        ]
-        rest = [
-            shop_book for shop_book in shop_books_in_run if shop_book not in created
-        ]
-
-    if not rest:
-        return created, [], [], set()
-
-    # IDs of shop_books with field-level changes in this run
-    changed_ids = set(
-        row[0]
-        for row in session.query(ShopBookChange.shop_book_id)
-        .filter(ShopBookChange.scrape_run_id == run_id)
-        .distinct()
-        .all()
-    )
-
-    # IDs of shop_books with price changes in this run
-    rest_ids = [shop_book.id for shop_book in rest]
-    if rest_ids:
-        # Current run prices
-        cur = (
-            session.query(Price.shop_book_id, Price.price, Price.in_stock)
-            .filter(
-                Price.scrape_run_id == run_id,
-                Price.shop_book_id.in_(rest_ids),
-            )
-            .subquery()
-        )
-
-        # Previous price: most recent price before this run's price
-        run_prices = (
-            session.query(Price).filter(Price.scrape_run_id == run_id).subquery()
-        )
-        prev = (
-            session.query(
-                Price.shop_book_id,
-                Price.price,
-                Price.in_stock,
-            )
-            .filter(
-                Price.shop_book_id.in_(rest_ids),
-                Price.scrape_run_id != run_id,
-                Price.scraped_at
-                < (
-                    session.query(func.min(run_prices.c.scraped_at))
-                    .filter(
-                        run_prices.c.shop_book_id == Price.shop_book_id,
-                    )
-                    .correlate(Price)
-                    .scalar_subquery()
-                ),
-            )
-            .distinct(Price.shop_book_id)
-            .order_by(Price.shop_book_id, Price.scraped_at.desc())
-            .subquery()
-        )
-
-        # Find shop_books where price or in_stock differs
-        price_changed_rows = (
-            session.query(cur.c.shop_book_id)
-            .outerjoin(prev, cur.c.shop_book_id == prev.c.shop_book_id)
-            .filter(
-                (prev.c.shop_book_id.is_(None))  # first re-scrape (no prev)
-                | (cur.c.price != prev.c.price)
-                | (cur.c.in_stock != prev.c.in_stock)
-            )
-            .all()
-        )
-        # Only count as price-changed if there WAS a previous price
-        # (no prev = first scrape of existing shop_book, not a "change")
-        price_changed_rows = (
-            session.query(cur.c.shop_book_id)
-            .join(prev, cur.c.shop_book_id == prev.c.shop_book_id)
-            .filter((cur.c.price != prev.c.price) | (cur.c.in_stock != prev.c.in_stock))
-            .all()
-        )
-        price_changed_ids = {row[0] for row in price_changed_rows}
-    else:
-        price_changed_ids = set()
-
-    all_changed_ids = changed_ids | price_changed_ids
-    changed = [shop_book for shop_book in rest if shop_book.id in all_changed_ids]
-    unchanged = [shop_book for shop_book in rest if shop_book.id not in all_changed_ids]
-
-    return created, changed, unchanged, price_changed_ids
 
 
 def get_shop_field_stats(session: Session, shop_id: int) -> dict:
