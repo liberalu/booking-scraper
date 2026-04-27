@@ -944,7 +944,7 @@ function HFRunDetail({ nav, goto, params }) {
               <div style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '60px 1fr 130px 90px 80px 80px 80px 90px'
+                  ? '55px 1fr 85px 120px 80px 70px 70px 95px'
                   : '1fr 60px 70px 150px',
                 padding:`8px ${HF.cardP}px`,
                 borderBottom: `1px solid ${HF.border}`,
@@ -975,12 +975,12 @@ function HFRunDetail({ nav, goto, params }) {
                     <>
                       <span>ID</span>
                       <SortHdr k="title">URL</SortHdr>
+                      <span>Disc. URL</span>
                       <SortHdr k="status">Status</SortHdr>
                       <SortHdr k="started">Started</SortHdr>
                       <SortHdr k="url_type">Type</SortHdr>
-                      <SortHdr k="duration" align="right">Duration</SortHdr>
-                      <span style={{textAlign:'right'}}>Throttle</span>
-                      <span>Disc. URL</span>
+                      <SortHdr k="duration">Duration</SortHdr>
+                      <span>Throttle</span>
                     </>
                   ) : (
                     <>
@@ -1028,7 +1028,7 @@ function HFRunDetail({ nav, goto, params }) {
                   <div key={i} style={{
                     display:'grid',
                     gridTemplateColumns: urlData.source === 'live'
-                      ? '60px 1fr 130px 90px 80px 80px 80px 90px'
+                      ? '55px 1fr 85px 120px 80px 70px 70px 95px'
                       : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
@@ -1051,19 +1051,7 @@ function HFRunDetail({ nav, goto, params }) {
                     </span>
                     {urlData.source === 'live' ? (
                       <>
-                        {statusCell}
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', textAlign:'right'}}>{fmtDur(u.duration_ms)}</span>
-                        {(() => {
-                          const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
-                          return (
-                            <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', textAlign:'right'}} title={lbl.title || ''}>
-                              {_fmtDelay(u.request_delay_s)}
-                              {lbl.suffix ? <span style={{color:HF.ink5}}> {lbl.suffix.slice(0,4)}</span> : null}
-                            </span>
-                          );
-                        })()}
+                        {/* Disc. URL — column 3, right after URL */}
                         {u.discovered_url_id != null ? (
                           <a href="#" onClick={(e)=>{e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
                              style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
@@ -1072,6 +1060,19 @@ function HFRunDetail({ nav, goto, params }) {
                         ) : (
                           <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5}}>—</span>
                         )}
+                        {statusCell}
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
+                        {(() => {
+                          const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
+                          return (
+                            <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}} title={lbl.title || ''}>
+                              {_fmtDelay(u.request_delay_s)}
+                              {lbl.suffix ? <span style={{color:HF.ink5}}> {lbl.suffix.slice(0,4)}</span> : null}
+                            </span>
+                          );
+                        })()}
                       </>
                     ) : (
                       <>
