@@ -247,6 +247,27 @@ class ScanSpider(scrapy.Spider):
             )
 
             for item in url_items:
+                # Pause/resume: poll status before each dispatch.
+                # If 'paused', sleep in 5s increments until resumed or
+                # stopped. 'stopping' exits the loop immediately.
+                if self._run_id is not None:
+                    import asyncio
+
+                    while True:
+                        run_status = self._poll_run_status()
+                        if run_status == "paused":
+                            self.logger.debug(
+                                "Run %d paused — waiting 5s", self._run_id
+                            )
+                            await asyncio.sleep(5)
+                            continue
+                        if run_status == "stopping":
+                            self.logger.info(
+                                "Run %d stopping — exiting queue loop",
+                                self._run_id,
+                            )
+                            return
+                        break
                 yield scrapy.Request(
                     item["url"],
                     callback=self.parse_product,
@@ -578,6 +599,32 @@ class ScanSpider(scrapy.Spider):
             bytes_=response_bytes,
             error_reason=error_reason,
         )
+
+    def _poll_run_status(self) -> str | None:
+        """Read `scrape_runs.status` for the current run.
+
+        Called before each request dispatch to detect pause/stop
+        transitions. Returns the current status string or None if the
+        run row vanished or the query fails.
+        """
+        if self._run_id is None:
+            return None
+        from sqlalchemy import text as sa_text
+
+        database_url = self.settings.get("DATABASE_URL")
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            result = session.execute(
+                sa_text("SELECT status FROM scrape_runs WHERE id = :run_id"),
+                {"run_id": self._run_id},
+            ).scalar()
+            return str(result) if result is not None else None
+        except Exception:
+            self.logger.exception("Status poll failed for run %d", self._run_id)
+            return None
+        finally:
+            session.close()
 
     def _current_in_flight(self) -> int | None:
         """Count of in-flight requests via Scrapy's engine slots.

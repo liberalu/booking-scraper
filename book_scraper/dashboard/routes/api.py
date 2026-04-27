@@ -25,6 +25,7 @@ from book_scraper.dashboard.queries import (
     get_recent_runs,
     get_repeated_failures,
     get_run_discovered_urls,
+    get_run_eta,
     get_run_in_flight,
     get_run_issue_summary,
     get_run_live_health,
@@ -33,6 +34,7 @@ from book_scraper.dashboard.queries import (
     get_run_recent_failures,
     get_run_url_breakdown,
     get_run_url_items,
+    get_schedule_info,
     get_scrape_activity_by_day,
     get_shop_book_changes,
     get_shop_book_issues,
@@ -280,6 +282,16 @@ def api_overview(session: Session = Depends(get_db)) -> dict[str, Any]:
 _WHEN_BOUNDS_HOURS = {"1h": 1, "24h": 24, "7d": 168, "30d": 720}
 
 
+@router.get("/schedule")
+def api_schedule(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Enabled cron jobs with next-firing time and last-success timestamp.
+
+    Consumed by the run-list page header to show 'Next run in 4h 23m'
+    and 'Last success: 3h ago' badges.
+    """
+    return {"items": get_schedule_info(session)}
+
+
 @router.get("/runs/repeated-failures")
 def api_repeated_failures(
     session: Session = Depends(get_db),
@@ -438,7 +450,7 @@ def _preflight_checks(
         .filter(
             ScrapeRun.shop_id == shop.id,
             ScrapeRun.phase == run_phase,
-            ScrapeRun.status.in_(("running", "stopping")),
+            ScrapeRun.status.in_(("running", "stopping", "paused")),
         )
         .first()
     )
@@ -552,6 +564,48 @@ def api_stop_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "running":
         run.status = "stopping"
+        session.commit()
+    return {"run_id": run_id, "status": run.status}
+
+
+@router.post("/runs/{run_id}/pause")
+def api_pause_run(
+    run_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Request a graceful pause of a running scan.
+
+    DB-mediated: flips `status` from 'running' to 'paused'. The spider
+    polls status between requests and enters a sleep loop on 'paused'.
+    The heartbeat keeps ticking during pause so the reaper doesn't kill
+    the run. Resume with POST /api/runs/{id}/resume.
+
+    Idempotent: pausing an already-paused or terminal run is a 200
+    no-op carrying the current status.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status == "running":
+        run.status = "paused"
+        session.commit()
+    return {"run_id": run_id, "status": run.status}
+
+
+@router.post("/runs/{run_id}/resume")
+def api_resume_run(
+    run_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Resume a paused run.
+
+    Flips `status` from 'paused' back to 'running'. The spider's pause
+    loop observes the transition on its next poll and resumes dispatching
+    requests. Idempotent: resuming a non-paused run is a no-op.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status == "paused":
+        run.status = "running"
         session.commit()
     return {"run_id": run_id, "status": run.status}
 
@@ -672,6 +726,14 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
                 health = "stuck"
                 break
 
+    # ETA: estimate minutes remaining based on pending URL count / rate.
+    req_per_min: float = 0.0
+    if rate and rate.get("window_s", 0) > 0:
+        req_per_min = (rate["done"] / rate["window_s"]) * 60
+    eta_min = (
+        get_run_eta(session, run_id, req_per_min) if run.status == "running" else None
+    )
+
     return {
         "run_id": run_id,
         "status": run.status,
@@ -679,6 +741,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
         "last_heartbeat_age_s": last_heartbeat_age_s,
         "in_flight": in_flight,
         "rate": rate,
+        "eta_min": eta_min,
         "recent_failures": recent_failures,
         "recent_activity": recent_activity,
     }

@@ -23,7 +23,11 @@ ENV DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/book_scra
 # --- Scraper stage ---
 FROM base AS scraper
 
-RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends cron logrotate && rm -rf /var/lib/apt/lists/*
+
+# Logrotate config for the JSONL events log (daily, 14-day retention).
+# Uses copytruncate so no SIGHUP plumbing is needed.
+COPY docker/logrotate.d/scrapy_events /etc/logrotate.d/scrapy_events
 
 COPY scripts/entrypoint-scraper.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

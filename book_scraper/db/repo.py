@@ -781,7 +781,8 @@ def find_resumable_run(
             ScrapeRun.shop_id == shop_id,
             ScrapeRun.phase == phase,
             or_(
-                ScrapeRun.status == "running",
+                # Active runs (running or paused) own their queue.
+                ScrapeRun.status.in_(("running", "paused")),
                 and_(
                     ScrapeRun.status == "failed",
                     ScrapeRun.resumable_after_failure.is_(True),

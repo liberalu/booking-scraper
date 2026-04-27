@@ -188,6 +188,8 @@ class HeartbeatExtension:  # pragma: no cover
         if status == "stopping":
             self._signal_stop()
             return
+        # 'paused': heartbeat keeps ticking so the reaper doesn't kill
+        # the run. The spider's start() loop handles the actual wait.
         self._schedule_next()
 
     def _signal_stop(self) -> None:
@@ -227,10 +229,12 @@ class HeartbeatExtension:  # pragma: no cover
             # reaped run. Without this, a tick that fires after the
             # dashboard reaper transitioned to `failed` would make the
             # row look alive again on the next reaper pass.
+            # Tick on 'running' and 'paused' — a paused run is alive and
+            # must not be reaped. Skip 'stopping'/'failed'/'completed'.
             session.execute(
                 sa_text(
                     "UPDATE scrape_runs SET last_heartbeat = now() "
-                    "WHERE id = :run_id AND status = 'running'"
+                    "WHERE id = :run_id AND status IN ('running', 'paused')"
                 ),
                 {"run_id": run_id},
             )

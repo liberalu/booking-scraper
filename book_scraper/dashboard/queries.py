@@ -142,6 +142,8 @@ def mark_stale_runs(session: Session) -> int:
     )
 
     cutoff = datetime.now(UTC) - timedelta(seconds=DEAD_RUN_SECONDS)
+    # 'paused' is intentionally alive — heartbeat keeps ticking during
+    # pause, so a paused run won't appear stale. Do NOT include it here.
     stale = (
         session.query(ScrapeRun)
         .filter(ScrapeRun.status.in_(("running", "stopping")))
@@ -186,6 +188,94 @@ def get_overview_stats(session: Session) -> dict:
         "with_isbn": with_isbn,
         "total_prices": total_prices,
     }
+
+
+def get_schedule_info(session: Session) -> list[dict[str, Any]]:
+    """Return schedule metadata for every enabled cron job.
+
+    For each job: next firing time (via croniter), time-until-next (seconds),
+    and the most recent completed run's finished_at for "last success" badge.
+    """
+    from croniter import croniter  # type: ignore[import-untyped]
+
+    from book_scraper.db.models import CronJob
+
+    jobs = (
+        session.query(CronJob)
+        .options(joinedload(CronJob.shop))
+        .filter(CronJob.enabled.is_(True))
+        .order_by(CronJob.id)
+        .all()
+    )
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for job in jobs:
+        try:
+            cron = croniter(job.cron_expression, now)
+            next_dt: datetime = cron.get_next(datetime).replace(tzinfo=UTC)
+            next_in_s = int((next_dt - now).total_seconds())
+        except Exception:
+            next_dt = None
+            next_in_s = None
+
+        last_ok = (
+            session.query(ScrapeRun)
+            .filter(
+                ScrapeRun.shop_id == job.shop_id,
+                ScrapeRun.phase == job.phase,
+                ScrapeRun.status == "completed",
+            )
+            .order_by(ScrapeRun.finished_at.desc().nullslast())
+            .limit(1)
+            .one_or_none()
+        )
+        out.append(
+            {
+                "shop": job.shop.name,
+                "phase": job.phase,
+                "cron_expression": job.cron_expression,
+                "next_run_at": next_dt.isoformat() if next_dt else None,
+                "next_run_in_s": next_in_s,
+                "last_success_at": (
+                    last_ok.finished_at.isoformat()
+                    if last_ok and last_ok.finished_at
+                    else None
+                ),
+                "last_run_at": (
+                    job.last_run_at.isoformat() if job.last_run_at else None
+                ),
+            }
+        )
+    return out
+
+
+def get_run_eta(
+    session: Session,
+    run_id: int,
+    req_per_min: float,
+) -> int | None:
+    """Estimate minutes remaining for a running scan.
+
+    Uses the current pending URL count divided by the observed request
+    rate. Returns None when rate is zero (stalled) or pending count
+    is unavailable.
+    """
+    from book_scraper.db.models import ScrapeUrlItem
+
+    if req_per_min <= 0:
+        return None
+    pending = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "pending",
+        )
+        .scalar()
+        or 0
+    )
+    if pending == 0:
+        return 0
+    return max(1, round(pending / req_per_min))
 
 
 def get_recent_runs(session: Session, limit: int = 20) -> list[ScrapeRun]:

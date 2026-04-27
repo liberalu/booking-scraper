@@ -1,0 +1,9 @@
+/app/logs/scrapy_events.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    copytruncate
+    missingok
+    notifempty
+}

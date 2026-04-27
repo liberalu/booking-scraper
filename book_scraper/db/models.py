@@ -305,6 +305,10 @@ scrape_status_enum = Enum(
     # flips the row to `failed` with `error_reason='stopped_by_operator'`,
     # so `stopping` is always transient.
     "stopping",
+    # Operator-requested pause: the spider's heartbeat observes this and
+    # spins in a poll loop. The heartbeat keeps ticking (preventing reaper
+    # from killing the run). Resume via POST /api/runs/{id}/resume.
+    "paused",
     "completed",
     "failed",
     name="scrape_status",

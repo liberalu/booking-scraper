@@ -40,7 +40,7 @@ function HFRuns({ nav, goto }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [q, shop, phase, status, when, page]);
 
-  // Repeated-failure banner — refresh on the same cadence as the runs list.
+  // Repeated-failure banner — refresh every 30s.
   const [repeatedFailures, setRepeatedFailures] = React.useState([]);
   React.useEffect(() => {
     let cancelled = false;
@@ -52,6 +52,32 @@ function HFRuns({ nav, goto }) {
     const id = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
+
+  // Schedule info — "Next run in Xh", "Last success Xh ago" badges.
+  const [scheduleItems, setScheduleItems] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = () => fetch('/api/schedule')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setScheduleItems(d.items || []); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const _fmtSeconds = (s) => {
+    if (s == null) return '—';
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.round(s/60)}m`;
+    const h = Math.floor(s/3600), m = Math.round((s%3600)/60);
+    return m ? `${h}h ${m}m` : `${h}h`;
+  };
+  const _fmtAgoIso = (iso) => {
+    if (!iso) return '—';
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    return _fmtSeconds(diff) + ' ago';
+  };
 
   const allRows = data.runs;
   const filtered = allRows;  // backend already filtered; keep alias for table render
@@ -87,6 +113,22 @@ function HFRuns({ nav, goto }) {
               </a>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Schedule badges — "Next run in Xh" + "Last success Xh ago" */}
+      {scheduleItems.length > 0 && (
+        <div style={{display:'flex', gap:8, marginBottom:HF.gap, flexWrap:'wrap'}}>
+          {scheduleItems.map((s, i) => (
+            <div key={i} style={{display:'flex', gap:8, padding:'6px 12px', background:HF.subtle, borderRadius:6, fontSize:12, color:HF.ink3, fontFamily:HF.mono, alignItems:'center'}}>
+              <span style={{color:HF.ink, fontWeight:500}}>{s.shop}/{s.phase}</span>
+              {s.next_run_in_s != null && (
+                <span title={s.next_run_at || ''}>next in <strong style={{color:HF.ink}}>{_fmtSeconds(s.next_run_in_s)}</strong></span>
+              )}
+              <span style={{color:HF.ink5}}>·</span>
+              <span title={s.last_success_at || ''}>last ok: <strong style={{color:HF.ink}}>{_fmtAgoIso(s.last_success_at)}</strong></span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -290,16 +332,18 @@ function HFLivePanel({ data, HF }) {
     ? Math.round((rate.done / rate.window_s) * 60)
     : 0;
 
-  const isLive = data?.status === 'running' || data?.status === 'stopping';
-  const panelTitle = isLive ? 'Live' : 'Final state';
-  const panelSub = isLive
-    ? `refreshed every 2s · health: ${health || 'unknown'}`
-    : `frozen at run end · last health: ${health || 'unknown'}`;
+  const isLive = data?.status === 'running' || data?.status === 'stopping' || data?.status === 'paused';
+  const panelTitle = data?.status === 'paused' ? 'Paused' : isLive ? 'Live' : 'Final state';
+  const panelSub = data?.status === 'paused'
+    ? `paused by operator · health: ${health || 'unknown'}`
+    : isLive
+      ? `refreshed every 2s · health: ${health || 'unknown'}`
+      : `frozen at run end · last health: ${health || 'unknown'}`;
   return (
     <HFCard
       title={panelTitle}
       sub={panelSub}
-      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={isLive && health==='healthy'} size={6}/> {health || '—'}</HFPill>}
+      action={<HFPill tone={healthTone}><HFDot tone={healthTone} pulse={isLive && health==='healthy' && data?.status !== 'paused'} size={6}/> {health || '—'}</HFPill>}
     >
       <div style={{padding:`12px ${HF.cardP}px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap}}>
         {/* Now fetching */}
@@ -325,7 +369,7 @@ function HFLivePanel({ data, HF }) {
           })}
         </div>
 
-        {/* Rate */}
+        {/* Rate + ETA */}
         <div style={{display:'grid', gridTemplateRows:'auto auto', gap:8}}>
           <div>
             <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Rate (last {rate.window_s}s)</div>
@@ -340,6 +384,20 @@ function HFLivePanel({ data, HF }) {
               </div>
             </div>
           </div>
+          {data.eta_min != null && (
+            <div>
+              <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>ETA</div>
+              <div style={{fontFamily:HF.mono, fontVariantNumeric:'tabular-nums'}}>
+                <span style={{fontSize:18, fontWeight:600, color: data.eta_min <= 5 ? HF.okInk : HF.ink}}>
+                  {data.eta_min === 0 ? '<1' : data.eta_min}m
+                </span>
+                <span style={{fontSize:11, color:HF.ink3, marginLeft:6}}>remaining</span>
+              </div>
+            </div>
+          )}
+          {data.status === 'running' && data.eta_min == null && reqPerMin === 0 && (
+            <div style={{fontSize:11, color:HF.warnInk, fontFamily:HF.mono}}>stalled — rate: 0/min</div>
+          )}
         </div>
       </div>
 
@@ -465,7 +523,7 @@ function HFRunDetail({ nav, goto, params }) {
   React.useEffect(() => {
     if (!runId || !data) return;
     const currentStatus = liveData?.status ?? data.status;
-    const isActive = currentStatus === 'running' || currentStatus === 'stopping';
+    const isActive = currentStatus === 'running' || currentStatus === 'stopping' || currentStatus === 'paused';
     if (!isActive) {
       // Run reached terminal state. Mirror the status into `data` for
       // pills/KPIs, then do ONE final fetch to populate `liveData` if we
@@ -540,6 +598,24 @@ function HFRunDetail({ nav, goto, params }) {
       .catch(e => setActionError(String(e.message || e)))
       .finally(() => setActionPending(false));
   }, [id, actionPending]);
+  const pauseRun = React.useCallback(() => {
+    if (actionPending || !id) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/pause`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(d => { setData(prev => prev ? {...prev, status: d.status} : prev); })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending]);
+  const resumeRun = React.useCallback(() => {
+    if (actionPending || !id) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/resume`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(d => { setData(prev => prev ? {...prev, status: d.status} : prev); })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending]);
   const rerunRun = React.useCallback(() => {
     if (actionPending || !id) return;
     if (!confirm(`Re-run #${id}? A new run will be created for the same shop+phase.`)) return;
@@ -566,7 +642,7 @@ function HFRunDetail({ nav, goto, params }) {
 
   const runStatus = data.status || 'completed';
   const runStatusTone = {
-    running: 'ok', stopping: 'warn', completed: 'neutral', failed: 'err',
+    running: 'ok', stopping: 'warn', paused: 'warn', completed: 'neutral', failed: 'err',
   };
 
   return (
@@ -583,7 +659,13 @@ function HFRunDetail({ nav, goto, params }) {
       </>}
       actions={<>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
-        {(runStatus === 'running' || runStatus === 'stopping') && (
+        {runStatus === 'running' && (
+          <HFButton disabled={actionPending} onClick={pauseRun}>⏸ Pause</HFButton>
+        )}
+        {runStatus === 'paused' && (
+          <HFButton variant="primary" disabled={actionPending} onClick={resumeRun}>▶ Resume</HFButton>
+        )}
+        {(runStatus === 'running' || runStatus === 'stopping' || runStatus === 'paused') && (
           <HFButton variant="danger" disabled={actionPending || runStatus === 'stopping'} onClick={stopRun}>
             <span style={{display:'flex'}}>{HF_ICONS.stop}</span>
             {runStatus === 'stopping' ? 'Stopping…' : 'Stop run'}

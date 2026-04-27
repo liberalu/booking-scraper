@@ -15,7 +15,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_LOG_PATH = Path(os.environ.get("SCRAPY_EVENTS_LOG", "logs/scrapy_events.log"))
+# Anchor to the project root so the log is written to the same place
+# regardless of the working directory at the time scrapy is invoked
+# (cron job, docker exec, interactive shell, etc.).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_LOG_PATH = Path(
+    os.environ.get(
+        "SCRAPY_EVENTS_LOG",
+        str(_PROJECT_ROOT / "logs" / "scrapy_events.log"),
+    )
+)
 _log_path: Path | None = None
 
 
