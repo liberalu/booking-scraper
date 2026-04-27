@@ -117,15 +117,11 @@ def _progress(run: ScrapeRun, terminal_count: int | None = None) -> int:
         return 100
     if not (run.urls_total and run.urls_total > 0):
         return 0
-    processed = (
-        terminal_count if terminal_count is not None else run.urls_processed
-    )
+    processed = terminal_count if terminal_count is not None else run.urls_processed
     return min(99, int(processed / run.urls_total * 100))
 
 
-def _run_terminal_counts(
-    session: Session, run_ids: list[int]
-) -> dict[int, int]:
+def _run_terminal_counts(session: Session, run_ids: list[int]) -> dict[int, int]:
     """Bulk-fetch `done + failed` counts for a batch of runs."""
     if not run_ids:
         return {}
@@ -146,9 +142,7 @@ def _run_terminal_counts(
     return {run_id: count for run_id, count in rows}
 
 
-def _run_dict(
-    run: ScrapeRun, terminal_count: int | None = None
-) -> dict[str, Any]:
+def _run_dict(run: ScrapeRun, terminal_count: int | None = None) -> dict[str, Any]:
     started_h = 0.0
     if run.started_at:
         start = run.started_at
@@ -543,9 +537,7 @@ def api_create_run(
 
 
 @router.post("/runs/{run_id}/stop")
-def api_stop_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_stop_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Request a clean stop of an active run.
 
     DB-mediated: flips `status` from 'running' to 'stopping' under a
@@ -569,9 +561,7 @@ def api_stop_run(
 
 
 @router.post("/runs/{run_id}/pause")
-def api_pause_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_pause_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Request a graceful pause of a running scan.
 
     DB-mediated: flips `status` from 'running' to 'paused'. The spider
@@ -592,9 +582,7 @@ def api_pause_run(
 
 
 @router.post("/runs/{run_id}/resume")
-def api_resume_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_resume_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Resume a paused run.
 
     Flips `status` from 'paused' back to 'running'. The spider's pause
@@ -611,9 +599,7 @@ def api_resume_run(
 
 
 @router.post("/runs/{run_id}/rerun")
-def api_rerun_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_rerun_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Re-fire a failed run.
 
     Flags the failed run `resumable_after_failure=True` so Track A's
@@ -786,9 +772,7 @@ def api_run_urls(
         for it, title in items:
             duration_ms: int | None = None
             if it.claimed_at and it.done_at:
-                duration_ms = int(
-                    (it.done_at - it.claimed_at).total_seconds() * 1000
-                )
+                duration_ms = int((it.done_at - it.claimed_at).total_seconds() * 1000)
             rows.append(
                 {
                     "url": it.url,
@@ -888,15 +872,11 @@ def api_shop_books(
         or 0
     )
     missing_isbn = (
-        session.query(func.count(ShopBook.id))
-        .filter(ShopBook.isbn.is_(None))
-        .scalar()
+        session.query(func.count(ShopBook.id)).filter(ShopBook.isbn.is_(None)).scalar()
         or 0
     )
     missing_price = (
-        session.query(func.count(ShopBook.id))
-        .filter(ShopBook.price.is_(None))
-        .scalar()
+        session.query(func.count(ShopBook.id)).filter(ShopBook.price.is_(None)).scalar()
         or 0
     )
 
@@ -1068,9 +1048,7 @@ def api_shop_detail(
         "last_run_ago": _rel(last_run.started_at if last_run else None),
         "last_run_status": last_run.status if last_run else "—",
         "field_stats": field_stats,
-        "recent_runs": [
-            _run_dict(r, terminal_count=terminal.get(r.id)) for r in runs
-        ],
+        "recent_runs": [_run_dict(r, terminal_count=terminal.get(r.id)) for r in runs],
     }
 
 
@@ -1101,9 +1079,7 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.post("/cron/{job_id}/toggle")
-def api_cron_toggle(
-    job_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_cron_toggle(job_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     job = get_cron_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")

@@ -30,7 +30,6 @@ from book_scraper.db.session import get_engine, get_session_factory
 from book_scraper.services.scan import ScanService
 from tests.conftest import TEST_DATABASE_URL
 
-
 # ────────────────────────────── #11 ──────────────────────────────
 
 
@@ -68,9 +67,9 @@ def test_advisory_lock_blocks_concurrent_acquire(engine):
     because pg_try_advisory_xact_lock is reentrant within a single
     transaction — we need genuinely separate xacts to observe the lock.
     """
-    SessionLocal = sessionmaker(bind=engine)
-    s1 = SessionLocal()
-    s2 = SessionLocal()
+    session_factory = sessionmaker(bind=engine)
+    s1 = session_factory()
+    s2 = session_factory()
     try:
         shop = upsert_shop(s1, "lock_test_shop", "https://example.com")
         s1.commit()
@@ -97,9 +96,9 @@ def test_advisory_lock_blocks_concurrent_acquire(engine):
 def test_prepare_scan_returns_lock_not_acquired_when_locked(engine):
     """prepare_scan_create_run yields lock_not_acquired when another
     transaction holds the advisory lock for the same shop+phase."""
-    SessionLocal = sessionmaker(bind=engine)
-    holder = SessionLocal()
-    contender = SessionLocal()
+    session_factory = sessionmaker(bind=engine)
+    holder = session_factory()
+    contender = session_factory()
     try:
         shop = upsert_shop(holder, "lock_test_shop_2", "https://example.com")
         holder.commit()
@@ -216,9 +215,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
     _seed_one_url(db_session, shop.id, "https://vaga.lt/p2")
 
     service = ScanService(db_session)
-    plan = service.prepare_scan_create_run(
-        "vaga", "https://vaga.lt", {}, rescrape=True
-    )
+    plan = service.prepare_scan_create_run("vaga", "https://vaga.lt", {}, rescrape=True)
 
     # Run row exists with a heartbeat...
     run = db_session.get(ScrapeRun, plan.run_id)
@@ -226,9 +223,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
     assert run.status == "running"
     assert run.last_heartbeat is not None
     # ...but no queue rows have been inserted yet.
-    queue_count = (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count()
-    )
+    queue_count = db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count()
     assert queue_count == 0
     # The plan carries the deferred URL list.
     assert plan._urls_to_scrape is not None
@@ -236,12 +231,10 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
 
     # Phase 2 inserts the queue.
     service.populate_scan_queue(plan)
-    assert (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 2
-    )
+    assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 2
 
 
-# ────────────────────────────── #2 + #10 — queue inheritance ──────────────────────────────
+# ─────────────────────── #2 + #10 — queue inheritance ───────────────────────
 
 
 def test_inherit_pending_items_repoints_run_id(db_session):
@@ -254,9 +247,7 @@ def test_inherit_pending_items_repoints_run_id(db_session):
 
     old_run = create_scrape_run(db_session, shop.id, "scan")
     insert_scrape_url_item(db_session, old_run.id, shop.id, du1.id, du1.url)
-    item2 = insert_scrape_url_item(
-        db_session, old_run.id, shop.id, du2.id, du2.url
-    )
+    item2 = insert_scrape_url_item(db_session, old_run.id, shop.id, du2.id, du2.url)
     # Mark item2 done so only item1 is pending.
     item2.status = "done"
     item2.done_at = datetime.now(UTC)
@@ -329,9 +320,7 @@ def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
 
     service = ScanService(db_session)
     first = service.prepare_scan("vaga", "https://vaga.lt", {}, rescrape=True)
-    assert (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=first.run_id).count() == 2
-    )
+    assert db_session.query(ScrapeUrlItem).filter_by(run_id=first.run_id).count() == 2
 
     # Simulate stall-style reap: mark first run failed + resumable.
     first_run = db_session.get(ScrapeRun, first.run_id)
@@ -364,7 +353,7 @@ def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
     assert first_run.resumable_after_failure is True
 
 
-# ────────────────────────────── #2 — abort_processing idempotency ──────────────────────────────
+# ────────────────── #2 — abort_processing idempotency ──────────────────
 
 
 def test_abort_processing_skips_already_done_items(db_session):

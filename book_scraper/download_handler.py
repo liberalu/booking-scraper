@@ -264,9 +264,7 @@ class HttpxMiddleware:  # pragma: no cover
         lock = self._get_lock(host)
         async with lock:
             # Compute and apply the throttle delay BEFORE dispatch.
-            current_delay = self._host_current_delay.get(
-                host, self._autothrottle_start
-            )
+            current_delay = self._host_current_delay.get(host, self._autothrottle_start)
             last_dispatch = self._host_last_dispatch.get(host, 0.0)
             now_mono = time.monotonic()
             sleep_for = max(0.0, last_dispatch + current_delay - now_mono)

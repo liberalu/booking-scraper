@@ -184,21 +184,38 @@ def test_live_route_returns_recent_done_and_failed_counts(
     now = datetime.now(UTC)
     # 2 done within window, 1 failed within window, 1 done outside window
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/d1",
-        status="done", done_at=now - timedelta(seconds=5),
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/d1",
+        status="done",
+        done_at=now - timedelta(seconds=5),
     )
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/d2",
-        status="done", done_at=now - timedelta(seconds=30),
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/d2",
+        status="done",
+        done_at=now - timedelta(seconds=30),
     )
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/f1",
-        status="failed", done_at=now - timedelta(seconds=10),
-        error_reason="http_503", http_status=503,
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/f1",
+        status="failed",
+        done_at=now - timedelta(seconds=10),
+        error_reason="http_503",
+        http_status=503,
     )
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/d_old",
-        status="done", done_at=now - timedelta(seconds=120),
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/d_old",
+        status="done",
+        done_at=now - timedelta(seconds=120),
     )
     db_session.commit()
 
@@ -222,22 +239,39 @@ def test_live_route_recent_activity_includes_timing_and_throttle(
     claimed_done = now - timedelta(seconds=12)
     done_at = now - timedelta(seconds=10)
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/done1",
-        status="done", claimed_at=claimed_done, done_at=done_at,
-        request_delay_s=2.34, delay_source="autothrottle",
-        response_bytes=18432, http_status=200,
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/done1",
+        status="done",
+        claimed_at=claimed_done,
+        done_at=done_at,
+        request_delay_s=2.34,
+        delay_source="autothrottle",
+        response_bytes=18432,
+        http_status=200,
     )
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/fail1",
-        status="failed", claimed_at=now - timedelta(seconds=8),
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/fail1",
+        status="failed",
+        claimed_at=now - timedelta(seconds=8),
         done_at=now - timedelta(seconds=6),
-        request_delay_s=4.5, delay_source="autothrottle",
-        http_status=503, error_reason="http_503",
+        request_delay_s=4.5,
+        delay_source="autothrottle",
+        http_status=503,
+        error_reason="http_503",
     )
     # processing rows must NOT appear in recent_activity
     _add_url(
-        db_session, shop, run, url="https://vaga.lt/inflight",
-        status="processing", claimed_at=now - timedelta(seconds=1),
+        db_session,
+        shop,
+        run,
+        url="https://vaga.lt/inflight",
+        status="processing",
+        claimed_at=now - timedelta(seconds=1),
     )
     db_session.commit()
 

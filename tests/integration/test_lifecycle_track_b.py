@@ -52,9 +52,7 @@ def test_stop_running_run_transitions_to_stopping(
     assert run.status == "stopping"
 
 
-def test_stop_terminal_run_is_idempotent(
-    client: TestClient, db_session: Session
-):
+def test_stop_terminal_run_is_idempotent(client: TestClient, db_session: Session):
     """Stopping a completed/failed run is a 200 no-op carrying current status."""
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
@@ -109,9 +107,7 @@ def test_rerun_failed_run_flags_resumable_and_spawns(
     run.finished_at = datetime.now(UTC)
     db_session.commit()
 
-    with patch(
-        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container"
-    ) as spawn:
+    with patch("book_scraper.dashboard.routes.api._spawn_scrapy_in_container") as spawn:
         resp = client.post(f"/api/runs/{run.id}/rerun")
     assert resp.status_code == 200
     body = resp.json()
@@ -154,18 +150,14 @@ def test_rerun_when_concurrent_run_active_returns_409(
     active_run = create_scrape_run(db_session, shop.id, "scan")
     db_session.commit()
 
-    with patch(
-        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container"
-    ) as spawn:
+    with patch("book_scraper.dashboard.routes.api._spawn_scrapy_in_container") as spawn:
         resp = client.post(f"/api/runs/{failed_run.id}/rerun")
     assert resp.status_code == 409
     spawn.assert_not_called()
     assert str(active_run.id) in resp.text or "running" in resp.text
 
 
-def test_rerun_handles_discover_phase(
-    client: TestClient, db_session: Session
-):
+def test_rerun_handles_discover_phase(client: TestClient, db_session: Session):
     """Re-running a discover_categories run preserves the phase as
     phase=discover, strategy=categories."""
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
@@ -175,9 +167,7 @@ def test_rerun_handles_discover_phase(
     run.finished_at = datetime.now(UTC)
     db_session.commit()
 
-    with patch(
-        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container"
-    ) as spawn:
+    with patch("book_scraper.dashboard.routes.api._spawn_scrapy_in_container") as spawn:
         resp = client.post(f"/api/runs/{run.id}/rerun")
     assert resp.status_code == 200
     spawn.assert_called_once()
@@ -204,9 +194,7 @@ def test_create_run_rejects_concurrent_active_run(
     create_scrape_run(db_session, shop.id, "scan")
     db_session.commit()
 
-    with patch(
-        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container"
-    ) as spawn:
+    with patch("book_scraper.dashboard.routes.api._spawn_scrapy_in_container") as spawn:
         resp = client.post("/api/runs", json={"shop": "vaga", "phase": "scan"})
     assert resp.status_code == 409
     spawn.assert_not_called()
@@ -222,9 +210,7 @@ def test_create_run_rejects_concurrent_stopping_run(
     run.status = "stopping"
     db_session.commit()
 
-    with patch(
-        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container"
-    ) as spawn:
+    with patch("book_scraper.dashboard.routes.api._spawn_scrapy_in_container") as spawn:
         resp = client.post("/api/runs", json={"shop": "vaga", "phase": "scan"})
     assert resp.status_code == 409
     spawn.assert_not_called()
@@ -321,11 +307,7 @@ def test_get_run_in_flight_caps_at_render_limit(db_session: Session):
             )
         )
         db_session.flush()
-        du = (
-            db_session.query(DiscoveredUrl)
-            .filter_by(url=url, shop_id=shop.id)
-            .one()
-        )
+        du = db_session.query(DiscoveredUrl).filter_by(url=url, shop_id=shop.id).one()
         item = insert_scrape_url_item(db_session, run.id, shop.id, du.id, url)
         item.status = "processing"
         item.claimed_at = datetime.now(UTC)

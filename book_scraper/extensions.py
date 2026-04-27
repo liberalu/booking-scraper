@@ -201,9 +201,7 @@ class HeartbeatExtension:  # pragma: no cover
                 self._run_id,
             )
             return
-        logger.info(
-            "Run %d transitioned to 'stopping' — closing spider", self._run_id
-        )
+        logger.info("Run %d transitioned to 'stopping' — closing spider", self._run_id)
         engine.close_spider(spider, "stopped_by_operator")
 
     def _write_heartbeat(self, run_id: int) -> str | None:

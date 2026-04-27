@@ -18,9 +18,7 @@ from book_scraper.extensions import HeartbeatExtension
 def crawler() -> MagicMock:
     c = MagicMock()
     c.settings.getfloat.return_value = 5.0
-    c.settings.get.return_value = (
-        "postgresql://postgres:postgres@localhost:5432/x"
-    )
+    c.settings.get.return_value = "postgresql://postgres:postgres@localhost:5432/x"
     return c
 
 
@@ -62,9 +60,7 @@ def test_tick_swallows_db_errors_and_reschedules(
     """A failing DB write must not poison the loop."""
     ext = HeartbeatExtension(crawler, interval=5.0)
     with (
-        patch.object(
-            ext, "_write_heartbeat", side_effect=RuntimeError("boom")
-        ),
+        patch.object(ext, "_write_heartbeat", side_effect=RuntimeError("boom")),
         patch.object(ext, "_schedule_next") as sn,
     ):
         # The immediate on_run_started write also raises; must be

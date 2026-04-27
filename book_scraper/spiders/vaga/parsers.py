@@ -141,9 +141,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
     else:
         reasons.append({"key": "non_book_categories", "points": 0})
 
-    if has_non_book_category and not (
-        has_book_category or valid_isbn or has_author
-    ):
+    if has_non_book_category and not (has_book_category or valid_isbn or has_author):
         reasons.append({"key": "blocked_non_book_category", "points": 0})
         return {
             "score": score,
@@ -151,9 +149,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
             "reasons": reasons,
             "has_primary_book_signal": False,
         }
-    if title_is_non_book and not (
-        has_book_category or valid_isbn or has_book_metadata
-    ):
+    if title_is_non_book and not (has_book_category or valid_isbn or has_book_metadata):
         reasons.append({"key": "blocked_game_toy_title", "points": 0})
         return {
             "score": score,
