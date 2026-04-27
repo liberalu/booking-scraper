@@ -407,14 +407,19 @@ function HFRunDetail({ nav, goto, params }) {
       order: sp.get('url_order') || 'desc',
     };
   })();
+  const _initialUrlParamsFull = (() => {
+    const sp = new URLSearchParams(window.location.search);
+    const pp = parseInt(sp.get('url_per_page') || '50', 10);
+    return { perPage: [25, 50, 100].includes(pp) ? pp : 50 };
+  })();
   const [urlStatus, setUrlStatus] = React.useState(_initialUrlParams.status);
   const [urlPage, setUrlPage] = React.useState(_initialUrlParams.page);
   const [urlSort, setUrlSort] = React.useState(_initialUrlParams.sort);
   const [urlOrder, setUrlOrder] = React.useState(_initialUrlParams.order);
-  const URL_PER_PAGE = 50;
+  const [urlPerPage, setUrlPerPage] = React.useState(_initialUrlParamsFull.perPage);
   const [urlData, setUrlData] = React.useState(null);
-  // Reset to page 1 when filter or sort changes (but not when paginating).
-  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus, urlSort, urlOrder]);
+  // Reset to page 1 when filter / sort / per-page changes (but not when paginating).
+  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus, urlSort, urlOrder, urlPerPage]);
 
   // Mirror state into the URL bar without adding history entries.
   React.useEffect(() => {
@@ -423,10 +428,11 @@ function HFRunDetail({ nav, goto, params }) {
     if (urlPage !== 1) sp.set('url_page', String(urlPage)); else sp.delete('url_page');
     if (urlSort !== 'started') sp.set('url_sort', urlSort); else sp.delete('url_sort');
     if (urlOrder !== 'desc') sp.set('url_order', urlOrder); else sp.delete('url_order');
+    if (urlPerPage !== 50) sp.set('url_per_page', String(urlPerPage)); else sp.delete('url_per_page');
     const qs = sp.toString();
     const url = window.location.pathname + (qs ? '?' + qs : '');
     window.history.replaceState(null, '', url);
-  }, [urlStatus, urlPage, urlSort, urlOrder]);
+  }, [urlStatus, urlPage, urlSort, urlOrder, urlPerPage]);
 
   const toggleSort = (key) => {
     if (urlSort === key) {
@@ -449,6 +455,12 @@ function HFRunDetail({ nav, goto, params }) {
   // Once we've polled at least once, treat the live endpoint as the
   // source of truth for status (the parent /api/runs/{id} fetch is
   // one-shot and would otherwise keep us polling a terminal run forever).
+  // Rolling throughput history: append reqPerMin on each live poll tick.
+  // Keeps last 60 samples (2s cadence → ~2 min of history). Frozen once
+  // the run reaches terminal state — postmortem chart stays visible.
+  const THROUGHPUT_MAX_SAMPLES = 60;
+  const [throughputHistory, setThroughputHistory] = React.useState([]);
+
   const [liveData, setLiveData] = React.useState(null);
   React.useEffect(() => {
     if (!runId || !data) return;
@@ -483,13 +495,24 @@ function HFRunDetail({ nav, goto, params }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [runId, data?.status, liveData?.status]);
 
+  // Accumulate throughput samples whenever liveData arrives.
+  React.useEffect(() => {
+    if (!liveData) return;
+    const rate = liveData.rate || { done: 0, window_s: 60 };
+    const ratePerMin = rate.window_s > 0 ? Math.round((rate.done / rate.window_s) * 60) : 0;
+    setThroughputHistory(prev => {
+      const next = [...prev, ratePerMin];
+      return next.length > THROUGHPUT_MAX_SAMPLES ? next.slice(next.length - THROUGHPUT_MAX_SAMPLES) : next;
+    });
+  }, [liveData]);
+
   React.useEffect(() => {
     if (!runId) return;
     let cancelled = false;
     const params = new URLSearchParams({
       status: urlStatus,
       page: String(urlPage),
-      per_page: String(URL_PER_PAGE),
+      per_page: String(urlPerPage),
       sort: urlSort,
       order: urlOrder,
     });
@@ -502,7 +525,7 @@ function HFRunDetail({ nav, goto, params }) {
     const isLive = data?.status === 'running';
     const id = isLive ? setInterval(load, 3000) : null;
     return () => { cancelled = true; if (id) clearInterval(id); };
-  }, [runId, urlStatus, urlPage, urlSort, urlOrder, data?.status]);
+  }, [runId, urlStatus, urlPage, urlPerPage, urlSort, urlOrder, data?.status]);
 
   const id = data?.id ?? runId;
   const [actionPending, setActionPending] = React.useState(false);
@@ -538,8 +561,6 @@ function HFRunDetail({ nav, goto, params }) {
   }
 
   const timeline = [];
-
-  const throughputData = [22, 28, 34, 30, 18, 26, 32, 35, 33, 29, 31, 34, 36, 33, 30, 28];
 
   const phases = [];
 
@@ -626,12 +647,20 @@ function HFRunDetail({ nav, goto, params }) {
           </div>
         </HFCard>
 
-        <HFCard title="Throughput" sub="items / minute · live"
-                action={<span style={{fontFamily:HF.mono, fontSize:12, color:HF.accentInk, fontVariantNumeric:'tabular-nums'}}>28/min</span>}>
+        <HFCard title="Throughput" sub="items / minute · 2s samples"
+                action={throughputHistory.length > 0
+                  ? <span style={{fontFamily:HF.mono, fontSize:12, color:HF.accentInk, fontVariantNumeric:'tabular-nums'}}>{throughputHistory[throughputHistory.length-1]}/min</span>
+                  : <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>waiting…</span>}>
           <div style={{padding:`${HF.cardP}px`}}>
-            <HFAreaChart data={throughputData} h={120}/>
+            {throughputHistory.length > 1
+              ? <HFAreaChart data={throughputHistory} h={120}/>
+              : <div style={{height:120, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
+                  {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
+                </div>
+            }
             <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:6, fontVariantNumeric:'tabular-nums'}}>
-              <span>-15m</span><span>-10m</span><span>-5m</span><span>now</span>
+              <span>{throughputHistory.length >= THROUGHPUT_MAX_SAMPLES ? `-${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m` : `${throughputHistory.length} samples`}</span>
+              <span>now</span>
             </div>
           </div>
         </HFCard>
@@ -646,17 +675,33 @@ function HFRunDetail({ nav, goto, params }) {
             : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
           style={{ marginTop: HF.gap }}
         >
-          {urlData.source === 'live' && (
-            <div style={{display:'flex', gap:6, padding:`8px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`, flexWrap:'wrap'}}>
-              {['all', ...urlData.statuses].map(s => (
-                <HFButton key={s} size="sm"
-                  variant={urlStatus === s ? 'accent' : 'subtle'}
-                  onClick={() => setUrlStatus(s)}>
-                  {s}{s !== 'all' && ` (${urlData.breakdown[s] ?? 0})`}
+          {/* Filter bar: status pills + per-page selector */}
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:`8px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`, flexWrap:'wrap', gap:8}}>
+            <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+              {urlData.source === 'live'
+                ? ['all', ...urlData.statuses].map(s => (
+                    <HFButton key={s} size="sm"
+                      variant={urlStatus === s ? 'accent' : 'subtle'}
+                      onClick={() => setUrlStatus(s)}>
+                      {s}{s !== 'all' && ` (${urlData.breakdown[s] ?? 0})`}
+                    </HFButton>
+                  ))
+                : <span style={{fontSize:12, color:HF.ink4, fontFamily:HF.mono}}>
+                    Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs
+                  </span>
+              }
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:6, fontSize:12, color:HF.ink4}}>
+              <span>Per page:</span>
+              {[25, 50, 100].map(n => (
+                <HFButton key={n} size="sm"
+                  variant={urlPerPage === n ? 'accent' : 'subtle'}
+                  onClick={() => setUrlPerPage(n)}>
+                  {n}
                 </HFButton>
               ))}
             </div>
-          )}
+          </div>
           {urlData.rows.length === 0 ? (
             <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:12.5}}>
               No URLs in this filter.
