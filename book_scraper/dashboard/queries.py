@@ -218,11 +218,18 @@ def get_schedule_info(session: Session) -> list[dict[str, Any]]:
             next_dt = None
             next_in_s = None
 
+        # scrape_runs stores the combined phase (e.g. 'discover_sitemap');
+        # cron_jobs stores phase + strategy separately.
+        run_phase = (
+            f"{job.phase}_{job.strategy}"
+            if job.strategy
+            else job.phase
+        )
         last_ok = (
             session.query(ScrapeRun)
             .filter(
                 ScrapeRun.shop_id == job.shop_id,
-                ScrapeRun.phase == job.phase,
+                ScrapeRun.phase == run_phase,
                 ScrapeRun.status == "completed",
             )
             .order_by(ScrapeRun.finished_at.desc().nullslast())
