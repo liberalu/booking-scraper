@@ -319,10 +319,19 @@ def get_run_live_health(run: ScrapeRun) -> str:
     # threshold cheaply without re-querying.
 
 
+IN_FLIGHT_RENDER_CAP = 50
+
+
 def get_run_in_flight(session: Session, run_id: int) -> list[dict[str, Any]]:
     """Currently-processing rows for a run.
 
-    Stable order: oldest claimed_at first, then by id.
+    Stable order: oldest claimed_at first, then by id. Capped at
+    ``IN_FLIGHT_RENDER_CAP`` rows: a healthy live run normally has 1
+    (CONCURRENT_REQUESTS_PER_DOMAIN), and a terminal run should have 0
+    after `abort_processing_scrape_url_items` fires. A stranded run
+    with hundreds of orphaned 'processing' rows would otherwise blow
+    up the dashboard's "Now fetching" panel and push the rest of the
+    page out of reach.
     """
     rows = (
         session.query(ScrapeUrlItem)
@@ -331,6 +340,7 @@ def get_run_in_flight(session: Session, run_id: int) -> list[dict[str, Any]]:
             ScrapeUrlItem.status == "processing",
         )
         .order_by(ScrapeUrlItem.claimed_at.asc(), ScrapeUrlItem.id.asc())
+        .limit(IN_FLIGHT_RENDER_CAP)
         .all()
     )
     now = datetime.now(UTC)

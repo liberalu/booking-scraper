@@ -288,6 +288,53 @@ def test_repeated_failures_resets_on_success(db_session: Session):
     assert matching == []
 
 
+def test_get_run_in_flight_caps_at_render_limit(db_session: Session):
+    """Defensive: a run with N >> CONCURRENT_REQUESTS_PER_DOMAIN stuck
+    `processing` rows must not blow up the live panel. Cap at
+    IN_FLIGHT_RENDER_CAP. Real runs should never hit this — Track A's
+    abort_processing_scrape_url_items zeroes processing rows on
+    transition — but the dashboard hardens against stranded data."""
+    from book_scraper.dashboard.queries import (
+        IN_FLIGHT_RENDER_CAP,
+        get_run_in_flight,
+    )
+    from book_scraper.db.models import DiscoveredUrl
+    from book_scraper.db.repo import insert_scrape_url_item
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+    run = create_scrape_run(db_session, shop.id, "scan")
+    db_session.commit()
+
+    cap = IN_FLIGHT_RENDER_CAP
+    extras = 5
+    for i in range(cap + extras):
+        url = f"https://vaga.lt/cap-{i}"
+        db_session.add(
+            DiscoveredUrl(
+                shop_id=shop.id,
+                url=url,
+                normalized_url=url,
+                source="sitemap",
+                url_type="product",
+                fail_count=0,
+            )
+        )
+        db_session.flush()
+        du = (
+            db_session.query(DiscoveredUrl)
+            .filter_by(url=url, shop_id=shop.id)
+            .one()
+        )
+        item = insert_scrape_url_item(db_session, run.id, shop.id, du.id, url)
+        item.status = "processing"
+        item.claimed_at = datetime.now(UTC)
+    db_session.commit()
+
+    in_flight = get_run_in_flight(db_session, run.id)
+    assert len(in_flight) == cap
+
+
 def test_repeated_failures_endpoint(client: TestClient, db_session: Session):
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
