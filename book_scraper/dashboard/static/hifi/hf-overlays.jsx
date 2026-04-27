@@ -867,12 +867,14 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
 // ══════════════════════════════ Rate Settings dialog ══════════════════════════════
 function HFRateSettingsDialog({ open, onClose, shopName, initialSettings = {} }) {
   const HF = getHF();
-  const [delay, setDelay] = React.useState('');
-  const [concurrent, setConcurrent] = React.useState('');
+  // Initialise from props — this component only mounts after data has loaded.
+  const [delay, setDelay] = React.useState(initialSettings.download_delay ?? '2.0');
+  const [concurrent, setConcurrent] = React.useState(initialSettings.concurrent_requests_per_domain ?? '1');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
+  // Re-sync when the modal reopens (e.g. after saving and the parent refreshes).
   React.useEffect(() => {
     if (open) {
       setDelay(initialSettings.download_delay ?? '2.0');
@@ -880,7 +882,7 @@ function HFRateSettingsDialog({ open, onClose, shopName, initialSettings = {} })
       setError('');
       setSaved(false);
     }
-  }, [open]);
+  }, [open, initialSettings.download_delay, initialSettings.concurrent_requests_per_domain]);
 
   function validate() {
     const d = parseFloat(delay);
