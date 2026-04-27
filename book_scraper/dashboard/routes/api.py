@@ -806,6 +806,8 @@ def api_run_urls(
                     "http_status": it.http_status,
                     "error_reason": it.error_reason,
                     "duration_ms": duration_ms,
+                    "request_delay_s": it.request_delay_s,
+                    "delay_source": it.delay_source,
                 }
             )
         source = "live"

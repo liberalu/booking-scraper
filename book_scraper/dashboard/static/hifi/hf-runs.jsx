@@ -434,13 +434,22 @@ function HFRunDetail({ nav, goto, params }) {
   }, [runId, data?.status, liveData?.status]);
 
   // Accumulate throughput samples whenever liveData arrives.
+  // For terminal runs a single postmortem fetch arrives; pre-seed the
+  // history with a flat line so the chart renders instead of a placeholder.
   React.useEffect(() => {
     if (!liveData) return;
     const rate = liveData.rate || { done: 0, window_s: 60 };
     const ratePerMin = rate.window_s > 0 ? Math.round((rate.done / rate.window_s) * 60) : 0;
     setThroughputHistory(prev => {
+      if (prev.length === 0 && ratePerMin === 0) return prev; // nothing to show
       const next = [...prev, ratePerMin];
-      return next.length > THROUGHPUT_MAX_SAMPLES ? next.slice(next.length - THROUGHPUT_MAX_SAMPLES) : next;
+      if (next.length === 1) {
+        // Duplicate so HFAreaChart has at least 2 points; the flat line
+        // honestly represents "this is the last-known rate in the 60s window".
+        return [ratePerMin, ratePerMin];
+      }
+      return next.length > THROUGHPUT_MAX_SAMPLES
+        ? next.slice(next.length - THROUGHPUT_MAX_SAMPLES) : next;
     });
   }, [liveData]);
 
@@ -651,9 +660,11 @@ function HFRunDetail({ nav, goto, params }) {
         { label:'Elapsed', value:data.elapsed || '—',
           delta:<span style={{color:HF.ink3}}>duration</span> },
         { label:'Errors', value:String(errorCount),
-          delta:<span style={{color:HF.ink3}}>
-            {(data.errors_4xx ?? 0)} · 4xx{'  '}{(data.errors_5xx ?? 0)} · 5xx
-          </span> },
+          delta: (() => {
+            const a = data.errors_4xx ?? 0, b = data.errors_5xx ?? 0;
+            if (a === 0 && b === 0) return <span style={{color:HF.ink3}}>failed URLs</span>;
+            return <span style={{color:HF.ink3}}>{a} 4xx · {b} 5xx</span>;
+          })() },
         { label:'Workers', value:String(workerCount),
           delta:<span style={{color:HF.ink3}}>in flight</span> },
       ]}/>
@@ -933,7 +944,7 @@ function HFRunDetail({ nav, goto, params }) {
               <div style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '1fr 130px 90px 80px 80px'
+                  ? '1fr 130px 90px 80px 80px 80px'
                   : '1fr 60px 70px 150px',
                 padding:`8px ${HF.cardP}px`,
                 borderBottom: `1px solid ${HF.border}`,
@@ -967,6 +978,7 @@ function HFRunDetail({ nav, goto, params }) {
                       <SortHdr k="started">Started</SortHdr>
                       <SortHdr k="url_type">Type</SortHdr>
                       <SortHdr k="duration" align="right">Duration</SortHdr>
+                      <span style={{textAlign:'right'}}>Throttle</span>
                     </>
                   ) : (
                     <>
@@ -1014,7 +1026,7 @@ function HFRunDetail({ nav, goto, params }) {
                   <div key={i} style={{
                     display:'grid',
                     gridTemplateColumns: urlData.source === 'live'
-                      ? '1fr 130px 90px 80px 80px'
+                      ? '1fr 130px 90px 80px 80px 80px'
                       : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
@@ -1035,6 +1047,15 @@ function HFRunDetail({ nav, goto, params }) {
                         <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink4}}>{u.url_type}</span>
                         <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', textAlign:'right'}}>{fmtDur(u.duration_ms)}</span>
+                        {(() => {
+                          const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
+                          return (
+                            <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', textAlign:'right'}} title={lbl.title || ''}>
+                              {_fmtDelay(u.request_delay_s)}
+                              {lbl.suffix ? <span style={{color:HF.ink5}}> {lbl.suffix.slice(0,4)}</span> : null}
+                            </span>
+                          );
+                        })()}
                       </>
                     ) : (
                       <>
@@ -1054,11 +1075,11 @@ function HFRunDetail({ nav, goto, params }) {
             padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
             fontSize:12, color:HF.ink3, flexWrap:'wrap', gap:8,
           }}>
-            <span style={{fontFamily:HF.mono}}>
-              Page {urlData.page} of {urlData.pages} · {urlData.total.toLocaleString()} URLs
+            <span style={{fontFamily:HF.mono, color:HF.ink4}}>
+              {urlData.total.toLocaleString()} URLs
             </span>
-            <div style={{display:'flex', gap:8, alignItems:'center'}}>
-              <span style={{color:HF.ink4, fontSize:12}}>Per page:</span>
+            <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+              <span style={{color:HF.ink4, fontSize:11.5, marginRight:2}}>Per page:</span>
               {[10, 25, 50, 100].map(n => (
                 <HFButton key={n} size="sm"
                   variant={urlPerPage === n ? 'accent' : 'subtle'}
@@ -1066,10 +1087,34 @@ function HFRunDetail({ nav, goto, params }) {
                   {n}
                 </HFButton>
               ))}
+              <span style={{width:1, height:18, background:HF.border, margin:'0 4px'}}/>
               <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
-                onClick={() => setUrlPage(p => Math.max(1, p - 1))}>‹ Prev</HFButton>
+                onClick={() => setUrlPage(p => Math.max(1, p - 1))}>‹</HFButton>
+              {(() => {
+                const cur = urlData.page, total = urlData.pages;
+                const btns = [];
+                const push = (n) => btns.push(
+                  <HFButton key={n} size="sm"
+                    variant={n === cur ? 'accent' : 'subtle'}
+                    onClick={() => setUrlPage(n)}>{n}</HFButton>
+                );
+                const ell = (k) => btns.push(
+                  <span key={k} style={{padding:'0 2px', color:HF.ink4}}>…</span>
+                );
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) push(i);
+                } else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return btns;
+              })()}
               <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
-                onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>Next ›</HFButton>
+                onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>›</HFButton>
             </div>
           </div>
         </HFCard>
