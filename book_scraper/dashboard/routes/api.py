@@ -29,6 +29,7 @@ from book_scraper.dashboard.queries import (
     get_run_eta,
     get_run_in_flight,
     get_run_issue_summary,
+    get_run_item_counts,
     get_run_live_health,
     get_run_rate_window,
     get_run_recent_activity,
@@ -685,11 +686,11 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     issues = get_run_issue_summary(session, run_id)
     terminal = _run_terminal_counts(session, [run_id]).get(run_id)
     close_reason = get_run_close_reason(session, run)
-    return {
-        **_run_dict(run, terminal_count=terminal),
-        "issues": issues,
-        "close_reason": close_reason,
-    }
+    item_counts = get_run_item_counts(session, run_id)
+    base = _run_dict(run, terminal_count=terminal)
+    base.update(item_counts)
+    base["items"] = item_counts["items_added"] + item_counts["items_updated"]
+    return {**base, "issues": issues, "close_reason": close_reason}
 
 
 @router.get("/runs/{run_id}/live")
@@ -808,6 +809,8 @@ def api_run_urls(
                     "duration_ms": duration_ms,
                     "request_delay_s": it.request_delay_s,
                     "delay_source": it.delay_source,
+                    "item_id": it.id,
+                    "discovered_url_id": it.discovered_url_id,
                 }
             )
         source = "live"

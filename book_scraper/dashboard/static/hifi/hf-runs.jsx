@@ -944,7 +944,7 @@ function HFRunDetail({ nav, goto, params }) {
               <div style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '1fr 130px 90px 80px 80px 80px'
+                  ? '60px 1fr 130px 90px 80px 80px 80px 90px'
                   : '1fr 60px 70px 150px',
                 padding:`8px ${HF.cardP}px`,
                 borderBottom: `1px solid ${HF.border}`,
@@ -973,12 +973,14 @@ function HFRunDetail({ nav, goto, params }) {
                   };
                   return urlData.source === 'live' ? (
                     <>
+                      <span>ID</span>
                       <SortHdr k="title">URL</SortHdr>
                       <SortHdr k="status">Status</SortHdr>
                       <SortHdr k="started">Started</SortHdr>
                       <SortHdr k="url_type">Type</SortHdr>
                       <SortHdr k="duration" align="right">Duration</SortHdr>
                       <span style={{textAlign:'right'}}>Throttle</span>
+                      <span>Disc. URL</span>
                     </>
                   ) : (
                     <>
@@ -1026,12 +1028,18 @@ function HFRunDetail({ nav, goto, params }) {
                   <div key={i} style={{
                     display:'grid',
                     gridTemplateColumns: urlData.source === 'live'
-                      ? '1fr 130px 90px 80px 80px 80px'
+                      ? '60px 1fr 130px 90px 80px 80px 80px 90px'
                       : '1fr 60px 70px 150px',
                     padding:`7px ${HF.cardP}px`,
                     borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
                     fontSize:12.5, alignItems:'center', gap:10,
                   }}>
+                    {urlData.source === 'live' && (
+                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                            title={`item #${u.item_id}`}>
+                        {u.item_id ?? '—'}
+                      </span>
+                    )}
                     <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
                       <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0, flex:1}}>
                         {u.title && (
@@ -1056,6 +1064,14 @@ function HFRunDetail({ nav, goto, params }) {
                             </span>
                           );
                         })()}
+                        {u.discovered_url_id != null ? (
+                          <a href="#" onClick={(e)=>{e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
+                             style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
+                            #{u.discovered_url_id}
+                          </a>
+                        ) : (
+                          <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5}}>—</span>
+                        )}
                       </>
                     ) : (
                       <>

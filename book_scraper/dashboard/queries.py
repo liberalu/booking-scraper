@@ -409,6 +409,37 @@ def get_run_close_reason(session: Session, run: ScrapeRun) -> str | None:
     return None
 
 
+def get_run_item_counts(session: Session, run_id: int) -> dict[str, int]:
+    """Return how many shop_books were created and updated in this run.
+
+    More reliable than ScrapeRun.items_added/items_updated, which are
+    spider-side batch counters that don't flush on a reaped failure.
+
+    - created: shop_books whose last_run_id == run_id and
+               last_run_action == 'created'.  Only accurate for the most
+               recent run that touched each book, but good enough for
+               current and recent runs.
+    - updated: DISTINCT shop_book_ids in shop_book_changes for this run.
+               This table is append-only — survives crashed/reaped runs.
+    """
+    created = (
+        session.query(func.count(ShopBook.id))
+        .filter(
+            ShopBook.last_run_id == run_id,
+            ShopBook.last_run_action == "created",
+        )
+        .scalar()
+        or 0
+    )
+    updated = (
+        session.query(func.count(func.distinct(ShopBookChange.shop_book_id)))
+        .filter(ShopBookChange.scrape_run_id == run_id)
+        .scalar()
+        or 0
+    )
+    return {"items_added": int(created), "items_updated": int(updated)}
+
+
 # ─────────────────── Live observability (Stage 2) ────────────────────
 # Live-view thresholds — sharper than the run-list page's STALE/DEAD
 # constants because the live view refreshes every ~2s and operators
