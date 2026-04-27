@@ -36,6 +36,11 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
+    # Default is 10s; on SIGTERM the spider's `closed()` callback runs
+    # finish_scrape_run + abort_processing_scrape_url_items, which can
+    # exceed 10s with a large queue and a slow DB. 30s gives finalize
+    # headroom so it persists `close_reason` instead of getting SIGKILLed.
+    stop_grace_period: 30s
     volumes:
       - scraper_logs:/var/log
 

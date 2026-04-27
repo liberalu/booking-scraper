@@ -12,8 +12,36 @@ def get_engine(database_url: str) -> Engine:
         pool_pre_ping=True,
         # Proactively recycle connections every 5 minutes so they don't go stale.
         pool_recycle=300,
-        # Kill sessions stuck in an open transaction after 5 minutes (e.g. spider crash)
-        connect_args={"options": "-c idle_in_transaction_session_timeout=300000"},
+        connect_args={
+            # Server-side guards:
+            #   idle_in_transaction_session_timeout: kill sessions stuck in an
+            #     open transaction after 5 min (e.g. spider crash mid-tx).
+            #   statement_timeout: cap any single query at 10s by default. The
+            #     reactor thread runs sync psycopg2 — a hung query freezes
+            #     scrapy's event loop, blocking heartbeat ticks AND request
+            #     dispatching. 10s is the worst-case reactor stall budget;
+            #     code paths needing more (large upserts) can SET LOCAL
+            #     statement_timeout higher inside their own transaction.
+            "options": (
+                "-c idle_in_transaction_session_timeout=300000 "
+                "-c statement_timeout=10000"
+            ),
+            # Client-side connect timeout: bounds a new pool connection's TCP
+            # handshake. Without this, psycopg2.connect() blocks indefinitely
+            # if Postgres is unreachable, which freezes whichever sync call
+            # tried to acquire it (typically a heartbeat tick or _mark_response).
+            "connect_timeout": 5,
+            # TCP keepalives: detect dropped connections in ~60s instead of
+            # the kernel default (~2 hours on Linux). Without these, a
+            # silently-dropped TCP connection (NAT idle, postgres restart,
+            # network blip) causes the next recv() on it to hang for hours,
+            # and pool_pre_ping doesn't help — it only checks at checkout,
+            # not while a connection is in use.
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 10,
+            "keepalives_count": 3,
+        },
     )
 
 

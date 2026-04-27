@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,8 @@ from book_scraper.db.models import (
 )
 from book_scraper.spiders.vaga.parsers import infer_shop_book_type
 from book_scraper.url_utils import normalize_url
+
+logger = logging.getLogger(__name__)
 
 _MULTI_AUTHOR_RE = re.compile(
     r"(?:,\s|;|\s&\s|\s/\s|\s+and\s+|\s+ir\s+)", re.IGNORECASE
@@ -665,11 +668,65 @@ def finish_scrape_run(
     was_running = run.status == "running"
     run.status = status
     run.finished_at = datetime.now(UTC)
+    # Stamp close_reason on every transition (idempotent — first writer wins
+    # via the `is None` guard in record_scrape_run_failed_issue, but the
+    # explicit set here ensures the happy `completed`/`reason="finished"`
+    # path also persists a value).
+    if reason is not None and run.close_reason is None:
+        run.close_reason = reason
     session.flush()
     if was_running:
         abort_processing_scrape_url_items(session, run_id)
     if was_running and status == "failed":
         record_scrape_run_failed_issue(session, run, reason or "finished_failed")
+    logger.info("scrape_run %d -> %s (reason=%s)", run_id, status, reason or "<none>")
+
+
+def finalize_run_failsafe(
+    database_url: str,
+    run_id: int,
+    status: str,
+    reason: str,
+    resumable_after_failure: bool = False,
+) -> None:
+    """Finalize a scrape run via a fresh DB session.
+
+    Bypasses any long-lived pipeline session that may be poisoned with a
+    PendingRollbackError after an earlier failed query. The fresh session
+    reconnects cleanly and applies a 5-second statement_timeout so a hung
+    DB doesn't block spider shutdown.
+
+    Used by spider close paths (scan, discover) and the StallDetector.
+    Swallows-and-logs any exception so the spider always finishes its
+    shutdown sequence — leaving the row zombie (later reaped) is strictly
+    worse than a logged finalize failure.
+
+    If ``resumable_after_failure`` is True, the run row is flagged so the
+    next scheduled run inherits its pending scrape_url_items (used by the
+    StallDetector — stalled runs still have valid pending work).
+    """
+    from book_scraper.db.session import get_session_factory
+
+    try:
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            session.execute(sa_text("SET LOCAL statement_timeout = '5s'"))
+            finish_scrape_run(session, run_id, status, reason=reason)
+            if resumable_after_failure:
+                run = session.get(ScrapeRun, run_id)
+                if run is not None:
+                    run.resumable_after_failure = True
+            session.commit()
+        finally:
+            session.close()
+    except Exception:
+        logger.exception(
+            "Failsafe finalize for run %d failed (status=%s, reason=%s)",
+            run_id,
+            status,
+            reason,
+        )
 
 
 def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
@@ -708,7 +765,14 @@ def record_scrape_run_failed_issue(
 
     Surfaces failed runs on the validation/issues page so they don't go
     unnoticed. Idempotent — skips insert if the run already has one.
+
+    Also stamps `close_reason` on the run if it is not already set, so
+    out-of-band callers (mark_stale_runs_failed, mark_orphan_runs_failed,
+    dashboard reaper, manual kill) record their reason on the run itself.
+    First writer wins.
     """
+    if run.close_reason is None:
+        run.close_reason = reason
     existing = (
         session.query(ValidationIssue.id)
         .filter(
@@ -718,6 +782,7 @@ def record_scrape_run_failed_issue(
         .first()
     )
     if existing is not None:
+        session.flush()
         return
     issue = ValidationIssue(
         scrape_run_id=run.id,
@@ -749,6 +814,7 @@ def mark_stale_runs_failed(
         run.finished_at = now
         record_scrape_run_failed_issue(session, run, reason)
         abort_processing_scrape_url_items(session, run.id)
+        logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
     session.flush()
     return len(stale)
 
@@ -813,6 +879,7 @@ def mark_orphan_runs_failed(session: Session) -> int:
         run.resumable_after_failure = True
         record_scrape_run_failed_issue(session, run, "orphan_on_boot")
         abort_processing_scrape_url_items(session, run.id)
+        logger.info("scrape_run %d -> failed (reason=orphan_on_boot)", run.id)
     session.flush()
     return len(orphans)
 

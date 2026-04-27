@@ -420,6 +420,13 @@ class ScrapeRun(Base):
         DateTime(timezone=True), nullable=True
     )
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Why the run terminated. Stamped at finalize for every code path that
+    # transitions a run to completed/failed (Scrapy `closed(reason)`,
+    # StallDetector, dashboard reaper, manual kill, boot reconciliation).
+    # Examples: "finished", "shutdown", "stall_timeout", "heartbeat_timeout",
+    # "orphan_on_boot", "stale_pre_scan", "killed_pid_dead". Null on legacy
+    # rows that finalized before this column existed.
+    close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # When a run is reaped for heartbeat_timeout / stall_timeout, its
     # pending scrape_url_items are still useful — the next scheduled run
     # inherits them rather than discarding the work. This flag is set by

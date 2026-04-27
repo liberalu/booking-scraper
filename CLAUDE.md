@@ -90,6 +90,7 @@ After completing any task that changes code, suggest to the user:
 1. **Rebuild + restart containers**:
    - Dashboard-only changes (routes, templates, queries): `docker compose build dashboard && docker compose up -d dashboard`
    - **Schema changes (Alembic migration that drops/renames a column or type), model changes, repo/pipeline/spider changes**: rebuild *both* — `docker compose build dashboard scraper && docker compose up -d dashboard scraper`. Skipping the scraper rebuild leaves it running old code that queries dropped columns and every crawl crashes on startup (see commit f740448).
+   - **BuildKit cache gotcha**: on macOS Docker Desktop, the `COPY book_scraper/` layer occasionally hits a stale-cache path even though source files changed — the new image is "Built" but inside the container `/app/book_scraper/...` still has the previous code. If you're verifying a fix and the running container disagrees with your edits, rebuild with `--no-cache`: `docker compose build --no-cache dashboard scraper && docker compose up -d dashboard scraper`. Quick way to confirm: `docker exec book-scraper-<svc>-1 grep <new-symbol> /app/book_scraper/<changed-file>` — if your new symbol isn't there, the cache lied.
 2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes.
 3. After schema migrations, trigger a short scan (`scrapy crawl scan -a shop=vaga -a urls=<one-url>`) to confirm the scraper container picked up the new models.
 

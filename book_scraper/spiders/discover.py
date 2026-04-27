@@ -505,61 +505,77 @@ class DiscoverSpider(scrapy.Spider):
         )
         if not database_url:
             return
-        factory = get_session_factory(database_url)
-        session = factory()
+
+        finalized = False
         try:
-            # Change detection and zero-yield checks still live here because
-            # they need spider-local state (_sitemap_urls, _urls_processed,
-            # _zero_yield_suppressed). finish_discover handles the generic
-            # parts: status, urls_processed, cron last_run_at, cleanup.
-            status = "completed" if reason == "finished" else "failed"
-            if (
-                status == "completed"
-                and self.strategy == "sitemap"
-                and self._sitemap_urls
-                and self._shop_id is not None
-            ):
-                from book_scraper.db.repo import mark_shop_books_inactive
+            factory = get_session_factory(database_url)
+            session = factory()
+            try:
+                # Change detection and zero-yield checks still live here because
+                # they need spider-local state (_sitemap_urls, _urls_processed,
+                # _zero_yield_suppressed). finish_discover handles the generic
+                # parts: status, urls_processed, cron last_run_at, cleanup.
+                status = "completed" if reason == "finished" else "failed"
+                if (
+                    status == "completed"
+                    and self.strategy == "sitemap"
+                    and self._sitemap_urls
+                    and self._shop_id is not None
+                ):
+                    from book_scraper.db.repo import mark_shop_books_inactive
 
-                deactivated = mark_shop_books_inactive(
-                    session,
-                    shop_id=self._shop_id,
-                    active_urls=self._sitemap_urls,
-                )
-                if deactivated:
-                    self.logger.info(
-                        "Change detection: marked %d shop_book(s) inactive",
-                        deactivated,
+                    deactivated = mark_shop_books_inactive(
+                        session,
+                        shop_id=self._shop_id,
+                        active_urls=self._sitemap_urls,
                     )
+                    if deactivated:
+                        self.logger.info(
+                            "Change detection: marked %d shop_book(s) inactive",
+                            deactivated,
+                        )
 
-            if (
-                status == "completed"
-                and self._urls_processed == 0
-                and not self._zero_yield_suppressed
-                and self._shop_id is not None
-            ):
-                from book_scraper.db.models import DiscoveredUrl
+                if (
+                    status == "completed"
+                    and self._urls_processed == 0
+                    and not self._zero_yield_suppressed
+                    and self._shop_id is not None
+                ):
+                    from book_scraper.db.models import DiscoveredUrl
 
-                prior_count = (
-                    session.query(DiscoveredUrl)
-                    .filter(DiscoveredUrl.shop_id == self._shop_id)
-                    .count()
-                )
-                if prior_count > 0:
-                    self._report_validation(
-                        "discover_zero_yield",
-                        "run",
-                        self.conf.shop.base_url,
-                        f"phase=discover_{self.strategy}, "
-                        f"shop had {prior_count} URLs pre-run",
+                    prior_count = (
+                        session.query(DiscoveredUrl)
+                        .filter(DiscoveredUrl.shop_id == self._shop_id)
+                        .count()
                     )
+                    if prior_count > 0:
+                        self._report_validation(
+                            "discover_zero_yield",
+                            "run",
+                            self.conf.shop.base_url,
+                            f"phase=discover_{self.strategy}, "
+                            f"shop had {prior_count} URLs pre-run",
+                        )
 
-            session.commit()
+                session.commit()
 
-            DiscoverService(session).finish_discover(
-                self._run_id,
-                self._urls_processed,
-                reason,
+                DiscoverService(session).finish_discover(
+                    self._run_id,
+                    self._urls_processed,
+                    reason,
+                )
+                finalized = True
+            finally:
+                session.close()
+        except Exception:
+            self.logger.exception(
+                "Spider close: discover finalize failed; using failsafe"
             )
-        finally:
-            session.close()
+
+        # Failsafe: if anything above blew up (poisoned session, DB blip)
+        # the run row is still 'running'. Finalize it via a fresh session.
+        if not finalized:
+            from book_scraper.db.repo import finalize_run_failsafe
+
+            status = "completed" if reason == "finished" else "failed"
+            finalize_run_failsafe(database_url, self._run_id, status, reason)

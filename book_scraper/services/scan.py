@@ -32,9 +32,10 @@ class ScanPlan:
     freshness_warnings: list[str] = field(default_factory=list)
     # Deferred queue-population payload. None when the plan resolves to a
     # resumable run (queue already populated) or when the lock could not
-    # be acquired. The spider passes the plan back to
-    # `populate_scan_queue` after emitting `run_started`, so that the
-    # heartbeat extension is ticking before the slow row-insert begins.
+    # be acquired. The spider populates the queue after `prepare_scan`
+    # so that the HeartbeatExtension's tick loop (started at
+    # `spider_opened`) is already running before the slow row-insert
+    # begins.
     _shop_id: int | None = None
     _urls_to_scrape: list[Any] | None = None
     # When the lock for (shop_id, "scan") can't be acquired because
@@ -87,9 +88,10 @@ class ScanService:
         the URL list for ``populate_scan_queue``).
 
         Why split: the queue insert can take 30+ seconds on cold cache.
-        Emitting ``run_started`` between phase 1 and phase 2 lets the
-        heartbeat extension tick during the insert, so the reaper does
-        not false-positive on long queue prep.
+        Phase 1 returns control to the spider before the insert so the
+        HeartbeatExtension (already ticking on a `spider_opened` timer)
+        can pick up the new ``_run_id`` and refresh ``last_heartbeat``
+        before the dashboard reaper threshold trips.
         """
         shop = upsert_shop(self.session, shop_name, base_url)
 

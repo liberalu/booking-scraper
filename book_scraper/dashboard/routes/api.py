@@ -179,6 +179,9 @@ def _run_dict(
         "type": "full",
         "by": "—",
         "startedH": round(started_h, 2),
+        # Why the run terminated. Populated for runs finalized after
+        # the close_reason column was added; legacy runs return null.
+        "close_reason": run.close_reason,
     }
 
 

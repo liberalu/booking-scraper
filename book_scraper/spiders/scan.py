@@ -1,3 +1,4 @@
+import contextlib
 import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
@@ -17,7 +18,6 @@ from book_scraper.db.session import get_session_factory
 from book_scraper.event_log import log_response_event
 from book_scraper.items import ShopBookItem
 from book_scraper.services.scan import ScanService
-from book_scraper.signals import run_started
 from book_scraper.spiders.registry import load_parsers
 
 
@@ -53,7 +53,13 @@ class ScanSpider(scrapy.Spider):
         self._progress_session: Session | None = None
         self._progress_service: ScanService | None = None
 
-        self._flush_every: int = 50
+        # Defence-in-depth heartbeat: `update_scrape_run_progress` (called
+        # from `_flush_progress` every `_flush_every` responses) also stamps
+        # `last_heartbeat`. Kept low enough that even a slow crawl (~5
+        # responses/min) flushes within the dashboard reaper threshold
+        # (`DEAD_RUN_SECONDS = 60`). HeartbeatExtension is the primary
+        # source of liveness signals; this is just a backup.
+        self._flush_every: int = 10
         self._errors_4xx: int = 0
         self._errors_5xx: int = 0
         self._error_count: int = 0
@@ -159,12 +165,8 @@ class ScanSpider(scrapy.Spider):
             finally:
                 session.close()
 
-            # Emit run_started so HeartbeatExtension can begin ticking.
-            self.crawler.signals.send_catch_log(
-                signal=run_started,
-                sender=self,
-                run_id=self._run_id,
-            )
+            # HeartbeatExtension picks up `_run_id` lazily on its next
+            # spider_opened-driven tick — no explicit handshake needed.
 
             self.logger.info(
                 "Single-URL mode: scraping %d URLs (run #%d)",
@@ -211,16 +213,12 @@ class ScanSpider(scrapy.Spider):
             for warning in plan.freshness_warnings:
                 self.logger.warning(warning)
 
-            # Emit run_started BEFORE the queue is populated. The
-            # HeartbeatExtension begins ticking immediately, so a slow
-            # `populate_scan_queue` (cold-cache 30+ s row insert) does
-            # not leave `last_heartbeat` frozen at row-creation time
-            # while the reaper threshold ticks past.
-            self.crawler.signals.send_catch_log(
-                signal=run_started,
-                sender=self,
-                run_id=self._run_id,
-            )
+            # HeartbeatExtension's tick loop (started at spider_opened)
+            # reads `self._run_id` lazily on each fire, so a slow
+            # `populate_scan_queue` does not leave `last_heartbeat`
+            # frozen at row-creation time while the reaper threshold
+            # ticks past — the next tick after the row is created
+            # picks it up.
 
             # Phase 2: populate (or inherit) the queue.
             service.populate_scan_queue(plan)
@@ -703,17 +701,25 @@ class ScanSpider(scrapy.Spider):
         )
 
     def closed(self, reason: str) -> None:
-        """Update scrape_run and process URL status updates on close."""
+        """Finalize scrape_run on spider close.
+
+        Tries the long-lived progress session first (carries pending URL
+        status updates and stats). If it errors — typically a poisoned
+        session after an earlier failed query — falls back to a fresh-
+        session failsafe finalize so the run row is never left zombie.
+        """
         if self._run_id is None:
             return
 
-        if self._progress_session is None:
-            database_url = self.settings.get("DATABASE_URL")
-            session_factory = get_session_factory(database_url)
-            self._progress_session = session_factory()
-            self._progress_service = ScanService(self._progress_session)
+        database_url = self.settings.get("DATABASE_URL")
+        finalized = False
 
         try:
+            if self._progress_session is None:
+                session_factory = get_session_factory(database_url)
+                self._progress_session = session_factory()
+                self._progress_service = ScanService(self._progress_session)
+
             assert self._progress_service is not None
             self._progress_service.finish_scan(
                 self._run_id,
@@ -730,6 +736,23 @@ class ScanSpider(scrapy.Spider):
                     error_count=self._error_count,
                 )
                 self._progress_session.commit()
+            finalized = True
+        except Exception:
+            self.logger.exception(
+                "Spider close: progress-session finalize failed; using failsafe"
+            )
         finally:
-            self._progress_session.close()
-            self._progress_session = None
+            if self._progress_session is not None:
+                with contextlib.suppress(Exception):
+                    self._progress_session.close()
+                self._progress_session = None
+
+        # Failsafe: if the progress-session path didn't finalize the run
+        # row (poisoned session, DB blip), do it via a fresh session so
+        # the row is never left as 'running'. Stats / URL status updates
+        # are best-effort and may be lost in this branch.
+        if not finalized:
+            from book_scraper.db.repo import finalize_run_failsafe
+
+            status = "completed" if reason == "finished" else "failed"
+            finalize_run_failsafe(database_url, self._run_id, status, reason)

@@ -10,6 +10,7 @@ Covers the five Track A items:
 """
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -30,7 +31,6 @@ from book_scraper.db.session import get_engine, get_session_factory
 from book_scraper.services.scan import ScanService
 from tests.conftest import TEST_DATABASE_URL
 
-
 # ────────────────────────────── #11 ──────────────────────────────
 
 
@@ -42,6 +42,52 @@ def test_engine_has_pool_pre_ping_and_recycle():
         assert engine.pool._recycle == 300
     finally:
         engine.dispose()
+
+
+def test_engine_has_fail_fast_connect_args():
+    """get_engine must bound how long any sync DB call can block the
+    reactor thread. Without these guards, a hung psycopg2 call freezes
+    the entire Twisted event loop — see runs 194/195 where heartbeat
+    ticks AND the StallDetector both stopped firing for ~5 minutes
+    while a sync write waited on a dead postgres connection.
+
+    The guards in connect_args are the only defense for IN-FLIGHT
+    queries; pool_pre_ping only checks at checkout. Test by intercepting
+    create_engine to read the user-supplied connect_args dict directly
+    (SQLAlchemy stores them as a closure on the connect creator, not as
+    a public attribute, so an indirect intercept is the cleanest path).
+    """
+    from unittest.mock import patch
+
+    captured: dict = {}
+
+    def capture(url, **kwargs):
+        captured.update(kwargs)
+        # Return a stub — this test only verifies what get_engine passed.
+        return MagicMock()
+
+    with patch("book_scraper.db.session.create_engine", side_effect=capture):
+        get_engine(TEST_DATABASE_URL)
+
+    connect_args = captured.get("connect_args", {})
+
+    # Bounded TCP handshake: a fresh connection can't hang forever.
+    assert connect_args.get("connect_timeout") == 5
+
+    # Server-side default statement_timeout: no individual query
+    # blocks the reactor more than 10s. Code paths that legitimately
+    # need longer (large upserts) opt in via SET LOCAL.
+    options = connect_args.get("options", "")
+    assert "statement_timeout=10000" in options
+    assert "idle_in_transaction_session_timeout=300000" in options
+
+    # TCP keepalives so a silently-dropped connection (NAT idle,
+    # postgres restart, network blip) is detected in ~60s rather
+    # than the kernel default of ~2 hours.
+    assert connect_args.get("keepalives") == 1
+    assert connect_args.get("keepalives_idle") == 30
+    assert connect_args.get("keepalives_interval") == 10
+    assert connect_args.get("keepalives_count") == 3
 
 
 # ────────────────────────────── #16 ──────────────────────────────
@@ -141,6 +187,7 @@ def test_mark_stale_runs_uses_seconds_threshold(db_session):
     assert run.status == "failed"
     assert run.resumable_after_failure is True
     assert run.finished_at is not None
+    assert run.close_reason == "heartbeat_timeout"
 
 
 def test_mark_stale_runs_leaves_fresh_runs_alone(db_session):
@@ -216,9 +263,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
     _seed_one_url(db_session, shop.id, "https://vaga.lt/p2")
 
     service = ScanService(db_session)
-    plan = service.prepare_scan_create_run(
-        "vaga", "https://vaga.lt", {}, rescrape=True
-    )
+    plan = service.prepare_scan_create_run("vaga", "https://vaga.lt", {}, rescrape=True)
 
     # Run row exists with a heartbeat...
     run = db_session.get(ScrapeRun, plan.run_id)
@@ -226,9 +271,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
     assert run.status == "running"
     assert run.last_heartbeat is not None
     # ...but no queue rows have been inserted yet.
-    queue_count = (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count()
-    )
+    queue_count = db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count()
     assert queue_count == 0
     # The plan carries the deferred URL list.
     assert plan._urls_to_scrape is not None
@@ -236,9 +279,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
 
     # Phase 2 inserts the queue.
     service.populate_scan_queue(plan)
-    assert (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 2
-    )
+    assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 2
 
 
 # ────────────────────────────── #2 + #10 — queue inheritance ──────────────────────────────
@@ -254,9 +295,7 @@ def test_inherit_pending_items_repoints_run_id(db_session):
 
     old_run = create_scrape_run(db_session, shop.id, "scan")
     insert_scrape_url_item(db_session, old_run.id, shop.id, du1.id, du1.url)
-    item2 = insert_scrape_url_item(
-        db_session, old_run.id, shop.id, du2.id, du2.url
-    )
+    item2 = insert_scrape_url_item(db_session, old_run.id, shop.id, du2.id, du2.url)
     # Mark item2 done so only item1 is pending.
     item2.status = "done"
     item2.done_at = datetime.now(UTC)
@@ -329,9 +368,7 @@ def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
 
     service = ScanService(db_session)
     first = service.prepare_scan("vaga", "https://vaga.lt", {}, rescrape=True)
-    assert (
-        db_session.query(ScrapeUrlItem).filter_by(run_id=first.run_id).count() == 2
-    )
+    assert db_session.query(ScrapeUrlItem).filter_by(run_id=first.run_id).count() == 2
 
     # Simulate stall-style reap: mark first run failed + resumable.
     first_run = db_session.get(ScrapeRun, first.run_id)

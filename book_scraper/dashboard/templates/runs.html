@@ -33,7 +33,14 @@
             <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
             <td><a href="/shops/{{ run.shop.name }}">{{ run.shop.name }}</a></td>
             <td>{{ run.phase }}</td>
-            <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+            <td>
+                <span class="badge badge-{{ run.status }}"
+                    {% if run.close_reason %}title="reason: {{ run.close_reason }}"{% endif %}
+                >{{ run.status }}</span>
+                {% if run.close_reason and run.status != 'running' %}
+                    <small class="text-muted">{{ run.close_reason }}</small>
+                {% endif %}
+            </td>
             <td>
                 {% set health = run_health.get(run.id, '') %}
                 {% if health == 'healthy' %}

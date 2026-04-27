@@ -96,63 +96,81 @@ class StallDetector:  # pragma: no cover
         URLs that the next scheduled run can adopt. Set
         ``resumable_after_failure`` so ``find_resumable_run`` picks the
         run up next time.
-        """
-        try:
-            from book_scraper.db.models import ScrapeRun
-            from book_scraper.db.repo import finish_scrape_run
-            from book_scraper.db.session import get_session_factory
 
-            database_url = self.crawler.settings.get("DATABASE_URL")
-            session_factory = get_session_factory(database_url)
-            session = session_factory()
-            try:
-                finish_scrape_run(session, run_id, "failed", reason=reason)
-                run = session.get(ScrapeRun, run_id)
-                if run is not None:
-                    run.resumable_after_failure = True
-                session.commit()
-            finally:
-                session.close()
-        except Exception:
-            logger.exception("Failed to mark run %d failed on stall", run_id)
+        Delegates to the shared ``finalize_run_failsafe`` so all
+        belt-and-suspenders close paths converge on one implementation
+        (statement_timeout, exception swallowing, INFO log line).
+        """
+        from book_scraper.db.repo import finalize_run_failsafe
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        finalize_run_failsafe(
+            database_url, run_id, "failed", reason, resumable_after_failure=True
+        )
 
 
 class HeartbeatExtension:  # pragma: no cover
     """Tick `scrape_runs.last_heartbeat` every N seconds while a run is live.
 
-    Hooks into the custom `run_started` signal (not `spider_opened`)
-    because `_run_id` is assigned inside `start()`, after spider_opened
-    has already fired. See the live observability spec.
+    Hooks into Scrapy's built-in ``spider_opened`` signal (proven to
+    deliver — StallDetector uses the same wiring). Earlier versions of
+    this extension hooked a custom ``run_started`` signal so the run_id
+    would be set when the handler fired; in practice that custom signal
+    didn't deliver to this extension's bound method (the custom-signal
+    + WeakMethod combination silently dropped the connection — see
+    runs 188-190 with `last_heartbeat` frozen at row creation).
+
+    Now we tick on a timer that starts at `spider_opened` and lazily
+    reads ``spider._run_id`` on every tick. The first few ticks may
+    fire before ``start()`` has assigned ``_run_id`` (the spider creates
+    the run row inside ``start()``, after ``spider_opened`` has already
+    been emitted). Those ticks are no-ops and reschedule.
+
+    The actual heartbeat write runs in Twisted's worker thread pool via
+    ``deferToThread`` — see ``_tick``. This keeps the reactor itself
+    free of synchronous psycopg2 I/O so a hung DB call cannot freeze
+    the event loop the way it did on runs 194/195. The heartbeat is
+    the canary that proves the reactor is alive; making it dependent
+    on reactor-thread DB calls would defeat its purpose.
 
     Independent of request flow, so a request hung in the downloader
-    doesn't make the process look dead. Stops on `spider_closed`.
+    doesn't make the process look dead. Stops on ``spider_closed``.
     """
 
     def __init__(self, crawler: Crawler, interval: float):
         self.crawler = crawler
         self.interval = interval
+        # Cached run_id once the spider has populated it. Used only as
+        # a hint to the operator-stop callback path; the live source of
+        # truth on each tick is `spider._run_id`.
         self._run_id: int | None = None
         self._task: Any = None
         self._session_factory: Any = None
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "HeartbeatExtension":
-        from book_scraper.signals import run_started
-
         interval = crawler.settings.getfloat("HEARTBEAT_INTERVAL_S", 5.0)
         if interval <= 0:
             raise NotConfigured
         ext = cls(crawler, interval)
-        crawler.signals.connect(ext.on_run_started, signal=run_started)
+        crawler.signals.connect(ext.spider_opened, signal=signals.spider_opened)
         crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
         return ext
 
+    def spider_opened(self) -> None:
+        """Begin ticking. The first ticks may run before the spider's
+        ``start()`` has assigned ``_run_id``; they are silent no-ops
+        until run_id appears."""
+        logger.info(
+            "HeartbeatExtension started (interval=%.1fs)", self.interval
+        )
+        self._schedule_next()
+
+    # Back-compat: kept so existing unit tests still exercise the
+    # write-immediately + schedule pattern. Production code no longer
+    # depends on this — `spider_opened` schedules ticks regardless.
     def on_run_started(self, run_id: int, sender: Any = None, **kwargs: Any) -> None:
         self._run_id = run_id
-        # Immediate write so even short runs (faster than the tick
-        # interval) get a fresh heartbeat — otherwise a 4-second scan
-        # would leave the dashboard reading the stale value from
-        # create_scrape_run.
         try:
             self._write_heartbeat(run_id)
         except Exception:
@@ -171,16 +189,52 @@ class HeartbeatExtension:  # pragma: no cover
             self.interval, self._tick
         )
 
+    def _resolve_run_id(self) -> int | None:
+        """Pull the current run_id from the live spider.
+
+        Reads ``spider._run_id`` on every tick rather than caching, so
+        we always have the latest value once ``start()`` populates it
+        — without depending on a custom-signal handshake to deliver it.
+        """
+        spider = getattr(self.crawler, "spider", None)
+        if spider is None:
+            return None
+        run_id = getattr(spider, "_run_id", None)
+        if isinstance(run_id, int):
+            self._run_id = run_id
+            return run_id
+        return None
+
     def _tick(self) -> None:
-        if self._run_id is None:
-            logger.warning("HeartbeatExtension tick before run_id; skipping")
+        """Schedule the heartbeat write on a worker thread.
+
+        Why off-thread: ``_write_heartbeat`` does synchronous psycopg2 I/O.
+        If it ran on the reactor thread (the natural place for callLater
+        callbacks) and a query hung — postgres restart, dropped TCP, NAT
+        idle reaper — the entire Twisted reactor would freeze for as
+        long as the kernel takes to give up on the dead socket (often
+        minutes). That freeze stops every other callLater, every HTTP
+        response, and the StallDetector's own ticks — exactly the
+        long-run stall pattern observed on runs 194/195.
+
+        ``deferToThread`` runs the write in Twisted's worker pool. The
+        reactor stays free to dispatch HTTP requests and fire other
+        scheduled callbacks while the heartbeat is in flight.
+        Callbacks (`_on_tick_done` / `_on_tick_failed`) fire back on the
+        reactor thread, so `_schedule_next` and `_signal_stop` are safe
+        to call there.
+        """
+        run_id = self._resolve_run_id()
+        if run_id is None:
+            # spider hasn't assigned _run_id yet — no-op, try again next tick.
             self._schedule_next()
             return
-        try:
-            status = self._write_heartbeat(self._run_id)
-        except Exception:
-            logger.exception("Heartbeat write failed for run %d", self._run_id)
-            status = None
+        from twisted.internet.threads import deferToThread
+
+        d = deferToThread(self._write_heartbeat, run_id)
+        d.addCallbacks(self._on_tick_done, self._on_tick_failed)
+
+    def _on_tick_done(self, status: str | None) -> None:
         # Operator-requested stop: the dashboard flipped status to
         # 'stopping'. Tear the spider down cleanly. The spider's
         # `closed()` callback transitions the row to 'failed' with
@@ -192,6 +246,17 @@ class HeartbeatExtension:  # pragma: no cover
         # the run. The spider's start() loop handles the actual wait.
         self._schedule_next()
 
+    def _on_tick_failed(self, failure: Any) -> None:
+        # Worker-thread exceptions surface here as a Twisted Failure.
+        # Log and reschedule so the loop stays alive — a one-off DB
+        # blip must not silently kill the heartbeat.
+        logger.error(
+            "Heartbeat write failed: %s",
+            failure.getErrorMessage() if hasattr(failure, "getErrorMessage")
+            else failure,
+        )
+        self._schedule_next()
+
     def _signal_stop(self) -> None:
         spider = getattr(self.crawler, "spider", None)
         engine = getattr(self.crawler, "engine", None)
@@ -201,9 +266,7 @@ class HeartbeatExtension:  # pragma: no cover
                 self._run_id,
             )
             return
-        logger.info(
-            "Run %d transitioned to 'stopping' — closing spider", self._run_id
-        )
+        logger.info("Run %d transitioned to 'stopping' — closing spider", self._run_id)
         engine.close_spider(spider, "stopped_by_operator")
 
     def _write_heartbeat(self, run_id: int) -> str | None:

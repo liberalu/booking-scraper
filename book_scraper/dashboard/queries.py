@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -21,6 +22,8 @@ from book_scraper.db.models import (
     UrlClassification,
     ValidationIssue,
 )
+
+logger = logging.getLogger(__name__)
 
 STALE_HEARTBEAT_MINUTES = 5
 # Coarse "dead" threshold for the run-list page's per-row badge. Kept
@@ -153,14 +156,15 @@ def mark_stale_runs(session: Session) -> int:
     for run in stale:
         last_activity = run.last_heartbeat or run.started_at
         if last_activity and last_activity < cutoff:
-            reason = (
-                "stop_timeout" if run.status == "stopping" else "heartbeat_timeout"
-            )
+            reason = "stop_timeout" if run.status == "stopping" else "heartbeat_timeout"
             run.status = "failed"
             run.finished_at = datetime.now(UTC)
             run.resumable_after_failure = True
+            # close_reason is stamped inside record_scrape_run_failed_issue
+            # (first writer wins), keeping the reason on the run row itself.
             record_scrape_run_failed_issue(session, run, reason)
             abort_processing_scrape_url_items(session, run.id)
+            logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
             marked += 1
     if marked:
         session.commit()
@@ -220,11 +224,7 @@ def get_schedule_info(session: Session) -> list[dict[str, Any]]:
 
         # scrape_runs stores the combined phase (e.g. 'discover_sitemap');
         # cron_jobs stores phase + strategy separately.
-        run_phase = (
-            f"{job.phase}_{job.strategy}"
-            if job.strategy
-            else job.phase
-        )
+        run_phase = f"{job.phase}_{job.strategy}" if job.strategy else job.phase
         last_ok = (
             session.query(ScrapeRun)
             .filter(
@@ -361,9 +361,7 @@ def get_repeated_failures(
             # Different reasons → genuinely transient; don't alert.
             continue
         shared_reason = next(iter(observed))
-        shop_name = (
-            session.query(Shop.name).filter(Shop.id == shop_id).scalar() or "?"
-        )
+        shop_name = session.query(Shop.name).filter(Shop.id == shop_id).scalar() or "?"
         out.append(
             {
                 "shop": shop_name,
