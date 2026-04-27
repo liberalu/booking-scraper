@@ -161,9 +161,7 @@ class HeartbeatExtension:  # pragma: no cover
         """Begin ticking. The first ticks may run before the spider's
         ``start()`` has assigned ``_run_id``; they are silent no-ops
         until run_id appears."""
-        logger.info(
-            "HeartbeatExtension started (interval=%.1fs)", self.interval
-        )
+        logger.info("HeartbeatExtension started (interval=%.1fs)", self.interval)
         self._schedule_next()
 
     # Back-compat: kept so existing unit tests still exercise the
@@ -252,7 +250,8 @@ class HeartbeatExtension:  # pragma: no cover
         # blip must not silently kill the heartbeat.
         logger.error(
             "Heartbeat write failed: %s",
-            failure.getErrorMessage() if hasattr(failure, "getErrorMessage")
+            failure.getErrorMessage()
+            if hasattr(failure, "getErrorMessage")
             else failure,
         )
         self._schedule_next()

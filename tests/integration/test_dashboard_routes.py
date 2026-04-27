@@ -164,9 +164,7 @@ def test_url_detail_api_404(client: TestClient) -> None:
 
 
 @pytest.mark.integration
-def test_url_detail_api_returns_url(
-    client: TestClient, db_session: Session
-) -> None:
+def test_url_detail_api_returns_url(client: TestClient, db_session: Session) -> None:
     """An existing DiscoveredUrl is returned by the API."""
     from book_scraper.db.repo import upsert_discovered_url, upsert_shop
 

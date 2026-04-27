@@ -229,6 +229,7 @@ templates.env.filters["markdown"] = _render_description
 templates.env.filters["relative_time"] = _relative_time
 templates.env.globals["change_diff"] = _change_diff
 
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     task = asyncio.create_task(reaper_loop())

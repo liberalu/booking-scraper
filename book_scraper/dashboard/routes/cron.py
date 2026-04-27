@@ -165,7 +165,8 @@ def cron_run_now(job_id: int, session: Session = Depends(get_db)) -> Response:
     if existing is not None:
         return HTMLResponse(
             f'<p class="error">A {run_phase} run for {job.shop.name} is already '
-            f"running (run #{existing.id}). Wait for it to finish or kill it first.</p>",
+            f"running (run #{existing.id}). Wait for it to finish or "
+            f"kill it first.</p>",
             status_code=409,
         )
 

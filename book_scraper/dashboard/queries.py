@@ -1395,7 +1395,6 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
     )
 
 
-
 def get_shop_field_stats(session: Session, shop_id: int) -> dict:
     """Get per-field completeness stats for a shop."""
     total = (
