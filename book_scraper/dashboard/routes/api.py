@@ -27,13 +27,13 @@ from book_scraper.dashboard.queries import (
     get_run_close_reason,
     get_run_discovered_urls,
     get_run_eta,
+    get_run_failure_groups,
     get_run_in_flight,
     get_run_issue_summary,
     get_run_item_counts,
     get_run_live_health,
     get_run_rate_window,
     get_run_recent_activity,
-    get_run_recent_failures,
     get_run_url_breakdown,
     get_run_url_items,
     get_schedule_info,
@@ -722,7 +722,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
 
     in_flight = get_run_in_flight(session, run_id)
     rate = get_run_rate_window(session, run_id)
-    recent_failures = get_run_recent_failures(session, run_id, limit=10)
+    failure_groups = get_run_failure_groups(session, run_id)
     recent_activity = get_run_recent_activity(session, run_id, limit=20)
 
     health = get_run_live_health(run)
@@ -752,7 +752,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
         "in_flight": in_flight,
         "rate": rate,
         "eta_min": eta_min,
-        "recent_failures": recent_failures,
+        "failure_groups": failure_groups,
         "recent_activity": recent_activity,
     }
 
@@ -1073,6 +1073,7 @@ def api_shop_detail(
     runs = get_shop_runs(session, shop.id, limit=20)
     last_run = runs[0] if runs else None
     terminal = _run_terminal_counts(session, [r.id for r in runs])
+    rate_settings = {s.key: s.value for s in shop.settings}
     return {
         "id": shop.id,
         "name": shop.name,
@@ -1085,6 +1086,7 @@ def api_shop_detail(
         "recent_runs": [
             _run_dict(r, terminal_count=terminal.get(r.id)) for r in runs
         ],
+        "rate_settings": rate_settings,
     }
 
 
