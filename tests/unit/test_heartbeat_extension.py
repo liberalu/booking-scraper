@@ -19,9 +19,7 @@ from book_scraper.extensions import HeartbeatExtension
 def crawler() -> MagicMock:
     c = MagicMock()
     c.settings.getfloat.return_value = 5.0
-    c.settings.get.return_value = (
-        "postgresql://postgres:postgres@localhost:5432/x"
-    )
+    c.settings.get.return_value = "postgresql://postgres:postgres@localhost:5432/x"
     # Default: no spider attached. Individual tests opt in via
     # `crawler.spider = MagicMock(_run_id=...)`.
     c.spider = None

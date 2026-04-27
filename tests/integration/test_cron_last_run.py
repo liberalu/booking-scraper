@@ -68,7 +68,7 @@ def test_scan_finish_no_matching_job_is_noop(db_session):
 
 
 def test_mark_cron_job_ran_if_matches_strategy(db_session):
-    """Strategy discriminator: discover+sitemap must match only sitemap job, not categories."""
+    """discover+sitemap should match sitemap job, not categories job."""
     from book_scraper.db.repo import mark_cron_job_ran_if_matches
 
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
