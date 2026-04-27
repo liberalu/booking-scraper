@@ -1,8 +1,9 @@
 from types import SimpleNamespace
+from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, templates
@@ -96,7 +97,7 @@ def shop_books_page(
     attr_key: str = "",
     attr_value: str = "",
     session: Session = Depends(get_db),
-):
+) -> Response:
     field_filters = parse_shop_book_field_filters(request.query_params)
     field_filter_params = get_shop_book_field_filter_params(field_filters)
     builder_field_name = request.query_params.get("field_name", "")
@@ -307,7 +308,7 @@ def shop_book_detail(
     shop_book_id: int,
     request: Request,
     session: Session = Depends(get_db),
-):
+) -> Response:
     shop_book = session.get(ShopBook, shop_book_id)
     if shop_book is None:
         return HTMLResponse("Shop book not found", status_code=404)
@@ -320,7 +321,7 @@ def shop_book_detail(
 
     # Build unified change history: field changes plus price/stock changes
     # derived from the prices table.
-    all_changes: list = list(changes)
+    all_changes: list[Any] = list(changes)
     for i in range(1, len(prices)):
         prev, cur = prices[i - 1], prices[i]
         if cur.price != prev.price:

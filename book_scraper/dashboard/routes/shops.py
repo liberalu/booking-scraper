@@ -3,7 +3,7 @@ import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
@@ -72,7 +72,7 @@ SHOP_COMMANDS = {
 
 
 @router.get("/shops")
-def shops_list(request: Request, session: Session = Depends(get_db)):
+def shops_list(request: Request, session: Session = Depends(get_db)) -> Response:
     shops = get_all_shops(session)
     shop_data = []
     for shop in shops:
@@ -86,7 +86,9 @@ def shops_list(request: Request, session: Session = Depends(get_db)):
 
 
 @router.get("/shops/{shop_name}")
-def shop_detail(shop_name: str, request: Request, session: Session = Depends(get_db)):
+def shop_detail(
+    shop_name: str, request: Request, session: Session = Depends(get_db)
+) -> Response:
     shop = get_shop_by_name(session, shop_name)
     if shop is None:
         return HTMLResponse("Shop not found", status_code=404)

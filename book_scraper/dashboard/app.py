@@ -1,13 +1,14 @@
 import asyncio
 import difflib
 import re
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
 import markdown as _markdown
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup, escape
 
@@ -231,7 +232,7 @@ templates.env.globals["change_diff"] = _change_diff
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastAPI):
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     task = asyncio.create_task(reaper_loop())
     try:
         yield
@@ -245,7 +246,9 @@ app = FastAPI(title="Book Scraper Dashboard", lifespan=_lifespan)
 
 
 @app.middleware("http")
-async def _no_cache_jsx(request, call_next):
+async def _no_cache_jsx(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response = await call_next(request)
     if request.url.path.endswith(".jsx"):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"

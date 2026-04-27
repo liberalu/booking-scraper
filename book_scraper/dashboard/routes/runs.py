@@ -4,7 +4,7 @@ import signal
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.deps import get_db, get_docker_client, templates
@@ -62,7 +62,7 @@ PHASE_COMMANDS: dict[str, list[str]] = {
 
 
 @router.get("/runs")
-def runs_list(request: Request, session: Session = Depends(get_db)):
+def runs_list(request: Request, session: Session = Depends(get_db)) -> Response:
     mark_stale_runs(session)
     recent_runs = get_recent_runs(session, limit=20)
     run_health = {run.id: get_run_health(run) for run in recent_runs}
@@ -87,7 +87,7 @@ def run_detail(
     url_status: str = "all",
     url_page: int = 1,
     session: Session = Depends(get_db),
-):
+) -> Response:
     run = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)
@@ -161,7 +161,7 @@ def run_detail(
 
 
 @router.get("/api/runs/{run_id}/status")
-def run_status(run_id: int, session: Session = Depends(get_db)):
+def run_status(run_id: int, session: Session = Depends(get_db)) -> Response:
     """Live status check for a run — used by HTMX polling."""
     run = get_run_detail(session, run_id)
     if run is None:
@@ -195,7 +195,7 @@ def run_status(run_id: int, session: Session = Depends(get_db)):
 
 
 @router.post("/runs/trigger")
-def trigger_run(request: Request, phase: str = "scan"):
+def trigger_run(request: Request, phase: str = "scan") -> Response:
     cmd = PHASE_COMMANDS.get(phase)
     if not cmd:
         return HTMLResponse(
@@ -242,7 +242,7 @@ def trigger_run(request: Request, phase: str = "scan"):
 
 
 @router.post("/runs/{run_id}/kill")
-def kill_run(run_id: int, session: Session = Depends(get_db)):
+def kill_run(run_id: int, session: Session = Depends(get_db)) -> Response:
     run = get_run_detail(session, run_id)
     if run is None:
         return HTMLResponse("Run not found", status_code=404)

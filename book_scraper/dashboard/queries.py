@@ -165,7 +165,7 @@ def mark_stale_runs(session: Session) -> int:
     return marked
 
 
-def get_overview_stats(session: Session) -> dict:
+def get_overview_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
         session.query(func.count(ShopBook.id))
@@ -712,7 +712,9 @@ def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]
     return [{"field": r.field, "issue": r.issue, "count": r.count} for r in rows]
 
 
-def get_validation_summary(session: Session, state: str | None = None) -> list[dict]:
+def get_validation_summary(
+    session: Session, state: str | None = None
+) -> list[dict[str, Any]]:
     q = session.query(
         ValidationIssue.issue,
         func.count(ValidationIssue.id).label("count"),
@@ -855,7 +857,7 @@ def get_validation_by_type(
     limit: int = 100,
     state: str | None = None,
     run_id: int | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get validation issues with shop_book IDs resolved from URL."""
     q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
     if state in {"new", "recurring", "already_seen"}:
@@ -1047,7 +1049,7 @@ def get_price_changes(
     return [dict(r) for r in rows], int(total)
 
 
-def get_inventory_stats(session: Session) -> dict:
+def get_inventory_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
         session.query(func.count(ShopBook.id))
@@ -1284,7 +1286,7 @@ def get_shop_by_name(session: Session, name: str) -> Shop | None:
     return session.query(Shop).filter(Shop.name == name).first()
 
 
-def get_shop_stats(session: Session, shop_id: int) -> dict:
+def get_shop_stats(session: Session, shop_id: int) -> dict[str, Any]:
     shop_books = (
         session.query(func.count(ShopBook.id))
         .filter(ShopBook.shop_id == shop_id)
@@ -1543,7 +1545,7 @@ def get_run_shop_books(
     return created, changed, unchanged, price_changed_ids
 
 
-def get_shop_field_stats(session: Session, shop_id: int) -> dict:
+def get_shop_field_stats(session: Session, shop_id: int) -> dict[str, Any]:
     """Get per-field completeness stats for a shop."""
     total = (
         session.query(func.count(ShopBook.id))
@@ -1605,7 +1607,7 @@ def get_shop_book_changes(
     )
 
 
-def get_data_completeness(session: Session) -> list[dict]:
+def get_data_completeness(session: Session) -> list[dict[str, Any]]:
     """Get field completeness percentages for the overview page."""
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     if total == 0:
@@ -1702,7 +1704,9 @@ DISCOVERED_URL_SORT_COLUMNS = {
 }
 
 
-def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> dict:
+def get_discovered_urls_stats(
+    session: Session, shop_id: int | None = None
+) -> dict[str, Any]:
     """Get stats for discovered URLs page."""
     base = session.query(DiscoveredUrl)
     if shop_id:
@@ -1735,7 +1739,7 @@ def get_discovered_urls_page(
     is_book: str = "",
     sort_by: str = "discovered",
     sort_order: str = "desc",
-) -> tuple[list, int]:
+) -> tuple[list[DiscoveredUrl], int]:
     """Return paginated discovered URLs with filters."""
     query = (
         session.query(DiscoveredUrl)

@@ -34,6 +34,7 @@ dev = [
     "pre-commit>=4.0",
     "deptry>=0.22",
     "pip-audit>=2.7",
+    "types-Markdown>=3.7",
 ]
 
 [tool.ruff]
@@ -89,6 +90,8 @@ DEP002 = [
     "pip-audit",           # CLI tool
     "uvicorn",             # ASGI server, run via CLI not imported
     "jinja2",              # used by FastAPI's Jinja2Templates (starlette dependency)
+    "python-multipart",    # required by FastAPI Form() parsing (loaded at runtime)
+    "types-Markdown",      # mypy stubs for the markdown library (dev-only)
 ]
 
 [build-system]
