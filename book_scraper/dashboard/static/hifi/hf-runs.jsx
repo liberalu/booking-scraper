@@ -504,6 +504,30 @@ function HFRunDetail({ nav, goto, params }) {
     return () => { cancelled = true; if (id) clearInterval(id); };
   }, [runId, urlStatus, urlPage, urlSort, urlOrder, data?.status]);
 
+  const id = data?.id ?? runId;
+  const [actionPending, setActionPending] = React.useState(false);
+  const [actionError, setActionError] = React.useState(null);
+  const stopRun = React.useCallback(() => {
+    if (actionPending || !id) return;
+    if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/stop`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(d => { setData(prev => prev ? {...prev, status: d.status} : prev); })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending]);
+  const rerunRun = React.useCallback(() => {
+    if (actionPending || !id) return;
+    if (!confirm(`Re-run #${id}? A new run will be created for the same shop+phase.`)) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/rerun`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(_d => { goto('runs'); })  // back to list — new run will appear
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending, goto]);
+
   if (loading || !data) {
     return (
       <HFShell {...nav} activePage="runs" title={`Run #${runId}`} subtitle="Loading…"
@@ -512,8 +536,6 @@ function HFRunDetail({ nav, goto, params }) {
       </HFShell>
     );
   }
-
-  const id = data.id;
 
   const timeline = [];
 
@@ -525,29 +547,6 @@ function HFRunDetail({ nav, goto, params }) {
   const runStatusTone = {
     running: 'ok', stopping: 'warn', completed: 'neutral', failed: 'err',
   };
-
-  const [actionPending, setActionPending] = React.useState(false);
-  const [actionError, setActionError] = React.useState(null);
-  const stopRun = React.useCallback(() => {
-    if (actionPending) return;
-    if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
-    setActionPending(true); setActionError(null);
-    fetch(`/api/runs/${id}/stop`, {method:'POST'})
-      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
-      .then(d => { setData(prev => prev ? {...prev, status: d.status} : prev); })
-      .catch(e => setActionError(String(e.message || e)))
-      .finally(() => setActionPending(false));
-  }, [id, actionPending]);
-  const rerunRun = React.useCallback(() => {
-    if (actionPending) return;
-    if (!confirm(`Re-run #${id}? A new run will be created for the same shop+phase.`)) return;
-    setActionPending(true); setActionError(null);
-    fetch(`/api/runs/${id}/rerun`, {method:'POST'})
-      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
-      .then(_d => { goto('runs'); })  // back to list — new run will appear
-      .catch(e => setActionError(String(e.message || e)))
-      .finally(() => setActionPending(false));
-  }, [id, actionPending, goto]);
 
   return (
     <HFShell {...nav} activePage="runs"
