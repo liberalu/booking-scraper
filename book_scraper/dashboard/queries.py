@@ -13,9 +13,9 @@ from book_scraper.dashboard.shop_book_filters import (
 from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
-    RunEvent,
     ScrapeFailure,
     ScrapeRun,
+    ScrapeRunEvent,
     ScrapeUrlItem,
     Shop,
     ShopBook,
@@ -175,10 +175,10 @@ def mark_stale_runs(session: Session) -> int:
     error reason is recorded as `stop_timeout` so the postmortem
     distinguishes it from ordinary heartbeat death.
     """
-    from book_scraper.db import run_events as run_event_types
+    from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (
         abort_processing_scrape_url_items,
-        emit_run_event,
+        emit_scrape_run_event,
         record_scrape_run_failed_issue,
         sweep_orphaned_processing_items,
     )
@@ -203,7 +203,7 @@ def mark_stale_runs(session: Session) -> int:
             # (first writer wins), keeping the reason on the run row itself.
             record_scrape_run_failed_issue(session, run, reason)
             abort_processing_scrape_url_items(session, run.id)
-            emit_run_event(
+            emit_scrape_run_event(
                 session,
                 run.id,
                 run_event_types.FAILED,
@@ -429,12 +429,12 @@ def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
 
 
-def get_run_events(session: Session, run_id: int) -> list[dict]:
+def get_scrape_run_events(session: Session, run_id: int) -> list[dict]:
     """Lifecycle events for a run, oldest first."""
     rows = (
-        session.query(RunEvent)
-        .filter(RunEvent.run_id == run_id)
-        .order_by(RunEvent.created_at.asc(), RunEvent.id.asc())
+        session.query(ScrapeRunEvent)
+        .filter(ScrapeRunEvent.run_id == run_id)
+        .order_by(ScrapeRunEvent.created_at.asc(), ScrapeRunEvent.id.asc())
         .all()
     )
     return [
@@ -1231,7 +1231,6 @@ def get_issues_page(
 
     Returns (rows, total).
     """
-    from sqlalchemy import or_
 
     rows: list[dict[str, Any]] = []
     total = 0
@@ -1380,7 +1379,7 @@ def _get_scrape_failures_page(
     """Inbox slice over `scrape_failures`. Mirrors the validation helper's
     filter contract: `state` maps to lifecycle_state; `severity` filters
     via the range/prefix logic in `severity_for_failure`."""
-    from sqlalchemy import and_, case, or_
+    from sqlalchemy import and_, or_
 
     query = (
         session.query(ScrapeFailure, ShopBook)

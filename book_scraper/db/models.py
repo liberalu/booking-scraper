@@ -460,21 +460,24 @@ class ScrapeRun(Base):
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(
         back_populates="scrape_run"
     )
-    events: Mapped[list["RunEvent"]] = relationship(
+    events: Mapped[list["ScrapeRunEvent"]] = relationship(
         back_populates="run",
         cascade="all, delete-orphan",
-        order_by="RunEvent.created_at",
+        order_by="ScrapeRunEvent.created_at",
     )
 
 
-class RunEvent(Base):
+class ScrapeRunEvent(Base):
     """Append-only lifecycle event log for a scrape run.
 
     One row per operator action or terminal transition. Errors stay in
     scrape_url_items / validation_issues; this table is run-level only.
+
+    Distinct from book_scraper/event_log.py (per-response JSONL trail
+    in logs/scrapy_events.log).
     """
 
-    __tablename__ = "run_events"
+    __tablename__ = "scrape_run_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     run_id: Mapped[int] = mapped_column(
@@ -490,13 +493,13 @@ class RunEvent(Base):
     run: Mapped["ScrapeRun"] = relationship(back_populates="events")
 
     __table_args__ = (
-        Index("ix_run_events_run_created", "run_id", "created_at"),
+        Index("ix_scrape_run_events_run_created", "run_id", "created_at"),
         CheckConstraint(
             "event_type IN ("
             "'started','paused','resumed','stop_requested','retry_failures',"
             "'rerun','continued','resumed_after_failure','completed','failed'"
             ")",
-            name="ck_run_events_event_type",
+            name="ck_scrape_run_events_event_type",
         ),
     )
 

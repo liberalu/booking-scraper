@@ -1,13 +1,13 @@
-"""Integration tests for run_events lifecycle log.
+"""Integration tests for scrape_run_events lifecycle log.
 
 Covers:
-  - emit_run_event helper validates event_type
+  - emit_scrape_run_event helper validates event_type
   - create_scrape_run emits 'started'
   - finish_scrape_run emits 'completed' / 'failed' once
   - mark_stale_runs (dashboard reaper) emits 'failed'
   - mark_orphan_runs_failed (boot reaper) emits 'failed'
   - mark_stale_runs_failed (pre-scan reaper) emits 'failed'
-  - get_run_events returns oldest-first dicts
+  - get_scrape_run_events returns oldest-first dicts
   - api_run_detail and api_run_live include events
   - operator endpoints (pause/resume/stop/retry/rerun/continue) emit events
 """
@@ -21,12 +21,12 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
-from book_scraper.dashboard.queries import get_run_events, mark_stale_runs
-from book_scraper.db import run_events as run_event_types
-from book_scraper.db.models import RunEvent
+from book_scraper.dashboard.queries import get_scrape_run_events, mark_stale_runs
+from book_scraper.db import scrape_run_events as run_event_types
+from book_scraper.db.models import ScrapeRunEvent
 from book_scraper.db.repo import (
     create_scrape_run,
-    emit_run_event,
+    emit_scrape_run_event,
     finish_scrape_run,
     mark_orphan_runs_failed,
     mark_stale_runs_failed,
@@ -42,18 +42,18 @@ def _make_shop(db_session, name="ev_shop"):
 
 def _events_of(db_session, run_id):
     return (
-        db_session.query(RunEvent)
+        db_session.query(ScrapeRunEvent)
         .filter_by(run_id=run_id)
-        .order_by(RunEvent.created_at.asc(), RunEvent.id.asc())
+        .order_by(ScrapeRunEvent.created_at.asc(), ScrapeRunEvent.id.asc())
         .all()
     )
 
 
-def test_emit_run_event_rejects_unknown_type(db_session):
+def test_emit_scrape_run_event_rejects_unknown_type(db_session):
     shop = _make_shop(db_session, "ev_unknown")
     run = create_scrape_run(db_session, shop.id, "scan")
     with pytest.raises(ValueError):
-        emit_run_event(db_session, run.id, "nope_not_real")
+        emit_scrape_run_event(db_session, run.id, "nope_not_real")
 
 
 def test_create_scrape_run_emits_started(db_session):
@@ -150,17 +150,17 @@ def test_mark_stale_runs_failed_emits_failed(db_session):
     assert failed.payload["close_reason"] == "stale_pre_scan"
 
 
-def test_get_run_events_returns_oldest_first(db_session):
+def test_get_scrape_run_events_returns_oldest_first(db_session):
     shop = _make_shop(db_session, "ev_order")
     run = create_scrape_run(db_session, shop.id, "scan")
-    emit_run_event(
+    emit_scrape_run_event(
         db_session,
         run.id,
         run_event_types.PAUSED,
         actor=run_event_types.ACTOR_OPERATOR,
         payload={"previous_status": "running"},
     )
-    emit_run_event(
+    emit_scrape_run_event(
         db_session,
         run.id,
         run_event_types.RESUMED,
@@ -168,7 +168,7 @@ def test_get_run_events_returns_oldest_first(db_session):
         payload={"previous_status": "paused"},
     )
     db_session.commit()
-    events = get_run_events(db_session, run.id)
+    events = get_scrape_run_events(db_session, run.id)
     assert [e["event_type"] for e in events] == [
         run_event_types.STARTED,
         run_event_types.PAUSED,

@@ -27,7 +27,6 @@ from book_scraper.dashboard.queries import (
     get_run_close_reason,
     get_run_discovered_urls,
     get_run_eta,
-    get_run_events,
     get_run_failure_groups,
     get_run_in_flight,
     get_run_issue_summary,
@@ -39,6 +38,7 @@ from book_scraper.dashboard.queries import (
     get_run_url_items,
     get_schedule_info,
     get_scrape_activity_by_day,
+    get_scrape_run_events,
     get_shop_book_changes,
     get_shop_book_issues,
     get_shop_books_page,
@@ -50,7 +50,7 @@ from book_scraper.dashboard.queries import (
     get_validation_lifecycle_counts,
     get_validation_summary,
 )
-from book_scraper.db import run_events as run_event_types
+from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import (
     ScrapeFailure,
     ScrapeRun,
@@ -59,7 +59,7 @@ from book_scraper.db.models import (
     ShopBook,
 )
 from book_scraper.db.repo import (
-    emit_run_event,
+    emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
     toggle_cron_job,
@@ -582,7 +582,7 @@ def api_stop_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "running":
         run.status = "stopping"
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run_id,
             run_event_types.STOP_REQUESTED,
@@ -611,7 +611,7 @@ def api_pause_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "running":
         run.status = "paused"
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run_id,
             run_event_types.PAUSED,
@@ -637,7 +637,7 @@ def api_resume_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "paused":
         run.status = "running"
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run_id,
             run_event_types.RESUMED,
@@ -691,7 +691,7 @@ def api_rerun_run(
     # harmless.
     if run.status == "failed":
         run.resumable_after_failure = True
-    emit_run_event(
+    emit_scrape_run_event(
         session,
         run_id,
         run_event_types.RERUN,
@@ -792,7 +792,7 @@ def api_continue_run(
     run.close_reason = None
     run.last_heartbeat = datetime.now(UTC)
     run.pid = None
-    emit_run_event(
+    emit_scrape_run_event(
         session,
         run_id,
         run_event_types.CONTINUED,
@@ -967,7 +967,7 @@ def api_retry_run_failures(
     elif http_status is not None:
         retry_payload["http_status_filter"] = http_status
 
-    emit_run_event(
+    emit_scrape_run_event(
         session,
         run_id,
         run_event_types.RETRY_FAILURES,
@@ -1117,7 +1117,7 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     base = _run_dict(run, terminal_count=terminal)
     base.update(item_counts)
     base["items"] = item_counts["items_added"] + item_counts["items_updated"]
-    events = get_run_events(session, run_id)
+    events = get_scrape_run_events(session, run_id)
     return {
         **base,
         "issues": issues,
@@ -1155,7 +1155,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
     rate = get_run_rate_window(session, run_id)
     failure_groups = get_run_failure_groups(session, run_id)
     recent_activity = get_run_recent_activity(session, run_id, limit=20)
-    events = get_run_events(session, run_id)
+    events = get_scrape_run_events(session, run_id)
 
     health = get_run_live_health(run)
     # Refine to 'stuck' when heartbeat is fresh but the oldest in-flight

@@ -1,4 +1,4 @@
-"""Constants for run_events lifecycle log."""
+"""Constants for scrape_run_events lifecycle log."""
 
 from typing import Final
 

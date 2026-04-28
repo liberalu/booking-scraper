@@ -318,44 +318,126 @@ function _fmtAge(seconds) {
 }
 
 // ── Run-event display metadata ──
+// `label` is shown as the row title. `defaultTone` is overridden in
+// `_eventTone` for events whose meaning depends on payload (e.g. failed
+// from a clean operator-stop is informational, not an error).
 const RUN_EVENT_META = {
-  started:               { glyph: '▶',  label: 'Started',          tone: 'accent'  },
-  paused:                { glyph: '⏸',  label: 'Paused',           tone: 'warn'    },
-  resumed:               { glyph: '▶',  label: 'Resumed',          tone: 'accent'  },
-  stop_requested:        { glyph: '⏹',  label: 'Stop requested',   tone: 'warn'    },
-  retry_failures:        { glyph: '↻',  label: 'Retry failures',   tone: 'accent'  },
-  rerun:                 { glyph: '↻',  label: 'Rerun triggered',  tone: 'accent'  },
-  continued:             { glyph: '▶',  label: 'Continued',        tone: 'accent'  },
-  resumed_after_failure: { glyph: '↺',  label: 'Resumed (inherited queue)', tone: 'accent' },
-  completed:             { glyph: '✓',  label: 'Completed',        tone: 'ok'      },
-  failed:                { glyph: '✗',  label: 'Failed',           tone: 'err'     },
+  started:               { glyph: '▶',  label: 'Run started' },
+  paused:                { glyph: '⏸',  label: 'Paused' },
+  resumed:               { glyph: '▶',  label: 'Resumed' },
+  stop_requested:        { glyph: '⏹',  label: 'Stop pressed' },
+  retry_failures:        { glyph: '↻',  label: 'Retry queued' },
+  rerun:                 { glyph: '⟲',  label: 'Re-run triggered' },
+  continued:             { glyph: '▶',  label: 'Continued' },
+  resumed_after_failure: { glyph: '⤴',  label: 'Picked up earlier run' },
+  completed:             { glyph: '✓',  label: 'Finished' },
+  failed:                { glyph: '✗',  label: 'Failed' },
 };
 
-function _fmtEventPayload(eventType, payload) {
-  if (!payload || typeof payload !== 'object') return '';
-  const parts = [];
-  // Pull the most operator-relevant keys first.
-  const order = [
-    'close_reason', 'previous_status', 'previous_run_id',
-    'phase', 'mode', 'rescrape', 'urls_total', 'urls_skipped',
-    'rows_reset', 'error_reason_filter', 'http_status_filter',
-    'pending_count', 'urls_processed', 'error_count',
-  ];
-  const seen = new Set();
-  for (const k of order) {
-    if (!(k in payload)) continue;
-    const v = payload[k];
-    if (v === null || v === undefined || v === '' || v === false) {
-      if (!(k === 'rescrape' && v === false)) {
-        // skip falsy noise unless it carries meaning (rescrape=false matters)
-        seen.add(k);
-        continue;
-      }
+// Pretty labels for the phase value carried in `started` payloads.
+const PHASE_LABELS = {
+  scan: 'Scan',
+  discover_sitemap: 'Discover · sitemap',
+  discover_categories: 'Discover · categories',
+  discover_full_crawl: 'Discover · full crawl',
+};
+
+// Pretty labels for close_reason values.
+const CLOSE_REASON_LABELS = {
+  finished: 'Finished cleanly',
+  shutdown: 'Container shutdown',
+  stall_timeout: 'Stalled — no progress',
+  heartbeat_timeout: 'Heartbeat timeout',
+  stop_timeout: 'Stop never completed',
+  orphan_on_boot: 'Killed by restart',
+  stale_pre_scan: 'Reaped before next run',
+  stopped_by_operator: 'Stopped by operator',
+  finished_failed: 'Spider exited with errors',
+};
+
+function _nfmt(n) {
+  if (n === null || n === undefined) return '—';
+  try { return Number(n).toLocaleString(); } catch (e) { return String(n); }
+}
+
+// Render a friendly one-liner for an event. Falls back to the event_type
+// label alone when there's nothing meaningful to add.
+function _eventSummary(eventType, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  switch (eventType) {
+    case 'started': {
+      const phase = PHASE_LABELS[p.phase] || p.phase || '';
+      const total = p.urls_total != null ? `${_nfmt(p.urls_total)} URLs` : null;
+      const mods = [];
+      if (p.rescrape) mods.push('full re-scrape');
+      if (p.mode === 'single_urls' && Array.isArray(p.urls)) mods.push(`${p.urls.length} ad-hoc URL${p.urls.length === 1 ? '' : 's'}`);
+      if (p.urls_skipped) mods.push(`${_nfmt(p.urls_skipped)} skipped (already done)`);
+      const left = [phase, total].filter(Boolean).join(' · ');
+      return mods.length ? `${left} · ${mods.join(' · ')}` : left;
     }
-    parts.push(`${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
-    seen.add(k);
+    case 'completed': {
+      const processed = p.urls_processed != null ? `${_nfmt(p.urls_processed)} URLs processed` : '';
+      const errors = p.error_count ? `${_nfmt(p.error_count)} error${p.error_count === 1 ? '' : 's'}` : 'no errors';
+      return [processed, errors].filter(Boolean).join(' · ');
+    }
+    case 'failed': {
+      const reason = CLOSE_REASON_LABELS[p.close_reason] || p.close_reason || '';
+      const processed = p.urls_processed != null ? `${_nfmt(p.urls_processed)} URLs processed` : '';
+      return [reason, processed].filter(Boolean).join(' · ');
+    }
+    case 'retry_failures': {
+      const n = p.rows_reset || 0;
+      const filters = [];
+      if (p.error_reason_filter) filters.push(`reason: ${p.error_reason_filter}`);
+      if (p.http_status_filter != null) filters.push(`HTTP ${p.http_status_filter}`);
+      const base = `${_nfmt(n)} URL${n === 1 ? '' : 's'} reset`;
+      return filters.length ? `${base} (${filters.join(', ')})` : base;
+    }
+    case 'rerun':
+      return p.previous_status ? `was ${p.previous_status}` : '';
+    case 'continued':
+      return p.pending_count != null ? `${_nfmt(p.pending_count)} URL${p.pending_count === 1 ? '' : 's'} still pending` : '';
+    case 'resumed_after_failure':
+      return p.previous_run_id ? `from run #${p.previous_run_id}` : '';
+    case 'paused':
+    case 'resumed':
+    case 'stop_requested':
+      return ''; // label says it all
+    default:
+      return '';
   }
-  return parts.join(' · ');
+}
+
+// Tone is derived per-event with a payload-aware override for `failed`:
+// an operator-stopped run is conceptually "successful" — don't flag it red.
+function _eventTone(ev) {
+  if (ev.event_type === 'completed') return 'ok';
+  if (ev.event_type === 'failed') {
+    const reason = ev.payload && ev.payload.close_reason;
+    if (reason === 'stopped_by_operator' || reason === 'shutdown') return 'warn';
+    return 'err';
+  }
+  if (ev.event_type === 'paused' || ev.event_type === 'stop_requested') return 'warn';
+  return 'accent';
+}
+
+// "10:36" / "10:36 (2m ago)". The full timestamp is on the title attr.
+function _fmtEventTime(iso) {
+  if (!iso) return { short: '—', age: '', absolute: '' };
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { short: '—', age: '', absolute: '' };
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ageS = Math.max(0, (Date.now() - d.getTime()) / 1000);
+    const age = (
+      ageS < 60 ? 'just now' :
+      ageS < 3600 ? `${Math.floor(ageS / 60)}m ago` :
+      ageS < 86400 ? `${Math.floor(ageS / 3600)}h ago` :
+      `${Math.floor(ageS / 86400)}d ago`
+    );
+    return { short: `${hh}:${mm}`, age, absolute: d.toLocaleString() };
+  } catch (e) { return { short: '—', age: '', absolute: '' }; }
 }
 
 
@@ -369,6 +451,14 @@ function HFRunTimelineCard({ events }) {
     if (tone === 'accent') return HF.accentInk || '#2563eb';
     return HF.ink2 || HF.ink || '#444';
   };
+  const toneSoft = (tone) => {
+    // Soft chip background — semi-transparent so it works on light/dark.
+    if (tone === 'ok')     return 'rgba(22,163,74,0.10)';
+    if (tone === 'warn')   return 'rgba(217,119,6,0.10)';
+    if (tone === 'err')    return 'rgba(220,38,38,0.10)';
+    if (tone === 'accent') return 'rgba(37,99,235,0.10)';
+    return 'rgba(0,0,0,0.04)';
+  };
   return (
     <HFCard
       title="Timeline"
@@ -381,44 +471,43 @@ function HFRunTimelineCard({ events }) {
         </div>
       ) : (
         <div style={{ padding: HF.cardP }}>
-          <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {list.map((ev) => {
-              const meta = RUN_EVENT_META[ev.event_type] || { glyph: '•', label: ev.event_type, tone: 'neutral' };
-              const summary = _fmtEventPayload(ev.event_type, ev.payload);
-              const absoluteTime = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
+              const meta = RUN_EVENT_META[ev.event_type] || { glyph: '•', label: ev.event_type };
+              const tone = _eventTone(ev);
+              const summary = _eventSummary(ev.event_type, ev.payload);
+              const t = _fmtEventTime(ev.created_at);
               return (
                 <li key={ev.id} style={{
                   display: 'grid',
-                  gridTemplateColumns: '20px 160px 1fr auto',
-                  alignItems: 'baseline',
-                  gap: 10,
-                  padding: '6px 8px',
+                  gridTemplateColumns: '24px minmax(140px, max-content) 1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '8px 10px',
                   borderRadius: HF.r2,
                   fontSize: 13,
-                  background: 'rgba(0,0,0,0.02)',
                 }}>
-                  <span style={{ color: toneColor(meta.tone), fontSize: 14, lineHeight: 1, textAlign: 'center' }}>
-                    {meta.glyph}
-                  </span>
-                  <span style={{ color: toneColor(meta.tone), fontWeight: 600 }}>
+                  <span style={{
+                    width: 24, height: 24, borderRadius: 12,
+                    background: toneSoft(tone), color: toneColor(tone),
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, lineHeight: 1, fontWeight: 700,
+                  }}>{meta.glyph}</span>
+                  <span style={{ color: HF.ink, fontWeight: 600 }}>
                     {meta.label}
-                    {ev.actor && ev.actor !== 'system' ? (
-                      <span style={{ color: HF.ink3, fontWeight: 400, marginLeft: 6 }}>
-                        ({ev.actor})
-                      </span>
-                    ) : null}
                   </span>
                   <span style={{
-                    fontFamily: HF.mono, color: HF.ink2, overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                    color: HF.ink2,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                   }} title={summary}>
                     {summary}
                   </span>
                   <span
-                    style={{ color: HF.ink3, fontFamily: HF.mono, fontSize: 12 }}
-                    title={absoluteTime}
+                    style={{ color: HF.ink3, fontFamily: HF.mono, fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                    title={t.absolute}
                   >
-                    {_fmtClockTime(ev.created_at)}
+                    {t.short}
+                    {t.age ? <span style={{ color: HF.ink4 || HF.ink3, marginLeft: 8 }}>({t.age})</span> : null}
                   </span>
                 </li>
               );

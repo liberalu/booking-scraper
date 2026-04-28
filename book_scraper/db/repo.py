@@ -10,15 +10,15 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from book_scraper.db import run_events as run_event_types
+from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import (
     Category,
     CronJob,
     DiscoveredUrl,
     Price,
-    RunEvent,
     ScrapeFailure,
     ScrapeRun,
+    ScrapeRunEvent,
     ScrapeUrlItem,
     Shop,
     ShopAuthor,
@@ -640,23 +640,23 @@ def inherit_pending_items(
     return int(rowcount) if rowcount is not None else 0
 
 
-def emit_run_event(
+def emit_scrape_run_event(
     session: Session,
     run_id: int,
     event_type: str,
     *,
     payload: dict[str, Any] | None = None,
     actor: str | None = None,
-) -> RunEvent:
-    """Append a lifecycle event to run_events.
+) -> ScrapeRunEvent:
+    """Append a lifecycle event to scrape_run_events.
 
     Append-only: callers must not update or delete events. Flushed within
     the caller's transaction so the event is atomic with the surrounding
     state mutation (status flip, row insert, etc.).
     """
     if event_type not in run_event_types.EVENT_TYPES:
-        raise ValueError(f"unknown run event_type: {event_type!r}")
-    event = RunEvent(
+        raise ValueError(f"unknown scrape run event_type: {event_type!r}")
+    event = ScrapeRunEvent(
         run_id=run_id,
         event_type=event_type,
         actor=actor,
@@ -689,7 +689,7 @@ def create_scrape_run(
         payload["urls_total"] = urls_total
     if extra_payload:
         payload.update(extra_payload)
-    emit_run_event(
+    emit_scrape_run_event(
         session,
         run.id,
         run_event_types.STARTED,
@@ -729,7 +729,7 @@ def finish_scrape_run(
             if status == "completed"
             else run_event_types.FAILED
         )
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run_id,
             terminal_event,
@@ -966,7 +966,7 @@ def mark_stale_runs_failed(
             run.close_reason = reason
         record_scrape_run_failed_issue(session, run, reason)
         abort_processing_scrape_url_items(session, run.id)
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run.id,
             run_event_types.FAILED,
@@ -1044,7 +1044,7 @@ def mark_orphan_runs_failed(session: Session) -> int:
             run.close_reason = "orphan_on_boot"
         record_scrape_run_failed_issue(session, run, "orphan_on_boot")
         abort_processing_scrape_url_items(session, run.id)
-        emit_run_event(
+        emit_scrape_run_event(
             session,
             run.id,
             run_event_types.FAILED,

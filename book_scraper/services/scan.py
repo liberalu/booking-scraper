@@ -3,12 +3,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from book_scraper.db import run_events as run_event_types
+from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
     create_scrape_run,
-    emit_run_event,
+    emit_scrape_run_event,
     find_resumable_run,
     finish_scrape_run,
     get_pending_scan_urls,
@@ -135,7 +135,7 @@ class ScanService:
                 urls_total=pending_count,
                 extra_payload={"rescrape": rescrape},
             )
-            emit_run_event(
+            emit_scrape_run_event(
                 self.session,
                 run.id,
                 run_event_types.RESUMED_AFTER_FAILURE,
