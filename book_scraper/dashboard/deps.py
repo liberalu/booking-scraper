@@ -1,9 +1,7 @@
 import os
 from collections.abc import Generator
-from pathlib import Path
 from typing import Any
 
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from book_scraper.db.session import get_session_factory
@@ -22,9 +20,6 @@ def get_db() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
-
-
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 def get_docker_client() -> Any:
