@@ -109,12 +109,6 @@ async def _spa_index_detail(rest: str = "") -> HTMLResponse:  # noqa: ARG001
     return _spa_html()
 
 
-for _spa_path in _SPA_FLAT_PATHS:
-    app.add_api_route(_spa_path, _spa_index_flat, methods=["GET"])
-for _spa_path in _SPA_DETAIL_PATHS:
-    app.add_api_route(_spa_path, _spa_index_detail, methods=["GET"])
-
-
 @app.get("/validation")
 async def _redirect_validation(request: Request) -> RedirectResponse:
     qs = request.url.query
@@ -125,6 +119,12 @@ async def _redirect_validation(request: Request) -> RedirectResponse:
 @app.get("/shops/{shop_name}/not-listed")
 async def _redirect_not_listed(shop_name: str) -> RedirectResponse:
     return RedirectResponse(url=f"/shops/{shop_name}", status_code=301)
+
+
+for _spa_path in _SPA_FLAT_PATHS:
+    app.add_api_route(_spa_path, _spa_index_flat, methods=["GET"])
+for _spa_path in _SPA_DETAIL_PATHS:
+    app.add_api_route(_spa_path, _spa_index_detail, methods=["GET"])
 
 
 app.include_router(shops.router)

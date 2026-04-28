@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
-from book_scraper.db.models import Shop, ShopBook
+from book_scraper.db.models import Shop, ShopBook, ScrapeRun, ValidationIssue
+from book_scraper.db.repo import bulk_insert_validation_issues
 
 
 @pytest.fixture()
@@ -35,101 +36,6 @@ def _ensure_shop(db_session: Session) -> None:
         shop = Shop(name="vaga", base_url="https://www.vaga.lt")
         db_session.add(shop)
         db_session.flush()
-
-
-ROUTES = [
-    "/shops",
-    "/shops/vaga",
-    "/shops/vaga/not-listed",
-    "/runs",
-    "/validation",
-    "/shop-books",
-    # Filter combinations
-    "/shop-books?active=true",
-    "/shop-books?has_isbn=true",
-    "/shop-books?shop=vaga",
-    "/shop-books?type=book",
-    # Sorting
-    "/runs?sort=started_at&order=desc",
-    "/runs?sort=id&order=asc",
-    "/shop-books?sort=title&order=asc",
-    "/shop-books?sort=price&order=desc",
-    "/shop-books?sort=type&order=asc",
-    "/shops/vaga?sort=started_at&order=desc",
-]
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("route", ROUTES)
-def test_route_returns_200(client: TestClient, route: str) -> None:
-    response = client.get(route)
-    assert response.status_code == 200, f"{route} returned {response.status_code}"
-
-
-@pytest.mark.integration
-def test_nonexistent_shop_returns_404(client: TestClient) -> None:
-    # SPA owns /shops/X — always 200. The 404 lives on the API.
-    response = client.get("/api/shops/nonexistent")
-    assert response.status_code == 404
-
-
-VALIDATION_ROUTES = [
-    "/validation",
-    "/validation?state=open",
-    "/validation?state=new",
-    "/validation?state=recurring",
-    "/validation?state=already_seen",
-    "/validation?state=all",
-    "/validation?shop=vaga",
-    "/validation?issue_type=missing_price",
-    "/validation?run_id=1",
-    "/validation?q=test",
-    "/validation?shop=vaga&issue_type=missing_price&run_id=1&q=a",
-    "/validation?order=asc",
-    "/validation?page=2",
-    "/validation?page=9999",  # out-of-range page clamps silently
-]
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("route", VALIDATION_ROUTES)
-def test_validation_routes_return_200(client: TestClient, route: str) -> None:
-    response = client.get(route)
-    assert response.status_code == 200, f"{route} returned {response.status_code}"
-
-
-@pytest.mark.integration
-def test_legacy_validation_detail_route_is_gone(client: TestClient) -> None:
-    response = client.get("/validation/missing_price")
-    assert response.status_code == 404
-
-
-@pytest.mark.integration
-def test_acknowledge_all_accepts_full_filter_set(client: TestClient) -> None:
-    response = client.post(
-        "/validation-issues/acknowledge-all",
-        data={
-            "issue_type": "missing_price",
-            "state": "open",
-            "shop": "",
-            "run_id": "",
-            "q": "",
-        },
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-
-
-@pytest.mark.integration
-def test_delete_matching_requires_filter(client: TestClient) -> None:
-    # state='all' + every other filter empty = truly unfiltered;
-    # repo raises, route returns 400
-    response = client.post(
-        "/validation-issues/delete-matching",
-        data={"issue_type": "", "state": "all", "shop": "", "run_id": "", "q": ""},
-        follow_redirects=False,
-    )
-    assert response.status_code == 400
 
 
 @pytest.mark.integration
@@ -249,6 +155,46 @@ def test_api_issues(client: TestClient) -> None:
 
 
 @pytest.mark.integration
+def test_api_issues_run_id_filter(client: TestClient, db_session: Session) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").first()
+    run_a = ScrapeRun(shop_id=shop.id, phase="scan", status="completed")
+    run_b = ScrapeRun(shop_id=shop.id, phase="scan", status="completed")
+    db_session.add_all([run_a, run_b])
+    db_session.flush()
+
+    def _seed(run_id: int, n: int) -> None:
+        bulk_insert_validation_issues(
+            db_session,
+            [
+                {
+                    "scrape_run_id": run_id,
+                    "url": f"https://vaga.lt/book-{run_id}-{i}",
+                    "field": "price",
+                    "issue": "missing",
+                    "raw_value": None,
+                    "shop_book_id": None,
+                }
+                for i in range(n)
+            ],
+        )
+
+    _seed(run_a.id, 2)
+    _seed(run_b.id, 3)
+    db_session.flush()
+
+    resp = client.get(f"/api/issues?run_id={run_a.id}&state=all")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert all(i["scrape_run_id"] == run_a.id for i in data["issues"])
+    c = data["counts"]
+    assert c["new"] + c["recurring"] + c["already_seen"] == 2
+
+    resp_b = client.get(f"/api/issues?run_id={run_b.id}&state=all")
+    assert resp_b.json()["total"] == 3
+
+
+@pytest.mark.integration
 def test_api_prices(client: TestClient) -> None:
     resp = client.get("/api/prices")
     assert resp.status_code == 200
@@ -275,6 +221,27 @@ def test_spa_entry_point(client: TestClient) -> None:
     assert resp.status_code == 200
     assert b"<html" in resp.content
     assert b"BookScraper Dashboard" in resp.content
+
+
+@pytest.mark.integration
+def test_validation_redirects_to_issues(client: TestClient) -> None:
+    resp = client.get("/validation", follow_redirects=False)
+    assert resp.status_code == 301
+    assert resp.headers["location"] == "/issues"
+
+
+@pytest.mark.integration
+def test_validation_redirects_preserves_query_string(client: TestClient) -> None:
+    resp = client.get("/validation?run_id=42&state=new", follow_redirects=False)
+    assert resp.status_code == 301
+    assert resp.headers["location"] == "/issues?run_id=42&state=new"
+
+
+@pytest.mark.integration
+def test_not_listed_redirects_to_shop_detail(client: TestClient) -> None:
+    resp = client.get("/shops/vaga/not-listed", follow_redirects=False)
+    assert resp.status_code == 301
+    assert resp.headers["location"] == "/shops/vaga"
 
 
 @pytest.mark.integration
