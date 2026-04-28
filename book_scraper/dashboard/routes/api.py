@@ -1137,6 +1137,7 @@ def api_issues(
     state: str = "open",
     shop: str = "",
     issue_type: str = "",
+    run_id: int = 0,
     severity: str = "",
     q: str = "",
     page: int = 1,
@@ -1148,6 +1149,7 @@ def api_issues(
         s = get_shop_by_name(session, shop)
         shop_id = s.id if s else -1
 
+    run_id_int = run_id if run_id > 0 else None
     page = max(1, page)
     per_page = max(1, min(per_page, 200))
     rows, total = get_issues_page(
@@ -1155,13 +1157,14 @@ def api_issues(
         state=state,
         shop_id=shop_id,
         issue_type=issue_type,
+        run_id=run_id_int,
         severity=severity,
         q=q,
         page=page,
         per_page=per_page,
     )
     counts = get_validation_lifecycle_counts(
-        session, shop_id=shop_id, issue_type=issue_type, severity=severity, q=q
+        session, shop_id=shop_id, issue_type=issue_type, run_id=run_id_int, severity=severity, q=q
     )
 
     issues = [
