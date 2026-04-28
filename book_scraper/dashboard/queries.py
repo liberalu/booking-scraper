@@ -627,12 +627,17 @@ def get_run_rate_window(
     }
 
 
-def _row_to_activity_entry(r: "ScrapeUrlItem", now: datetime) -> dict[str, Any]:
+def _row_to_activity_entry(
+    r: "ScrapeUrlItem",
+    now: datetime,
+    error_reason: str | None = None,
+) -> dict[str, Any]:
     """Convert a ScrapeUrlItem into the activity-stream dict shape.
 
-    Includes both the `claimed_at` (start) and `done_at` (finish)
-    timestamps as ISO strings, the derived duration in seconds, and
-    the throttle delay we imposed before dispatch (with its source).
+    `error_reason` comes from the latest `scrape_failures` event for the
+    item (PR 3 of the migration: the queue's `error_reason` column is
+    being dropped). Caller pre-fetches and passes the value; only
+    meaningful for rows whose status is `failed`.
     """
     claimed_at = r.claimed_at
     if claimed_at is not None and claimed_at.tzinfo is None:
@@ -650,7 +655,7 @@ def _row_to_activity_entry(r: "ScrapeUrlItem", now: datetime) -> dict[str, Any]:
         "url": r.url,
         "status": r.status,
         "http_status": r.http_status,
-        "error_reason": r.error_reason,
+        "error_reason": error_reason if r.status == "failed" else None,
         "claimed_at": claimed_at.isoformat() if claimed_at is not None else None,
         "done_at": done_at.isoformat() if done_at is not None else None,
         "duration_s": duration_s,
@@ -665,8 +670,30 @@ def get_run_recent_failures(
     session: Session, run_id: int, limit: int = 10
 ) -> list[dict[str, Any]]:
     """Most-recent failed rows for a run."""
+    latest = (
+        session.query(
+            ScrapeFailure.scrape_url_item_id,
+            ScrapeFailure.error_reason,
+            func.row_number()
+            .over(
+                partition_by=ScrapeFailure.scrape_url_item_id,
+                order_by=(
+                    ScrapeFailure.occurred_at.desc(),
+                    ScrapeFailure.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .filter(ScrapeFailure.run_id == run_id)
+        .subquery()
+    )
     rows = (
-        session.query(ScrapeUrlItem)
+        session.query(ScrapeUrlItem, latest.c.error_reason)
+        .outerjoin(
+            latest,
+            (latest.c.scrape_url_item_id == ScrapeUrlItem.id)
+            & (latest.c.rn == 1),
+        )
         .filter(
             ScrapeUrlItem.run_id == run_id,
             ScrapeUrlItem.status == "failed",
@@ -676,7 +703,7 @@ def get_run_recent_failures(
         .all()
     )
     now = datetime.now(UTC)
-    return [_row_to_activity_entry(r, now) for r in rows]
+    return [_row_to_activity_entry(r, now, reason) for r, reason in rows]
 
 
 FAILURE_RECURRENCE_LOOKBACK_RUNS = 5
@@ -847,9 +874,35 @@ def get_run_recent_activity(
     duration, throttle delay applied, response bytes. Used by the live
     panel so an operator can see exactly when each request started and
     finished, not just relative ages.
+
+    Failed rows include their `error_reason` from the latest
+    `scrape_failures` event (PR 3 — `scrape_url_items.error_reason` was
+    dropped); done rows pass `error_reason=None` through.
     """
+    latest = (
+        session.query(
+            ScrapeFailure.scrape_url_item_id,
+            ScrapeFailure.error_reason,
+            func.row_number()
+            .over(
+                partition_by=ScrapeFailure.scrape_url_item_id,
+                order_by=(
+                    ScrapeFailure.occurred_at.desc(),
+                    ScrapeFailure.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .filter(ScrapeFailure.run_id == run_id)
+        .subquery()
+    )
     rows = (
-        session.query(ScrapeUrlItem)
+        session.query(ScrapeUrlItem, latest.c.error_reason)
+        .outerjoin(
+            latest,
+            (latest.c.scrape_url_item_id == ScrapeUrlItem.id)
+            & (latest.c.rn == 1),
+        )
         .filter(
             ScrapeUrlItem.run_id == run_id,
             ScrapeUrlItem.status.in_(("done", "failed")),
@@ -860,7 +913,7 @@ def get_run_recent_activity(
         .all()
     )
     now = datetime.now(UTC)
-    return [_row_to_activity_entry(r, now) for r in rows]
+    return [_row_to_activity_entry(r, now, reason) for r, reason in rows]
 
 
 RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
@@ -909,21 +962,24 @@ def get_run_url_items(
     error_reason_is_null: bool = False,
     http_status: int | None = None,
     http_status_is_null: bool = False,
-) -> tuple[list[tuple[ScrapeUrlItem, str | None, int | None]], int]:
-    """Live URL queue for a run, paginated. Returns ((item, title, shop_book_id), total).
+) -> tuple[
+    list[tuple[ScrapeUrlItem, str | None, int | None, str | None]], int
+]:
+    """Live URL queue for a run, paginated. Returns
+    ((item, title, shop_book_id, latest_error_reason), total).
 
     `title` and `shop_book_id` are left-joined from `shop_books` (matched on
     shop_id + url) and are `None` for URLs that didn't produce a book product.
+
+    `latest_error_reason` is the `error_reason` of the latest
+    `scrape_failures` event for the item (or NULL if the item has no failure
+    history). PR 3 of the migration: `scrape_url_items.error_reason` is
+    going away, so the History card reads the reason from this projection.
 
     The `error_reason` / `http_status` filters target the failure-group
     keys on the Failures card. Both columns are nullable, so each has an
     explicit `*_is_null` flag — that flag wins if both are sent (defensive,
     avoids any string-sentinel ambiguity).
-
-    Filter source: latest `scrape_failures` event per item (PR 2). Reading
-    from the event log instead of the queue's denormalized columns means
-    the filter consistently matches whatever the failure card showed —
-    even when retries have piled up multiple events on the same row.
     """
     from sqlalchemy import case
 
@@ -934,8 +990,35 @@ def get_run_url_items(
         or http_status is not None
     )
 
+    # Always JOIN the latest scrape_failures event so the row builder can
+    # display the reason without a second query. INNER JOIN when filtering
+    # (rows without a matching event are excluded), LEFT OUTER otherwise.
+    latest_failure = (
+        session.query(
+            ScrapeFailure.scrape_url_item_id,
+            ScrapeFailure.error_reason,
+            ScrapeFailure.http_status,
+            func.row_number()
+            .over(
+                partition_by=ScrapeFailure.scrape_url_item_id,
+                order_by=(
+                    ScrapeFailure.occurred_at.desc(),
+                    ScrapeFailure.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .filter(ScrapeFailure.run_id == run_id)
+        .subquery()
+    )
+
     query = (
-        session.query(ScrapeUrlItem, ShopBook.title, ShopBook.id)
+        session.query(
+            ScrapeUrlItem,
+            ShopBook.title,
+            ShopBook.id,
+            latest_failure.c.error_reason,
+        )
         .outerjoin(
             ShopBook,
             (ShopBook.shop_id == ScrapeUrlItem.shop_id)
@@ -947,24 +1030,6 @@ def get_run_url_items(
         query = query.filter(ScrapeUrlItem.status == status)
 
     if needs_failure_filter:
-        latest_failure = (
-            session.query(
-                ScrapeFailure.scrape_url_item_id,
-                ScrapeFailure.error_reason,
-                ScrapeFailure.http_status,
-                func.row_number()
-                .over(
-                    partition_by=ScrapeFailure.scrape_url_item_id,
-                    order_by=(
-                        ScrapeFailure.occurred_at.desc(),
-                        ScrapeFailure.id.desc(),
-                    ),
-                )
-                .label("rn"),
-            )
-            .filter(ScrapeFailure.run_id == run_id)
-            .subquery()
-        )
         query = query.join(
             latest_failure,
             latest_failure.c.scrape_url_item_id == ScrapeUrlItem.id,
@@ -979,6 +1044,12 @@ def get_run_url_items(
             query = query.filter(latest_failure.c.http_status.is_(None))
         elif http_status is not None:
             query = query.filter(latest_failure.c.http_status == http_status)
+    else:
+        query = query.outerjoin(
+            latest_failure,
+            (latest_failure.c.scrape_url_item_id == ScrapeUrlItem.id)
+            & (latest_failure.c.rn == 1),
+        )
 
     total = query.count()
 
@@ -1021,7 +1092,10 @@ def get_run_url_items(
         .limit(per_page)
         .all()
     )
-    return [(it, title, sb_id) for it, title, sb_id in rows], total
+    return [
+        (it, title, sb_id, latest_reason)
+        for it, title, sb_id, latest_reason in rows
+    ], total
 
 
 def get_run_discovered_urls(

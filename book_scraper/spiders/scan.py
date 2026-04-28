@@ -298,12 +298,9 @@ class ScanSpider(scrapy.Spider):
         if 400 <= response.status < 500:
             self._errors_4xx += 1
             self._error_count += 1
-            self._report_validation(
-                "http_4xx",
-                "response",
-                url,
-                str(response.status),
-            )
+            # Transport errors are recorded only in scrape_failures (PR 1
+            # of the migration; PR 3 stops the validation_issues
+            # double-write — single source of truth for failure events).
             self._mark_response(
                 scrape_url_item_id,
                 response_url=url,
@@ -325,12 +322,6 @@ class ScanSpider(scrapy.Spider):
         if 500 <= response.status < 600:
             self._errors_5xx += 1
             self._error_count += 1
-            self._report_validation(
-                "http_5xx",
-                "response",
-                url,
-                str(response.status),
-            )
             self._mark_response(
                 scrape_url_item_id,
                 response_url=url,
@@ -469,32 +460,16 @@ class ScanSpider(scrapy.Spider):
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None
 
+        # Transport errors land only in scrape_failures (PR 3 of the
+        # migration). The validation_issues counterparts were duplicates.
         if http_status and 400 <= http_status < 500:
             self._errors_4xx += 1
-            self._report_validation(
-                "http_4xx",
-                "response",
-                url,
-                str(http_status),
-            )
             error_reason = f"http_{http_status}"
         elif http_status and 500 <= http_status < 600:
             self._errors_5xx += 1
-            self._report_validation(
-                "http_5xx",
-                "response",
-                url,
-                str(http_status),
-            )
             error_reason = f"http_{http_status}"
         else:
             error_type = type(failure.value).__name__
-            self._report_validation(
-                "request_error",
-                "response",
-                url,
-                error_type,
-            )
             error_reason = f"request_error:{error_type}"
         self._error_count += 1
 

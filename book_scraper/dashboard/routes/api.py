@@ -947,7 +947,9 @@ def api_retry_run_failures(
     ).update(
         {
             "status": "pending",
-            "error_reason": None,
+            # PR 3: error_reason column dropped. http_status is the
+            # last-response cache; reset it so a retry that succeeds
+            # doesn't display the prior failure's status alongside `done`.
             "http_status": None,
             "claimed_at": None,
             "done_at": None,
@@ -1232,12 +1234,18 @@ def api_run_urls(
             http_status_is_null=http_status_is_null,
         )
         rows = []
-        for it, title, shop_book_id in items:
+        for it, title, shop_book_id, latest_error_reason in items:
             duration_ms: int | None = None
             if it.claimed_at and it.done_at:
                 duration_ms = int(
                     (it.done_at - it.claimed_at).total_seconds() * 1000
                 )
+            # error_reason now sourced from the latest scrape_failures
+            # event (PR 3). Surface it only on currently-failed rows so a
+            # retried-and-succeeded URL doesn't show its old failure.
+            display_error_reason = (
+                latest_error_reason if it.status == "failed" else None
+            )
             rows.append(
                 {
                     "url": it.url,
@@ -1247,7 +1255,7 @@ def api_run_urls(
                     "claimed_at": it.claimed_at.isoformat() if it.claimed_at else None,
                     "done_at": it.done_at.isoformat() if it.done_at else None,
                     "http_status": it.http_status,
-                    "error_reason": it.error_reason,
+                    "error_reason": display_error_reason,
                     "duration_ms": duration_ms,
                     "request_delay_s": it.request_delay_s,
                     "delay_source": it.delay_source,

@@ -476,8 +476,17 @@ def test_sweep_orphaned_processing_items_cleans_terminal_run(db_session):
     assert cleaned == 1
     db_session.refresh(item)
     assert item.status == "failed"
-    assert item.error_reason == "run_aborted"
     assert item.done_at is not None
+    # PR 3 of the scrape_failures migration: failure detail lives in
+    # scrape_failures, not on the queue row.
+    from book_scraper.db.models import ScrapeFailure
+
+    failure = (
+        db_session.query(ScrapeFailure)
+        .filter(ScrapeFailure.scrape_url_item_id == item.id)
+        .one()
+    )
+    assert failure.error_reason == "run_aborted"
 
 
 def test_sweep_reaps_stuck_rows_on_running_run(db_session):
@@ -517,8 +526,15 @@ def test_sweep_reaps_stuck_rows_on_running_run(db_session):
     assert fresh.status == "processing"
     assert fresh.done_at is None
     assert stuck.status == "failed"
-    assert stuck.error_reason == "stuck_in_processing"
     assert stuck.done_at is not None
+    from book_scraper.db.models import ScrapeFailure
+
+    stuck_failure = (
+        db_session.query(ScrapeFailure)
+        .filter(ScrapeFailure.scrape_url_item_id == stuck.id)
+        .one()
+    )
+    assert stuck_failure.error_reason == "stuck_in_processing"
 
 
 def test_sweep_reaps_stuck_rows_on_paused_run(db_session):
@@ -544,7 +560,14 @@ def test_sweep_reaps_stuck_rows_on_paused_run(db_session):
     assert cleaned == 1
     db_session.refresh(item)
     assert item.status == "failed"
-    assert item.error_reason == "stuck_in_processing"
+    from book_scraper.db.models import ScrapeFailure
+
+    failure = (
+        db_session.query(ScrapeFailure)
+        .filter(ScrapeFailure.scrape_url_item_id == item.id)
+        .one()
+    )
+    assert failure.error_reason == "stuck_in_processing"
 
 
 # ─────────────────────── pool_pre_ping smoke (best-effort) ───────────────────────

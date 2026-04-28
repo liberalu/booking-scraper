@@ -540,14 +540,15 @@ def _make_run_with_failures(db_session: Session, shop_id: int) -> ScrapeRun:
         ("https://vaga.lt/e", None, None),
     ]
     items: list[ScrapeUrlItem] = []
-    for url, reason, http in rows:
+    for url, _reason, http in rows:
+        # PR 3: scrape_url_items.error_reason was dropped. Failure detail
+        # lives in scrape_failures only.
         item = ScrapeUrlItem(
             run_id=run.id,
             shop_id=shop_id,
             url=url,
             url_type="product",
             status="failed",
-            error_reason=reason,
             http_status=http,
         )
         db_session.add(item)
@@ -791,7 +792,6 @@ def test_failure_groups_recurring_in_runs_counts_prior_runs(
             url=f"https://vaga.lt/historical-{i}",
             url_type="product",
             status="failed",
-            error_reason="http_404",
             http_status=404,
         )
         db_session.add(item)
@@ -1078,7 +1078,8 @@ def test_retry_run_filtered_alive_no_spawn(
     by_url = {r.url: r for r in rows}
     flipped = by_url["https://vaga.lt/b"]
     assert flipped.status == "pending"
-    assert flipped.error_reason is None
+    # error_reason column dropped in PR 3; failure history stays in
+    # scrape_failures (append-only) — retry doesn't delete events.
     assert flipped.http_status is None
     # Same-reason / different-http buckets must NOT be touched.
     assert by_url["https://vaga.lt/a"].status == "failed"

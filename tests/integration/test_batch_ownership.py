@@ -68,7 +68,6 @@ def test_flush_progress_does_not_modify_scrape_url_item_terminal_state(
         "status": item_before.status,
         "done_at": item_before.done_at,
         "http_status": item_before.http_status,
-        "error_reason": item_before.error_reason,
         "response_bytes": item_before.response_bytes,
     }
 
@@ -99,7 +98,6 @@ def test_flush_progress_does_not_modify_scrape_url_item_terminal_state(
     assert after.status == snapshot["status"]
     assert after.done_at == snapshot["done_at"]
     assert after.http_status == snapshot["http_status"]
-    assert after.error_reason == snapshot["error_reason"]
     assert after.response_bytes == snapshot["response_bytes"]
 
 
@@ -114,7 +112,6 @@ def test_finish_scan_does_not_modify_scrape_url_item_terminal_state(
         "status": item_before.status,
         "done_at": item_before.done_at,
         "http_status": item_before.http_status,
-        "error_reason": item_before.error_reason,
         "response_bytes": item_before.response_bytes,
     }
 
@@ -139,5 +136,4 @@ def test_finish_scan_does_not_modify_scrape_url_item_terminal_state(
     assert after.status == snapshot["status"]
     assert after.done_at == snapshot["done_at"]
     assert after.http_status == snapshot["http_status"]
-    assert after.error_reason == snapshot["error_reason"]
     assert after.response_bytes == snapshot["response_bytes"]

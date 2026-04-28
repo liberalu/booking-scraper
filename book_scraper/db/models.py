@@ -544,7 +544,8 @@ class ScrapeUrlItem(Base):
         DateTime(timezone=True), nullable=True
     )
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # error_reason removed in PR 3 of the scrape_failures migration —
+    # source of truth is scrape_failures.error_reason (latest event).
     request_delay_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     delay_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(

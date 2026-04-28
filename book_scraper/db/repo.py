@@ -811,14 +811,14 @@ def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
     for item in items:
         item.status = "failed"
         item.done_at = now
-        if item.error_reason is None:
-            item.error_reason = "run_aborted"
     session.flush()
+    # PR 3 of the migration: failure detail (reason / http) lives only
+    # in scrape_failures now. The queue row carries `status` only.
     for item in items:
         record_scrape_failure(
             session,
             scrape_url_item=item,
-            error_reason=item.error_reason,
+            error_reason="run_aborted",
             http_status=None,
             error_detail="run_aborted",
             occurred_at=now,
@@ -890,8 +890,6 @@ def sweep_orphaned_processing_items(session: Session) -> int:
     for item in stuck:
         item.status = "failed"
         item.done_at = now
-        if item.error_reason is None:
-            item.error_reason = "stuck_in_processing"
         cleaned += 1
 
     if cleaned:
@@ -900,7 +898,7 @@ def sweep_orphaned_processing_items(session: Session) -> int:
             record_scrape_failure(
                 session,
                 scrape_url_item=item,
-                error_reason=item.error_reason,
+                error_reason="stuck_in_processing",
                 http_status=None,
                 error_detail="stuck_in_processing",
                 occurred_at=now,
@@ -1589,10 +1587,10 @@ def mark_scrape_url_item_response(
 ) -> None:
     """Immediate per-response write — owns terminal state for an item.
 
-    Sets status to 'done' or 'failed' and stamps done_at, http_status,
-    response_bytes, and error_reason in a single UPDATE on the response.
-    The pre-existing batched flush path no longer writes these columns
-    (live observability spec — ownership split).
+    Sets status to 'done' or 'failed' and stamps done_at, http_status, and
+    response_bytes in a single UPDATE. PR 3 of the migration: failure
+    detail (`error_reason`) is no longer written to the queue row; the
+    `scrape_failures` event log carries it.
     """
     item = session.get(ScrapeUrlItem, item_id)
     if item is None:
@@ -1613,17 +1611,12 @@ def mark_scrape_url_item_response(
     )
     if http_status is not None:
         item.http_status = http_status
-    if error_reason is not None:
-        item.error_reason = error_reason
     if response_bytes is not None:
         item.response_bytes = response_bytes
     if url_type is not None:
         item.url_type = url_type
     session.flush()
     if not success:
-        # Dual-write while the failure card / retry / URLs view still
-        # read from scrape_url_items.error_reason. PR 3 of the migration
-        # plan drops those columns and this becomes the single source.
         record_scrape_failure(
             session,
             scrape_url_item=item,
@@ -1663,8 +1656,9 @@ def mark_scrape_url_item_done(
             item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:
             item.http_status = http_status
-        if error_reason is not None:
-            item.error_reason = error_reason
+        # PR 3: scrape_url_items.error_reason was dropped. Caller's
+        # `error_reason` arg is ignored for done rows (success); on the
+        # rare done-with-error path we'd record a scrape_failures event.
         if url_type is not None:
             item.url_type = url_type
         session.flush()
@@ -1693,11 +1687,10 @@ def mark_scrape_url_item_failed(
             item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if http_status is not None:
             item.http_status = http_status
-        if error_reason is not None:
-            item.error_reason = error_reason
         if url_type is not None:
             item.url_type = url_type
         session.flush()
+        # PR 3: error_reason lives only in scrape_failures.
         record_scrape_failure(
             session,
             scrape_url_item=item,
