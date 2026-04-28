@@ -676,6 +676,28 @@ function HFRunDetail({ nav, goto, params }) {
       .finally(() => setActionPending(false));
   }, [id, urlStatus, urlPage, urlPerPage, urlSort, urlOrder,
       urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull]);
+  // Acknowledge a failure-card group: flips all matching scrape_failures
+  // events to lifecycle_state='already_seen' so the bucket stops showing
+  // up on the card. PR 2d of the migration.
+  const ackGroup = React.useCallback((group) => {
+    if (!id || !group) return;
+    const label = `${group.reason_display ?? group.reason ?? 'unknown'}${group.http != null ? ` · HTTP ${group.http}` : ''}`;
+    if (!confirm(`Mark group "${label}" as known on run #${id}?\nThe bucket will stop appearing on the Failures card.`)) return;
+    const params = new URLSearchParams();
+    if (group.reason_is_null) params.set('error_reason_is_null', 'true');
+    else if (group.reason) params.set('error_reason', group.reason);
+    if (group.http_is_null) params.set('http_status_is_null', 'true');
+    else if (group.http != null) params.set('http_status', String(group.http));
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/failures/ack?${params.toString()}`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t || r.statusText); }))
+      .then(_d => {
+        // Refresh the live failure_groups so the bucket disappears.
+        fetch(`/api/runs/${id}/live`).then(r => r.ok ? r.json() : null).then(ld => { if (ld) setLiveData(ld); });
+      })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id]);
   const stopRun = React.useCallback(() => {
     if (actionPending || !id) return;
     if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
@@ -1042,6 +1064,15 @@ function HFRunDetail({ nav, goto, params }) {
                       <span style={{fontFamily: HF.mono, fontSize: 11.5, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
                         × {g.count}
                       </span>
+                      {g.recurring_in_runs > 0 && (
+                        <span title={`This bucket also failed in ${g.recurring_in_runs} of the last 5 prior runs for this shop`} style={{
+                          display:'inline-flex', alignItems:'center', gap: 4,
+                          height: 20, padding: '0 7px',
+                          background: HF.warnSoft, color: HF.warnInk,
+                          border: `1px solid ${HF.warnBorder}`, borderRadius: 4,
+                          fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                        }}>↻ recurring × {g.recurring_in_runs}</span>
+                      )}
                     </div>
                     <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
                       <HFButton size="sm" disabled={actionPending} onClick={() => retryRun(g)}>Retry group</HFButton>
@@ -1064,7 +1095,7 @@ function HFRunDetail({ nav, goto, params }) {
                         )}
                       </div>
                       <div style={{display:'flex', gap: 6}}>
-                        <HFButton size="sm" variant="subtle" disabled>Skip permanently</HFButton>
+                        <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => ackGroup(g)}>Mark as known</HFButton>
                         <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>View all {g.count}</HFButton>
                       </div>
                     </div>

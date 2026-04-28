@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
 from book_scraper.db.models import (
+    ScrapeFailure,
     ScrapeRun,
     ScrapeUrlItem,
     Shop,
@@ -538,14 +539,30 @@ def _make_run_with_failures(db_session: Session, shop_id: int) -> ScrapeRun:
         ("https://vaga.lt/d", "http_404", 404),
         ("https://vaga.lt/e", None, None),
     ]
+    items: list[ScrapeUrlItem] = []
     for url, reason, http in rows:
+        item = ScrapeUrlItem(
+            run_id=run.id,
+            shop_id=shop_id,
+            url=url,
+            url_type="product",
+            status="failed",
+            error_reason=reason,
+            http_status=http,
+        )
+        db_session.add(item)
+        items.append(item)
+    db_session.flush()
+    # Mirror what production does on a real failure: record the event.
+    # PR 2 of the scrape-failures migration reads from this table for the
+    # failure card / URL filter / retry, so the fixture must populate it.
+    for item, (_, reason, http) in zip(items, rows, strict=True):
         db_session.add(
-            ScrapeUrlItem(
+            ScrapeFailure(
+                scrape_url_item_id=item.id,
                 run_id=run.id,
                 shop_id=shop_id,
-                url=url,
-                url_type="product",
-                status="failed",
+                url=item.url,
                 error_reason=reason,
                 http_status=http,
             )
@@ -714,6 +731,306 @@ def test_run_live_failure_groups_payload_shape(
     timeout_null_http = by_key[("request_error:TimeoutError", None)]
     assert timeout_null_http["reason_is_null"] is False
     assert timeout_null_http["http_is_null"] is True
+
+
+@pytest.mark.integration
+def test_failure_groups_drop_retried_and_succeeded(
+    client: TestClient, db_session: Session
+) -> None:
+    """A URL that failed, was retried, and succeeded must disappear from
+    the failure card — the card answers "what is failed right now", not
+    "what failed at any point in this run". The append-only event log
+    keeps the history; the card filters on current queue state."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    # Flip /b (the http_503 row) to `done` — operator retried and it worked.
+    db_session.query(ScrapeUrlItem).filter(
+        ScrapeUrlItem.run_id == run.id,
+        ScrapeUrlItem.url == "https://vaga.lt/b",
+    ).update({"status": "done"})
+    db_session.commit()
+
+    resp = client.get(f"/api/runs/{run.id}/live")
+    assert resp.status_code == 200, resp.text
+    groups = resp.json()["failure_groups"]
+    by_key = {(g["reason"], g["http"]): g["count"] for g in groups}
+
+    # The 503 bucket no longer has a `failed` queue row — must be gone.
+    assert ("request_error:TimeoutError", 503) not in by_key
+    # The other Timeout buckets (NULL / 504) still show one failure each.
+    assert by_key[("request_error:TimeoutError", None)] == 1
+    assert by_key[("request_error:TimeoutError", 504)] == 1
+
+
+@pytest.mark.integration
+def test_failure_groups_recurring_in_runs_counts_prior_runs(
+    client: TestClient, db_session: Session
+) -> None:
+    """`recurring_in_runs` is a status-blind historical count: how many
+    of the last N prior runs (same shop) had ≥1 failure in this bucket."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+
+    # Two prior runs with the http_404 bucket failing.
+    from datetime import UTC, datetime, timedelta
+
+    base = datetime.now(UTC) - timedelta(hours=2)
+    for i, started in enumerate([base, base + timedelta(minutes=30)], start=1):
+        prior = ScrapeRun(
+            shop_id=shop.id,
+            phase="scan",
+            status="completed",
+            started_at=started,
+            finished_at=started + timedelta(minutes=10),
+        )
+        db_session.add(prior)
+        db_session.flush()
+        item = ScrapeUrlItem(
+            run_id=prior.id,
+            shop_id=shop.id,
+            url=f"https://vaga.lt/historical-{i}",
+            url_type="product",
+            status="failed",
+            error_reason="http_404",
+            http_status=404,
+        )
+        db_session.add(item)
+        db_session.flush()
+        db_session.add(
+            ScrapeFailure(
+                scrape_url_item_id=item.id,
+                run_id=prior.id,
+                shop_id=shop.id,
+                url=item.url,
+                error_reason="http_404",
+                http_status=404,
+            )
+        )
+    db_session.commit()
+
+    # Current run with the same bucket.
+    current = _make_run_with_failures(db_session, shop.id)
+
+    resp = client.get(f"/api/runs/{current.id}/live")
+    assert resp.status_code == 200, resp.text
+    groups = resp.json()["failure_groups"]
+    by_key = {(g["reason"], g["http"]): g for g in groups}
+
+    http_404 = by_key[("http_404", 404)]
+    assert http_404["recurring_in_runs"] == 2
+    # The other buckets in the current run had no prior occurrences.
+    timeout_503 = by_key[("request_error:TimeoutError", 503)]
+    assert timeout_503["recurring_in_runs"] == 0
+
+
+@pytest.mark.integration
+def test_api_issues_kind_all_unions_validation_and_scrape_failures(
+    client: TestClient, db_session: Session
+) -> None:
+    """`/api/issues?kind=all` (default) returns both `validation_issues`
+    and `scrape_failures` rows, each carrying its `kind` field."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+    # Add a validation issue on the same run for cross-source coverage.
+    db_session.add(
+        ValidationIssue(
+            scrape_run_id=run.id,
+            url="https://vaga.lt/v1",
+            field="price",
+            issue="missing_price",
+            raw_value=None,
+        )
+    )
+    db_session.commit()
+
+    resp = client.get("/api/issues", params={"run_id": run.id, "kind": "all"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    kinds = {i["kind"] for i in body["issues"]}
+    assert "validation" in kinds
+    assert "scrape_failure" in kinds
+    # The 503 row is a useful representative scrape_failure: both fields set.
+    sf_503 = next(
+        i
+        for i in body["issues"]
+        if i["kind"] == "scrape_failure" and i["url"] == "https://vaga.lt/b"
+    )
+    val = next(i for i in body["issues"] if i["kind"] == "validation")
+    assert sf_503["error_reason"] == "request_error:TimeoutError"
+    assert sf_503["http_status"] == 503
+    # Validation rows omit transport keys.
+    assert val["error_reason"] is None
+    assert val["http_status"] is None
+
+
+@pytest.mark.integration
+def test_api_issues_kind_scrape_failure_excludes_validation(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+    db_session.add(
+        ValidationIssue(
+            scrape_run_id=run.id,
+            url="https://vaga.lt/v2",
+            field="price",
+            issue="missing_price",
+            raw_value=None,
+        )
+    )
+    db_session.commit()
+
+    resp = client.get(
+        "/api/issues", params={"run_id": run.id, "kind": "scrape_failure"}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    kinds = {i["kind"] for i in body["issues"]}
+    assert kinds == {"scrape_failure"}
+    # No `missing_price` validation row should appear.
+    assert all(i["issue"] != "missing_price" for i in body["issues"])
+
+
+@pytest.mark.integration
+def test_api_issues_severity_classifier_handles_per_status_reasons(
+    client: TestClient, db_session: Session
+) -> None:
+    """`error_reason='http_503'` (per-status, today's actual writes) must
+    classify as the http_5xx bucket = warning, via http_status range."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    resp = client.get(
+        "/api/issues", params={"run_id": run.id, "kind": "scrape_failure"}
+    )
+    assert resp.status_code == 200, resp.text
+    by_url = {i["url"]: i for i in resp.json()["issues"]}
+    # 503 → warning (http range)
+    assert by_url["https://vaga.lt/b"]["severity"] == "warning"
+    # 504 → warning (http range)
+    assert by_url["https://vaga.lt/c"]["severity"] == "warning"
+    # 404 → warning (http range)
+    assert by_url["https://vaga.lt/d"]["severity"] == "warning"
+    # request_error:TimeoutError, http_status NULL → critical (prefix)
+    assert by_url["https://vaga.lt/a"]["severity"] == "critical"
+    # NULL reason, NULL http → default warning
+    assert by_url["https://vaga.lt/e"]["severity"] == "warning"
+
+
+@pytest.mark.integration
+def test_acknowledge_run_failures_flips_lifecycle(
+    client: TestClient, db_session: Session
+) -> None:
+    """POST /failures/ack flips matching scrape_failures.lifecycle_state
+    to `already_seen`, sets `acknowledged_at`, and records the note."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    resp = client.post(
+        f"/api/runs/{run.id}/failures/ack",
+        params={
+            "error_reason": "request_error:TimeoutError",
+            "http_status": 503,
+            "note": "vendor outage 2026-04-28",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["acknowledged"] == 1
+    assert body["run_id"] == run.id
+
+    db_session.expire_all()
+    rows = (
+        db_session.query(ScrapeFailure)
+        .filter(
+            ScrapeFailure.run_id == run.id,
+            ScrapeFailure.error_reason == "request_error:TimeoutError",
+            ScrapeFailure.http_status == 503,
+        )
+        .all()
+    )
+    assert all(r.lifecycle_state == "already_seen" for r in rows)
+    assert all(r.acknowledged_at is not None for r in rows)
+    assert all(r.acknowledged_note == "vendor outage 2026-04-28" for r in rows)
+    # Other buckets untouched.
+    other = (
+        db_session.query(ScrapeFailure)
+        .filter(
+            ScrapeFailure.run_id == run.id,
+            ScrapeFailure.error_reason == "http_404",
+        )
+        .one()
+    )
+    assert other.lifecycle_state == "new"
+
+
+@pytest.mark.integration
+def test_acknowledge_run_failures_no_match_returns_400(
+    client: TestClient, db_session: Session
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    resp = client.post(
+        f"/api/runs/{run.id}/failures/ack",
+        params={"error_reason": "no_such_reason"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.integration
+def test_acknowledge_run_failures_404_when_missing(client: TestClient) -> None:
+    resp = client.post("/api/runs/999999999/failures/ack")
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+def test_acknowledged_bucket_disappears_from_failure_card(
+    client: TestClient, db_session: Session
+) -> None:
+    """End-to-end: ack a bucket, then re-fetch /api/runs/{id}/live and
+    confirm the bucket is no longer surfaced."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    before = client.get(f"/api/runs/{run.id}/live").json()["failure_groups"]
+    assert any(g["http"] == 404 for g in before)
+
+    resp = client.post(
+        f"/api/runs/{run.id}/failures/ack",
+        params={"error_reason": "http_404", "http_status": 404},
+    )
+    assert resp.status_code == 200, resp.text
+
+    after = client.get(f"/api/runs/{run.id}/live").json()["failure_groups"]
+    assert all(g["http"] != 404 for g in after)
+
+
+@pytest.mark.integration
+def test_failure_groups_hides_acknowledged_by_default(
+    client: TestClient, db_session: Session
+) -> None:
+    """Marking a bucket's latest event as `already_seen` removes it from
+    the failure card unless the caller opts in."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_run_with_failures(db_session, shop.id)
+
+    # Acknowledge the http_404 bucket.
+    db_session.query(ScrapeFailure).filter(
+        ScrapeFailure.run_id == run.id,
+        ScrapeFailure.error_reason == "http_404",
+    ).update(
+        {"lifecycle_state": "already_seen"}, synchronize_session=False
+    )
+    db_session.commit()
+
+    resp = client.get(f"/api/runs/{run.id}/live")
+    assert resp.status_code == 200, resp.text
+    groups = resp.json()["failure_groups"]
+    keys = {(g["reason"], g["http"]) for g in groups}
+    assert ("http_404", 404) not in keys
+    # The other buckets still show.
+    assert ("request_error:TimeoutError", 503) in keys
 
 
 # ── /api/runs/{id}/retry ───────────────────────────────────────────────────

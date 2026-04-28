@@ -51,7 +51,13 @@ from book_scraper.dashboard.queries import (
     get_validation_summary,
 )
 from book_scraper.db import run_events as run_event_types
-from book_scraper.db.models import ScrapeRun, ScrapeUrlItem, Shop, ShopBook
+from book_scraper.db.models import (
+    ScrapeFailure,
+    ScrapeRun,
+    ScrapeUrlItem,
+    Shop,
+    ShopBook,
+)
 from book_scraper.db.repo import (
     emit_run_event,
     get_cron_job,
@@ -854,20 +860,62 @@ def api_retry_run_failures(
             detail=f"Retry is only supported for scan runs; phase={run.phase!r}",
         )
 
-    update_filter = [
+    # Candidate selection: items whose latest scrape_failures event matches
+    # the requested bucket AND whose queue row is currently `failed`. The
+    # window-function subquery mirrors the failure card's grouping query so
+    # retry acts on exactly the rows the operator just saw.
+    needs_failure_filter = (
+        error_reason_is_null
+        or bool(error_reason)
+        or http_status_is_null
+        or http_status is not None
+    )
+    candidate_q = session.query(ScrapeUrlItem.id).filter(
         ScrapeUrlItem.run_id == run.id,
         ScrapeUrlItem.status == "failed",
-    ]
-    if error_reason_is_null:
-        update_filter.append(ScrapeUrlItem.error_reason.is_(None))
-    elif error_reason:
-        update_filter.append(ScrapeUrlItem.error_reason == error_reason)
-    if http_status_is_null:
-        update_filter.append(ScrapeUrlItem.http_status.is_(None))
-    elif http_status is not None:
-        update_filter.append(ScrapeUrlItem.http_status == http_status)
+    )
+    if needs_failure_filter:
+        latest_failure = (
+            session.query(
+                ScrapeFailure.scrape_url_item_id,
+                ScrapeFailure.error_reason,
+                ScrapeFailure.http_status,
+                func.row_number()
+                .over(
+                    partition_by=ScrapeFailure.scrape_url_item_id,
+                    order_by=(
+                        ScrapeFailure.occurred_at.desc(),
+                        ScrapeFailure.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .filter(ScrapeFailure.run_id == run.id)
+            .subquery()
+        )
+        candidate_q = candidate_q.join(
+            latest_failure,
+            latest_failure.c.scrape_url_item_id == ScrapeUrlItem.id,
+        ).filter(latest_failure.c.rn == 1)
+        if error_reason_is_null:
+            candidate_q = candidate_q.filter(
+                latest_failure.c.error_reason.is_(None)
+            )
+        elif error_reason:
+            candidate_q = candidate_q.filter(
+                latest_failure.c.error_reason == error_reason
+            )
+        if http_status_is_null:
+            candidate_q = candidate_q.filter(
+                latest_failure.c.http_status.is_(None)
+            )
+        elif http_status is not None:
+            candidate_q = candidate_q.filter(
+                latest_failure.c.http_status == http_status
+            )
 
-    matches = session.query(func.count(ScrapeUrlItem.id)).filter(*update_filter).scalar() or 0
+    candidate_ids = [r[0] for r in candidate_q.all()]
+    matches = len(candidate_ids)
     if matches == 0:
         raise HTTPException(
             status_code=400,
@@ -894,7 +942,9 @@ def api_retry_run_failures(
                 ),
             )
 
-    session.query(ScrapeUrlItem).filter(*update_filter).update(
+    session.query(ScrapeUrlItem).filter(
+        ScrapeUrlItem.id.in_(candidate_ids)
+    ).update(
         {
             "status": "pending",
             "error_reason": None,
@@ -968,6 +1018,74 @@ def api_retry_run_failures(
         "run_id": run_id,
         "run_status": "running",
         "spawned": True,
+    }
+
+
+@router.post("/runs/{run_id}/failures/ack")
+def api_acknowledge_run_failures(
+    run_id: int,
+    error_reason: str = "",
+    error_reason_is_null: bool = False,
+    http_status: int | None = None,
+    http_status_is_null: bool = False,
+    note: str = "",
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark a failure-card bucket as `already_seen` so it stops surfacing.
+
+    Filter contract mirrors `/retry` and `/urls`: pass the bucket's
+    `error_reason` + `http_status` (with `*_is_null` flags for the
+    nullable buckets). The endpoint flips `lifecycle_state` to
+    `already_seen` for every `scrape_failures` row in the run that
+    matches — including history events, so a retried-and-still-failing
+    URL doesn't pop back as `new` on the next attempt.
+    """
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    update_filter = [ScrapeFailure.run_id == run_id]
+    if error_reason_is_null:
+        update_filter.append(ScrapeFailure.error_reason.is_(None))
+    elif error_reason:
+        update_filter.append(ScrapeFailure.error_reason == error_reason)
+    if http_status_is_null:
+        update_filter.append(ScrapeFailure.http_status.is_(None))
+    elif http_status is not None:
+        update_filter.append(ScrapeFailure.http_status == http_status)
+
+    matches = (
+        session.query(func.count(ScrapeFailure.id))
+        .filter(*update_filter)
+        .scalar()
+        or 0
+    )
+    if matches == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No matching scrape_failures rows to acknowledge.",
+        )
+
+    now = datetime.now(UTC)
+    update_values: dict[str, Any] = {
+        "lifecycle_state": "already_seen",
+        "acknowledged_at": now,
+    }
+    if note:
+        update_values["acknowledged_note"] = note
+
+    session.query(ScrapeFailure).filter(*update_filter).update(
+        update_values, synchronize_session=False
+    )
+    session.commit()
+
+    return {
+        "acknowledged": int(matches),
+        "run_id": run_id,
+        "error_reason": None if error_reason_is_null else (error_reason or None),
+        "http_status": None
+        if http_status_is_null
+        else (http_status if http_status is not None else None),
     }
 
 
@@ -1464,8 +1582,18 @@ def api_issues(
     q: str = "",
     page: int = 1,
     per_page: int = 30,
+    kind: str = "all",
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    """Issues inbox. PR 2 of the scrape-failures migration: when
+    `kind="all"` the response merges `validation_issues` (parser-level
+    data quality) with `scrape_failures` (transport / HTTP-level events).
+    `kind="validation"` or `"scrape_failure"` narrows to one source.
+
+    Each row carries a `kind` field so the frontend can color/route per
+    type. `error_reason` and `http_status` are NULL on validation rows
+    and populated on scrape-failure rows.
+    """
     shop_id = None
     if shop and shop != "all":
         s = get_shop_by_name(session, shop)
@@ -1474,6 +1602,8 @@ def api_issues(
     run_id_int = run_id if run_id > 0 else None
     page = max(1, page)
     per_page = max(1, min(per_page, 200))
+    if kind not in ("all", "validation", "scrape_failure"):
+        kind = "all"
     rows, total = get_issues_page(
         session,
         state=state,
@@ -1484,6 +1614,7 @@ def api_issues(
         q=q,
         page=page,
         per_page=per_page,
+        kind=kind,
     )
     counts = get_validation_lifecycle_counts(
         session, shop_id=shop_id, issue_type=issue_type, run_id=run_id_int, severity=severity, q=q
@@ -1492,10 +1623,13 @@ def api_issues(
     issues = [
         {
             "id": r["id"],
+            "kind": r.get("kind", "validation"),
             "url": r["url"],
             "field": r["field"],
             "issue": r["issue"],
             "raw_value": r["raw_value"],
+            "error_reason": r.get("error_reason"),
+            "http_status": r.get("http_status"),
             "scrape_run_id": r["scrape_run_id"],
             "shop_book_id": r["shop_book_id"],
             "shop_book_title": r["shop_book_title"],
@@ -1516,6 +1650,7 @@ def api_issues(
         "per_page": per_page,
         "pages": pages,
         "counts": counts,
+        "kind": kind,
     }
 
 

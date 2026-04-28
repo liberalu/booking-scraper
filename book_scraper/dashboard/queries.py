@@ -14,6 +14,7 @@ from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
     RunEvent,
+    ScrapeFailure,
     ScrapeRun,
     ScrapeUrlItem,
     Shop,
@@ -91,6 +92,40 @@ ISSUE_SEVERITY: dict[str, str] = {
     "field_cleared": "critical",
     "scrape_run_failed": "critical",
 }
+
+
+# Severity for scrape_failures (PR 2 of the migration). Driven by
+# `error_reason` prefix when present; falls back to http_status range.
+# Per-status reasons (`http_404`, `http_503`, ...) classify via the
+# range, so we don't need to enumerate every status code.
+SCRAPE_FAILURE_SEVERITY: dict[str, str] = {
+    "request_error":     "critical",
+    "anti_bot_detected": "critical",
+    "schema_drift":      "critical",
+    "rate_limited":      "warning",
+    "robots_disallowed": "warning",
+    "soft_404":          "warning",
+}
+
+
+def severity_for_failure(
+    error_reason: str | None, http_status: int | None
+) -> str:
+    """Classify a scrape failure's severity. http_status range wins
+    when set so per-status reasons (`http_503`) resolve via the bucket
+    without backfilling the data.
+
+    NULL/unknown defaults to `warning` — the operator can still triage
+    explicitly via the lifecycle state."""
+    if http_status is not None:
+        if 400 <= http_status < 500:
+            return "warning"
+        if 500 <= http_status < 600:
+            return "warning"
+    if error_reason:
+        prefix = error_reason.split(":", 1)[0]
+        return SCRAPE_FAILURE_SEVERITY.get(prefix, "warning")
+    return "warning"
 
 
 def _pid_alive(pid: int | None) -> bool | None:
@@ -644,53 +679,150 @@ def get_run_recent_failures(
     return [_row_to_activity_entry(r, now) for r in rows]
 
 
-def get_run_failure_groups(
-    session: Session, run_id: int, limit_examples: int = 3
-) -> list[dict[str, Any]]:
-    """All failure types for a run, grouped by (error_reason, http_status).
+FAILURE_RECURRENCE_LOOKBACK_RUNS = 5
 
-    Returns every distinct failure type with a count and example URLs so
-    the dashboard Failures card shows the full picture, not just the 10
-    most-recent rows.
+
+def get_run_failure_groups(
+    session: Session,
+    run_id: int,
+    limit_examples: int = 3,
+    include_acked: bool = False,
+) -> list[dict[str, Any]]:
+    """Failure types for a run, grouped by (error_reason, http_status).
+
+    Reads from the append-only `scrape_failures` event log (PR 2 of the
+    scrape-failures migration). Two filters in tandem ensure the card
+    reflects "what is failed *right now* in this run", not the historical
+    timeline:
+    - Pick each item's latest event by `occurred_at` via ROW_NUMBER().
+    - JOIN `scrape_url_items` and require `status='failed'` so a URL that
+      was retried and succeeded falls off the card immediately.
+
+    `recurring_in_runs` is computed status-blind against the last
+    `FAILURE_RECURRENCE_LOOKBACK_RUNS` prior runs for the same shop —
+    operators want to know "how often has this kind of failure happened",
+    even for buckets that already cleared in earlier runs.
+
+    `include_acked=False` (default) hides groups whose latest event is
+    `lifecycle_state='already_seen'`.
     """
-    rows = (
+    run = session.get(ScrapeRun, run_id)
+    if run is None:
+        return []
+
+    # Subquery: latest scrape_failures event per (run_id, scrape_url_item).
+    latest = (
         session.query(
-            ScrapeUrlItem.error_reason,
-            ScrapeUrlItem.http_status,
+            ScrapeFailure.id,
+            ScrapeFailure.scrape_url_item_id,
+            ScrapeFailure.error_reason,
+            ScrapeFailure.http_status,
+            ScrapeFailure.lifecycle_state,
+            func.row_number()
+            .over(
+                partition_by=ScrapeFailure.scrape_url_item_id,
+                order_by=(
+                    ScrapeFailure.occurred_at.desc(),
+                    ScrapeFailure.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .filter(ScrapeFailure.run_id == run_id)
+        .subquery()
+    )
+
+    base = (
+        session.query(
+            latest.c.error_reason,
+            latest.c.http_status,
             func.count(ScrapeUrlItem.id).label("count"),
         )
-        .filter(ScrapeUrlItem.run_id == run_id, ScrapeUrlItem.status == "failed")
-        .group_by(ScrapeUrlItem.error_reason, ScrapeUrlItem.http_status)
+        .join(ScrapeUrlItem, ScrapeUrlItem.id == latest.c.scrape_url_item_id)
+        .filter(latest.c.rn == 1, ScrapeUrlItem.status == "failed")
+    )
+    if not include_acked:
+        base = base.filter(latest.c.lifecycle_state != "already_seen")
+
+    rows = (
+        base.group_by(latest.c.error_reason, latest.c.http_status)
         .order_by(func.count(ScrapeUrlItem.id).desc())
         .all()
     )
+
+    # Recurrence lookup: for each (reason, http) bucket in this run, count
+    # how many of the last N prior runs (same shop) had ≥1 scrape_failures
+    # event in the same bucket. Status-blind: history is the question.
+    prior_run_ids: list[int] = []
+    if rows:
+        prior_run_ids = [
+            rid
+            for (rid,) in (
+                session.query(ScrapeRun.id)
+                .filter(
+                    ScrapeRun.shop_id == run.shop_id,
+                    ScrapeRun.id != run_id,
+                    ScrapeRun.started_at.isnot(None),
+                )
+                .order_by(ScrapeRun.started_at.desc())
+                .limit(FAILURE_RECURRENCE_LOOKBACK_RUNS)
+                .all()
+            )
+        ]
+
     out: list[dict[str, Any]] = []
     for reason, http, count in rows:
-        # Match the same (error_reason, http_status) bucket the row was
-        # grouped on. Both columns are nullable, so use IS NULL when the
-        # bucket key is None — `col == None` becomes `col = NULL` in SQL,
-        # which never matches and would yield empty examples.
-        reason_pred = (
-            ScrapeUrlItem.error_reason.is_(None)
+        recurring_runs = 0
+        if prior_run_ids:
+            reason_pred = (
+                ScrapeFailure.error_reason.is_(None)
+                if reason is None
+                else ScrapeFailure.error_reason == reason
+            )
+            http_pred = (
+                ScrapeFailure.http_status.is_(None)
+                if http is None
+                else ScrapeFailure.http_status == http
+            )
+            recurring_runs = (
+                session.query(func.count(func.distinct(ScrapeFailure.run_id)))
+                .filter(
+                    ScrapeFailure.run_id.in_(prior_run_ids),
+                    reason_pred,
+                    http_pred,
+                )
+                .scalar()
+                or 0
+            )
+
+        # Examples come from the same latest-failed slice the count was
+        # computed from — so retried-and-succeeded URLs are excluded.
+        examples_reason_pred = (
+            latest.c.error_reason.is_(None)
             if reason is None
-            else ScrapeUrlItem.error_reason == reason
+            else latest.c.error_reason == reason
         )
-        http_pred = (
-            ScrapeUrlItem.http_status.is_(None)
+        examples_http_pred = (
+            latest.c.http_status.is_(None)
             if http is None
-            else ScrapeUrlItem.http_status == http
+            else latest.c.http_status == http
         )
         examples_q = (
             session.query(ScrapeUrlItem.url)
+            .join(latest, latest.c.scrape_url_item_id == ScrapeUrlItem.id)
             .filter(
-                ScrapeUrlItem.run_id == run_id,
+                latest.c.rn == 1,
                 ScrapeUrlItem.status == "failed",
-                reason_pred,
-                http_pred,
+                examples_reason_pred,
+                examples_http_pred,
             )
-            .limit(limit_examples)
-            .all()
         )
+        if not include_acked:
+            examples_q = examples_q.filter(
+                latest.c.lifecycle_state != "already_seen"
+            )
+        examples = [u for (u,) in examples_q.limit(limit_examples).all()]
+
         out.append(
             {
                 "reason": reason,
@@ -699,7 +831,8 @@ def get_run_failure_groups(
                 "http": http,
                 "http_is_null": http is None,
                 "count": int(count),
-                "examples": [r.url for r in examples_q],
+                "recurring_in_runs": int(recurring_runs),
+                "examples": examples,
             }
         )
     return out
@@ -786,8 +919,20 @@ def get_run_url_items(
     keys on the Failures card. Both columns are nullable, so each has an
     explicit `*_is_null` flag — that flag wins if both are sent (defensive,
     avoids any string-sentinel ambiguity).
+
+    Filter source: latest `scrape_failures` event per item (PR 2). Reading
+    from the event log instead of the queue's denormalized columns means
+    the filter consistently matches whatever the failure card showed —
+    even when retries have piled up multiple events on the same row.
     """
     from sqlalchemy import case
+
+    needs_failure_filter = (
+        error_reason_is_null
+        or bool(error_reason)
+        or http_status_is_null
+        or http_status is not None
+    )
 
     query = (
         session.query(ScrapeUrlItem, ShopBook.title, ShopBook.id)
@@ -800,14 +945,41 @@ def get_run_url_items(
     )
     if status in RUN_URL_STATUSES:
         query = query.filter(ScrapeUrlItem.status == status)
-    if error_reason_is_null:
-        query = query.filter(ScrapeUrlItem.error_reason.is_(None))
-    elif error_reason:
-        query = query.filter(ScrapeUrlItem.error_reason == error_reason)
-    if http_status_is_null:
-        query = query.filter(ScrapeUrlItem.http_status.is_(None))
-    elif http_status is not None:
-        query = query.filter(ScrapeUrlItem.http_status == http_status)
+
+    if needs_failure_filter:
+        latest_failure = (
+            session.query(
+                ScrapeFailure.scrape_url_item_id,
+                ScrapeFailure.error_reason,
+                ScrapeFailure.http_status,
+                func.row_number()
+                .over(
+                    partition_by=ScrapeFailure.scrape_url_item_id,
+                    order_by=(
+                        ScrapeFailure.occurred_at.desc(),
+                        ScrapeFailure.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .filter(ScrapeFailure.run_id == run_id)
+            .subquery()
+        )
+        query = query.join(
+            latest_failure,
+            latest_failure.c.scrape_url_item_id == ScrapeUrlItem.id,
+        ).filter(latest_failure.c.rn == 1)
+        if error_reason_is_null:
+            query = query.filter(latest_failure.c.error_reason.is_(None))
+        elif error_reason:
+            query = query.filter(
+                latest_failure.c.error_reason == error_reason
+            )
+        if http_status_is_null:
+            query = query.filter(latest_failure.c.http_status.is_(None))
+        elif http_status is not None:
+            query = query.filter(latest_failure.c.http_status == http_status)
+
     total = query.count()
 
     if sort not in RUN_URL_SORT_KEYS:
@@ -954,6 +1126,10 @@ def get_validation_lifecycle_counts(
     return counts
 
 
+ISSUE_KIND_VALIDATION = "validation"
+ISSUE_KIND_SCRAPE_FAILURE = "scrape_failure"
+
+
 def get_issues_page(
     session: Session,
     state: str | None = "open",
@@ -965,14 +1141,92 @@ def get_issues_page(
     order: str = "desc",
     page: int = 1,
     per_page: int = 50,
+    kind: str = "all",
 ) -> tuple[list[dict[str, Any]], int]:
-    """Return paginated flat list of validation issues with filters.
+    """Return paginated flat list of issues with filters.
 
-    Rows are sorted by scrape_runs.started_at (then ValidationIssue.id) to
-    approximate per-issue creation time without adding a column.
+    PR 2 of the scrape-failures migration: the inbox now spans both
+    `validation_issues` (parser-level data quality) and `scrape_failures`
+    (transport / HTTP-level events). `kind="validation"` or
+    `"scrape_failure"` narrows to one source; the default `"all"` merges
+    them and pages the combined result.
+
+    Rows from `validation_issues` are sorted by `scrape_runs.started_at`
+    (added_at proxy). Rows from `scrape_failures` use their own
+    `occurred_at`. The merged view sorts by added_at across both.
 
     Returns (rows, total).
     """
+    from sqlalchemy import or_
+
+    rows: list[dict[str, Any]] = []
+    total = 0
+
+    # Single-kind: helper paginates directly. Merged: fetch up to
+    # `page*per_page` rows from each source, merge, sort, slice. The
+    # pigeonhole holds — the Nth-newest merged row must be in the top
+    # N*per_page from at least one source.
+    helper_page = 1 if kind == "all" else page
+    helper_per_page = page * per_page if kind == "all" else per_page
+
+    if kind in ("all", ISSUE_KIND_VALIDATION):
+        v_rows, v_total = _get_validation_issues_page(
+            session,
+            state=state,
+            shop_id=shop_id,
+            issue_type=issue_type,
+            run_id=run_id,
+            q=q,
+            severity=severity,
+            order=order,
+            page=helper_page,
+            per_page=helper_per_page,
+        )
+        rows.extend(v_rows)
+        total += v_total
+
+    if kind in ("all", ISSUE_KIND_SCRAPE_FAILURE):
+        f_rows, f_total = _get_scrape_failures_page(
+            session,
+            state=state,
+            shop_id=shop_id,
+            issue_type=issue_type,
+            run_id=run_id,
+            q=q,
+            severity=severity,
+            order=order,
+            page=helper_page,
+            per_page=helper_per_page,
+        )
+        rows.extend(f_rows)
+        total += f_total
+
+    if kind == "all":
+        rows.sort(
+            key=lambda r: (
+                r["added_at"] or datetime.min.replace(tzinfo=UTC)
+            ),
+            reverse=(order != "asc"),
+        )
+        start = (page - 1) * per_page
+        rows = rows[start : start + per_page]
+
+    return rows, total
+
+
+def _get_validation_issues_page(
+    session: Session,
+    *,
+    state: str | None,
+    shop_id: int | None,
+    issue_type: str,
+    run_id: int | None,
+    q: str,
+    severity: str,
+    order: str,
+    page: int,
+    per_page: int,
+) -> tuple[list[dict[str, Any]], int]:
     from sqlalchemy import or_
 
     query = (
@@ -1018,16 +1272,149 @@ def get_issues_page(
         result.append(
             {
                 "id": issue.id,
+                "kind": ISSUE_KIND_VALIDATION,
                 "url": issue.url,
                 "field": issue.field,
                 "issue": issue.issue,
                 "raw_value": issue.raw_value,
+                "error_reason": None,
+                "http_status": None,
                 "scrape_run_id": issue.scrape_run_id,
                 "shop_book_id": issue.shop_book_id,
                 "shop_book_title": shop_book.title if shop_book else None,
                 "lifecycle_state": issue.lifecycle_state,
                 "added_at": run.started_at,
                 "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
+            }
+        )
+    return result, total
+
+
+def _get_scrape_failures_page(
+    session: Session,
+    *,
+    state: str | None,
+    shop_id: int | None,
+    issue_type: str,
+    run_id: int | None,
+    q: str,
+    severity: str,
+    order: str,
+    page: int,
+    per_page: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Inbox slice over `scrape_failures`. Mirrors the validation helper's
+    filter contract: `state` maps to lifecycle_state; `severity` filters
+    via the range/prefix logic in `severity_for_failure`."""
+    from sqlalchemy import and_, case, or_
+
+    query = (
+        session.query(ScrapeFailure, ShopBook)
+        .outerjoin(
+            ShopBook,
+            and_(
+                ShopBook.shop_id == ScrapeFailure.shop_id,
+                ShopBook.url == ScrapeFailure.url,
+            ),
+        )
+    )
+
+    if state in {"new", "recurring", "already_seen"}:
+        query = query.filter(ScrapeFailure.lifecycle_state == state)
+    elif state == "open":
+        query = query.filter(ScrapeFailure.lifecycle_state != "already_seen")
+
+    if shop_id is not None:
+        query = query.filter(ScrapeFailure.shop_id == shop_id)
+    if run_id is not None:
+        query = query.filter(ScrapeFailure.run_id == run_id)
+    if issue_type:
+        # `issue_type` doubles as the error_reason filter for this source.
+        query = query.filter(ScrapeFailure.error_reason == issue_type)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(
+            or_(
+                ScrapeFailure.url.ilike(pattern),
+                ShopBook.title.ilike(pattern),
+            )
+        )
+    if severity in ("critical", "warning"):
+        # Mirror severity_for_failure() in SQL via CASE: http_status range
+        # wins, else error_reason prefix lookup, else default warning.
+        crit_prefixes = [
+            k for k, v in SCRAPE_FAILURE_SEVERITY.items() if v == "critical"
+        ]
+        warn_prefixes = [
+            k for k, v in SCRAPE_FAILURE_SEVERITY.items() if v == "warning"
+        ]
+        # error_reason prefix matched via LIKE 'prefix%'
+        crit_pred = or_(
+            *[
+                ScrapeFailure.error_reason.like(f"{p}%")
+                for p in crit_prefixes
+            ]
+        )
+        warn_pred = or_(
+            and_(
+                ScrapeFailure.http_status.isnot(None),
+                ScrapeFailure.http_status >= 400,
+                ScrapeFailure.http_status < 600,
+            ),
+            *[
+                ScrapeFailure.error_reason.like(f"{p}%")
+                for p in warn_prefixes
+            ],
+        )
+        if severity == "critical":
+            # critical = matches a critical prefix AND not an http range
+            query = query.filter(
+                and_(
+                    crit_pred,
+                    or_(
+                        ScrapeFailure.http_status.is_(None),
+                        ScrapeFailure.http_status < 400,
+                        ScrapeFailure.http_status >= 600,
+                    ),
+                )
+            )
+        else:  # warning
+            query = query.filter(warn_pred)
+
+    total = query.count()
+
+    if order == "asc":
+        query = query.order_by(
+            ScrapeFailure.occurred_at.asc(), ScrapeFailure.id.asc()
+        )
+    else:
+        query = query.order_by(
+            ScrapeFailure.occurred_at.desc(), ScrapeFailure.id.desc()
+        )
+
+    rows = query.offset((page - 1) * per_page).limit(per_page).all()
+    result: list[dict[str, Any]] = []
+    for failure, shop_book in rows:
+        result.append(
+            {
+                "id": failure.id,
+                "kind": ISSUE_KIND_SCRAPE_FAILURE,
+                "url": failure.url,
+                "field": "response",
+                "issue": failure.error_reason or "unknown",
+                "raw_value": str(failure.http_status)
+                if failure.http_status is not None
+                else None,
+                "error_reason": failure.error_reason,
+                "http_status": failure.http_status,
+                "scrape_run_id": failure.run_id,
+                "shop_book_id": shop_book.id if shop_book else None,
+                "shop_book_title": shop_book.title if shop_book else None,
+                "lifecycle_state": failure.lifecycle_state,
+                "added_at": failure.occurred_at,
+                "severity": severity_for_failure(
+                    failure.error_reason, failure.http_status
+                ),
             }
         )
     return result, total
