@@ -330,11 +330,17 @@ function HFRunDetail({ nav, goto, params }) {
   // Persisted in the URL query string so reload preserves view.
   const _initialUrlParams = (() => {
     const sp = new URLSearchParams(window.location.search);
+    const httpRaw = sp.get('url_http');
+    const httpInt = httpRaw != null ? parseInt(httpRaw, 10) : NaN;
     return {
       status: sp.get('url_status') || 'all',
       page: Math.max(parseInt(sp.get('url_page') || '1', 10) || 1, 1),
       sort: sp.get('url_sort') || 'started',
       order: sp.get('url_order') || 'desc',
+      reason: sp.get('url_reason') || '',
+      reasonIsNull: sp.get('url_reason_is_null') === '1',
+      http: Number.isFinite(httpInt) ? httpInt : null,
+      httpIsNull: sp.get('url_http_is_null') === '1',
     };
   })();
   const _initialUrlParamsFull = (() => {
@@ -347,9 +353,17 @@ function HFRunDetail({ nav, goto, params }) {
   const [urlSort, setUrlSort] = React.useState(_initialUrlParams.sort);
   const [urlOrder, setUrlOrder] = React.useState(_initialUrlParams.order);
   const [urlPerPage, setUrlPerPage] = React.useState(_initialUrlParamsFull.perPage);
+  const [urlReason, setUrlReason] = React.useState(_initialUrlParams.reason);
+  const [urlReasonIsNull, setUrlReasonIsNull] = React.useState(_initialUrlParams.reasonIsNull);
+  const [urlHttp, setUrlHttp] = React.useState(_initialUrlParams.http);
+  const [urlHttpIsNull, setUrlHttpIsNull] = React.useState(_initialUrlParams.httpIsNull);
   const [urlData, setUrlData] = React.useState(null);
+  const historyRef = React.useRef(null);
   // Reset to page 1 when filter / sort / per-page changes (but not when paginating).
-  React.useEffect(() => { setUrlPage(1); }, [runId, urlStatus, urlSort, urlOrder, urlPerPage]);
+  React.useEffect(() => { setUrlPage(1); }, [
+    runId, urlStatus, urlSort, urlOrder, urlPerPage,
+    urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull,
+  ]);
 
   // Mirror state into the URL bar without adding history entries.
   React.useEffect(() => {
@@ -359,10 +373,15 @@ function HFRunDetail({ nav, goto, params }) {
     if (urlSort !== 'started') sp.set('url_sort', urlSort); else sp.delete('url_sort');
     if (urlOrder !== 'desc') sp.set('url_order', urlOrder); else sp.delete('url_order');
     if (urlPerPage !== 10) sp.set('url_per_page', String(urlPerPage)); else sp.delete('url_per_page');
+    if (urlReason) sp.set('url_reason', urlReason); else sp.delete('url_reason');
+    if (urlReasonIsNull) sp.set('url_reason_is_null', '1'); else sp.delete('url_reason_is_null');
+    if (urlHttp != null) sp.set('url_http', String(urlHttp)); else sp.delete('url_http');
+    if (urlHttpIsNull) sp.set('url_http_is_null', '1'); else sp.delete('url_http_is_null');
     const qs = sp.toString();
     const url = window.location.pathname + (qs ? '?' + qs : '');
     window.history.replaceState(null, '', url);
-  }, [urlStatus, urlPage, urlSort, urlOrder, urlPerPage]);
+  }, [urlStatus, urlPage, urlSort, urlOrder, urlPerPage,
+      urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull]);
 
   const toggleSort = (key) => {
     if (urlSort === key) {
@@ -463,6 +482,10 @@ function HFRunDetail({ nav, goto, params }) {
       sort: urlSort,
       order: urlOrder,
     });
+    if (urlReasonIsNull) params.set('error_reason_is_null', 'true');
+    else if (urlReason) params.set('error_reason', urlReason);
+    if (urlHttpIsNull) params.set('http_status_is_null', 'true');
+    else if (urlHttp != null) params.set('http_status', String(urlHttp));
     const load = () => fetch(`/api/runs/${runId}/urls?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) setUrlData(d); })
@@ -472,12 +495,74 @@ function HFRunDetail({ nav, goto, params }) {
     const isLive = data?.status === 'running';
     const id = isLive ? setInterval(load, 3000) : null;
     return () => { cancelled = true; if (id) clearInterval(id); };
-  }, [runId, urlStatus, urlPage, urlPerPage, urlSort, urlOrder, data?.status]);
+  }, [runId, urlStatus, urlPage, urlPerPage, urlSort, urlOrder,
+      urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull, data?.status]);
 
   const id = data?.id ?? runId;
   const [actionPending, setActionPending] = React.useState(false);
   const [actionError, setActionError] = React.useState(null);
   const [expandedFailure, setExpandedFailure] = React.useState(-1);
+  // Drives every group-aware button on the Failures card so behavior is
+  // uniform — pass `null` to clear (card-level "all groups" link) or a
+  // failure-group dict to narrow History to that bucket.
+  const applyGroupFilter = React.useCallback((group) => {
+    setUrlReason(group?.reason ?? '');
+    setUrlReasonIsNull(!!group?.reason_is_null);
+    setUrlHttp(group?.http ?? null);
+    setUrlHttpIsNull(!!group?.http_is_null);
+    setUrlStatus('failed');
+    // Defer scroll until React has reconciled and the History card is
+    // visible (the chip + filter change can shift layout).
+    requestAnimationFrame(() => {
+      historyRef.current?.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  }, []);
+  // Retry all failed URLs (group=null) or just one bucket. POST /retry
+  // resets matching rows to `pending`; for terminal runs it also
+  // re-spawns the spider, mirroring /continue.
+  const retryRun = React.useCallback((group) => {
+    if (!id) return;
+    const label = group
+      ? `${group.reason_display ?? group.reason ?? 'unknown'}${group.http != null ? ` · HTTP ${group.http}` : ''}`
+      : 'all failed URLs';
+    if (!confirm(`Retry ${group ? `group "${label}"` : label} on run #${id}?\nFailed URLs will be flipped back to pending.`)) return;
+    const params = new URLSearchParams();
+    if (group) {
+      if (group.reason_is_null) params.set('error_reason_is_null', 'true');
+      else if (group.reason) params.set('error_reason', group.reason);
+      if (group.http_is_null) params.set('http_status_is_null', 'true');
+      else if (group.http != null) params.set('http_status', String(group.http));
+    }
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/retry?${params.toString()}`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t || r.statusText); }))
+      .then(d => {
+        // Refresh the three live data sources so the Failures card,
+        // History card, and run-level KPIs all reflect the reset.
+        fetch(`/api/runs/${id}`).then(r => r.ok ? r.json() : null).then(rd => { if (rd) setData(rd); });
+        fetch(`/api/runs/${id}/live`).then(r => r.ok ? r.json() : null).then(ld => { if (ld) setLiveData(ld); });
+        // The urlData fetch effect is keyed on filter state — filters
+        // didn't change here, so re-fetch directly with the current
+        // params to pick up the row-status flip.
+        const sp = new URLSearchParams({
+          status: urlStatus,
+          page: String(urlPage),
+          per_page: String(urlPerPage),
+          sort: urlSort,
+          order: urlOrder,
+        });
+        if (urlReasonIsNull) sp.set('error_reason_is_null', 'true');
+        else if (urlReason) sp.set('error_reason', urlReason);
+        if (urlHttpIsNull) sp.set('http_status_is_null', 'true');
+        else if (urlHttp != null) sp.set('http_status', String(urlHttp));
+        fetch(`/api/runs/${id}/urls?${sp.toString()}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(ud => { if (ud) setUrlData(ud); });
+      })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, urlStatus, urlPage, urlPerPage, urlSort, urlOrder,
+      urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull]);
   const stopRun = React.useCallback(() => {
     if (actionPending || !id) return;
     if (!confirm(`Stop run #${id}? Spider will exit cleanly on its next heartbeat tick.`)) return;
@@ -522,7 +607,14 @@ function HFRunDetail({ nav, goto, params }) {
     setActionPending(true); setActionError(null);
     fetch(`/api/runs/${id}/continue`, {method:'POST'})
       .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
-      .then(_d => { setData(prev => prev ? {...prev, status: 'running', close_reason: null, finished_at: null} : prev); })
+      .then(_d => {
+        // Drop the stale terminal-state liveData snapshot so the live-poll
+        // effect (which treats liveData.status as source of truth) doesn't
+        // immediately mirror 'failed' back over our optimistic 'running'.
+        setLiveData(null);
+        setThroughputHistory([]);
+        setData(prev => prev ? {...prev, status: 'running', close_reason: null, finished_at: null} : prev);
+      })
       .catch(e => setActionError(String(e.message || e)))
       .finally(() => setActionPending(false));
   }, [id, actionPending]);
@@ -545,7 +637,7 @@ function HFRunDetail({ nav, goto, params }) {
   const canContinue = (
     runStatus === 'failed' &&
     data.phase === 'scan' &&
-    closeReason === 'stopped_by_operator'
+    (data.pending_count || 0) > 0
   );
   const closeReasonTone = (
     runStatus === 'failed' ? 'err' :
@@ -791,14 +883,8 @@ function HFRunDetail({ nav, goto, params }) {
           title="Failures"
           sub={`${failureGroups.reduce((a, g) => a + g.count, 0)} recent failure${failureGroups.reduce((a, g) => a + g.count, 0) === 1 ? '' : 's'} · grouped by reason`}
           action={<>
-            <HFButton size="sm" variant="subtle" disabled>Retry all</HFButton>
-            <HFButton size="sm" variant="subtle" onClick={() => {
-              const title = encodeURIComponent(`[${data.shop}] Failures in run #${id}`);
-              const body = encodeURIComponent(
-                failureGroups.map(g => `- ${g.reason} × ${g.count}${g.http ? ` (HTTP ${g.http})` : ''}`).join('\n')
-              );
-              window.open(`https://github.com/liberalu/booking-scraper/issues/new?title=${title}&body=${body}`);
-            }}>Open issue</HFButton>
+            <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => retryRun(null)}>Retry all</HFButton>
+            <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(null)}>Open issues</HFButton>
           </>}
           style={{marginBottom: HF.gap}}
         >
@@ -811,7 +897,7 @@ function HFRunDetail({ nav, goto, params }) {
               const toneb  = tone === 'err' ? HF.errBorder : HF.warnBorder;
               const open = expandedFailure === i;
               return (
-                <div key={g.reason} style={{
+                <div key={`${g.reason ?? '__null__'}|${g.http ?? '__null__'}`} style={{
                   borderTop: i === 0 ? 'none' : `1px solid ${HF.borderFaint}`,
                 }}>
                   <div style={{
@@ -835,15 +921,15 @@ function HFRunDetail({ nav, goto, params }) {
                         }}>{g.http}</span>
                       )}
                       <span style={{fontFamily: HF.mono, fontSize: 12.5, color: HF.ink, fontWeight: 600}}>
-                        {g.reason}
+                        {g.reason_display ?? g.reason ?? 'unknown'}
                       </span>
                       <span style={{fontFamily: HF.mono, fontSize: 11.5, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
                         × {g.count}
                       </span>
                     </div>
                     <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
-                      <HFButton size="sm" disabled>Retry group</HFButton>
-                      <HFButton size="sm" variant="subtle" onClick={() => window.open(`vscode://file//Users/evaldas/Projects/book-scraper/book_scraper/spiders/${data.shop}/parsers.py`)}>Open parser</HFButton>
+                      <HFButton size="sm" disabled={actionPending} onClick={() => retryRun(g)}>Retry group</HFButton>
+                      <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>Open issues</HFButton>
                     </div>
                   </div>
                   {open && (
@@ -855,7 +941,7 @@ function HFRunDetail({ nav, goto, params }) {
                           </div>
                         ))}
                         {g.count > g.examples.length && (
-                          <a href="#" onClick={(e)=>{e.preventDefault(); setUrlStatus('failed');}} style={{
+                          <a href="#" onClick={(e)=>{e.preventDefault(); applyGroupFilter(g);}} style={{
                             fontFamily: HF.mono, fontSize: 11.5, color: HF.accentInk,
                             textDecoration: 'none', marginLeft: 12, marginTop: 2,
                           }}>+ {g.count - g.examples.length} more (view in History)</a>
@@ -863,7 +949,7 @@ function HFRunDetail({ nav, goto, params }) {
                       </div>
                       <div style={{display:'flex', gap: 6}}>
                         <HFButton size="sm" variant="subtle" disabled>Skip permanently</HFButton>
-                        <HFButton size="sm" variant="subtle" onClick={() => setUrlStatus('failed')}>View all {g.count}</HFButton>
+                        <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>View all {g.count}</HFButton>
                       </div>
                     </div>
                   )}
@@ -935,6 +1021,7 @@ function HFRunDetail({ nav, goto, params }) {
 
       {/* History card — tabbed URL queue / discovered URL history */}
       {urlData && (urlData.source === 'live' || urlData.total > 0) && (
+        <div ref={historyRef}>
         <HFCard
           title="History"
           sub={urlData.source === 'live'
@@ -955,6 +1042,29 @@ function HFRunDetail({ nav, goto, params }) {
                   { id:'failed',     label:'failed',     count: tabCounts.failed ?? 0 },
                 ]}
               />
+              {(urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (() => {
+                const reasonLabel = urlReasonIsNull ? 'unknown' : urlReason;
+                const httpLabel = urlHttp != null ? `HTTP ${urlHttp}` : urlHttpIsNull ? 'no response' : '';
+                const clearGroupFilter = () => {
+                  setUrlReason('');
+                  setUrlReasonIsNull(false);
+                  setUrlHttp(null);
+                  setUrlHttpIsNull(false);
+                };
+                return (
+                  <div style={{
+                    display:'inline-flex', alignItems:'center', gap: 6,
+                    marginTop: 8, padding: '4px 6px 4px 10px',
+                    background: HF.errSoft, border: `1px solid ${HF.errBorder}`,
+                    borderRadius: 4, fontFamily: HF.mono, fontSize: 11.5, color: HF.errInk,
+                  }}>
+                    <span>failed{reasonLabel ? ` · ${reasonLabel}` : ''}{httpLabel ? ` · ${httpLabel}` : ''}</span>
+                    <span onClick={clearGroupFilter} title="Clear group filter" style={{
+                      cursor:'pointer', padding:'0 4px', color: HF.errInk, fontWeight: 600,
+                    }}>×</span>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1066,9 +1176,25 @@ function HFRunDetail({ nav, goto, params }) {
                     <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
                       <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0, flex:1}}>
                         {u.title && (
-                          <span style={{fontSize:12.5, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.title}>{u.title}</span>
+                          u.shop_book_id != null ? (
+                            <a href="#" onClick={(e)=>{e.preventDefault(); e.stopPropagation(); goto('shop-book-detail', {id: String(u.shop_book_id)});}}
+                               title={u.title}
+                               style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:12.5, color:HF.accentInk, fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
+                              {u.title}
+                            </a>
+                          ) : (
+                            <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:12.5, color:HF.ink, fontWeight:500}} title={u.title}>{u.title}</span>
+                          )
                         )}
-                        <span style={{fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={u.url}>{u.url}</span>
+                        {u.discovered_url_id != null ? (
+                          <a href="#" onClick={(e)=>{e.preventDefault(); e.stopPropagation(); goto('url-detail', {id: String(u.discovered_url_id)});}}
+                             title={u.url}
+                             style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color:HF.accentInk, textDecoration:'none', cursor:'pointer'}}>
+                            {u.url}
+                          </a>
+                        ) : (
+                          <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink}} title={u.url}>{u.url}</span>
+                        )}
                       </span>
                       <HFExtLink href={u.url}/>
                     </span>
@@ -1119,12 +1245,17 @@ function HFRunDetail({ nav, goto, params }) {
               {urlData.total.toLocaleString()} URLs
             </span>
             <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
-              {(urlStatus !== 'all' || urlSort !== 'started' || urlOrder !== 'desc' || urlPage !== 1) && (
+              {(urlStatus !== 'all' || urlSort !== 'started' || urlOrder !== 'desc' || urlPage !== 1
+                || urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (
                 <HFButton size="sm" variant="ghost" onClick={() => {
                   setUrlStatus('all');
                   setUrlSort('started');
                   setUrlOrder('desc');
                   setUrlPage(1);
+                  setUrlReason('');
+                  setUrlReasonIsNull(false);
+                  setUrlHttp(null);
+                  setUrlHttpIsNull(false);
                 }}>Clear</HFButton>
               )}
               <span style={{color:HF.ink4, fontSize:11.5, marginRight:2}}>Per page:</span>
@@ -1166,25 +1297,16 @@ function HFRunDetail({ nav, goto, params }) {
             </div>
           </div>
         </HFCard>
+        </div>
       )}
 
       {/* Parameters */}
       <HFCard title="Parameters">
         <div style={{padding:`4px 0`}}>
           {[
-            ['run_id', `#${id}`],
-            ['shop', data.shop || '—'],
-            ['phase', data.phase || '—'],
-            ['triggered_by', data.by || '—'],
-            ['started', data.started_ago || '—'],
-            ['duration', data.elapsed || '—'],
-            ['urls_processed', data.urls_total
-              ? `${(data.urls_processed ?? 0).toLocaleString()} / ${data.urls_total.toLocaleString()}`
-              : String(data.urls_processed ?? 0)],
             ['items_added', String(data.items_added ?? 0)],
             ['items_updated', String(data.items_updated ?? 0)],
             ['errors', `${data.errors ?? 0} (${data.errors_4xx ?? 0} · 4xx, ${data.errors_5xx ?? 0} · 5xx)`],
-            ['status', data.status || '—'],
             ...(closeReason ? [['close_reason', closeReason]] : []),
           ].map(([k,v], i, arr) => (
             <div key={k} style={{
