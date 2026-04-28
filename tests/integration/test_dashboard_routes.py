@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
-from book_scraper.db.models import Shop, ShopBook, ScrapeRun, ValidationIssue
+from book_scraper.db.models import (
+    ScrapeRun,
+    ScrapeUrlItem,
+    Shop,
+    ShopBook,
+    ValidationIssue,
+)
 from book_scraper.db.repo import bulk_insert_validation_issues
 
 
@@ -285,3 +291,216 @@ def test_update_rate_settings_validates_bounds(
         data={"download_delay": "1.0", "concurrent_requests_per_domain": "0"},
     )
     assert response.status_code == 400
+
+
+# ── /api/runs/{id}/continue ──────────────────────────────────────────────
+
+
+def _make_stopped_scan_run(
+    db_session: Session,
+    shop_id: int,
+    *,
+    pending: int = 2,
+    phase: str = "scan",
+    close_reason_value: str | None = "stopped_by_operator",
+) -> ScrapeRun:
+    """Create a failed run with the given close_reason and pending URLs.
+
+    `close_reason` is read from the latest ValidationIssue with
+    issue='scrape_run_failed' (see get_run_close_reason).
+    """
+    from datetime import UTC, datetime
+
+    run = ScrapeRun(
+        shop_id=shop_id,
+        phase=phase,
+        status="failed",
+        close_reason=close_reason_value,
+        finished_at=datetime.now(UTC),
+    )
+    db_session.add(run)
+    db_session.flush()
+
+    if close_reason_value is not None:
+        db_session.add(
+            ValidationIssue(
+                scrape_run_id=run.id,
+                url="run-level",
+                field="run",
+                issue="scrape_run_failed",
+                raw_value=close_reason_value,
+                shop_book_id=None,
+            )
+        )
+
+    for i in range(pending):
+        db_session.add(
+            ScrapeUrlItem(
+                run_id=run.id,
+                shop_id=shop_id,
+                url=f"https://vaga.lt/p/{run.id}-{i}",
+                url_type="product",
+                status="pending",
+            )
+        )
+    db_session.commit()
+    return run
+
+
+@pytest.fixture()
+def _mock_spawn(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    calls: list[dict] = []
+
+    def _fake(
+        *, phase: str, shop: str, strategy: str = "", mode: str = "delta"
+    ) -> None:
+        calls.append(
+            {"phase": phase, "shop": shop, "strategy": strategy, "mode": mode}
+        )
+
+    monkeypatch.setattr(
+        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container", _fake
+    )
+    return calls
+
+
+@pytest.mark.integration
+def test_continue_run_happy_path(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(db_session, shop.id, pending=3)
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body == {"status": "continued", "run_id": run.id, "shop": "vaga"}
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScrapeRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == "running"
+    assert refreshed.close_reason is None
+    assert refreshed.finished_at is None
+
+    pending_after = (
+        db_session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run.id, ScrapeUrlItem.status == "pending"
+        )
+        .count()
+    )
+    assert pending_after == 3
+    assert _mock_spawn == [
+        {"phase": "scan", "shop": "vaga", "strategy": "", "mode": "delta"}
+    ]
+
+
+@pytest.mark.integration
+def test_continue_run_rejects_non_operator_failure(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(
+        db_session, shop.id, close_reason_value="heartbeat_timeout"
+    )
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 400
+    assert _mock_spawn == []
+
+    refreshed = db_session.get(ScrapeRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+
+
+@pytest.mark.integration
+def test_continue_run_rejects_discover_phase(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(
+        db_session, shop.id, phase="discover_categories"
+    )
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 400
+    assert _mock_spawn == []
+
+
+@pytest.mark.integration
+def test_continue_run_rejects_when_no_pending_items(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(db_session, shop.id, pending=0)
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 400
+    assert "pending" in resp.json()["detail"].lower()
+    assert _mock_spawn == []
+
+
+@pytest.mark.integration
+def test_continue_run_rejects_when_other_run_active(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(db_session, shop.id, pending=1)
+
+    other = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
+    db_session.add(other)
+    db_session.commit()
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 409
+    assert _mock_spawn == []
+
+    refreshed = db_session.get(ScrapeRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+
+
+@pytest.mark.integration
+def test_continue_run_rolls_back_on_spawn_failure(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(db_session, shop.id, pending=2)
+
+    db_session.expire(run)
+    refreshed_before = db_session.get(ScrapeRun, run.id)
+    assert refreshed_before is not None
+    snapshot_close_reason = refreshed_before.close_reason
+    snapshot_finished_at = refreshed_before.finished_at
+    snapshot_last_heartbeat = refreshed_before.last_heartbeat
+    snapshot_pid = refreshed_before.pid
+
+    def _boom(**_kwargs: object) -> None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Docker not available")
+
+    monkeypatch.setattr(
+        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container", _boom
+    )
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 503
+
+    db_session.expire_all()
+    after = db_session.get(ScrapeRun, run.id)
+    assert after is not None
+    assert after.status == "failed"
+    assert after.close_reason == snapshot_close_reason
+    assert after.finished_at == snapshot_finished_at
+    assert after.last_heartbeat == snapshot_last_heartbeat
+    assert after.pid == snapshot_pid
+
+
+@pytest.mark.integration
+def test_continue_run_404_when_missing(client: TestClient) -> None:
+    resp = client.post("/api/runs/999999999/continue")
+    assert resp.status_code == 404

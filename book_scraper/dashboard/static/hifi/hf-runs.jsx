@@ -516,6 +516,16 @@ function HFRunDetail({ nav, goto, params }) {
       .catch(e => setActionError(String(e.message || e)))
       .finally(() => setActionPending(false));
   }, [id, actionPending, goto]);
+  const continueRun = React.useCallback(() => {
+    if (actionPending || !id) return;
+    if (!confirm(`Continue run #${id}? Pending URLs will be picked up on the same run.`)) return;
+    setActionPending(true); setActionError(null);
+    fetch(`/api/runs/${id}/continue`, {method:'POST'})
+      .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
+      .then(_d => { setData(prev => prev ? {...prev, status: 'running', close_reason: null, finished_at: null} : prev); })
+      .catch(e => setActionError(String(e.message || e)))
+      .finally(() => setActionPending(false));
+  }, [id, actionPending]);
 
   if (loading || !data) {
     return (
@@ -532,6 +542,11 @@ function HFRunDetail({ nav, goto, params }) {
   };
   const isTerminal = runStatus === 'completed' || runStatus === 'failed';
   const closeReason = data.close_reason || null;
+  const canContinue = (
+    runStatus === 'failed' &&
+    data.phase === 'scan' &&
+    closeReason === 'stopped_by_operator'
+  );
   const closeReasonTone = (
     runStatus === 'failed' ? 'err' :
     runStatus === 'completed' && closeReason === 'completed_with_errors' ? 'warn' :
@@ -554,30 +569,12 @@ function HFRunDetail({ nav, goto, params }) {
   const failPct = rateTotal > 0 ? Math.round((rateFailed / rateTotal) * 100) : 0;
   const ratePerMin = liveRate.window_s > 0 ? Math.round((rateDone / liveRate.window_s) * 60) : 0;
 
-  // ── Failure grouping (client-side, from liveData.recent_failures) ──
-  // recent_failures is capped at 10 — enough for a representative group view.
-  // RECURRING / NEW badges are not computed here (would need a cross-run query).
-  const failureGroups = (() => {
-    const src = liveData?.recent_failures || [];
-    if (src.length === 0) return [];
-    const groups = {};
-    for (const r of src) {
-      const reason = r.error_reason || 'unknown';
-      if (!groups[reason]) {
-        groups[reason] = {
-          reason,
-          http: r.http_status ?? null,
-          examples: [],
-          count: 0,
-          firstSeenAt: r.done_at || r.claimed_at || null,
-        };
-      }
-      const g = groups[reason];
-      g.count += 1;
-      if (g.examples.length < 3 && r.url) g.examples.push(r.url);
-    }
-    return Object.values(groups).sort((a, b) => b.count - a.count);
-  })();
+  // ── Failure groups — server-side aggregation covers all error types.
+  // Previously computed client-side from recent_failures (capped at 10),
+  // which silently excluded error types not in the 10 most-recent rows.
+  const failureGroups = liveData?.failure_groups || [];
+
+  const validationIssueCount = (data.issues || []).reduce((s, g) => s + g.count, 0);
 
   // ── Health pill (in-flight panel header) ──
   const liveHealth = liveData?.health || null;
@@ -589,8 +586,10 @@ function HFRunDetail({ nav, goto, params }) {
 
   // ── Tabs for History card map straight onto urlStatus ──
   const tabCounts = urlData?.breakdown || {};
-  const tabAllCount = (urlData?.total ?? 0)
-    || (Object.values(tabCounts).reduce((a, b) => a + (b || 0), 0));
+  // Always sum the breakdown — urlData.total reflects the *active filter*'s
+  // row count, not the grand total, so it's wrong for the "all" pill when a
+  // filtered tab is selected.
+  const tabAllCount = Object.values(tabCounts).reduce((a, b) => a + (b || 0), 0);
 
   // ── Progress numerator + error count ──
   // The run row's `urls_processed` and `error_count` counters lag the
@@ -637,7 +636,11 @@ function HFRunDetail({ nav, goto, params }) {
             {runStatus === 'stopping' ? 'Stopping…' : 'Stop run'}
           </HFButton>
         )}
-        {(runStatus === 'failed' || runStatus === 'completed') && (
+        {canContinue ? (
+          <HFButton variant="primary" disabled={actionPending} onClick={continueRun}>
+            <span style={{display:'flex'}}>{HF_ICONS.play}</span> Continue
+          </HFButton>
+        ) : (runStatus === 'failed' || runStatus === 'completed') && (
           <HFButton variant="primary" disabled={actionPending} onClick={rerunRun}>
             <span style={{display:'flex'}}>{HF_ICONS.play}</span> Re-run
           </HFButton>
@@ -658,7 +661,11 @@ function HFRunDetail({ nav, goto, params }) {
               : (data.items ? `${data.items.toLocaleString()} items` : '—')}
           </span> },
         { label:'Elapsed', value:data.elapsed || '—',
-          delta:<span style={{color:HF.ink3}}>duration</span> },
+          delta:<span style={{color:HF.ink3}}>
+            {liveData?.eta_min != null
+              ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m`
+              : 'duration'}
+          </span> },
         { label:'Errors', value:String(errorCount),
           delta: (() => {
             const a = data.errors_4xx ?? 0, b = data.errors_5xx ?? 0;
@@ -666,7 +673,12 @@ function HFRunDetail({ nav, goto, params }) {
             return <span style={{color:HF.ink3}}>{a} 4xx · {b} 5xx</span>;
           })() },
         { label:'Workers', value:String(workerCount),
-          delta:<span style={{color:HF.ink3}}>in flight</span> },
+          delta:<span style={{color:HF.ink3}} title="CONCURRENT_REQUESTS_PER_DOMAIN controls max simultaneous fetches">in flight</span> },
+        { label:'Val. Issues', value:String(validationIssueCount),
+          href: validationIssueCount > 0 ? `/issues?run_id=${id}` : '#',
+          delta:<span style={{color: validationIssueCount > 0 ? HF.accentInk : HF.ink3}}>
+            {validationIssueCount > 0 ? 'view →' : 'none'}
+          </span> },
       ]}/>
 
       {/* In-flight card — what's happening RIGHT NOW (only when live) */}
@@ -726,6 +738,11 @@ function HFRunDetail({ nav, goto, params }) {
                     <div style={{width:'40%', height:'100%', background: HF.accent, animation:'hfSweep 1.6s ease-in-out infinite'}}/>
                   </div>
                 </>
+              ) : (tabCounts.processing ?? 0) > 0 ? (
+                <div style={{display:'flex', alignItems:'center', gap: 8, flex:1, color: HF.accentInk, fontFamily: HF.mono, fontSize: 12.5}}>
+                  <HFDot tone="accent" pulse size={7}/>
+                  {tabCounts.processing} URL{tabCounts.processing > 1 ? 's' : ''} processing · refreshing…
+                </div>
               ) : (
                 <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 12.5}}>
                   {liveData ? 'between requests · waiting for next dispatch…' : 'loading…'}
@@ -759,7 +776,7 @@ function HFRunDetail({ nav, goto, params }) {
                     {rateFailed}
                   </div>
                   <div style={{fontFamily: HF.mono, fontSize: 11, color: rateFailed > 0 ? HF.errInk : HF.ink3, marginTop: 5}}>
-                    failed{rateTotal > 0 ? ` · ${failPct}% rate` : ''}
+                    failed{rateFailed > 0 ? ` · ${failPct}% rate` : ''}
                   </div>
                 </div>
               </div>
@@ -775,7 +792,13 @@ function HFRunDetail({ nav, goto, params }) {
           sub={`${failureGroups.reduce((a, g) => a + g.count, 0)} recent failure${failureGroups.reduce((a, g) => a + g.count, 0) === 1 ? '' : 's'} · grouped by reason`}
           action={<>
             <HFButton size="sm" variant="subtle" disabled>Retry all</HFButton>
-            <HFButton size="sm" variant="subtle" disabled>Open issue</HFButton>
+            <HFButton size="sm" variant="subtle" onClick={() => {
+              const title = encodeURIComponent(`[${data.shop}] Failures in run #${id}`);
+              const body = encodeURIComponent(
+                failureGroups.map(g => `- ${g.reason} × ${g.count}${g.http ? ` (HTTP ${g.http})` : ''}`).join('\n')
+              );
+              window.open(`https://github.com/liberalu/booking-scraper/issues/new?title=${title}&body=${body}`);
+            }}>Open issue</HFButton>
           </>}
           style={{marginBottom: HF.gap}}
         >
@@ -820,7 +843,7 @@ function HFRunDetail({ nav, goto, params }) {
                     </div>
                     <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
                       <HFButton size="sm" disabled>Retry group</HFButton>
-                      <HFButton size="sm" variant="subtle" disabled>Open parser</HFButton>
+                      <HFButton size="sm" variant="subtle" onClick={() => window.open(`vscode://file//Users/evaldas/Projects/book-scraper/book_scraper/spiders/${data.shop}/parsers.py`)}>Open parser</HFButton>
                     </div>
                   </div>
                   {open && (
@@ -973,7 +996,7 @@ function HFRunDetail({ nav, goto, params }) {
                   };
                   return urlData.source === 'live' ? (
                     <>
-                      <span>ID</span>
+                      <SortHdr k="id">ID</SortHdr>
                       <SortHdr k="title">URL</SortHdr>
                       <span>Disc. URL</span>
                       <SortHdr k="status">Status</SortHdr>
@@ -1096,6 +1119,14 @@ function HFRunDetail({ nav, goto, params }) {
               {urlData.total.toLocaleString()} URLs
             </span>
             <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+              {(urlStatus !== 'all' || urlSort !== 'started' || urlOrder !== 'desc' || urlPage !== 1) && (
+                <HFButton size="sm" variant="ghost" onClick={() => {
+                  setUrlStatus('all');
+                  setUrlSort('started');
+                  setUrlOrder('desc');
+                  setUrlPage(1);
+                }}>Clear</HFButton>
+              )}
               <span style={{color:HF.ink4, fontSize:11.5, marginRight:2}}>Per page:</span>
               {[10, 25, 50, 100].map(n => (
                 <HFButton key={n} size="sm"

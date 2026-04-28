@@ -125,6 +125,11 @@ function HFIssues({ nav, goto }) {
   });
   const [loading, setLoading] = React.useState(true);
 
+  const [runId] = React.useState(() => {
+    const v = parseInt(new URLSearchParams(window.location.search).get('run_id') || '0', 10);
+    return v > 0 ? v : null;
+  });
+
   // Reset to page 1 when tab changes.
   React.useEffect(() => { setPage(1); }, [tab]);
 
@@ -132,12 +137,13 @@ function HFIssues({ nav, goto }) {
     let cancelled = false;
     const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
     const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE) });
+    if (runId) params.set('run_id', String(runId));
     fetch(`/api/issues?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tab, page]);
+  }, [tab, page, runId]);
 
   const seed = data.issues.map(i => ({
     id: `ISS-${i.id}`,
@@ -278,9 +284,16 @@ function HFIssues({ nav, goto }) {
 
   return (
     <HFShell {...nav} activePage="issues"
-      title="Issues" subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
+      title={<span style={{display:'flex', alignItems:'center', gap:10}}>
+        Issues
+        {runId && <HFPill tone="accent"><span style={{fontFamily:HF.mono, fontSize:11}}>run #{runId}</span></HFPill>}
+      </span>}
+      subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
       breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Issues</span></>}
-      actions={<><HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton></>}
+      actions={<>
+        {runId && <a href="/issues" style={{fontSize:12, color:HF.ink3, textDecoration:'none'}}>← All issues</a>}
+        <HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton>
+      </>}
     >
       <HFKpiStrip items={[
         { label:'Open',      value: String(byTab.open), delta:<span style={{color:HF.errInk}}>open</span>, tone: byTab.open > 0 ? 'err' : 'ok' },

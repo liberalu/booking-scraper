@@ -756,6 +756,79 @@ def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
     return len(items)
 
 
+# Per-row staleness threshold for `processing` items on still-active runs.
+# DOWNLOAD_TIMEOUT is 15s (settings.py); the dashboard already labels rows
+# "stuck" at 30s (DOWNLOAD_TIMEOUT × 2). The reaper threshold is set higher
+# so we never reap a row the dashboard hasn't even labeled stuck yet.
+STUCK_ROW_THRESHOLD_S = 120
+
+
+def sweep_orphaned_processing_items(session: Session) -> int:
+    """Reap stale `processing` rows.
+
+    Two cases in one pass:
+    - Terminal runs (failed/completed/stopped): every `processing` row →
+      `failed` with reason `run_aborted`. Reuses
+      `abort_processing_scrape_url_items`.
+    - Active runs (`running`/`paused`): only rows whose `claimed_at` is
+      older than `STUCK_ROW_THRESHOLD_S` → `failed` with reason
+      `stuck_in_processing`. Surfaces hung workers in the Failures card
+      instead of letting them sit at `processing` forever.
+
+    Rows with `claimed_at IS NULL` are never reaped — they were never
+    legitimately claimed.
+
+    Transaction ownership stays with the caller: this helper only
+    `flush()`es. The caller commits (or rolls back) so we don't
+    accidentally commit unrelated pending work on the same session.
+    """
+    from sqlalchemy import exists
+
+    has_orphan = (
+        exists()
+        .where(ScrapeUrlItem.run_id == ScrapeRun.id)
+        .where(ScrapeUrlItem.status == "processing")
+        .where(ScrapeUrlItem.done_at.is_(None))
+    )
+    terminal_with_orphans = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.status.not_in(("running", "paused")),
+            has_orphan,
+        )
+        .all()
+    )
+
+    cleaned = 0
+    for run in terminal_with_orphans:
+        cleaned += abort_processing_scrape_url_items(session, run.id)
+
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(seconds=STUCK_ROW_THRESHOLD_S)
+    stuck = (
+        session.query(ScrapeUrlItem)
+        .join(ScrapeRun, ScrapeRun.id == ScrapeUrlItem.run_id)
+        .filter(
+            ScrapeRun.status.in_(("running", "paused")),
+            ScrapeUrlItem.status == "processing",
+            ScrapeUrlItem.done_at.is_(None),
+            ScrapeUrlItem.claimed_at.isnot(None),
+            ScrapeUrlItem.claimed_at < cutoff,
+        )
+        .all()
+    )
+    for item in stuck:
+        item.status = "failed"
+        item.done_at = now
+        if item.error_reason is None:
+            item.error_reason = "stuck_in_processing"
+        cleaned += 1
+
+    if cleaned:
+        session.flush()
+    return cleaned
+
+
 def record_scrape_run_failed_issue(
     session: Session,
     run: ScrapeRun,
@@ -1351,6 +1424,9 @@ def mark_scrape_url_item_processing(
     """
     item = session.get(ScrapeUrlItem, item_id)
     if item:
+        run = session.get(ScrapeRun, item.run_id)
+        if run is not None and run.status != "running":
+            return
         item.status = "processing"
         item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
         if request_delay_s is not None:

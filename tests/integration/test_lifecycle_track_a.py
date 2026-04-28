@@ -20,9 +20,12 @@ from book_scraper.db.models import DiscoveredUrl, ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     create_scrape_run,
     find_resumable_run,
+    finish_scrape_run,
     inherit_pending_items,
     insert_scrape_url_item,
+    mark_scrape_url_item_processing,
     mark_scrape_url_item_response,
+    sweep_orphaned_processing_items,
     try_acquire_scan_lock,
     update_scrape_run_progress,
     upsert_shop,
@@ -431,6 +434,117 @@ def test_abort_processing_skips_already_done_items(db_session):
     assert aborted_second == 0
     db_session.refresh(item)
     assert item.done_at == first_done_at  # unchanged
+
+
+def test_mark_processing_no_ops_for_terminal_run(db_session):
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    _seed_one_url(db_session, shop.id, "https://vaga.lt/terminal-processing")
+    du = (
+        db_session.query(DiscoveredUrl)
+        .filter_by(url="https://vaga.lt/terminal-processing")
+        .one()
+    )
+    run = create_scrape_run(db_session, shop.id, "scan")
+    finish_scrape_run(db_session, run.id, status="failed")
+    item = insert_scrape_url_item(db_session, run.id, shop.id, du.id, du.url)
+    db_session.commit()
+
+    mark_scrape_url_item_processing(db_session, item.id, dispatched_at=123.0)
+
+    db_session.refresh(item)
+    assert item.status == "pending"
+    assert item.claimed_at is None
+
+
+def test_sweep_orphaned_processing_items_cleans_terminal_run(db_session):
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    _seed_one_url(db_session, shop.id, "https://vaga.lt/orphan-processing")
+    du = (
+        db_session.query(DiscoveredUrl)
+        .filter_by(url="https://vaga.lt/orphan-processing")
+        .one()
+    )
+    run = create_scrape_run(db_session, shop.id, "scan")
+    finish_scrape_run(db_session, run.id, status="failed")
+    item = insert_scrape_url_item(db_session, run.id, shop.id, du.id, du.url)
+    item.status = "processing"
+    item.done_at = None
+    db_session.commit()
+
+    cleaned = sweep_orphaned_processing_items(db_session)
+
+    assert cleaned == 1
+    db_session.refresh(item)
+    assert item.status == "failed"
+    assert item.error_reason == "run_aborted"
+    assert item.done_at is not None
+
+
+def test_sweep_reaps_stuck_rows_on_running_run(db_session):
+    """Per-row sweep: only stale processing rows on active runs are reaped."""
+    from book_scraper.db.repo import STUCK_ROW_THRESHOLD_S
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    _seed_one_url(db_session, shop.id, "https://vaga.lt/fresh-processing")
+    _seed_one_url(db_session, shop.id, "https://vaga.lt/stuck-processing")
+    du_fresh = (
+        db_session.query(DiscoveredUrl)
+        .filter_by(url="https://vaga.lt/fresh-processing")
+        .one()
+    )
+    du_stuck = (
+        db_session.query(DiscoveredUrl)
+        .filter_by(url="https://vaga.lt/stuck-processing")
+        .one()
+    )
+    run = create_scrape_run(db_session, shop.id, "scan")
+    # run defaults to status='running' — leave it that way.
+    fresh = insert_scrape_url_item(db_session, run.id, shop.id, du_fresh.id, du_fresh.url)
+    stuck = insert_scrape_url_item(db_session, run.id, shop.id, du_stuck.id, du_stuck.url)
+
+    now = datetime.now(UTC)
+    fresh.status = "processing"
+    fresh.claimed_at = now
+    stuck.status = "processing"
+    stuck.claimed_at = now - timedelta(seconds=STUCK_ROW_THRESHOLD_S + 60)
+    db_session.commit()
+
+    cleaned = sweep_orphaned_processing_items(db_session)
+
+    assert cleaned == 1
+    db_session.refresh(fresh)
+    db_session.refresh(stuck)
+    assert fresh.status == "processing"
+    assert fresh.done_at is None
+    assert stuck.status == "failed"
+    assert stuck.error_reason == "stuck_in_processing"
+    assert stuck.done_at is not None
+
+
+def test_sweep_reaps_stuck_rows_on_paused_run(db_session):
+    """Paused runs are 'active' for sweep purposes — same per-row treatment."""
+    from book_scraper.db.repo import STUCK_ROW_THRESHOLD_S
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    _seed_one_url(db_session, shop.id, "https://vaga.lt/paused-stuck")
+    du = (
+        db_session.query(DiscoveredUrl)
+        .filter_by(url="https://vaga.lt/paused-stuck")
+        .one()
+    )
+    run = create_scrape_run(db_session, shop.id, "scan")
+    run.status = "paused"
+    item = insert_scrape_url_item(db_session, run.id, shop.id, du.id, du.url)
+    item.status = "processing"
+    item.claimed_at = datetime.now(UTC) - timedelta(seconds=STUCK_ROW_THRESHOLD_S + 60)
+    db_session.commit()
+
+    cleaned = sweep_orphaned_processing_items(db_session)
+
+    assert cleaned == 1
+    db_session.refresh(item)
+    assert item.status == "failed"
+    assert item.error_reason == "stuck_in_processing"
 
 
 # ─────────────────────── pool_pre_ping smoke (best-effort) ───────────────────────

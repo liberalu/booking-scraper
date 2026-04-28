@@ -142,6 +142,7 @@ def mark_stale_runs(session: Session) -> int:
     from book_scraper.db.repo import (
         abort_processing_scrape_url_items,
         record_scrape_run_failed_issue,
+        sweep_orphaned_processing_items,
     )
 
     cutoff = datetime.now(UTC) - timedelta(seconds=DEAD_RUN_SECONDS)
@@ -166,7 +167,8 @@ def mark_stale_runs(session: Session) -> int:
             abort_processing_scrape_url_items(session, run.id)
             logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
             marked += 1
-    if marked:
+    cleaned = sweep_orphaned_processing_items(session)
+    if marked or cleaned:
         session.commit()
     return marked
 
@@ -608,6 +610,64 @@ def get_run_recent_failures(
     return [_row_to_activity_entry(r, now) for r in rows]
 
 
+def get_run_failure_groups(
+    session: Session, run_id: int, limit_examples: int = 3
+) -> list[dict[str, Any]]:
+    """All failure types for a run, grouped by (error_reason, http_status).
+
+    Returns every distinct failure type with a count and example URLs so
+    the dashboard Failures card shows the full picture, not just the 10
+    most-recent rows.
+    """
+    rows = (
+        session.query(
+            ScrapeUrlItem.error_reason,
+            ScrapeUrlItem.http_status,
+            func.count(ScrapeUrlItem.id).label("count"),
+        )
+        .filter(ScrapeUrlItem.run_id == run_id, ScrapeUrlItem.status == "failed")
+        .group_by(ScrapeUrlItem.error_reason, ScrapeUrlItem.http_status)
+        .order_by(func.count(ScrapeUrlItem.id).desc())
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for reason, http, count in rows:
+        # Match the same (error_reason, http_status) bucket the row was
+        # grouped on. Both columns are nullable, so use IS NULL when the
+        # bucket key is None — `col == None` becomes `col = NULL` in SQL,
+        # which never matches and would yield empty examples.
+        reason_pred = (
+            ScrapeUrlItem.error_reason.is_(None)
+            if reason is None
+            else ScrapeUrlItem.error_reason == reason
+        )
+        http_pred = (
+            ScrapeUrlItem.http_status.is_(None)
+            if http is None
+            else ScrapeUrlItem.http_status == http
+        )
+        examples_q = (
+            session.query(ScrapeUrlItem.url)
+            .filter(
+                ScrapeUrlItem.run_id == run_id,
+                ScrapeUrlItem.status == "failed",
+                reason_pred,
+                http_pred,
+            )
+            .limit(limit_examples)
+            .all()
+        )
+        out.append(
+            {
+                "reason": reason or "unknown",
+                "http": http,
+                "count": int(count),
+                "examples": [r.url for r in examples_q],
+            }
+        )
+    return out
+
+
 def get_run_recent_activity(
     session: Session, run_id: int, limit: int = 20
 ) -> list[dict[str, Any]]:
@@ -655,6 +715,7 @@ def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
 
 
 RUN_URL_SORT_KEYS = (
+    "id",
     "started",  # claimed_at
     "done",  # done_at
     "duration",  # done_at - claimed_at
@@ -700,7 +761,9 @@ def get_run_url_items(
     desc = order != "asc"
 
     sort_col: Any
-    if sort == "started":
+    if sort == "id":
+        sort_col = ScrapeUrlItem.id
+    elif sort == "started":
         sort_col = ScrapeUrlItem.claimed_at
     elif sort == "done":
         sort_col = ScrapeUrlItem.done_at

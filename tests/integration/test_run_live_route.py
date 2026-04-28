@@ -113,7 +113,7 @@ def test_live_route_empty_run_returns_zeros(
     assert body["health"] == "healthy"
     assert body["in_flight"] == []
     assert body["rate"] == {"window_s": 60, "done": 0, "failed": 0}
-    assert body["recent_failures"] == []
+    assert body["failure_groups"] == []
     assert body["recent_activity"] == []
 
 
@@ -209,11 +209,14 @@ def test_live_route_returns_recent_done_and_failed_counts(
     # made the throughput legend show identical done/failed values.
     assert body["rate"]["done"] == 2
     assert body["rate"]["failed"] == 1
-    assert len(body["recent_failures"]) == 1
-    failure = body["recent_failures"][0]
-    assert failure["url"] == "https://vaga.lt/f1"
-    assert failure["http_status"] == 503
-    assert failure["error_reason"] == "http_503"
+    assert body["failure_groups"] == [
+        {
+            "reason": "http_503",
+            "http": 503,
+            "count": 1,
+            "examples": ["https://vaga.lt/f1"],
+        }
+    ]
 
 
 def test_live_route_recent_activity_includes_timing_and_throttle(
@@ -262,6 +265,41 @@ def test_live_route_recent_activity_includes_timing_and_throttle(
     assert activity[1]["status"] == "done"
     assert activity[1]["response_bytes"] == 18432
     assert activity[1]["delay_source"] == "autothrottle"
+
+
+def test_failure_groups_examples_match_http_status_bucket(
+    client: TestClient, db_session: Session
+) -> None:
+    """Examples must come from the same (error_reason, http_status) bucket
+    as the count. Same reason across multiple HTTP statuses should not
+    leak example URLs across buckets — including the http_status IS NULL
+    bucket."""
+    shop, run = _seed_run(db_session)
+    now = datetime.now(UTC)
+    # Same reason "request_error", three distinct buckets:
+    # http=503 (1 row), http=504 (1 row), http=NULL (1 row).
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/x-503",
+        status="failed", done_at=now - timedelta(seconds=5),
+        error_reason="request_error", http_status=503,
+    )
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/x-504",
+        status="failed", done_at=now - timedelta(seconds=4),
+        error_reason="request_error", http_status=504,
+    )
+    _add_url(
+        db_session, shop, run, url="https://vaga.lt/x-null",
+        status="failed", done_at=now - timedelta(seconds=3),
+        error_reason="request_error", http_status=None,
+    )
+    db_session.commit()
+
+    body = client.get(f"/api/runs/{run.id}/live").json()
+    groups = {(g["reason"], g["http"]): g for g in body["failure_groups"]}
+    assert groups[("request_error", 503)]["examples"] == ["https://vaga.lt/x-503"]
+    assert groups[("request_error", 504)]["examples"] == ["https://vaga.lt/x-504"]
+    assert groups[("request_error", None)]["examples"] == ["https://vaga.lt/x-null"]
 
 
 def test_live_route_works_for_finished_run(

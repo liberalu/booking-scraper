@@ -49,7 +49,7 @@ from book_scraper.dashboard.queries import (
     get_validation_lifecycle_counts,
     get_validation_summary,
 )
-from book_scraper.db.models import ScrapeRun, Shop, ShopBook
+from book_scraper.db.models import ScrapeRun, ScrapeUrlItem, Shop, ShopBook
 from book_scraper.db.repo import get_cron_job, list_cron_jobs, toggle_cron_job
 
 router = APIRouter()
@@ -674,6 +674,110 @@ def api_rerun_run(
         phase=phase, shop=run.shop.name, strategy=strategy, mode="delta"
     )
     return {"status": "started", "rerun_of": run_id, "shop": run.shop.name}
+
+
+@router.post("/runs/{run_id}/continue")
+def api_continue_run(
+    run_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Resume an operator-stopped scan run on the same `scrape_runs` row.
+
+    Flips a stopped scan back from 'failed' → 'running', then spawns a
+    fresh scrapy subprocess. The spider's `find_resumable_run` matches
+    Case A (running + has pending items) and reuses this same row, so
+    no new run id is created. Atomic against concurrent /continue calls
+    via row-level locking; rolls the row back to its prior terminal
+    state if the subprocess can't be spawned.
+    """
+    run = (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.id == run_id)
+        .with_for_update(of=ScrapeRun)
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.status != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Only operator-stopped runs can be continued; "
+                f"status={run.status!r}"
+            ),
+        )
+    if run.phase != "scan":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Continue is only supported for scan runs; phase={run.phase!r}"
+            ),
+        )
+    if get_run_close_reason(session, run) != "stopped_by_operator":
+        raise HTTPException(
+            status_code=400,
+            detail="Only runs stopped by the operator can be continued.",
+        )
+
+    pending_count = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run.id,
+            ScrapeUrlItem.status == "pending",
+        )
+        .scalar()
+        or 0
+    )
+    if pending_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing left to continue: no pending URLs on this run.",
+        )
+
+    shop_name = session.query(Shop.name).filter(Shop.id == run.shop_id).scalar()
+    if shop_name is None:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    shop, existing = _preflight_checks(session, shop_name, run.phase)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A {run.phase} run for {shop.name} is already "
+                f"{existing.status} (run #{existing.id})."
+            ),
+        )
+
+    original_close_reason = run.close_reason
+    original_finished_at = run.finished_at
+    original_last_heartbeat = run.last_heartbeat
+    original_pid = run.pid
+
+    run.status = "running"
+    run.finished_at = None
+    run.close_reason = None
+    run.last_heartbeat = datetime.now(UTC)
+    run.pid = None
+    session.commit()
+
+    try:
+        _spawn_scrapy_in_container(
+            phase="scan", shop=shop_name, strategy="", mode="delta"
+        )
+    except Exception:
+        session.query(ScrapeRun).filter(ScrapeRun.id == run_id).update(
+            {
+                "status": "failed",
+                "finished_at": original_finished_at,
+                "close_reason": original_close_reason,
+                "last_heartbeat": original_last_heartbeat,
+                "pid": original_pid,
+            }
+        )
+        session.commit()
+        raise
+
+    return {"status": "continued", "run_id": run_id, "shop": shop_name}
 
 
 @router.get("/runs/{run_id}")
