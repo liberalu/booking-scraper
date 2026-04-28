@@ -139,6 +139,10 @@ class ScanSpider(scrapy.Spider):
                     shop.id,
                     "scan",
                     urls_total=len(self._single_urls),
+                    extra_payload={
+                        "mode": "single_urls",
+                        "urls": list(self._single_urls),
+                    },
                 )
                 session.commit()
                 self._run_id = run.id

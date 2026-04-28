@@ -10,11 +10,14 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from book_scraper.db import run_events as run_event_types
 from book_scraper.db.models import (
     Category,
     CronJob,
     DiscoveredUrl,
     Price,
+    RunEvent,
+    ScrapeFailure,
     ScrapeRun,
     ScrapeUrlItem,
     Shop,
@@ -637,11 +640,39 @@ def inherit_pending_items(
     return int(rowcount) if rowcount is not None else 0
 
 
+def emit_run_event(
+    session: Session,
+    run_id: int,
+    event_type: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    actor: str | None = None,
+) -> RunEvent:
+    """Append a lifecycle event to run_events.
+
+    Append-only: callers must not update or delete events. Flushed within
+    the caller's transaction so the event is atomic with the surrounding
+    state mutation (status flip, row insert, etc.).
+    """
+    if event_type not in run_event_types.EVENT_TYPES:
+        raise ValueError(f"unknown run event_type: {event_type!r}")
+    event = RunEvent(
+        run_id=run_id,
+        event_type=event_type,
+        actor=actor,
+        payload=payload,
+    )
+    session.add(event)
+    session.flush()
+    return event
+
+
 def create_scrape_run(
     session: Session,
     shop_id: int,
     phase: str,
     urls_total: int | None = None,
+    extra_payload: dict[str, Any] | None = None,
 ) -> ScrapeRun:
     run = ScrapeRun(
         shop_id=shop_id,
@@ -653,6 +684,18 @@ def create_scrape_run(
     )
     session.add(run)
     session.flush()
+    payload: dict[str, Any] = {"phase": phase}
+    if urls_total is not None:
+        payload["urls_total"] = urls_total
+    if extra_payload:
+        payload.update(extra_payload)
+    emit_run_event(
+        session,
+        run.id,
+        run_event_types.STARTED,
+        payload=payload,
+        actor=run_event_types.ACTOR_SYSTEM,
+    )
     return run
 
 
@@ -666,6 +709,7 @@ def finish_scrape_run(
     if run is None:
         return
     was_running = run.status == "running"
+    was_non_terminal = run.status not in ("completed", "failed")
     run.status = status
     run.finished_at = datetime.now(UTC)
     # Stamp close_reason on every transition (idempotent — first writer wins
@@ -679,6 +723,23 @@ def finish_scrape_run(
         abort_processing_scrape_url_items(session, run_id)
     if was_running and status == "failed":
         record_scrape_run_failed_issue(session, run, reason or "finished_failed")
+    if was_non_terminal and status in ("completed", "failed"):
+        terminal_event = (
+            run_event_types.COMPLETED
+            if status == "completed"
+            else run_event_types.FAILED
+        )
+        emit_run_event(
+            session,
+            run_id,
+            terminal_event,
+            payload={
+                "close_reason": run.close_reason,
+                "urls_processed": run.urls_processed,
+                "error_count": run.error_count,
+            },
+            actor=run_event_types.ACTOR_SYSTEM,
+        )
     logger.info("scrape_run %d -> %s (reason=%s)", run_id, status, reason or "<none>")
 
 
@@ -753,6 +814,15 @@ def abort_processing_scrape_url_items(session: Session, run_id: int) -> int:
         if item.error_reason is None:
             item.error_reason = "run_aborted"
     session.flush()
+    for item in items:
+        record_scrape_failure(
+            session,
+            scrape_url_item=item,
+            error_reason=item.error_reason,
+            http_status=None,
+            error_detail="run_aborted",
+            occurred_at=now,
+        )
     return len(items)
 
 
@@ -826,6 +896,15 @@ def sweep_orphaned_processing_items(session: Session) -> int:
 
     if cleaned:
         session.flush()
+        for item in stuck:
+            record_scrape_failure(
+                session,
+                scrape_url_item=item,
+                error_reason=item.error_reason,
+                http_status=None,
+                error_detail="stuck_in_processing",
+                occurred_at=now,
+            )
     return cleaned
 
 
@@ -885,8 +964,21 @@ def mark_stale_runs_failed(
     for run in stale:
         run.status = "failed"
         run.finished_at = now
+        if run.close_reason is None:
+            run.close_reason = reason
         record_scrape_run_failed_issue(session, run, reason)
         abort_processing_scrape_url_items(session, run.id)
+        emit_run_event(
+            session,
+            run.id,
+            run_event_types.FAILED,
+            payload={
+                "close_reason": reason,
+                "urls_processed": run.urls_processed,
+                "error_count": run.error_count,
+            },
+            actor=run_event_types.ACTOR_SYSTEM,
+        )
         logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
     session.flush()
     return len(stale)
@@ -950,8 +1042,21 @@ def mark_orphan_runs_failed(session: Session) -> int:
         run.status = "failed"
         run.finished_at = now
         run.resumable_after_failure = True
+        if run.close_reason is None:
+            run.close_reason = "orphan_on_boot"
         record_scrape_run_failed_issue(session, run, "orphan_on_boot")
         abort_processing_scrape_url_items(session, run.id)
+        emit_run_event(
+            session,
+            run.id,
+            run_event_types.FAILED,
+            payload={
+                "close_reason": "orphan_on_boot",
+                "urls_processed": run.urls_processed,
+                "error_count": run.error_count,
+            },
+            actor=run_event_types.ACTOR_SYSTEM,
+        )
         logger.info("scrape_run %d -> failed (reason=orphan_on_boot)", run.id)
     session.flush()
     return len(orphans)
@@ -1436,6 +1541,41 @@ def mark_scrape_url_item_processing(
         session.flush()
 
 
+def record_scrape_failure(
+    session: Session,
+    *,
+    scrape_url_item: ScrapeUrlItem,
+    error_reason: str | None,
+    http_status: int | None,
+    response_bytes: int | None = None,
+    error_detail: str | None = None,
+    occurred_at: datetime | None = None,
+) -> ScrapeFailure:
+    """Append a `scrape_failures` row for a failure event.
+
+    Append-only by design — every call inserts a new row, ordered by
+    `occurred_at`. Retries get their own rows; lifecycle / acks live on
+    each failure event rather than on the queue row. The single writer
+    is the spider/repo pair, so accidental dupes are a real bug worth
+    surfacing in the data, not papering over with idempotency tricks.
+    """
+    failure = ScrapeFailure(
+        scrape_url_item_id=scrape_url_item.id,
+        run_id=scrape_url_item.run_id,
+        shop_id=scrape_url_item.shop_id,
+        url=scrape_url_item.url,
+        discovered_url_id=scrape_url_item.discovered_url_id,
+        occurred_at=occurred_at or datetime.now(UTC),
+        error_reason=error_reason,
+        http_status=http_status,
+        response_bytes=response_bytes,
+        error_detail=error_detail,
+    )
+    session.add(failure)
+    session.flush()
+    return failure
+
+
 def mark_scrape_url_item_response(
     session: Session,
     item_id: int,
@@ -1480,6 +1620,18 @@ def mark_scrape_url_item_response(
     if url_type is not None:
         item.url_type = url_type
     session.flush()
+    if not success:
+        # Dual-write while the failure card / retry / URLs view still
+        # read from scrape_url_items.error_reason. PR 3 of the migration
+        # plan drops those columns and this becomes the single source.
+        record_scrape_failure(
+            session,
+            scrape_url_item=item,
+            error_reason=error_reason,
+            http_status=http_status,
+            response_bytes=response_bytes,
+            occurred_at=item.done_at,
+        )
 
 
 def mark_scrape_url_item_done(
@@ -1546,6 +1698,13 @@ def mark_scrape_url_item_failed(
         if url_type is not None:
             item.url_type = url_type
         session.flush()
+        record_scrape_failure(
+            session,
+            scrape_url_item=item,
+            error_reason=error_reason,
+            http_status=http_status,
+            occurred_at=item.done_at,
+        )
 
 
 def reset_processing_scrape_url_items(session: Session, run_id: int) -> int:

@@ -27,6 +27,7 @@ from book_scraper.dashboard.queries import (
     get_run_close_reason,
     get_run_discovered_urls,
     get_run_eta,
+    get_run_events,
     get_run_failure_groups,
     get_run_in_flight,
     get_run_issue_summary,
@@ -49,8 +50,14 @@ from book_scraper.dashboard.queries import (
     get_validation_lifecycle_counts,
     get_validation_summary,
 )
+from book_scraper.db import run_events as run_event_types
 from book_scraper.db.models import ScrapeRun, ScrapeUrlItem, Shop, ShopBook
-from book_scraper.db.repo import get_cron_job, list_cron_jobs, toggle_cron_job
+from book_scraper.db.repo import (
+    emit_run_event,
+    get_cron_job,
+    list_cron_jobs,
+    toggle_cron_job,
+)
 
 router = APIRouter()
 
@@ -569,6 +576,12 @@ def api_stop_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "running":
         run.status = "stopping"
+        emit_run_event(
+            session,
+            run_id,
+            run_event_types.STOP_REQUESTED,
+            actor=run_event_types.ACTOR_OPERATOR,
+        )
         session.commit()
     return {"run_id": run_id, "status": run.status}
 
@@ -592,6 +605,13 @@ def api_pause_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "running":
         run.status = "paused"
+        emit_run_event(
+            session,
+            run_id,
+            run_event_types.PAUSED,
+            payload={"previous_status": "running"},
+            actor=run_event_types.ACTOR_OPERATOR,
+        )
         session.commit()
     return {"run_id": run_id, "status": run.status}
 
@@ -611,6 +631,13 @@ def api_resume_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "paused":
         run.status = "running"
+        emit_run_event(
+            session,
+            run_id,
+            run_event_types.RESUMED,
+            payload={"previous_status": "paused"},
+            actor=run_event_types.ACTOR_OPERATOR,
+        )
         session.commit()
     return {"run_id": run_id, "status": run.status}
 
@@ -658,7 +685,14 @@ def api_rerun_run(
     # harmless.
     if run.status == "failed":
         run.resumable_after_failure = True
-        session.commit()
+    emit_run_event(
+        session,
+        run_id,
+        run_event_types.RERUN,
+        payload={"previous_status": run.status},
+        actor=run_event_types.ACTOR_OPERATOR,
+    )
+    session.commit()
 
     # Phase form: `scan` or `discover_<strategy>` or `discover` plain.
     phase: str
@@ -702,8 +736,7 @@ def api_continue_run(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Only operator-stopped runs can be continued; "
-                f"status={run.status!r}"
+                f"Only failed runs can be continued; status={run.status!r}"
             ),
         )
     if run.phase != "scan":
@@ -712,11 +745,6 @@ def api_continue_run(
             detail=(
                 f"Continue is only supported for scan runs; phase={run.phase!r}"
             ),
-        )
-    if get_run_close_reason(session, run) != "stopped_by_operator":
-        raise HTTPException(
-            status_code=400,
-            detail="Only runs stopped by the operator can be continued.",
         )
 
     pending_count = (
@@ -758,6 +786,13 @@ def api_continue_run(
     run.close_reason = None
     run.last_heartbeat = datetime.now(UTC)
     run.pid = None
+    emit_run_event(
+        session,
+        run_id,
+        run_event_types.CONTINUED,
+        payload={"pending_count": int(pending_count)},
+        actor=run_event_types.ACTOR_OPERATOR,
+    )
     session.commit()
 
     try:
@@ -780,6 +815,162 @@ def api_continue_run(
     return {"status": "continued", "run_id": run_id, "shop": shop_name}
 
 
+@router.post("/runs/{run_id}/retry")
+def api_retry_run_failures(
+    run_id: int,
+    error_reason: str = "",
+    error_reason_is_null: bool = False,
+    http_status: int | None = None,
+    http_status_is_null: bool = False,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Reset failed scrape_url_items to pending so they get re-scraped.
+
+    Filters mirror the failure-card buttons: card-level "Retry all" sends
+    no filters; per-group "Retry group" sends the bucket's reason+http
+    keys (with `*_is_null` flags for the nullable buckets — same sentinel
+    contract as `/api/runs/{id}/urls`).
+
+    For terminal runs (`failed`/`completed`) this also re-spawns the
+    spider so the resets actually get processed (mirrors `/continue`).
+    For alive runs (`running`/`paused`/`stopping`) the resident spider
+    picks the rows up on its next claim cycle — no spawn needed.
+
+    Row resets are committed before the spawn attempt: if spawn fails we
+    roll the run state back, but the rows stay `pending` so the operator
+    can retry the spawn (or call `/continue`) without losing the reset.
+    """
+    run = (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.id == run_id)
+        .with_for_update(of=ScrapeRun)
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.phase != "scan":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Retry is only supported for scan runs; phase={run.phase!r}",
+        )
+
+    update_filter = [
+        ScrapeUrlItem.run_id == run.id,
+        ScrapeUrlItem.status == "failed",
+    ]
+    if error_reason_is_null:
+        update_filter.append(ScrapeUrlItem.error_reason.is_(None))
+    elif error_reason:
+        update_filter.append(ScrapeUrlItem.error_reason == error_reason)
+    if http_status_is_null:
+        update_filter.append(ScrapeUrlItem.http_status.is_(None))
+    elif http_status is not None:
+        update_filter.append(ScrapeUrlItem.http_status == http_status)
+
+    matches = session.query(func.count(ScrapeUrlItem.id)).filter(*update_filter).scalar() or 0
+    if matches == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No matching failed URLs to retry.",
+        )
+
+    is_terminal = run.status in ("failed", "completed")
+    shop_name: str | None = None
+    if is_terminal:
+        # Validate spawn prerequisites BEFORE we touch any rows so we
+        # don't end up with pending rows for a run that can't be revived.
+        shop_name = (
+            session.query(Shop.name).filter(Shop.id == run.shop_id).scalar()
+        )
+        if shop_name is None:
+            raise HTTPException(status_code=404, detail="Shop not found")
+        shop, existing = _preflight_checks(session, shop_name, run.phase)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A {run.phase} run for {shop.name} is already "
+                    f"{existing.status} (run #{existing.id})."
+                ),
+            )
+
+    session.query(ScrapeUrlItem).filter(*update_filter).update(
+        {
+            "status": "pending",
+            "error_reason": None,
+            "http_status": None,
+            "claimed_at": None,
+            "done_at": None,
+        },
+        synchronize_session=False,
+    )
+
+    retry_payload: dict[str, Any] = {"rows_reset": int(matches)}
+    if error_reason_is_null:
+        retry_payload["error_reason_filter"] = None
+    elif error_reason:
+        retry_payload["error_reason_filter"] = error_reason
+    if http_status_is_null:
+        retry_payload["http_status_filter"] = None
+    elif http_status is not None:
+        retry_payload["http_status_filter"] = http_status
+
+    emit_run_event(
+        session,
+        run_id,
+        run_event_types.RETRY_FAILURES,
+        payload=retry_payload,
+        actor=run_event_types.ACTOR_OPERATOR,
+    )
+
+    if not is_terminal:
+        session.commit()
+        return {
+            "retried": int(matches),
+            "run_id": run_id,
+            "run_status": run.status,
+            "spawned": False,
+        }
+
+    original_close_reason = run.close_reason
+    original_finished_at = run.finished_at
+    original_last_heartbeat = run.last_heartbeat
+    original_pid = run.pid
+    original_status = run.status
+
+    run.status = "running"
+    run.finished_at = None
+    run.close_reason = None
+    run.last_heartbeat = datetime.now(UTC)
+    run.pid = None
+    session.commit()
+
+    try:
+        assert shop_name is not None  # guarded above for is_terminal branch
+        _spawn_scrapy_in_container(
+            phase="scan", shop=shop_name, strategy="", mode="delta"
+        )
+    except Exception:
+        session.query(ScrapeRun).filter(ScrapeRun.id == run_id).update(
+            {
+                "status": original_status,
+                "finished_at": original_finished_at,
+                "close_reason": original_close_reason,
+                "last_heartbeat": original_last_heartbeat,
+                "pid": original_pid,
+            }
+        )
+        session.commit()
+        raise
+
+    return {
+        "retried": int(matches),
+        "run_id": run_id,
+        "run_status": "running",
+        "spawned": True,
+    }
+
+
 @router.get("/runs/{run_id}")
 def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     run = (
@@ -794,10 +985,26 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     terminal = _run_terminal_counts(session, [run_id]).get(run_id)
     close_reason = get_run_close_reason(session, run)
     item_counts = get_run_item_counts(session, run_id)
+    pending_count = (
+        session.query(func.count(ScrapeUrlItem.id))
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "pending",
+        )
+        .scalar()
+        or 0
+    )
     base = _run_dict(run, terminal_count=terminal)
     base.update(item_counts)
     base["items"] = item_counts["items_added"] + item_counts["items_updated"]
-    return {**base, "issues": issues, "close_reason": close_reason}
+    events = get_run_events(session, run_id)
+    return {
+        **base,
+        "issues": issues,
+        "close_reason": close_reason,
+        "pending_count": pending_count,
+        "events": events,
+    }
 
 
 @router.get("/runs/{run_id}/live")
@@ -828,6 +1035,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
     rate = get_run_rate_window(session, run_id)
     failure_groups = get_run_failure_groups(session, run_id)
     recent_activity = get_run_recent_activity(session, run_id, limit=20)
+    events = get_run_events(session, run_id)
 
     health = get_run_live_health(run)
     # Refine to 'stuck' when heartbeat is fresh but the oldest in-flight
@@ -858,6 +1066,7 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
         "eta_min": eta_min,
         "failure_groups": failure_groups,
         "recent_activity": recent_activity,
+        "events": events,
     }
 
 
@@ -869,6 +1078,10 @@ def api_run_urls(
     per_page: int = 50,
     sort: str = "started",
     order: str = "desc",
+    error_reason: str = "",
+    error_reason_is_null: bool = False,
+    http_status: int | None = None,
+    http_status_is_null: bool = False,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """URL queue (live `scrape_url_items`) or history (`discovered_urls`)
@@ -895,9 +1108,13 @@ def api_run_urls(
             per_page=per_page,
             sort=sort,
             order=order,
+            error_reason=error_reason,
+            error_reason_is_null=error_reason_is_null,
+            http_status=http_status,
+            http_status_is_null=http_status_is_null,
         )
         rows = []
-        for it, title in items:
+        for it, title, shop_book_id in items:
             duration_ms: int | None = None
             if it.claimed_at and it.done_at:
                 duration_ms = int(
@@ -918,6 +1135,7 @@ def api_run_urls(
                     "delay_source": it.delay_source,
                     "item_id": it.id,
                     "discovered_url_id": it.discovered_url_id,
+                    "shop_book_id": shop_book_id,
                 }
             )
         source = "live"

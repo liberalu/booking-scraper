@@ -317,6 +317,119 @@ function _fmtAge(seconds) {
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 
+// ── Run-event display metadata ──
+const RUN_EVENT_META = {
+  started:               { glyph: '▶',  label: 'Started',          tone: 'accent'  },
+  paused:                { glyph: '⏸',  label: 'Paused',           tone: 'warn'    },
+  resumed:               { glyph: '▶',  label: 'Resumed',          tone: 'accent'  },
+  stop_requested:        { glyph: '⏹',  label: 'Stop requested',   tone: 'warn'    },
+  retry_failures:        { glyph: '↻',  label: 'Retry failures',   tone: 'accent'  },
+  rerun:                 { glyph: '↻',  label: 'Rerun triggered',  tone: 'accent'  },
+  continued:             { glyph: '▶',  label: 'Continued',        tone: 'accent'  },
+  resumed_after_failure: { glyph: '↺',  label: 'Resumed (inherited queue)', tone: 'accent' },
+  completed:             { glyph: '✓',  label: 'Completed',        tone: 'ok'      },
+  failed:                { glyph: '✗',  label: 'Failed',           tone: 'err'     },
+};
+
+function _fmtEventPayload(eventType, payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const parts = [];
+  // Pull the most operator-relevant keys first.
+  const order = [
+    'close_reason', 'previous_status', 'previous_run_id',
+    'phase', 'mode', 'rescrape', 'urls_total', 'urls_skipped',
+    'rows_reset', 'error_reason_filter', 'http_status_filter',
+    'pending_count', 'urls_processed', 'error_count',
+  ];
+  const seen = new Set();
+  for (const k of order) {
+    if (!(k in payload)) continue;
+    const v = payload[k];
+    if (v === null || v === undefined || v === '' || v === false) {
+      if (!(k === 'rescrape' && v === false)) {
+        // skip falsy noise unless it carries meaning (rescrape=false matters)
+        seen.add(k);
+        continue;
+      }
+    }
+    parts.push(`${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
+    seen.add(k);
+  }
+  return parts.join(' · ');
+}
+
+
+function HFRunTimelineCard({ events }) {
+  const HF = getHF();
+  const list = Array.isArray(events) ? events : [];
+  const toneColor = (tone) => {
+    if (tone === 'ok')     return HF.okInk || '#16a34a';
+    if (tone === 'warn')   return HF.warnInk || '#d97706';
+    if (tone === 'err')    return HF.errInk || '#dc2626';
+    if (tone === 'accent') return HF.accentInk || '#2563eb';
+    return HF.ink2 || HF.ink || '#444';
+  };
+  return (
+    <HFCard
+      title="Timeline"
+      sub={list.length === 1 ? '1 event' : `${list.length} events`}
+      style={{ marginBottom: HF.gap }}
+    >
+      {list.length === 0 ? (
+        <div style={{ padding: HF.cardP, color: HF.ink3, fontSize: 13 }}>
+          No events recorded for this run.
+        </div>
+      ) : (
+        <div style={{ padding: HF.cardP }}>
+          <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {list.map((ev) => {
+              const meta = RUN_EVENT_META[ev.event_type] || { glyph: '•', label: ev.event_type, tone: 'neutral' };
+              const summary = _fmtEventPayload(ev.event_type, ev.payload);
+              const absoluteTime = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
+              return (
+                <li key={ev.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '20px 160px 1fr auto',
+                  alignItems: 'baseline',
+                  gap: 10,
+                  padding: '6px 8px',
+                  borderRadius: HF.r2,
+                  fontSize: 13,
+                  background: 'rgba(0,0,0,0.02)',
+                }}>
+                  <span style={{ color: toneColor(meta.tone), fontSize: 14, lineHeight: 1, textAlign: 'center' }}>
+                    {meta.glyph}
+                  </span>
+                  <span style={{ color: toneColor(meta.tone), fontWeight: 600 }}>
+                    {meta.label}
+                    {ev.actor && ev.actor !== 'system' ? (
+                      <span style={{ color: HF.ink3, fontWeight: 400, marginLeft: 6 }}>
+                        ({ev.actor})
+                      </span>
+                    ) : null}
+                  </span>
+                  <span style={{
+                    fontFamily: HF.mono, color: HF.ink2, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                  }} title={summary}>
+                    {summary}
+                  </span>
+                  <span
+                    style={{ color: HF.ink3, fontFamily: HF.mono, fontSize: 12 }}
+                    title={absoluteTime}
+                  >
+                    {_fmtClockTime(ev.created_at)}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+    </HFCard>
+  );
+}
+
 
 // ───────────────────────────── Run Detail ─────────────────────────────
 
@@ -772,6 +885,9 @@ function HFRunDetail({ nav, goto, params }) {
             {validationIssueCount > 0 ? 'view →' : 'none'}
           </span> },
       ]}/>
+
+      {/* Timeline — operator and lifecycle events for this run, oldest first */}
+      <HFRunTimelineCard events={liveData?.events ?? data.events ?? []} />
 
       {/* In-flight card — what's happening RIGHT NOW (only when live) */}
       {liveData && (runStatus === 'running' || runStatus === 'paused' || runStatus === 'stopping') && (

@@ -75,7 +75,9 @@ class DiscoverService:
 
         mark_stale_runs_failed(self.session, shop.id, phase)
 
-        run = create_scrape_run(self.session, shop.id, phase)
+        run = create_scrape_run(
+            self.session, shop.id, phase, extra_payload={"strategy": strategy}
+        )
 
         seed_url = self._seed_url(strategy, shop_config)
         url_type = _STRATEGY_URL_TYPE[strategy]

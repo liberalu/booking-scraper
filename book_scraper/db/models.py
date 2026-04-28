@@ -460,6 +460,45 @@ class ScrapeRun(Base):
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(
         back_populates="scrape_run"
     )
+    events: Mapped[list["RunEvent"]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="RunEvent.created_at",
+    )
+
+
+class RunEvent(Base):
+    """Append-only lifecycle event log for a scrape run.
+
+    One row per operator action or terminal transition. Errors stay in
+    scrape_url_items / validation_issues; this table is run-level only.
+    """
+
+    __tablename__ = "run_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("scrape_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    actor: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    run: Mapped["ScrapeRun"] = relationship(back_populates="events")
+
+    __table_args__ = (
+        Index("ix_run_events_run_created", "run_id", "created_at"),
+        CheckConstraint(
+            "event_type IN ("
+            "'started','paused','resumed','stop_requested','retry_failures',"
+            "'rerun','continued','resumed_after_failure','completed','failed'"
+            ")",
+            name="ck_run_events_event_type",
+        ),
+    )
 
 
 scrape_url_status_enum = Enum(
@@ -561,6 +600,67 @@ class ValidationIssue(Base):
     scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")
     shop_book: Mapped["ShopBook | None"] = relationship()
     discovered_url: Mapped["DiscoveredUrl | None"] = relationship()
+
+
+class ScrapeFailure(Base):
+    """Append-only event log of scrape failures.
+
+    One row per failed fetch attempt. Retries get their own rows ordered
+    by `occurred_at`; the queue row in `scrape_url_items` carries only
+    the current status. Lifecycle / acknowledgments live here so an
+    operator can mark "this URL is permanently dead" once and have the
+    Failures card stop surfacing it.
+    """
+
+    __tablename__ = "scrape_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scrape_url_item_id: Mapped[int] = mapped_column(
+        ForeignKey("scrape_url_items.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=False
+    )
+    shop_id: Mapped[int] = mapped_column(
+        ForeignKey("shops.id"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    discovered_url_id: Mapped[int | None] = mapped_column(
+        ForeignKey("discovered_urls.id"), nullable=True
+    )
+
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    lifecycle_state: Mapped[str] = mapped_column(
+        validation_lifecycle_enum,
+        nullable=False,
+        server_default="new",
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_scrape_failures_run_bucket",
+            "run_id",
+            "error_reason",
+            "http_status",
+        ),
+        Index("ix_scrape_failures_shop_url", "shop_id", "url"),
+    )
+
+    scrape_url_item: Mapped["ScrapeUrlItem"] = relationship()
 
 
 class CronJob(Base):

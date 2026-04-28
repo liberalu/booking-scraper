@@ -3,10 +3,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from book_scraper.db import run_events as run_event_types
 from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
     create_scrape_run,
+    emit_run_event,
     find_resumable_run,
     finish_scrape_run,
     get_pending_scan_urls,
@@ -127,7 +129,18 @@ class ScanService:
             # spawn a fresh run row that inherits the failed run's pending
             # queue. Old run stays `failed` for postmortem.
             run = create_scrape_run(
-                self.session, shop.id, "scan", urls_total=pending_count
+                self.session,
+                shop.id,
+                "scan",
+                urls_total=pending_count,
+                extra_payload={"rescrape": rescrape},
+            )
+            emit_run_event(
+                self.session,
+                run.id,
+                run_event_types.RESUMED_AFTER_FAILURE,
+                payload={"previous_run_id": resumable.id},
+                actor=run_event_types.ACTOR_SYSTEM,
             )
             self.session.commit()
             return ScanPlan(
@@ -160,7 +173,11 @@ class ScanService:
             urls_skipped = len(pending_urls) - len(urls_to_scrape)
 
         run = create_scrape_run(
-            self.session, shop.id, "scan", urls_total=len(urls_to_scrape)
+            self.session,
+            shop.id,
+            "scan",
+            urls_total=len(urls_to_scrape),
+            extra_payload={"rescrape": rescrape, "urls_skipped": urls_skipped},
         )
         # Commit so the run row + heartbeat are visible to the reaper
         # before the (potentially slow) queue insert begins.

@@ -13,6 +13,7 @@ from book_scraper.dashboard.shop_book_filters import (
 from book_scraper.db.models import (
     DiscoveredUrl,
     Price,
+    RunEvent,
     ScrapeRun,
     ScrapeUrlItem,
     Shop,
@@ -139,8 +140,10 @@ def mark_stale_runs(session: Session) -> int:
     error reason is recorded as `stop_timeout` so the postmortem
     distinguishes it from ordinary heartbeat death.
     """
+    from book_scraper.db import run_events as run_event_types
     from book_scraper.db.repo import (
         abort_processing_scrape_url_items,
+        emit_run_event,
         record_scrape_run_failed_issue,
         sweep_orphaned_processing_items,
     )
@@ -165,6 +168,17 @@ def mark_stale_runs(session: Session) -> int:
             # (first writer wins), keeping the reason on the run row itself.
             record_scrape_run_failed_issue(session, run, reason)
             abort_processing_scrape_url_items(session, run.id)
+            emit_run_event(
+                session,
+                run.id,
+                run_event_types.FAILED,
+                payload={
+                    "close_reason": reason,
+                    "urls_processed": run.urls_processed,
+                    "error_count": run.error_count,
+                },
+                actor=run_event_types.ACTOR_SYSTEM,
+            )
             logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
             marked += 1
     cleaned = sweep_orphaned_processing_items(session)
@@ -378,6 +392,26 @@ def get_repeated_failures(
 
 def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
+
+
+def get_run_events(session: Session, run_id: int) -> list[dict]:
+    """Lifecycle events for a run, oldest first."""
+    rows = (
+        session.query(RunEvent)
+        .filter(RunEvent.run_id == run_id)
+        .order_by(RunEvent.created_at.asc(), RunEvent.id.asc())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "event_type": r.event_type,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "actor": r.actor,
+            "payload": r.payload,
+        }
+        for r in rows
+    ]
 
 
 def get_run_close_reason(session: Session, run: ScrapeRun) -> str | None:
@@ -659,8 +693,11 @@ def get_run_failure_groups(
         )
         out.append(
             {
-                "reason": reason or "unknown",
+                "reason": reason,
+                "reason_display": reason or "unknown",
+                "reason_is_null": reason is None,
                 "http": http,
+                "http_is_null": http is None,
                 "count": int(count),
                 "examples": [r.url for r in examples_q],
             }
@@ -735,16 +772,25 @@ def get_run_url_items(
     per_page: int = 50,
     sort: str = "started",
     order: str = "desc",
-) -> tuple[list[tuple[ScrapeUrlItem, str | None]], int]:
-    """Live URL queue for a run, paginated. Returns ((item, title), total).
+    error_reason: str = "",
+    error_reason_is_null: bool = False,
+    http_status: int | None = None,
+    http_status_is_null: bool = False,
+) -> tuple[list[tuple[ScrapeUrlItem, str | None, int | None]], int]:
+    """Live URL queue for a run, paginated. Returns ((item, title, shop_book_id), total).
 
-    `title` is left-joined from `shop_books` (matched on shop_id + url) and
-    is `None` for URLs that didn't produce a book product.
+    `title` and `shop_book_id` are left-joined from `shop_books` (matched on
+    shop_id + url) and are `None` for URLs that didn't produce a book product.
+
+    The `error_reason` / `http_status` filters target the failure-group
+    keys on the Failures card. Both columns are nullable, so each has an
+    explicit `*_is_null` flag — that flag wins if both are sent (defensive,
+    avoids any string-sentinel ambiguity).
     """
     from sqlalchemy import case
 
     query = (
-        session.query(ScrapeUrlItem, ShopBook.title)
+        session.query(ScrapeUrlItem, ShopBook.title, ShopBook.id)
         .outerjoin(
             ShopBook,
             (ShopBook.shop_id == ScrapeUrlItem.shop_id)
@@ -754,6 +800,14 @@ def get_run_url_items(
     )
     if status in RUN_URL_STATUSES:
         query = query.filter(ScrapeUrlItem.status == status)
+    if error_reason_is_null:
+        query = query.filter(ScrapeUrlItem.error_reason.is_(None))
+    elif error_reason:
+        query = query.filter(ScrapeUrlItem.error_reason == error_reason)
+    if http_status_is_null:
+        query = query.filter(ScrapeUrlItem.http_status.is_(None))
+    elif http_status is not None:
+        query = query.filter(ScrapeUrlItem.http_status == http_status)
     total = query.count()
 
     if sort not in RUN_URL_SORT_KEYS:
@@ -795,7 +849,7 @@ def get_run_url_items(
         .limit(per_page)
         .all()
     )
-    return [(it, title) for it, title in rows], total
+    return [(it, title, sb_id) for it, title, sb_id in rows], total
 
 
 def get_run_discovered_urls(
