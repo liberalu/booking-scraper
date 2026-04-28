@@ -1,6 +1,0 @@
-{% macro sort_header(col, label, current_sort, current_order, base_params='') -%}
-<a href="?{{ base_params ~ '&' if base_params else '' }}sort={{ col }}&order={{ 'desc' if current_sort == col and current_order == 'asc' else 'asc' }}">
-    {{- label -}}
-    {%- if current_sort == col %}<span class="sort-arrow">{{ '▲' if current_order == 'asc' else '▼' }}</span>{% endif -%}
-</a>
-{%- endmacro %}
