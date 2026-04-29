@@ -771,12 +771,23 @@ function HFRunDetail({ nav, goto, params }) {
   const ackGroup = React.useCallback((group) => {
     if (!id || !group) return;
     const label = `${group.reason_display ?? group.reason ?? 'unknown'}${group.http != null ? ` · HTTP ${group.http}` : ''}`;
-    if (!confirm(`Mark group "${label}" as known on run #${id}?\nThe bucket will stop appearing on the Failures card.`)) return;
+    // One-step prompt: returns null on Cancel, the entered string on OK.
+    // Operators come back to acked buckets months later — a short note
+    // ("vendor outage 2026-04-28", "URL deleted upstream") beats
+    // unlabeled `already_seen`. Empty string is fine (just acks).
+    const note = prompt(
+      `Mark group "${label}" as known on run #${id}?\n` +
+      `The bucket will stop appearing on the Failures card.\n\n` +
+      `Optional note (e.g. "vendor outage", "deleted upstream"):`,
+      ''
+    );
+    if (note === null) return;  // user cancelled
     const params = new URLSearchParams();
     if (group.reason_is_null) params.set('error_reason_is_null', 'true');
     else if (group.reason) params.set('error_reason', group.reason);
     if (group.http_is_null) params.set('http_status_is_null', 'true');
     else if (group.http != null) params.set('http_status', String(group.http));
+    if (note) params.set('note', note);
     setActionPending(true); setActionError(null);
     fetch(`/api/runs/${id}/failures/ack?${params.toString()}`, {method:'POST'})
       .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t || r.statusText); }))

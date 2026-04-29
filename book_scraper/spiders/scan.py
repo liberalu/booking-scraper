@@ -21,6 +21,37 @@ from book_scraper.services.scan import ScanService
 from book_scraper.spiders.registry import load_parsers
 
 
+# Anti-bot challenge / wall fingerprints. A 200 OK response whose body
+# matches one of these is treated as a failed fetch (`error_reason =
+# 'anti_bot_detected'`, severity=critical) instead of a "successful"
+# scrape that produces garbage data downstream. Matching is a cheap
+# case-insensitive substring scan on the body — patterns are short,
+# distinctive, and chosen to avoid collisions with legitimate prose.
+ANTI_BOT_MARKERS: tuple[str, ...] = (
+    # Cloudflare challenge / Bot Fight Mode
+    "just a moment...",
+    "checking your browser before accessing",
+    "cf-browser-verification",
+    "challenge-platform",
+    # Akamai
+    "pardon our interruption",
+    # Datadome
+    "datadome",
+    "captcha-delivery",
+    # Generic CAPTCHA / verification walls
+    "are you a human",
+    "verify you are not a robot",
+)
+
+
+def _is_anti_bot_response(text: str) -> bool:
+    """True if the response body matches a known anti-bot wall."""
+    if not text:
+        return False
+    lower = text.lower()
+    return any(m in lower for m in ANTI_BOT_MARKERS)
+
+
 class ScanSpider(scrapy.Spider):
     name = "scan"
 
@@ -343,6 +374,30 @@ class ScanSpider(scrapy.Spider):
 
         # HTTP-level checks
         url = response.url.split("?")[0]
+        # Anti-bot wall check fires before any content-quality signal:
+        # a 200 OK challenge page would otherwise trip empty_response /
+        # redirect_to_homepage as warnings while still being parsed for
+        # garbage data. Treat as a real failure with critical severity.
+        if _is_anti_bot_response(response.text):
+            self._error_count += 1
+            self._mark_response(
+                scrape_url_item_id,
+                response_url=url,
+                success=False,
+                http_status=response.status,
+                received_at=received_at,
+                response_bytes=response_bytes,
+                error_reason="anti_bot_detected",
+                dispatched_at=dispatched_at,
+                request_delay_s=request_delay_s,
+                delay_source=delay_source,
+            )
+            self._queue_url_status_update(
+                discovered_url_id,
+                http_status=response.status,
+                increment_fail=True,
+            )
+            return
         if len(response.text) < 1024:
             self._report_validation(
                 "empty_response",

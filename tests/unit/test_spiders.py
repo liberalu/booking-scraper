@@ -203,6 +203,58 @@ class TestScanSpider:
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
         assert shop_book_items == []
 
+    def test_is_anti_bot_response_matches_known_walls(self):
+        from book_scraper.spiders.scan import _is_anti_bot_response
+
+        # Real-shape Cloudflare challenge body fragment.
+        cf = (
+            "<html><head><title>Just a moment...</title></head>"
+            "<body><div class=\"cf-browser-verification\">x</div></body></html>"
+        )
+        assert _is_anti_bot_response(cf) is True
+        # Akamai
+        assert _is_anti_bot_response("Pardon Our Interruption") is True
+        # Datadome
+        assert _is_anti_bot_response("<html>...captcha-delivery...</html>") is True
+        # Generic CAPTCHA copy
+        assert _is_anti_bot_response("Please verify you are not a robot") is True
+
+    def test_is_anti_bot_response_negative_cases(self):
+        from book_scraper.spiders.scan import _is_anti_bot_response
+
+        assert _is_anti_bot_response("") is False
+        assert _is_anti_bot_response("<html><body>Just a regular product page</body></html>") is False
+        # Substring check is case-insensitive: "challenge-platform" must match
+        # the pattern, but a benign mention of the word "challenge" alone shouldn't
+        # — assert that "platform" alone doesn't trigger.
+        assert _is_anti_bot_response("This is a fun book about challenge.") is False
+        assert _is_anti_bot_response("A platform for kids.") is False
+
+    def test_parse_product_anti_bot_marks_failed_and_skips_parse(self):
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        # Cloudflare challenge body — no ld+json, no real product data.
+        html = (
+            "<html><head><title>Just a moment...</title></head>"
+            "<body><div class=\"cf-browser-verification\">"
+            "<p>Checking your browser before accessing vaga.lt</p></div>"
+            "</body></html>"
+        )
+        response = _fake_response(
+            "https://vaga.lt/blocked",
+            html,
+            meta={"discovered_url_id": 99},
+        )
+        items = list(spider.parse_product(response))
+        # Anti-bot wall must NOT yield a ShopBookItem (parser skipped).
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert shop_book_items == []
+        # The discovered_url update is queued with increment_fail=True so
+        # the discover-side fail counter reflects the rejection.
+        assert spider._url_status_updates[-1]["increment_fail"] is True
+        assert spider._error_count >= 1
+
     def test_parse_product_non_book_is_skipped(self):
         from book_scraper.spiders.scan import ScanSpider
 
