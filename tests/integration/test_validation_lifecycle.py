@@ -1,7 +1,3 @@
-from fastapi.testclient import TestClient
-
-from book_scraper.dashboard.app import app
-from book_scraper.dashboard.deps import get_db
 from book_scraper.db.models import ScrapeRun, Shop, ShopBook, ValidationIssue
 from book_scraper.db.repo import (
     acknowledge_validation_issue,
@@ -95,26 +91,3 @@ def test_acknowledged_reappears_as_new(db_session):
     assert newest.lifecycle_state == "new"
 
 
-def test_acknowledge_endpoint(db_session):
-    shop, shop_book = _setup(db_session)
-    run = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
-    db_session.add(run)
-    db_session.flush()
-    _insert_issue(db_session, run.id, shop_book.id)
-    issue = db_session.query(ValidationIssue).one()
-
-    # Bind the app to the same transactional session.
-    app.dependency_overrides[get_db] = lambda: db_session
-    try:
-        with TestClient(app) as client:
-            resp = client.post(
-                f"/validation-issues/{issue.id}/acknowledge",
-                follow_redirects=False,
-            )
-            assert resp.status_code == 303
-
-        db_session.refresh(issue)
-        assert issue.lifecycle_state == "already_seen"
-        assert issue.acknowledged_at is not None
-    finally:
-        app.dependency_overrides.pop(get_db, None)

@@ -76,8 +76,11 @@ def test_prepare_discover_resumes_running_run_with_pending_items(db_session):
     assert second.run_id == first.run_id  # resumed, not new
 
 
-def test_finish_discover_deletes_staging_rows(db_session):
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+def test_finish_discover_keeps_staging_rows(db_session):
+    """scrape_url_items used to be deleted on discover finish; they're now
+    kept as the source of truth for per-URL run history (see commit
+    history: cleanup_scrape_url_items removed)."""
+    upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 
     service = DiscoverService(db_session)
@@ -85,4 +88,4 @@ def test_finish_discover_deletes_staging_rows(db_session):
     assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 1
 
     service.finish_discover(plan.run_id, urls_processed=1, reason="finished")
-    assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 0
+    assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 1
