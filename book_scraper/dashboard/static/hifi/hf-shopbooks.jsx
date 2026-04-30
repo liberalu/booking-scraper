@@ -48,26 +48,26 @@ function HFShopBooks({ nav, goto }) {
   return (
     <HFShell {...nav} activePage="shop-books"
       title="Shop Books" subtitle="Every scraped listing from every shop."
-      breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Shop Books</span></>}
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Shop Books</span></>}
       actions={<>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openAddBook()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add book</HFButton>
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total books',   value: data.kpis.total.toLocaleString(), delta:<span style={{color:HF.ink3}}>total</span>,
+        { label:'Total books',   value: data.kpis.total.toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>total</span>,
           onClick: clearAll },
-        { label:'Active',        value: data.kpis.active.toLocaleString(), delta:<span style={{color:HF.ink3}}>{data.kpis.total > 0 ? Math.round(data.kpis.active/data.kpis.total*100) : 0}%</span>,
+        { label:'Active',        value: data.kpis.active.toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>{data.kpis.total > 0 ? Math.round(data.kpis.active/data.kpis.total*100) : 0}%</span>,
           onClick: () => { setActive('true'); setMissing('any'); } },
-        { label:'Missing ISBN',  value: data.kpis.missing_isbn.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_isbn/data.kpis.total*100) : 0}%</span>, tone:'warn',
+        { label:'Missing ISBN',  value: data.kpis.missing_isbn.toLocaleString(), delta:<span style={{color:'var(--hf-warn-ink)'}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_isbn/data.kpis.total*100) : 0}%</span>, tone:'warn',
           onClick: () => { setMissing('isbn'); setActive('all'); } },
-        { label:'Missing price', value: data.kpis.missing_price.toLocaleString(), delta:<span style={{color:HF.warnInk}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_price/data.kpis.total*100) : 0}%</span>, tone:'warn',
+        { label:'Missing price', value: data.kpis.missing_price.toLocaleString(), delta:<span style={{color:'var(--hf-warn-ink)'}}>{data.kpis.total > 0 ? Math.round(data.kpis.missing_price/data.kpis.total*100) : 0}%</span>, tone:'warn',
           onClick: () => { setMissing('price'); setActive('all'); } },
       ]}/>
 
-      <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
+      <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:12, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
+          <span style={{fontSize:12, color: activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
             {rows.length.toLocaleString()} of {(data.total || 0).toLocaleString()}
           </span>
           {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
@@ -83,9 +83,9 @@ function HFShopBooks({ nav, goto }) {
 
       <HFCard>
         {rows.length === 0 ? (
-          <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
-            <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
-            <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>
+          <div style={{padding:'60px 20px', textAlign:'center', color:'var(--hf-ink3)'}}>
+            <div style={{fontSize:28, marginBottom:8, color:'var(--hf-ink5)', display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
+            <div style={{fontSize:14, color:'var(--hf-ink)', fontWeight:500, marginBottom:4}}>
               {loading ? 'Loading…' : (data.kpis.total || 0) === 0 ? 'No books yet' : 'No books match these filters'}
             </div>
             {!loading && activeCount > 0 && (
@@ -96,19 +96,19 @@ function HFShopBooks({ nav, goto }) {
         <HFTable
           onRowClick={(r) => goto('shop-book-detail', { id: r.id })}
           columns={[
-            { key:'id', label:'ID', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
+            { key:'id', label:'ID', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
             { key:'title', label:'Title', w:'2.4fr', sortable:true, cell: (v,r) => (
               <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
-                <span style={{color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
-                <span style={{color:HF.ink3, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.author}</span>
+                <span style={{color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
+                <span style={{color:'var(--hf-ink3)', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.author}</span>
               </span>
             )},
-            { key:'shop', label:'Shop', w:'0.7fr', sortable:true, cell: v => <span style={{color:HF.ink}}>{v}</span> },
-            { key:'isbn', label:'ISBN', w:'1.1fr', mono:true, sortable:true, cell: v => v ? <span style={{color:HF.ink2}}>{v}</span> : <HFPill tone="warn">missing</HFPill> },
-            { key:'price', label:'Price', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.price||'').replace(/[^\d.]/g,''))||0, cell: v => <span style={{color: v==='—'? HF.ink4 : HF.ink, fontWeight:500}}>{v}</span> },
+            { key:'shop', label:'Shop', w:'0.7fr', sortable:true, cell: v => <span style={{color:'var(--hf-ink)'}}>{v}</span> },
+            { key:'isbn', label:'ISBN', w:'1.1fr', mono:true, sortable:true, cell: v => v ? <span style={{color:'var(--hf-ink2)'}}>{v}</span> : <HFPill tone="warn">missing</HFPill> },
+            { key:'price', label:'Price', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.price||'').replace(/[^\d.]/g,''))||0, cell: v => <span style={{color: v==='—'? 'var(--hf-ink4)' : 'var(--hf-ink)', fontWeight:500}}>{v}</span> },
             { key:'status', label:'Status', w:'0.8fr', sortable:true, cell: v => <HFPill tone={statusTone[v]}>{v}</HFPill> },
             { key:'updated', label:'Updated', w:'0.8fr', muted:true, mono:true, sortable:true },
-            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={rows}
         />
@@ -116,7 +116,7 @@ function HFShopBooks({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
@@ -138,7 +138,7 @@ function HFShopBooks({ nav, goto }) {
                     onClick={() => setPage(n)}>{n}</HFButton>
                 );
                 const ell = (k) => buttons.push(
-                  <span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>
+                  <span key={k} style={{padding:'6px 4px', color:'var(--hf-ink4)'}}>…</span>
                 );
                 if (total <= 7) {
                   for (let i = 1; i <= total; i++) push(i);
@@ -189,7 +189,7 @@ function HFShopBookDetail({ nav, goto, params }) {
     return (
       <HFShell {...nav} activePage="shop-books" title="Book detail" subtitle="Loading…"
         breadcrumb={<><HFBreadcrumbLink page="shop-books" goto={goto}>Shop Books</HFBreadcrumbLink><span>/</span><span>#{bookId}</span></>}>
-        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+        <div style={{padding:40, color:'var(--hf-ink3)'}}>Loading…</div>
       </HFShell>
     );
   }
@@ -203,11 +203,11 @@ function HFShopBookDetail({ nav, goto, params }) {
         <span>{data.title || 'Book detail'}</span>
         <HFPill tone={data.is_active ? 'ok' : 'neutral'}>{data.status || 'unknown'}</HFPill>
       </span>}
-      subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:HF.mono, color:HF.ink3}}>#{id}</span> · shop <span style={{color:HF.ink2, fontWeight:500}}>{data.shop}</span></span>}
+      subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink3)'}}>#{id}</span> · shop <span style={{color:'var(--hf-ink2)', fontWeight:500}}>{data.shop}</span></span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="shop-books" goto={goto}>Shop Books</HFBreadcrumbLink>
-        <span style={{color:HF.ink5}}>/</span>
-        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>#{id}</span>
+        <span style={{color:'var(--hf-ink5)'}}>/</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>#{id}</span>
       </>}
       actions={<>
         {data.url && <HFButton onClick={() => window.open(data.url, '_blank')}><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open on {data.shop}.lt</HFButton>}
@@ -216,13 +216,13 @@ function HFShopBookDetail({ nav, goto, params }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Current price', value: data.price || '—', delta:<span style={{color:HF.ink3}}>current</span> },
-        { label:'Issues',        value: String(data.issues || 0), delta:<span style={{color: (data.issues||0) > 0 ? HF.warnInk : HF.okInk}}>{(data.issues||0) > 0 ? 'needs attention' : 'all clean'}</span>, tone: (data.issues||0) > 0 ? 'warn' : 'ok' },
-        { label:'Status',        value: data.status || '—', tone: data.is_active ? 'ok' : 'neutral', delta:<span style={{color:HF.ink3}}>listing</span> },
+        { label:'Current price', value: data.price || '—', delta:<span style={{color:'var(--hf-ink3)'}}>current</span> },
+        { label:'Issues',        value: String(data.issues || 0), delta:<span style={{color: (data.issues||0) > 0 ? 'var(--hf-warn-ink)' : 'var(--hf-ok-ink)'}}>{(data.issues||0) > 0 ? 'needs attention' : 'all clean'}</span>, tone: (data.issues||0) > 0 ? 'warn' : 'ok' },
+        { label:'Status',        value: data.status || '—', tone: data.is_active ? 'ok' : 'neutral', delta:<span style={{color:'var(--hf-ink3)'}}>listing</span> },
       ]}/>
 
-      <HFCard style={{marginBottom:HF.gap}}>
-        <div style={{padding:`0 ${HF.cardP}px`}}>
+      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
+        <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
             { id:'overview', label:'Overview' },
             { id:'prices',   label:'Price history', count:127 },
@@ -238,8 +238,8 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'urls'   && (
         <HFCard title="Source URLs" sub="all URLs that point to this book">
           {data.url ? (
-            <div style={{padding:`10px ${HF.cardP}px`, display:'flex', alignItems:'center', gap:10, fontSize:13}}>
-              <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
+            <div style={{padding:`10px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:10, fontSize:13}}>
+              <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
               <HFPill tone="accent">primary</HFPill>
               <HFPill tone="ok">ok</HFPill>
             </div>
@@ -251,20 +251,20 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'raw' && (
         <HFCard title="Raw extracted data" sub={`API response for book #${id}`}
                 action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export JSON</HFButton>}>
-          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:12, lineHeight:1.65, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`, whiteSpace:'pre', overflow:'auto'}}>
+          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:'var(--hf-mono)', fontSize:12, lineHeight:1.65, borderTop:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:`0 0 var(--hf-r3) var(--hf-r3)`, whiteSpace:'pre', overflow:'auto'}}>
             {JSON.stringify(data, null, 2)}
           </div>
         </HFCard>
       )}
 
       {tab === 'overview' && <>
-      <div style={{display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Price history" sub={`${priceHistory.length} data points`}>
-          <div style={{padding:`${HF.cardP}px`}}>
+          <div style={{padding:`var(--hf-card-p)`}}>
             {priceHistory.length > 0 ? (
               <HFAreaChart data={priceHistory.map(p => typeof p === 'number' ? p : p.price || 0)} h={180} label="Price per scrape"/>
             ) : (
-              <div style={{height:180, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:13}}>No price history yet</div>
+              <div style={{height:180, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:13}}>No price history yet</div>
             )}
           </div>
         </HFCard>
@@ -281,13 +281,13 @@ function HFShopBookDetail({ nav, goto, params }) {
             ].map(([k, v, tone], i, arr) => (
               <div key={k} style={{
                 display:'grid', gridTemplateColumns:'110px 1fr 14px',
-                padding:`7px ${HF.cardP}px`, alignItems:'center',
-                borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                padding:`7px var(--hf-card-p)`, alignItems:'center',
+                borderBottom: i < arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
                 fontSize:13,
               }}>
-                <span style={{color:HF.ink3, fontFamily:HF.mono, fontSize:12}}>{k}</span>
-                <span style={{color: v==='—'? HF.ink4 : HF.ink, fontWeight: v==='—'? 400 : 500}}>{v}</span>
-                <span style={{color: tone==='ok'? HF.ok : HF.warn, display:'flex', justifyContent:'flex-end'}}>
+                <span style={{color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)', fontSize:12}}>{k}</span>
+                <span style={{color: v==='—'? 'var(--hf-ink4)' : 'var(--hf-ink)', fontWeight: v==='—'? 400 : 500}}>{v}</span>
+                <span style={{color: tone==='ok'? 'var(--hf-ok)' : 'var(--hf-warn)', display:'flex', justifyContent:'flex-end'}}>
                   {tone==='ok' ? HF_ICONS.check : HF_ICONS.bang}
                 </span>
               </div>
@@ -296,21 +296,21 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)'}}>
         <HFCard title="Source URL" sub="URL for this book">
           <div>
             {data.url ? (
               <div style={{
-                padding:`10px ${HF.cardP}px`,
+                padding:`10px var(--hf-card-p)`,
                 display:'flex', alignItems:'center', gap:10,
                 fontSize:13,
               }}>
-                <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
+                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
                 <HFPill tone="accent">primary</HFPill>
                 <HFPill tone="ok">ok</HFPill>
               </div>
             ) : (
-              <div style={{padding:`10px ${HF.cardP}px`, color:HF.ink4, fontSize:13}}>No URL available</div>
+              <div style={{padding:`10px var(--hf-card-p)`, color:'var(--hf-ink4)', fontSize:13}}>No URL available</div>
             )}
           </div>
         </HFCard>
@@ -320,13 +320,13 @@ function HFShopBookDetail({ nav, goto, params }) {
             <HFTable
               columns={[
                 { key:'scraped_at', label:'When', w:'1fr', muted:true, mono:true, cell: v => v ? new Date(v).toLocaleDateString() : '—' },
-                { key:'price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v != null ? `€${v.toFixed(2)}` : '—'}</span> },
+                { key:'price', label:'Price', w:'0.8fr', mono:true, align:'right', cell: v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v != null ? `€${v.toFixed(2)}` : '—'}</span> },
                 { key:'in_stock', label:'Stock', w:'0.6fr', align:'right', cell: v => v ? <HFPill tone="ok">in stock</HFPill> : <HFPill tone="neutral">out</HFPill> },
               ]}
               rows={priceHistory.slice(0, 5)}
             />
           ) : (
-            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:13}}>No price history yet</div>
+            <div style={{padding:`var(--hf-card-p)`, color:'var(--hf-ink4)', fontSize:13}}>No price history yet</div>
           )}
         </HFCard>
       </div>

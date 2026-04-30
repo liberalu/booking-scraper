@@ -61,19 +61,19 @@ function HFParserEditor({ nav, goto, params }) {
   return (
     <HFShell {...nav} activePage={null}
       title={<span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: HF.ink, letterSpacing: -0.3 }}>Parser editor</span>
-        <HFPill tone="accent"><span style={{ fontFamily: HF.mono }}>{cur.parser}</span></HFPill>
+        <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--hf-ink)', letterSpacing: -0.3 }}>Parser editor</span>
+        <HFPill tone="accent"><span style={{ fontFamily: 'var(--hf-mono)' }}>{cur.parser}</span></HFPill>
         <HFPill tone="warn">unsaved changes</HFPill>
       </span>}
-      subtitle={<span style={{ fontFamily: HF.mono, fontSize: 13, color: HF.ink3 }}>
+      subtitle={<span style={{ fontFamily: 'var(--hf-mono)', fontSize: 13, color: 'var(--hf-ink3)' }}>
         shop={shop} · {fields.length} fields · {fields.filter(f=>f.required).length} required · health {cur.health}%
       </span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="shops" goto={goto}>Shops</HFBreadcrumbLink>
-        <span style={{ color: HF.ink5 }}>/</span>
-        <HFBreadcrumbLink page="shop-detail" params={{name: shop}} goto={goto} style={{ fontFamily: HF.mono }}>{cur.lbl}</HFBreadcrumbLink>
-        <span style={{ color: HF.ink5 }}>/</span>
-        <span style={{ color: HF.ink, fontWeight: 500 }}>Parser</span>
+        <span style={{ color: 'var(--hf-ink5)' }}>/</span>
+        <HFBreadcrumbLink page="shop-detail" params={{name: shop}} goto={goto} style={{ fontFamily: 'var(--hf-mono)' }}>{cur.lbl}</HFBreadcrumbLink>
+        <span style={{ color: 'var(--hf-ink5)' }}>/</span>
+        <span style={{ color: 'var(--hf-ink)', fontWeight: 500 }}>Parser</span>
       </>}
       actions={<>
         <HFButton onClick={runTest}><span style={{display:'flex'}}>{HF_ICONS.play}</span> Test now</HFButton>
@@ -85,11 +85,11 @@ function HFParserEditor({ nav, goto, params }) {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(380px, 1.1fr) 2fr',
-        gap: HF.gap, alignItems: 'stretch',
+        gap: 'var(--hf-gap)', alignItems: 'stretch',
         minHeight: 620,
       }}>
         {/* ═══════════ LEFT: fields list + config ═══════════ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: HF.gap }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hf-gap)' }}>
           <HFCard title="Fields" sub={`${okCount}/${fields.length} extracting · ${missingRequired} required missing`}
             action={<HFButton size="sm" onClick={addField}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add field</HFButton>}>
             <div style={{ maxHeight: 360, overflow: 'auto' }} className="hf-scroll">
@@ -102,28 +102,28 @@ function HFParserEditor({ nav, goto, params }) {
                     gridTemplateColumns: '18px 1fr auto',
                     alignItems: 'center', gap: 10,
                     padding: '9px 14px',
-                    borderBottom: `1px solid ${HF.borderFaint}`,
-                    background: active ? HF.accentSoft : 'transparent',
-                    borderLeft: `3px solid ${active ? HF.accent : 'transparent'}`,
+                    borderBottom: `1px solid ${'var(--hf-border-faint)'}`,
+                    background: active ? 'var(--hf-accent-soft)' : 'transparent',
+                    borderLeft: `3px solid ${active ? 'var(--hf-accent)' : 'transparent'}`,
                     cursor: 'pointer',
                   }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = HF.subtle; }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--hf-subtle)'; }}
                   onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
                     <HFDot tone={tone} size={7}/>
                     <div style={{ minWidth: 0 }}>
                       <div style={{
-                        fontFamily: HF.mono, fontSize: 12,
-                        color: active ? HF.accentInk : HF.ink, fontWeight: active ? 600 : 500,
+                        fontFamily: 'var(--hf-mono)', fontSize: 12,
+                        color: active ? 'var(--hf-accent-ink)' : 'var(--hf-ink)', fontWeight: active ? 600 : 500,
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {f.k}
-                        {f.required && <span style={{ color: HF.errInk, fontSize: 10 }}>*</span>}
+                        {f.required && <span style={{ color: 'var(--hf-err-ink)', fontSize: 10 }}>*</span>}
                       </div>
-                      <div style={{ fontFamily: HF.mono, fontSize: 11, color: HF.ink3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ink3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {f.sel || '—'}
                       </div>
                     </div>
-                    <span style={{ fontFamily: HF.mono, fontSize: 11, color: HF.ink4 }}>{f.type}</span>
+                    <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ink4)' }}>{f.type}</span>
                   </div>
                 );
               })}
@@ -131,7 +131,7 @@ function HFParserEditor({ nav, goto, params }) {
           </HFCard>
 
           {/* Selected field editor */}
-          <HFCard title={<span style={{ fontFamily: HF.mono }}>{sel.k}</span>}
+          <HFCard title={<span style={{ fontFamily: 'var(--hf-mono)' }}>{sel.k}</span>}
             sub="selector & extraction config"
             action={
               <HFButton size="sm" variant="danger" onClick={removeField}>Remove</HFButton>
@@ -167,14 +167,14 @@ function HFParserEditor({ nav, goto, params }) {
                 </HFField>
               </div>
               <div style={{ display: 'flex', gap: 18, marginTop: 4 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: HF.ink2, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--hf-ink2)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={sel.required} onChange={(e) => updateField({ required: e.target.checked })}
-                    style={{ margin: 0, accentColor: HF.accent }}/>
+                    style={{ margin: 0, accentColor: 'var(--hf-accent)' }}/>
                   Required
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: HF.ink2, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--hf-ink2)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={sel.multi} onChange={(e) => updateField({ multi: e.target.checked })}
-                    style={{ margin: 0, accentColor: HF.accent }}/>
+                    style={{ margin: 0, accentColor: 'var(--hf-accent)' }}/>
                   Multi (array)
                 </label>
               </div>
@@ -183,13 +183,13 @@ function HFParserEditor({ nav, goto, params }) {
         </div>
 
         {/* ═══════════ RIGHT: test output ═══════════ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: HF.gap }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--hf-gap)' }}>
           {/* Test URL bar */}
           <HFCard padding={12}>
             <div style={{ padding: 2 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: HF.ink3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Test URL</span>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: HF.ink3, fontFamily: HF.mono }}>
+                <span style={{ fontSize: 11, color: 'var(--hf-ink3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Test URL</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)' }}>
                   last test: {testing ? 'running…' : '2m ago · 9/10 ok · 1.4s'}
                 </span>
               </div>
@@ -204,8 +204,8 @@ function HFParserEditor({ nav, goto, params }) {
 
           {/* Tab strip for right pane */}
           <div style={{
-            display: 'flex', gap: 2, borderBottom: `1px solid ${HF.border}`,
-            marginBottom: -HF.gap, paddingBottom: 0,
+            display: 'flex', gap: 2, borderBottom: `1px solid ${'var(--hf-border)'}`,
+            marginBottom: 'calc(-1 * var(--hf-gap))', paddingBottom: 0,
           }}>
             {[
               ['preview',    'Extracted'],
@@ -214,11 +214,11 @@ function HFParserEditor({ nav, goto, params }) {
               ['diagnostics','Diagnostics'],
             ].map(([v, l]) => (
               <button key={v} onClick={() => setRightTab(v)} style={{
-                padding: '8px 14px', fontSize: 13, fontFamily: HF.sans,
+                padding: '8px 14px', fontSize: 13, fontFamily: 'var(--hf-sans)',
                 background: 'transparent', border: 'none', cursor: 'pointer',
-                color: rightTab === v ? HF.accent : HF.ink3,
+                color: rightTab === v ? 'var(--hf-accent)' : 'var(--hf-ink3)',
                 fontWeight: rightTab === v ? 600 : 500,
-                borderBottom: `2px solid ${rightTab === v ? HF.accent : 'transparent'}`,
+                borderBottom: `2px solid ${rightTab === v ? 'var(--hf-accent)' : 'transparent'}`,
                 marginBottom: -1,
               }}>{l}</button>
             ))}
@@ -227,36 +227,36 @@ function HFParserEditor({ nav, goto, params }) {
           {/* Right pane content */}
           {rightTab === 'preview' && (
             <HFCard title="Extracted fields" sub="after selector match + post-processing">
-              <div style={{ fontFamily: HF.mono, fontSize: 12, background: HF.subtle, borderTop: `1px solid ${HF.borderFaint}` }}>
-                <div style={{ padding: '10px 14px 4px', color: HF.ink3 }}>
-                  <span style={{ color: HF.ink4 }}>// JSON output · posted to bookscraper.books</span>
+              <div style={{ fontFamily: 'var(--hf-mono)', fontSize: 12, background: 'var(--hf-subtle)', borderTop: `1px solid ${'var(--hf-border-faint)'}` }}>
+                <div style={{ padding: '10px 14px 4px', color: 'var(--hf-ink3)' }}>
+                  <span style={{ color: 'var(--hf-ink4)' }}>// JSON output · posted to bookscraper.books</span>
                 </div>
-                <div style={{ padding: '4px 14px 14px', lineHeight: 1.85, color: HF.ink2 }}>
-                  <div><span style={{ color: HF.ink4 }}>&#123;</span></div>
+                <div style={{ padding: '4px 14px 14px', lineHeight: 1.85, color: 'var(--hf-ink2)' }}>
+                  <div><span style={{ color: 'var(--hf-ink4)' }}>&#123;</span></div>
                   {fields.map((f, i) => {
                     const ok = f.val != null;
                     const val = ok
-                      ? (f.type === 'html'    ? <span style={{ color: HF.ink3 }}>"&lt;p&gt;…&lt;/p&gt;"</span>
+                      ? (f.type === 'html'    ? <span style={{ color: 'var(--hf-ink3)' }}>"&lt;p&gt;…&lt;/p&gt;"</span>
                         : f.type === 'decimal' || f.type === 'integer' ? <span style={{ color: '#b45309' }}>{f.val}</span>
-                        : <span style={{ color: HF.okInk }}>"{f.val}"</span>)
-                      : <span style={{ color: HF.ink4 }}>null</span>;
+                        : <span style={{ color: 'var(--hf-ok-ink)' }}>"{f.val}"</span>)
+                      : <span style={{ color: 'var(--hf-ink4)' }}>null</span>;
                     const warn = !ok && f.required;
                     return (
                       <div key={i} style={{
                         padding: '2px 0 2px 18px',
-                        background: warn ? HF.errSoft : i === selectedIdx ? HF.accentSoft : 'transparent',
-                        borderLeft: warn ? `2px solid ${HF.err}` : i === selectedIdx ? `2px solid ${HF.accent}` : '2px solid transparent',
+                        background: warn ? 'var(--hf-err-soft)' : i === selectedIdx ? 'var(--hf-accent-soft)' : 'transparent',
+                        borderLeft: warn ? `2px solid ${'var(--hf-err)'}` : i === selectedIdx ? `2px solid ${'var(--hf-accent)'}` : '2px solid transparent',
                         marginLeft: -14, paddingLeft: 30, position: 'relative',
                       }}>
                         <span style={{ color: '#6b7280' }}>"{f.k}"</span>
-                        <span style={{ color: HF.ink4 }}>: </span>
+                        <span style={{ color: 'var(--hf-ink4)' }}>: </span>
                         {val}
-                        <span style={{ color: HF.ink4 }}>{i === fields.length - 1 ? '' : ','}</span>
-                        {warn && <span style={{ color: HF.errInk, fontSize: 11, marginLeft: 10 }}>  // ⚠ required, not matched</span>}
+                        <span style={{ color: 'var(--hf-ink4)' }}>{i === fields.length - 1 ? '' : ','}</span>
+                        {warn && <span style={{ color: 'var(--hf-err-ink)', fontSize: 11, marginLeft: 10 }}>  // ⚠ required, not matched</span>}
                       </div>
                     );
                   })}
-                  <div><span style={{ color: HF.ink4 }}>&#125;</span></div>
+                  <div><span style={{ color: 'var(--hf-ink4)' }}>&#125;</span></div>
                 </div>
               </div>
             </HFCard>
@@ -264,7 +264,7 @@ function HFParserEditor({ nav, goto, params }) {
 
           {rightTab === 'selector' && (
             <HFCard title="Selector match"
-              sub={<span style={{ fontFamily: HF.mono }}>{sel.sel || '— no selector —'}</span>}>
+              sub={<span style={{ fontFamily: 'var(--hf-mono)' }}>{sel.sel || '— no selector —'}</span>}>
               <div style={{ padding: 14 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
                   {[
@@ -273,40 +273,40 @@ function HFParserEditor({ nav, goto, params }) {
                     ['Shape', sel.multi ? 'array' : 'scalar', 'neutral'],
                   ].map(([l, v, tone]) => (
                     <div key={l} style={{
-                      padding: 10, background: HF.subtle,
-                      border: `1px solid ${HF.border}`, borderRadius: 6,
+                      padding: 10, background: 'var(--hf-subtle)',
+                      border: `1px solid ${'var(--hf-border)'}`, borderRadius: 6,
                     }}>
-                      <div style={{ fontSize: 11, color: HF.ink4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{l}</div>
+                      <div style={{ fontSize: 11, color: 'var(--hf-ink4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{l}</div>
                       <div style={{
-                        fontFamily: HF.mono, fontSize: 16, marginTop: 4,
-                        color: tone === 'ok' ? HF.okInk : tone === 'err' ? HF.errInk : HF.ink,
+                        fontFamily: 'var(--hf-mono)', fontSize: 16, marginTop: 4,
+                        color: tone === 'ok' ? 'var(--hf-ok-ink)' : tone === 'err' ? 'var(--hf-err-ink)' : 'var(--hf-ink)',
                         fontWeight: 500, fontVariantNumeric: 'tabular-nums',
                       }}>{v}</div>
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 12, color: HF.ink3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Matched node</div>
+                <div style={{ fontSize: 12, color: 'var(--hf-ink3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Matched node</div>
                 <div style={{
-                  fontFamily: HF.mono, fontSize: 12, background: HF.subtle,
-                  border: `1px solid ${HF.border}`, borderRadius: 6,
-                  padding: 10, color: HF.ink2, lineHeight: 1.75,
+                  fontFamily: 'var(--hf-mono)', fontSize: 12, background: 'var(--hf-subtle)',
+                  border: `1px solid ${'var(--hf-border)'}`, borderRadius: 6,
+                  padding: 10, color: 'var(--hf-ink2)', lineHeight: 1.75,
                 }}>
-                  <span style={{ color: HF.ink4 }}>&lt;</span>
-                  <span style={{ color: HF.accentInk }}>h1</span>
-                  <span style={{ color: HF.ink4 }}> </span>
-                  <span style={{ color: HF.warnInk }}>class</span>
-                  <span style={{ color: HF.ink4 }}>=</span>
-                  <span style={{ color: HF.okInk }}>"product-title"</span>
-                  <span style={{ color: HF.ink4 }}>&gt;</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}>&lt;</span>
+                  <span style={{ color: 'var(--hf-accent-ink)' }}>h1</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}> </span>
+                  <span style={{ color: 'var(--hf-warn-ink)' }}>class</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}>=</span>
+                  <span style={{ color: 'var(--hf-ok-ink)' }}>"product-title"</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}>&gt;</span>
                   <br/>
                   <span style={{ paddingLeft: 16 }}>Sapiens: A Brief History of Humankind</span>
                   <br/>
-                  <span style={{ color: HF.ink4 }}>&lt;/</span>
-                  <span style={{ color: HF.accentInk }}>h1</span>
-                  <span style={{ color: HF.ink4 }}>&gt;</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}>&lt;/</span>
+                  <span style={{ color: 'var(--hf-accent-ink)' }}>h1</span>
+                  <span style={{ color: 'var(--hf-ink4)' }}>&gt;</span>
                 </div>
-                <div style={{ fontSize: 12, color: HF.ink3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 14, marginBottom: 6 }}>XPath equivalent</div>
-                <div style={{ fontFamily: HF.mono, fontSize: 12, color: HF.ink2, padding: '8px 10px', background: HF.bg, border: `1px solid ${HF.border}`, borderRadius: 6 }}>
+                <div style={{ fontSize: 12, color: 'var(--hf-ink3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 14, marginBottom: 6 }}>XPath equivalent</div>
+                <div style={{ fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-ink2)', padding: '8px 10px', background: 'var(--hf-bg)', border: `1px solid ${'var(--hf-border)'}`, borderRadius: 6 }}>
                   //h1[contains(@class, 'product-title')]
                 </div>
               </div>
@@ -316,9 +316,9 @@ function HFParserEditor({ nav, goto, params }) {
           {rightTab === 'dom' && (
             <HFCard title="DOM sample" sub="live fetched HTML · highlighted nodes match the active selector">
               <div style={{
-                fontFamily: HF.mono, fontSize: 11, lineHeight: 1.8,
-                padding: 14, color: HF.ink2, maxHeight: 420, overflow: 'auto',
-                background: HF.subtle, borderTop: `1px solid ${HF.borderFaint}`,
+                fontFamily: 'var(--hf-mono)', fontSize: 11, lineHeight: 1.8,
+                padding: 14, color: 'var(--hf-ink2)', maxHeight: 420, overflow: 'auto',
+                background: 'var(--hf-subtle)', borderTop: `1px solid ${'var(--hf-border-faint)'}`,
               }} className="hf-scroll">
                 {[
                   ['<!DOCTYPE html>', 'c'],
@@ -343,15 +343,15 @@ function HFParserEditor({ nav, goto, params }) {
                   ['  </body>', 't'],
                   ['</html>', 't'],
                 ].map(([line, k], i) => {
-                  const bg = k === 'hit' ? HF.accentSoft2 : k === 'miss' ? HF.errSoft : 'transparent';
-                  const color = k === 'hit' ? HF.accentInk : k === 'miss' ? HF.errInk : k === 'c' ? HF.ink4 : HF.ink2;
+                  const bg = k === 'hit' ? 'var(--hf-accent-soft2)' : k === 'miss' ? 'var(--hf-err-soft)' : 'transparent';
+                  const color = k === 'hit' ? 'var(--hf-accent-ink)' : k === 'miss' ? 'var(--hf-err-ink)' : k === 'c' ? 'var(--hf-ink4)' : 'var(--hf-ink2)';
                   return (
                     <div key={i} style={{
                       padding: '0 10px', background: bg, color, whiteSpace: 'pre',
-                      borderLeft: k === 'hit' ? `3px solid ${HF.accent}` : k === 'miss' ? `3px solid ${HF.err}` : '3px solid transparent',
+                      borderLeft: k === 'hit' ? `3px solid ${'var(--hf-accent)'}` : k === 'miss' ? `3px solid ${'var(--hf-err)'}` : '3px solid transparent',
                       marginLeft: -14, paddingLeft: 14, display: 'flex',
                     }}>
-                      <span style={{ width: 28, color: HF.ink5, userSelect: 'none', display: 'inline-block', textAlign: 'right', paddingRight: 10 }}>{i + 1}</span>
+                      <span style={{ width: 28, color: 'var(--hf-ink5)', userSelect: 'none', display: 'inline-block', textAlign: 'right', paddingRight: 10 }}>{i + 1}</span>
                       <span>{line}</span>
                     </div>
                   );
@@ -372,23 +372,23 @@ function HFParserEditor({ nav, goto, params }) {
                 ].map((r, i) => (
                   <div key={i} style={{
                     display: 'flex', justifyContent: 'space-between',
-                    padding: '7px 0', borderBottom: i === 4 ? 'none' : `1px solid ${HF.borderFaint}`,
-                    fontFamily: HF.mono, fontSize: 12,
+                    padding: '7px 0', borderBottom: i === 4 ? 'none' : `1px solid ${'var(--hf-border-faint)'}`,
+                    fontFamily: 'var(--hf-mono)', fontSize: 12,
                   }}>
-                    <span style={{ color: HF.ink2 }}>{r.l}</span>
-                    <span style={{ color: HF.okInk, fontVariantNumeric: 'tabular-nums' }}>{r.v}</span>
+                    <span style={{ color: 'var(--hf-ink2)' }}>{r.l}</span>
+                    <span style={{ color: 'var(--hf-ok-ink)', fontVariantNumeric: 'tabular-nums' }}>{r.v}</span>
                   </div>
                 ))}
-                <div style={{ marginTop: 14, fontSize: 12, color: HF.ink3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Warnings</div>
+                <div style={{ marginTop: 14, fontSize: 12, color: 'var(--hf-ink3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Warnings</div>
                 <div style={{
-                  padding: 10, background: HF.warnSoft, border: `1px solid ${HF.warnBorder}`,
-                  borderRadius: 6, fontSize: 12, color: HF.warnInk, fontFamily: HF.mono,
+                  padding: 10, background: 'var(--hf-warn-soft)', border: `1px solid ${'var(--hf-warn-border)'}`,
+                  borderRadius: 6, fontSize: 12, color: 'var(--hf-warn-ink)', fontFamily: 'var(--hf-mono)',
                   display: 'flex', gap: 8, alignItems: 'flex-start',
                 }}>
                   <span>⚠</span>
                   <div>
                     <div style={{ fontWeight: 500, marginBottom: 2 }}>price.old_price: selector matched 0 nodes</div>
-                    <div style={{ color: HF.ink3, fontSize: 12 }}>The <span style={{ color: HF.ink }}>.price-was</span> element exists but is hidden. Consider <span style={{ color: HF.ink }}>:not([hidden])</span> or mark field optional.</div>
+                    <div style={{ color: 'var(--hf-ink3)', fontSize: 12 }}>The <span style={{ color: 'var(--hf-ink)' }}>.price-was</span> element exists but is hidden. Consider <span style={{ color: 'var(--hf-ink)' }}>:not([hidden])</span> or mark field optional.</div>
                   </div>
                 </div>
               </div>
@@ -399,16 +399,16 @@ function HFParserEditor({ nav, goto, params }) {
 
       {/* Deploy bar */}
       <div style={{
-        position: 'sticky', bottom: -48, marginTop: HF.gap, marginBottom: -48,
-        background: HF.surface, border: `1px solid ${HF.border}`, borderRadius: HF.r3,
+        position: 'sticky', bottom: -48, marginTop: 'var(--hf-gap)', marginBottom: -48,
+        background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border)'}`, borderRadius: 'var(--hf-r3)',
         padding: '12px 16px', boxShadow: '0 -2px 12px rgba(16,24,40,.04)',
         display: 'flex', alignItems: 'center', gap: 14,
       }}>
         <HFDot tone="warn" pulse size={8}/>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: HF.ink }}>Unsaved changes</div>
-          <div style={{ fontSize: 12, color: HF.ink3, fontFamily: HF.mono, marginTop: 1 }}>
-            2 fields edited · last tested 2m ago · would deploy as <span style={{ color: HF.ink }}>product.v{cur.version + 1}</span>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--hf-ink)' }}>Unsaved changes</div>
+          <div style={{ fontSize: 12, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)', marginTop: 1 }}>
+            2 fields edited · last tested 2m ago · would deploy as <span style={{ color: 'var(--hf-ink)' }}>product.v{cur.version + 1}</span>
           </div>
         </div>
         <HFButton>Discard</HFButton>

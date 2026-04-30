@@ -82,6 +82,21 @@ function _hfPublish(a, d) {
   r.setProperty('--hf-fs-mono',    `${d.fsMono}px`);
   // Layout
   r.setProperty('--hf-content-x',  '28px');
+  // Chart palette (accent-derived)
+  r.setProperty('--hf-chart-primary',   a[500]);
+  r.setProperty('--hf-chart-fill-from', a[200]);
+  r.setProperty('--hf-chart-fill-to',   a[50]);
+  r.setProperty('--hf-chart-grid',      '#eef0f4');
+  r.setProperty('--hf-chart-axis',      '#9ca3af');
+  // Fonts
+  r.setProperty('--hf-sans', '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+  r.setProperty('--hf-mono', '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace');
+  // Radii
+  r.setProperty('--hf-r1', '4px');
+  r.setProperty('--hf-r2', '6px');
+  r.setProperty('--hf-r3', '8px');
+  r.setProperty('--hf-r4', '10px');
+  r.setProperty('--hf-r5', '12px');
 }
 
 function getHF() {

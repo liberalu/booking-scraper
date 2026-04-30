@@ -29,12 +29,12 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
   const sidebarW = collapsed ? 56 : 232;
 
   return (
-    <div style={{ display: 'flex', height: '100%', background: HF.bg, color: HF.ink, fontFamily: HF.sans, fontSize: 13, fontFeatureSettings: '"cv11","ss01"' }}>
+    <div style={{ display: 'flex', height: '100%', background: 'var(--hf-bg)', color: 'var(--hf-ink)', fontFamily: 'var(--hf-sans)', fontSize: 13, fontFeatureSettings: '"cv11","ss01"' }}>
       {/* Sidebar */}
       <aside style={{
         width: sidebarW, flexShrink: 0,
-        background: HF.sidebar,
-        borderRight: `1px solid ${HF.border}`,
+        background: 'var(--hf-sidebar)',
+        borderRight: `1px solid ${'var(--hf-border)'}`,
         display: 'flex', flexDirection: 'column',
         transition: 'width 160ms ease',
       }}>
@@ -43,20 +43,20 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           height: 56, padding: collapsed ? 0 : '0 14px',
           display: 'flex', alignItems: 'center', gap: 10,
           justifyContent: collapsed ? 'center' : 'flex-start',
-          borderBottom: `1px solid ${HF.borderFaint}`,
+          borderBottom: `1px solid ${'var(--hf-border-faint)'}`,
         }}>
           <div style={{
             width: 28, height: 28, borderRadius: 7,
-            background: `linear-gradient(135deg, ${HF.accent}, ${HF.accentHover})`,
+            background: `linear-gradient(135deg, ${'var(--hf-accent)'}, ${'var(--hf-accent-hover)'})`,
             color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12, fontWeight: 700, letterSpacing: -0.3,
-            boxShadow: HF.shadowSm,
+            boxShadow: 'var(--hf-shadow-sm)',
           }}>BS</div>
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1, color: HF.ink }}>BookScraper</div>
-              <div style={{ fontSize: 11, color: HF.ink3, lineHeight: 1.2, marginTop: 2 }}>admin · prod</div>
+              <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1, color: 'var(--hf-ink)' }}>BookScraper</div>
+              <div style={{ fontSize: 11, color: 'var(--hf-ink3)', lineHeight: 1.2, marginTop: 2 }}>admin · prod</div>
             </div>
           )}
         </div>
@@ -67,18 +67,18 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             <button onClick={openCmdK} aria-label="Open command palette" className="hf-btn" style={{
               width: '100%',
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '7px 10px', background: HF.surface,
-              border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-              color: HF.ink4, fontSize: 13, fontFamily: HF.sans,
+              padding: '7px 10px', background: 'var(--hf-surface)',
+              border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+              color: 'var(--hf-ink4)', fontSize: 13, fontFamily: 'var(--hf-sans)',
               boxShadow: '0 1px 2px rgba(16,24,40,.03)',
               cursor: 'pointer', textAlign: 'left',
             }}>
-              <span style={{ color: HF.ink4, display: 'flex' }}>{HF_ICONS.search}</span>
+              <span style={{ color: 'var(--hf-ink4)', display: 'flex' }}>{HF_ICONS.search}</span>
               <span style={{ flex: 1 }}>Search…</span>
               <span style={{
-                fontFamily: HF.mono, fontSize: 11,
-                padding: '1px 5px', background: HF.subtle,
-                border: `1px solid ${HF.border}`, borderRadius: 3, color: HF.ink3,
+                fontFamily: 'var(--hf-mono)', fontSize: 11,
+                padding: '1px 5px', background: 'var(--hf-subtle)',
+                border: `1px solid ${'var(--hf-border)'}`, borderRadius: 3, color: 'var(--hf-ink3)',
               }}>⌘K</span>
             </button>
           </div>
@@ -90,7 +90,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             <div key={g.group} style={{ marginBottom: 14 }}>
               {!collapsed && (
                 <div style={{
-                  fontSize: 11, color: HF.ink4, fontWeight: 600,
+                  fontSize: 11, color: 'var(--hf-ink4)', fontWeight: 600,
                   textTransform: 'uppercase', letterSpacing: 0.7,
                   padding: '4px 8px 6px',
                 }}>{g.group}</div>
@@ -115,25 +115,25 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
                     padding: collapsed ? '8px 0' : '7px 9px',
                     margin: '1px 0',
                     borderRadius: 6,
-                    color: a ? HF.accentInk : HF.ink2,
-                    background: a ? HF.accentSoft : 'transparent',
+                    color: a ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
+                    background: a ? 'var(--hf-accent-soft)' : 'transparent',
                     fontSize: 13, fontWeight: a ? 600 : 500,
                     textDecoration: 'none',
                     position: 'relative',
                     transition: 'background 100ms',
                   }}>
-                    {a && !collapsed && <span style={{position:'absolute', left:-10, top:6, bottom:6, width:3, background:HF.accent, borderRadius:'0 2px 2px 0'}}/>}
-                    <span style={{ color: a ? HF.accent : HF.ink3, display: 'flex' }}>{icon}</span>
+                    {a && !collapsed && <span style={{position:'absolute', left:-10, top:6, bottom:6, width:3, background:'var(--hf-accent)', borderRadius:'0 2px 2px 0'}}/>}
+                    <span style={{ color: a ? 'var(--hf-accent)' : 'var(--hf-ink3)', display: 'flex' }}>{icon}</span>
                     {!collapsed && (
                       <>
                         <span style={{ flex: 1 }}>{label}</span>
                         {badge && (
                           <span style={{
-                            fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                            fontFamily: 'var(--hf-mono)', fontSize: 11, fontWeight: 500,
                             padding: '1px 6px',
-                            background: a ? HF.surface : HF.subtle,
-                            color: a ? HF.accentInk : HF.ink2,
-                            border: `1px solid ${a ? HF.accentBorder : HF.border}`,
+                            background: a ? 'var(--hf-surface)' : 'var(--hf-subtle)',
+                            color: a ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
+                            border: `1px solid ${a ? 'var(--hf-accent-border)' : 'var(--hf-border)'}`,
                             borderRadius: 4,
                           }}>{badge}</span>
                         )}
@@ -148,12 +148,12 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
 
         {/* Footer: status + collapse */}
         <div style={{
-          borderTop: `1px solid ${HF.borderFaint}`,
+          borderTop: `1px solid ${'var(--hf-border-faint)'}`,
           padding: collapsed ? '10px 0' : '12px 12px',
           display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: 10,
         }}>
           {!collapsed && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: HF.ink2 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--hf-ink2)' }}>
               <HFDot tone="ok" size={7}/>
               <span>all systems ok</span>
             </div>
@@ -163,8 +163,8 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             aria-expanded={!collapsed}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{
-            background: HF.surface, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-            color: HF.ink3, cursor: 'pointer', padding: '5px 7px',
+            background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+            color: 'var(--hf-ink3)', cursor: 'pointer', padding: '5px 7px',
             display: 'flex', alignItems: 'center',
           }}>
             <span style={{ display: 'inline-block', transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 160ms' }}>
@@ -179,18 +179,18 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
         {/* Topbar */}
         <div style={{
           height: 56, flexShrink: 0,
-          padding: `0 ${HF.contentX}px`,
-          borderBottom: `1px solid ${HF.border}`,
+          padding: `0 var(--hf-content-x)`,
+          borderBottom: `1px solid ${'var(--hf-border)'}`,
           display: 'flex', alignItems: 'center', gap: 14,
-          background: HF.surface,
+          background: 'var(--hf-surface)',
         }}>
-          <div style={{ fontSize: 13, color: HF.ink3, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 13, color: 'var(--hf-ink3)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {breadcrumb}
           </div>
           <div style={{ flex: 1 }}/>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: HF.ink3 }}>
-            <span style={{ fontFamily: HF.mono, fontSize: 11, color: HF.ink4 }}>v2.14.0</span>
-            <span style={{ width: 1, height: 18, background: HF.border }}/>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--hf-ink3)' }}>
+            <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ink4)' }}>v2.14.0</span>
+            <span style={{ width: 1, height: 18, background: 'var(--hf-border)' }}/>
             <HFButton size="md" variant="primary" onClick={openNewRun}>
               <span style={{ display: 'flex' }}>{HF_ICONS.plus}</span> New run
             </HFButton>
@@ -199,32 +199,32 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
               aria-haspopup="menu"
               className="hf-focus" style={{
               width: 30, height: 30, borderRadius: '50%',
-              background: `linear-gradient(135deg, ${HF.accent}, ${HF.accentHover})`,
+              background: `linear-gradient(135deg, ${'var(--hf-accent)'}, ${'var(--hf-accent-hover)'})`,
               border: 'none', padding: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 12, color: '#fff', fontWeight: 600,
-              boxShadow: HF.shadowSm, cursor: 'pointer',
-              fontFamily: HF.sans,
+              boxShadow: 'var(--hf-shadow-sm)', cursor: 'pointer',
+              fontFamily: 'var(--hf-sans)',
             }}>A</button>
           </div>
         </div>
 
         {/* Page head */}
         <div style={{
-          padding: `24px ${HF.contentX}px 18px`,
-          borderBottom: `1px solid ${HF.border}`,
+          padding: `24px var(--hf-content-x) 18px`,
+          borderBottom: `1px solid ${'var(--hf-border)'}`,
           display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16,
-          background: HF.surface,
+          background: 'var(--hf-surface)',
         }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1.15, color: HF.ink }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 14, color: HF.ink3, marginTop: 6 }}>{subtitle}</div>}
+            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1.15, color: 'var(--hf-ink)' }}>{title}</div>
+            {subtitle && <div style={{ fontSize: 14, color: 'var(--hf-ink3)', marginTop: 6 }}>{subtitle}</div>}
           </div>
           {actions && <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>{actions}</div>}
         </div>
 
         {/* Content */}
-        <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: `20px ${HF.contentX}px 48px`, background: HF.bg }}>
+        <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: `20px var(--hf-content-x) 48px`, background: 'var(--hf-bg)' }}>
           <div style={{ minWidth: 1100 }}>
             {children}
           </div>

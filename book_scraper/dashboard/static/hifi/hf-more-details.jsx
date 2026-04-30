@@ -24,14 +24,14 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
   return (
     <div>
       {/* Parser header / version */}
-      <HFCard style={{marginBottom:HF.gap}} padding={14}>
+      <HFCard style={{marginBottom:'var(--hf-gap)'}} padding={14}>
         <div style={{display:'flex', alignItems:'center', gap:14}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>Active parser</div>
+            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>Active parser</div>
             <div style={{display:'flex', alignItems:'center', gap:10}}>
-              <span style={{fontFamily:HF.mono, fontSize:15, color:HF.ink, fontWeight:500}}>{version.current}</span>
+              <span style={{fontFamily:'var(--hf-mono)', fontSize:15, color:'var(--hf-ink)', fontWeight:500}}>{version.current}</span>
               <HFPill tone="ok">deployed</HFPill>
-              <span style={{fontSize:12, color:HF.ink3, fontFamily:HF.mono}}>{version.deployed}</span>
+              <span style={{fontSize:12, color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)'}}>{version.deployed}</span>
             </div>
           </div>
           <div style={{display:'flex', gap:6}}>
@@ -43,26 +43,26 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
       </HFCard>
 
       {/* Field selectors */}
-      <HFCard title="Field selectors" sub={`${fields.length} fields · ${fields.filter(f=>f.required).length} required`} style={{marginBottom:HF.gap}}>
+      <HFCard title="Field selectors" sub={`${fields.length} fields · ${fields.filter(f=>f.required).length} required`} style={{marginBottom:'var(--hf-gap)'}}>
         <HFTable
           columns={[
             { key:'k', label:'Field', w:'0.9fr', mono:true, cell:(v,r) => (
               <span style={{display:'inline-flex', alignItems:'center', gap:6}}>
-                <span style={{color:HF.ink, fontWeight:500}}>{v}</span>
-                {r.required && <span style={{fontSize:10, color:HF.errInk, fontWeight:600}}>*</span>}
+                <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span>
+                {r.required && <span style={{fontSize:10, color:'var(--hf-err-ink)', fontWeight:600}}>*</span>}
               </span>
             )},
             { key:'type', label:'Type', w:'0.6fr', mono:true, muted:true },
-            { key:'sel', label:'Selector', w:'2.2fr', mono:true, cell:v => <span style={{color:HF.ink2, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span> },
+            { key:'sel', label:'Selector', w:'2.2fr', mono:true, cell:v => <span style={{color:'var(--hf-ink2)', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span> },
             { key:'success', label:'Success', w:'0.9fr', align:'right', sortable:true, sortVal:r=>r.success, cell:v => {
               const tone = v >= 90 ? 'ok' : v >= 70 ? 'warn' : 'err';
-              const ink = tone==='ok'? HF.okInk : tone==='warn'? HF.warnInk : HF.errInk;
+              const ink = tone==='ok'? 'var(--hf-ok-ink)' : tone==='warn'? 'var(--hf-warn-ink)' : 'var(--hf-err-ink)';
               return (
                 <span style={{display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end'}}>
-                  <span style={{width:40, height:4, background:HF.subtle, borderRadius:2, overflow:'hidden'}}>
-                    <span style={{display:'block', width:`${v}%`, height:'100%', background: tone==='ok'? HF.ok : tone==='warn'? HF.warn : HF.err}}/>
+                  <span style={{width:40, height:4, background:'var(--hf-subtle)', borderRadius:2, overflow:'hidden'}}>
+                    <span style={{display:'block', width:`${v}%`, height:'100%', background: tone==='ok'? 'var(--hf-ok)' : tone==='warn'? 'var(--hf-warn)' : 'var(--hf-err)'}}/>
                   </span>
-                  <span style={{fontFamily:HF.mono, color:ink, fontWeight:500, fontSize:12, fontVariantNumeric:'tabular-nums', minWidth:40, textAlign:'right'}}>{v}%</span>
+                  <span style={{fontFamily:'var(--hf-mono)', color:ink, fontWeight:500, fontSize:12, fontVariantNumeric:'tabular-nums', minWidth:40, textAlign:'right'}}>{v}%</span>
                 </span>
               );
             }},
@@ -74,17 +74,17 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
       </HFCard>
 
       {/* Test harness preview */}
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)'}}>
         <HFCard title="Last test" sub="ran against /knygos/sapiens-yuval-noah-harari · 2h ago"
                 action={<HFPill tone="ok">9/10 fields ok</HFPill>}>
-          <div style={{padding:14, fontFamily:HF.mono, fontSize:12, lineHeight:1.7, color:HF.ink2, background:HF.subtle, borderTop:`1px solid ${HF.borderFaint}`}}>
-            <div><span style={{color:HF.ink4}}>title</span>   <span style={{color:HF.okInk}}>→</span> "Sapiens: A Brief History of Humankind"</div>
-            <div><span style={{color:HF.ink4}}>author</span>  <span style={{color:HF.okInk}}>→</span> "Yuval Noah Harari"</div>
-            <div><span style={{color:HF.ink4}}>price</span>   <span style={{color:HF.okInk}}>→</span> 19.90</div>
-            <div><span style={{color:HF.ink4}}>isbn</span>    <span style={{color:HF.okInk}}>→</span> "9789955134572"</div>
-            <div><span style={{color:HF.ink4}}>year</span>    <span style={{color:HF.okInk}}>→</span> 2019</div>
-            <div><span style={{color:HF.ink4}}>pages</span>   <span style={{color:HF.warnInk}}>→</span> <span style={{color:HF.warnInk}}>null</span>  <span style={{color:HF.ink4}}>// selector matched 0 nodes</span></div>
-            <div><span style={{color:HF.ink4}}>publisher</span> <span style={{color:HF.okInk}}>→</span> "Kitos knygos"</div>
+          <div style={{padding:14, fontFamily:'var(--hf-mono)', fontSize:12, lineHeight:1.7, color:'var(--hf-ink2)', background:'var(--hf-subtle)', borderTop:`1px solid ${'var(--hf-border-faint)'}`}}>
+            <div><span style={{color:'var(--hf-ink4)'}}>title</span>   <span style={{color:'var(--hf-ok-ink)'}}>→</span> "Sapiens: A Brief History of Humankind"</div>
+            <div><span style={{color:'var(--hf-ink4)'}}>author</span>  <span style={{color:'var(--hf-ok-ink)'}}>→</span> "Yuval Noah Harari"</div>
+            <div><span style={{color:'var(--hf-ink4)'}}>price</span>   <span style={{color:'var(--hf-ok-ink)'}}>→</span> 19.90</div>
+            <div><span style={{color:'var(--hf-ink4)'}}>isbn</span>    <span style={{color:'var(--hf-ok-ink)'}}>→</span> "9789955134572"</div>
+            <div><span style={{color:'var(--hf-ink4)'}}>year</span>    <span style={{color:'var(--hf-ok-ink)'}}>→</span> 2019</div>
+            <div><span style={{color:'var(--hf-ink4)'}}>pages</span>   <span style={{color:'var(--hf-warn-ink)'}}>→</span> <span style={{color:'var(--hf-warn-ink)'}}>null</span>  <span style={{color:'var(--hf-ink4)'}}>// selector matched 0 nodes</span></div>
+            <div><span style={{color:'var(--hf-ink4)'}}>publisher</span> <span style={{color:'var(--hf-ok-ink)'}}>→</span> "Kitos knygos"</div>
           </div>
         </HFCard>
 
@@ -97,10 +97,10 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
               { f:'isbn',        n:89,  pct:18.6, tone:'warn' },
               { f:'year',        n:62,  pct:31.8, tone:'warn' },
             ].map((r, i, arr) => (
-              <div key={r.f} style={{padding:`10px ${HF.cardP}px`, borderBottom: i<arr.length-1?`1px solid ${HF.borderFaint}`:'none', display:'grid', gridTemplateColumns:'1fr 80px 80px', alignItems:'center', fontSize:13}}>
-                <span style={{fontFamily:HF.mono, color:HF.ink}}>{r.f}</span>
-                <span style={{fontFamily:HF.mono, color:HF.ink2, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>{r.n} miss</span>
-                <span style={{fontFamily:HF.mono, color: r.tone==='err'? HF.errInk : HF.warnInk, textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{r.pct.toFixed(1)}%</span>
+              <div key={r.f} style={{padding:`10px var(--hf-card-p)`, borderBottom: i<arr.length-1?`1px solid ${'var(--hf-border-faint)'}`:'none', display:'grid', gridTemplateColumns:'1fr 80px 80px', alignItems:'center', fontSize:13}}>
+                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink)'}}>{r.f}</span>
+                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)', textAlign:'right', fontVariantNumeric:'tabular-nums'}}>{r.n} miss</span>
+                <span style={{fontFamily:'var(--hf-mono)', color: r.tone==='err'? 'var(--hf-err-ink)' : 'var(--hf-warn-ink)', textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{r.pct.toFixed(1)}%</span>
               </div>
             ))}
           </div>
@@ -132,14 +132,14 @@ function HFRunsPanel({ goto, scope = 'shop', entity = 'vaga' }) {
       <HFTable
         onRowClick={r => goto && goto('run-detail', { id:r.id })}
         columns={[
-          { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
+          { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
           { key:'phase', label:'Phase', w:'0.8fr', mono:true, sortable:true },
           { key:'started', label:'Started', w:'0.9fr', mono:true, muted:true, sortable:true },
           { key:'dur', label:'Duration', w:'0.8fr', mono:true, muted:true, align:'right', sortable:true },
-          { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> },
-          { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:HF.errInk, fontWeight:500}}>{v}</span> : <span style={{color:HF.ink4}}>—</span> },
+          { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> },
+          { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:'var(--hf-err-ink)', fontWeight:500}}>{v}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
           { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => <HFPill tone={statusTone[v]}>{v}</HFPill> },
-          { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+          { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
         ]}
         rows={rows}
       />
@@ -165,18 +165,18 @@ function HFPricesPanel() {
   return (
     <div>
       <HFKpiStrip items={[
-        { label:'Current',      value:'€19.90', delta:<span style={{color:HF.errInk}}>−€1.10 · 12m ago</span>, tone:'err' },
-        { label:'30d avg',      value:'€19.92', delta:<span style={{color:HF.ink3}}>σ €0.84</span> },
-        { label:'All-time low', value:'€18.50', delta:<span style={{color:HF.ink3}}>Mar 22</span> },
-        { label:'All-time high',value:'€21.00', delta:<span style={{color:HF.ink3}}>Apr 2</span> },
-        { label:'Changes',      value:'12',     delta:<span style={{color:HF.ink3}}>of 127 scrapes</span> },
+        { label:'Current',      value:'€19.90', delta:<span style={{color:'var(--hf-err-ink)'}}>−€1.10 · 12m ago</span>, tone:'err' },
+        { label:'30d avg',      value:'€19.92', delta:<span style={{color:'var(--hf-ink3)'}}>σ €0.84</span> },
+        { label:'All-time low', value:'€18.50', delta:<span style={{color:'var(--hf-ink3)'}}>Mar 22</span> },
+        { label:'All-time high',value:'€21.00', delta:<span style={{color:'var(--hf-ink3)'}}>Apr 2</span> },
+        { label:'Changes',      value:'12',     delta:<span style={{color:'var(--hf-ink3)'}}>of 127 scrapes</span> },
       ]}/>
 
-      <HFCard title="Price trajectory" sub="30 data points · last 30 days" style={{marginBottom:HF.gap}}
+      <HFCard title="Price trajectory" sub="30 data points · last 30 days" style={{marginBottom:'var(--hf-gap)'}}
               action={<HFPill tone="err">−5.2% vs 30d avg</HFPill>}>
-        <div style={{padding:HF.cardP}}>
+        <div style={{padding:'var(--hf-card-p)'}}>
           <HFAreaChart data={history} h={200} label="Price per day"/>
-          <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:10, fontVariantNumeric:'tabular-nums'}}>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:10, fontVariantNumeric:'tabular-nums'}}>
             <span>Mar 20</span><span>Mar 27</span><span>Apr 3</span><span>Apr 10</span><span>Apr 17</span>
           </div>
         </div>
@@ -185,12 +185,12 @@ function HFPricesPanel() {
       <HFCard title="All price changes" sub={`${changes.length} recorded movements`}>
         <HFTable
           columns={[
-            { key:'ts', label:'When', w:'1.1fr', mono:true, sortable:true, cell:v => <span style={{color:HF.ink2}}>{v}</span> },
+            { key:'ts', label:'When', w:'1.1fr', mono:true, sortable:true, cell:v => <span style={{color:'var(--hf-ink2)'}}>{v}</span> },
             { key:'old', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true, sortVal:r=>parseFloat((r.old||'').replace(/[^\d.]/g,''))||0 },
-            { key:'neo', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.neo||'').replace(/[^\d.]/g,''))||0, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
-            { key:'pct', label:'Δ %', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct||0, cell:v => v == null ? <span style={{color:HF.ink4}}>—</span> : <span style={{color: v<0?HF.errInk:v>0?HF.okInk:HF.ink3, fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span> },
-            { key:'reason', label:'Reason', w:'1.2fr', cell:v => <span style={{color:HF.ink2, fontSize:12}}>{v}</span> },
-            { key:'run', label:'Run', w:'0.5fr', mono:true, align:'right', cell:v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
+            { key:'neo', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.neo||'').replace(/[^\d.]/g,''))||0, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
+            { key:'pct', label:'Δ %', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct||0, cell:v => v == null ? <span style={{color:'var(--hf-ink4)'}}>—</span> : <span style={{color: v<0?'var(--hf-err-ink)':v>0?'var(--hf-ok-ink)':'var(--hf-ink3)', fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span> },
+            { key:'reason', label:'Reason', w:'1.2fr', cell:v => <span style={{color:'var(--hf-ink2)', fontSize:12}}>{v}</span> },
+            { key:'run', label:'Run', w:'0.5fr', mono:true, align:'right', cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
           ]}
           rows={changes}
         />
@@ -262,16 +262,16 @@ function HFScheduleDetail({ nav, goto, params }) {
     <HFShell {...nav} activePage="cron"
       title={<span style={{display:'flex', alignItems:'center', gap:12, minWidth:0}}>
         <HFDot tone={enabledState ? (lastStatus==='fail'?'err':'ok') : 'neutral'} size={10}/>
-        <span style={{fontFamily:HF.mono, fontSize:18, color:HF.ink, fontWeight:500}}>{name}</span>
+        <span style={{fontFamily:'var(--hf-mono)', fontSize:18, color:'var(--hf-ink)', fontWeight:500}}>{name}</span>
         {enabledState
           ? <HFPill tone={lastStatus==='fail'?'err':'ok'}>{lastStatus==='fail'?'failing':'active'}</HFPill>
           : <HFPill tone="neutral">disabled</HFPill>}
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>{cron} · {cronHuman} · shop={shop}</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>{cron} · {cronHuman} · shop={shop}</span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="cron" goto={goto}>Schedules</HFBreadcrumbLink>
-        <span style={{color:HF.ink5}}>/</span>
-        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{name}</span>
+        <span style={{color:'var(--hf-ink5)'}}>/</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>{name}</span>
       </>}
       actions={<>
         <HFButton onClick={()=>setEnabledState(!enabledState)}>
@@ -283,18 +283,18 @@ function HFScheduleDetail({ nav, goto, params }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Next run',     value:enabledState ? '48m' : '—', tone: enabledState ? 'accent' : undefined, delta:<span style={{color:HF.ink3}}>{enabledState ? 'today 14:00' : 'disabled'}</span> },
-        { label:'Last 24h',     value:'24 runs', delta:<span style={{color:HF.okInk}}>22 ok · 2 failed</span> },
-        { label:'Success rate', value:'94.7%',   delta:<span style={{color:HF.okInk}}>30d</span>, tone:'ok' },
-        { label:'Avg duration', value:'14m 18s', delta:<span style={{color:HF.ink3}}>p95 16m 42s</span> },
-        { label:'Last run',     value:'12m ago', delta:<span style={{color: lastStatus==='fail'? HF.errInk : HF.okInk}}>{lastStatus==='fail' ? 'failed' : 'ok'}</span>, tone: lastStatus==='fail'? 'err' : 'ok' },
+        { label:'Next run',     value:enabledState ? '48m' : '—', tone: enabledState ? 'accent' : undefined, delta:<span style={{color:'var(--hf-ink3)'}}>{enabledState ? 'today 14:00' : 'disabled'}</span> },
+        { label:'Last 24h',     value:'24 runs', delta:<span style={{color:'var(--hf-ok-ink)'}}>22 ok · 2 failed</span> },
+        { label:'Success rate', value:'94.7%',   delta:<span style={{color:'var(--hf-ok-ink)'}}>30d</span>, tone:'ok' },
+        { label:'Avg duration', value:'14m 18s', delta:<span style={{color:'var(--hf-ink3)'}}>p95 16m 42s</span> },
+        { label:'Last run',     value:'12m ago', delta:<span style={{color: lastStatus==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{lastStatus==='fail' ? 'failed' : 'ok'}</span>, tone: lastStatus==='fail'? 'err' : 'ok' },
       ]}/>
 
       {/* Schedule card + upcoming runs */}
-      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Schedule" sub="when this job fires"
                 action={<HFButton size="sm">Edit cron</HFButton>}>
-          <div style={{padding:HF.cardP, display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
+          <div style={{padding:'var(--hf-card-p)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
             {[
               ['Cron expression', cron, true],
               ['Humanized',       cronHuman],
@@ -306,23 +306,23 @@ function HFScheduleDetail({ nav, goto, params }) {
               ['Owner',           'data-eng'],
             ].map(([k,v,mono]) => (
               <div key={k}>
-                <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
-                <div style={{marginTop:3, fontSize:13, color:HF.ink, fontFamily: mono? HF.mono : HF.sans, fontWeight:500}}>{v}</div>
+                <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
+                <div style={{marginTop:3, fontSize:13, color:'var(--hf-ink)', fontFamily: mono? 'var(--hf-mono)' : 'var(--hf-sans)', fontWeight:500}}>{v}</div>
               </div>
             ))}
           </div>
-          <div style={{padding:`12px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`, background:HF.subtle}}>
-            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>Last 24h history</div>
+          <div style={{padding:`12px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, background:'var(--hf-subtle)'}}>
+            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>Last 24h history</div>
             <div style={{display:'flex', gap:3}}>
               {last24.map((s, i) => (
                 <div key={i} title={`${24-i}h ago: ${s}`} style={{
                   flex:1, height:22, borderRadius:2,
-                  background: s==='fail' ? HF.err : HF.ok,
+                  background: s==='fail' ? 'var(--hf-err)' : 'var(--hf-ok)',
                   opacity: s==='fail' ? 1 : 0.85,
                 }}/>
               ))}
             </div>
-            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:6, fontVariantNumeric:'tabular-nums'}}>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:6, fontVariantNumeric:'tabular-nums'}}>
               <span>24h ago</span><span>12h</span><span>now</span>
             </div>
           </div>
@@ -331,16 +331,16 @@ function HFScheduleDetail({ nav, goto, params }) {
         <HFCard title="Upcoming runs" sub={enabledState ? 'next 5 scheduled' : 'job is disabled'}>
           {!enabledState ? (
             <div style={{padding:'28px 16px', textAlign:'center'}}>
-              <div style={{color:HF.ink4, marginBottom:6, display:'flex', justifyContent:'center'}}>{HF_ICONS.stop}</div>
-              <div style={{fontSize:13, color:HF.ink3}}>No upcoming runs — job is disabled.</div>
+              <div style={{color:'var(--hf-ink4)', marginBottom:6, display:'flex', justifyContent:'center'}}>{HF_ICONS.stop}</div>
+              <div style={{fontSize:13, color:'var(--hf-ink3)'}}>No upcoming runs — job is disabled.</div>
             </div>
           ) : (
             <div style={{padding:'4px 0'}}>
               {upcoming.map((r, i, arr) => (
-                <div key={i} style={{padding:`11px ${HF.cardP}px`, borderBottom: i<arr.length-1? `1px solid ${HF.borderFaint}` : 'none', display:'flex', alignItems:'center', gap:12, fontSize:13}}>
-                  <span style={{color: i===0? HF.accentInk : HF.ink3, fontFamily:HF.mono, fontWeight: i===0? 600 : 400, minWidth:80, fontVariantNumeric:'tabular-nums'}}>{r.when}</span>
-                  <span style={{color:HF.ink2, fontFamily:HF.mono}}>{r.at}</span>
-                  <span style={{color:HF.ink4, fontFamily:HF.mono, fontSize:12}}>{r.date}</span>
+                <div key={i} style={{padding:`11px var(--hf-card-p)`, borderBottom: i<arr.length-1? `1px solid ${'var(--hf-border-faint)'}` : 'none', display:'flex', alignItems:'center', gap:12, fontSize:13}}>
+                  <span style={{color: i===0? 'var(--hf-accent-ink)' : 'var(--hf-ink3)', fontFamily:'var(--hf-mono)', fontWeight: i===0? 600 : 400, minWidth:80, fontVariantNumeric:'tabular-nums'}}>{r.when}</span>
+                  <span style={{color:'var(--hf-ink2)', fontFamily:'var(--hf-mono)'}}>{r.at}</span>
+                  <span style={{color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontSize:12}}>{r.date}</span>
                   {i===0 && <HFPill tone="accent" style={{marginLeft:'auto'}}>next</HFPill>}
                 </div>
               ))}
@@ -350,8 +350,8 @@ function HFScheduleDetail({ nav, goto, params }) {
       </div>
 
       {/* Tabs: runs / logs */}
-      <HFCard style={{marginBottom:HF.gap}}>
-        <div style={{padding:`0 ${HF.cardP}px`}}>
+      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
+        <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
             { id:'runs', label:'Run history', count:runs.length },
             { id:'logs', label:'Latest logs' },
@@ -364,13 +364,13 @@ function HFScheduleDetail({ nav, goto, params }) {
           <HFTable
             onRowClick={r => goto('run-detail', { id:r.id })}
             columns={[
-              { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
+              { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
               { key:'started', label:'Started', w:'0.9fr', mono:true, muted:true, sortable:true },
               { key:'dur', label:'Duration', w:'0.8fr', mono:true, muted:true, align:'right', sortable:true },
-              { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> },
-              { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:HF.errInk, fontWeight:500}}>{v}</span> : <span style={{color:HF.ink4}}>—</span> },
+              { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> },
+              { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:'var(--hf-err-ink)', fontWeight:500}}>{v}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
               { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => <HFPill tone={statusTone[v]}>{v}</HFPill> },
-              { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+              { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
             ]}
             rows={runs}
           />
@@ -380,7 +380,7 @@ function HFScheduleDetail({ nav, goto, params }) {
       {tab === 'logs' && (
         <HFCard title="Latest logs" sub="from run #4820 · 12m ago"
                 action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Download log</HFButton>}>
-          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:12, lineHeight:1.7, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`}}>
+          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:'var(--hf-mono)', fontSize:12, lineHeight:1.7, borderTop:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:`0 0 var(--hf-r3) var(--hf-r3)`}}>
             {logs.map((l, i) => {
               const lvlColor = l.lvl === 'WARN' ? '#F5B041' : l.lvl === 'ERROR' ? '#E74C3C' : '#58B3E0';
               return (

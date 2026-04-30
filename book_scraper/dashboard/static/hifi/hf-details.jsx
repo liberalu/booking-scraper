@@ -18,7 +18,7 @@ function HFUrlDetail({ nav, goto, params }) {
     return (
       <HFShell {...nav} activePage="urls" title="URL detail" subtitle="Loading…"
         breadcrumb={<><HFBreadcrumbLink page="urls" goto={goto}>URLs</HFBreadcrumbLink><span>/</span><span>#{urlId}</span></>}>
-        <div style={{padding:40, color:HF.ink3}}>Loading…</div>
+        <div style={{padding:40, color:'var(--hf-ink3)'}}>Loading…</div>
       </HFShell>
     );
   }
@@ -28,7 +28,7 @@ function HFUrlDetail({ nav, goto, params }) {
   const status = data.fail_count >= 3 ? 'error' : 'ok';
   const code = data.fail_count >= 3 ? 404 : 200;
   const sTone = { ok: 'ok', warn: 'warn', error: 'err' };
-  const sInk = { ok: HF.okInk, warn: HF.warnInk, error: HF.errInk };
+  const sInk = { ok: 'var(--hf-ok-ink)', warn: 'var(--hf-warn-ink)', error: 'var(--hf-err-ink)' };
 
   const history = [];
   const runs = [];
@@ -38,18 +38,18 @@ function HFUrlDetail({ nav, goto, params }) {
       title={
         <span style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
           <HFDot tone={sTone[status]} size={10} pulse={status==='error'}/>
-          <span style={{fontFamily:HF.mono, fontSize:18, color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis'}}>
-            {shop}.lt<span style={{color:HF.ink3}}>{urlPath}</span>
+          <span style={{fontFamily:'var(--hf-mono)', fontSize:18, color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis'}}>
+            {shop}.lt<span style={{color:'var(--hf-ink3)'}}>{urlPath}</span>
           </span>
           <HFPill tone={sTone[status]}>{status}</HFPill>
           <HFPill tone={code>=400?'err':code>=300?'warn':'ok'}>HTTP {code}</HFPill>
         </span>
       }
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="urls" goto={goto}>URLs</HFBreadcrumbLink>
-        <span style={{color:HF.ink5}}>/</span>
-        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono, overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>{urlPath}</span>
+        <span style={{color:'var(--hf-ink5)'}}>/</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)', overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>{urlPath}</span>
       </>}
       actions={<>
         <HFButton onClick={() => {
@@ -68,13 +68,13 @@ function HFUrlDetail({ nav, goto, params }) {
     >
       {/* Error banner */}
       {status === 'error' && (
-        <HFCard style={{marginBottom:HF.gap, borderColor:HF.errBorder, background:HF.errSoft || '#FEF2F2'}} padding={14}>
+        <HFCard style={{marginBottom:'var(--hf-gap)', borderColor:'var(--hf-err-border)', background:'var(--hf-err-soft)' || '#FEF2F2'}} padding={14}>
           <div style={{display:'flex', gap:12, alignItems:'flex-start'}}>
-            <div style={{color:HF.err, display:'flex', marginTop:1}}>{HF_ICONS.bang}</div>
+            <div style={{color:'var(--hf-err)', display:'flex', marginTop:1}}>{HF_ICONS.bang}</div>
             <div style={{flex:1, minWidth:0}}>
-              <div style={{fontSize:13, fontWeight:600, color:HF.errInk, marginBottom:2}}>URL has been failing for 6 consecutive checks</div>
-              <div style={{fontSize:13, color:HF.ink2, lineHeight:1.5}}>
-                Returns <span style={{fontFamily:HF.mono, fontWeight:500}}>HTTP 404</span> since <span style={{fontFamily:HF.mono}}>2d ago</span>. Last successful response on <span style={{fontFamily:HF.mono}}>4d ago</span> was <span style={{fontFamily:HF.mono}}>HTTP 200</span>. This URL resolves to <span style={{color:HF.ink, fontWeight:500}}>Sapiens (alias)</span> — consider removing the alias or updating the parser.
+              <div style={{fontSize:13, fontWeight:600, color:'var(--hf-err-ink)', marginBottom:2}}>URL has been failing for 6 consecutive checks</div>
+              <div style={{fontSize:13, color:'var(--hf-ink2)', lineHeight:1.5}}>
+                Returns <span style={{fontFamily:'var(--hf-mono)', fontWeight:500}}>HTTP 404</span> since <span style={{fontFamily:'var(--hf-mono)'}}>2d ago</span>. Last successful response on <span style={{fontFamily:'var(--hf-mono)'}}>4d ago</span> was <span style={{fontFamily:'var(--hf-mono)'}}>HTTP 200</span>. This URL resolves to <span style={{color:'var(--hf-ink)', fontWeight:500}}>Sapiens (alias)</span> — consider removing the alias or updating the parser.
               </div>
             </div>
             <div style={{display:'flex', gap:6, flexShrink:0}}>
@@ -87,16 +87,16 @@ function HFUrlDetail({ nav, goto, params }) {
 
       <HFKpiStrip items={[
         { label:'Status',       value:status, tone: sTone[status], delta:<span style={{color:sInk[status]}}>HTTP {code}</span> },
-        { label:'Last scraped', value: data.last_scraped_ago || '—', delta:<span style={{color:HF.ink3}}>last check</span> },
-        { label:'Fail count',   value: String(data.fail_count || 0), tone: data.fail_count >= 3 ? 'err' : 'ok', delta:<span style={{color:data.fail_count >= 3 ? HF.errInk : HF.okInk}}>{data.fail_count >= 3 ? 'failing' : 'ok'}</span> },
+        { label:'Last scraped', value: data.last_scraped_ago || '—', delta:<span style={{color:'var(--hf-ink3)'}}>last check</span> },
+        { label:'Fail count',   value: String(data.fail_count || 0), tone: data.fail_count >= 3 ? 'err' : 'ok', delta:<span style={{color:data.fail_count >= 3 ? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{data.fail_count >= 3 ? 'failing' : 'ok'}</span> },
       ]}/>
 
-      <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Response code history" sub="check history not yet available">
-          <div style={{padding:`${HF.cardP}px`}}>
-            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:13}}>No history data yet</div>
-            <div style={{display:'flex', gap:14, marginTop:10, fontSize:11, color:HF.ink3, fontFamily:HF.mono}}>
-              <span><span style={{color:HF.accent}}>━</span> response time (ms)</span>
+          <div style={{padding:`var(--hf-card-p)`}}>
+            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:13}}>No history data yet</div>
+            <div style={{display:'flex', gap:14, marginTop:10, fontSize:11, color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)'}}>
+              <span><span style={{color:'var(--hf-accent)'}}>━</span> response time (ms)</span>
               <span style={{marginLeft:'auto'}}>{history.length} checks</span>
             </div>
           </div>
@@ -112,14 +112,14 @@ function HFUrlDetail({ nav, goto, params }) {
               ['Last scraped',  data.last_scraped_ago || '—'],
             ].map(([k,v,mono], i, arr) => (
               <div key={k} style={{
-                display:'flex', padding:`8px ${HF.cardP}px`,
-                borderBottom: i<arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                display:'flex', padding:`8px var(--hf-card-p)`,
+                borderBottom: i<arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
                 fontSize:13, gap:12, alignItems:'center',
               }}>
-                <span style={{color:HF.ink4, minWidth:110}}>{k}</span>
+                <span style={{color:'var(--hf-ink4)', minWidth:110}}>{k}</span>
                 <span style={{
-                  color: v==='—'?HF.ink4:HF.ink, flex:1,
-                  fontFamily: mono ? HF.mono : HF.sans,
+                  color: v==='—'?'var(--hf-ink4)':'var(--hf-ink)', flex:1,
+                  fontFamily: mono ? 'var(--hf-mono)' : 'var(--hf-sans)',
                   fontSize: mono ? 11.5 : 12.5,
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                 }}>{v}</span>
@@ -130,23 +130,23 @@ function HFUrlDetail({ nav, goto, params }) {
       </div>
 
       {/* Check history table */}
-      <HFCard title="Check history" sub={`${history.length} most recent checks`} style={{marginBottom:HF.gap}}>
+      <HFCard title="Check history" sub={`${history.length} most recent checks`} style={{marginBottom:'var(--hf-gap)'}}>
         <HFTable
           columns={[
             { key:'t', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
             { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => (
               <span style={{display:'inline-flex', alignItems:'center', gap:7}}>
-                <HFDot tone={sTone[v]}/> <span style={{color: v==='error'?HF.errInk:HF.ink}}>{v}</span>
+                <HFDot tone={sTone[v]}/> <span style={{color: v==='error'?'var(--hf-err-ink)':'var(--hf-ink)'}}>{v}</span>
               </span>
             )},
             { key:'code', label:'HTTP', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.code, cell:v => (
-              <span style={{color: v>=400?HF.errInk:v>=300?HF.warnInk:HF.ink2, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span>
+              <span style={{color: v>=400?'var(--hf-err-ink)':v>=300?'var(--hf-warn-ink)':'var(--hf-ink2)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span>
             )},
-            { key:'ms', label:'Response', w:'0.8fr', mono:true, align:'right', sortable:true, sortVal:r=>r.ms, cell:v => <span style={{color:HF.ink3}}>{v}ms</span> },
+            { key:'ms', label:'Response', w:'0.8fr', mono:true, align:'right', sortable:true, sortVal:r=>r.ms, cell:v => <span style={{color:'var(--hf-ink3)'}}>{v}ms</span> },
             { key:'bar', label:'', w:'2fr', cell:(_, r) => (
               <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
-                <span style={{flex:1, maxWidth:240, height:4, background:HF.subtle, borderRadius:2, overflow:'hidden'}}>
-                  <span style={{display:'block', width:`${Math.min(100, r.ms/5)}%`, height:'100%', background: r.status==='error'?HF.err:r.status==='warn'?HF.warn:HF.ok, borderRadius:2}}/>
+                <span style={{flex:1, maxWidth:240, height:4, background:'var(--hf-subtle)', borderRadius:2, overflow:'hidden'}}>
+                  <span style={{display:'block', width:`${Math.min(100, r.ms/5)}%`, height:'100%', background: r.status==='error'?'var(--hf-err)':r.status==='warn'?'var(--hf-warn)':'var(--hf-ok)', borderRadius:2}}/>
                 </span>
               </span>
             )},
@@ -160,7 +160,7 @@ function HFUrlDetail({ nav, goto, params }) {
         <HFTable
           onRowClick={(r) => goto('run-detail', { id: r.id })}
           columns={[
-            { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
+            { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
             { key:'phase', label:'Phase', w:'0.8fr', mono:true, sortable:true },
             { key:'started', label:'Started', w:'1fr', mono:true, muted:true, sortable:true },
             { key:'dur', label:'Duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
@@ -168,9 +168,9 @@ function HFUrlDetail({ nav, goto, params }) {
               <HFPill tone={v==='resolved'?'ok':v==='found'?'neutral':'warn'}>{v}</HFPill>
             )},
             { key:'code', label:'HTTP', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.code, cell:v => (
-              <span style={{color: v>=400?HF.errInk:v>=300?HF.warnInk:HF.ink2, fontWeight:500}}>{v}</span>
+              <span style={{color: v>=400?'var(--hf-err-ink)':v>=300?'var(--hf-warn-ink)':'var(--hf-ink2)', fontWeight:500}}>{v}</span>
             )},
-            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={runs}
         />
@@ -188,7 +188,7 @@ function HFIssueDetail({ nav, goto, params }) {
   const count = params?.n || 48;
 
   const sevTone = { high:'err', medium:'warn', low:'neutral' };
-  const sevInk  = { high:HF.errInk, medium:HF.warnInk, low:HF.ink3 };
+  const sevInk  = { high:'var(--hf-err-ink)', medium:'var(--hf-warn-ink)', low:'var(--hf-ink3)' };
 
   // Titles & descriptions per issue type
   const meta = {
@@ -239,11 +239,11 @@ function HFIssueDetail({ nav, goto, params }) {
         <span>{m.title}</span>
         <HFPill tone={sevTone[sev]}>{sev} severity</HFPill>
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>type={type} · first seen 2 days ago · {count} affected</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>type={type} · first seen 2 days ago · {count} affected</span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="issues" goto={goto}>Issues</HFBreadcrumbLink>
-        <span style={{color:HF.ink5}}>/</span>
-        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{type}</span>
+        <span style={{color:'var(--hf-ink5)'}}>/</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>{type}</span>
       </>}
       actions={<>
         <HFButton>Snooze 7d</HFButton>
@@ -252,31 +252,31 @@ function HFIssueDetail({ nav, goto, params }) {
       </>}
     >
       {/* Description card */}
-      <HFCard style={{marginBottom:HF.gap}}>
-        <div style={{padding:`${HF.cardP}px`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap}}>
+      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
+        <div style={{padding:`var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)'}}>
           <div>
-            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>What this means</div>
-            <div style={{fontSize:13, color:HF.ink, lineHeight:1.55, textWrap:'pretty'}}>{m.desc}</div>
+            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>What this means</div>
+            <div style={{fontSize:13, color:'var(--hf-ink)', lineHeight:1.55, textWrap:'pretty'}}>{m.desc}</div>
             <div style={{
               marginTop:14, padding:'8px 10px',
-              background:HF.subtle, border:`1px solid ${HF.borderFaint}`, borderRadius:5,
-              fontFamily:HF.mono, fontSize:12, color:HF.ink2,
+              background:'var(--hf-subtle)', border:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:5,
+              fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink2)',
             }}>
-              <span style={{color:HF.ink4, marginRight:8}}>rule:</span>{m.rule}
+              <span style={{color:'var(--hf-ink4)', marginRight:8}}>rule:</span>{m.rule}
             </div>
           </div>
-          <div style={{borderLeft:`1px solid ${HF.borderFaint}`, paddingLeft:HF.gap, display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
+          <div style={{borderLeft:`1px solid ${'var(--hf-border-faint)'}`, paddingLeft:'var(--hf-gap)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
             {[
               ['Severity',     sev, sevInk[sev]],
               ['First seen',   '2 days ago'],
               ['Last seen',    '12m ago'],
-              ['Affected',     count, HF.ink],
+              ['Affected',     count, 'var(--hf-ink)'],
               ['Shops',        'vaga'],
-              ['Assigned',     'unassigned', HF.ink4],
+              ['Assigned',     'unassigned', 'var(--hf-ink4)'],
             ].map(([k,v,c]) => (
               <div key={k}>
-                <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
-                <div style={{fontSize:14, color: c||HF.ink, marginTop:3, fontWeight: c?500:400, fontFamily: typeof v==='number'||['2 days ago','12m ago'].includes(v)?HF.mono:HF.sans, fontVariantNumeric:'tabular-nums'}}>{v}</div>
+                <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
+                <div style={{fontSize:14, color: c||'var(--hf-ink)', marginTop:3, fontWeight: c?500:400, fontFamily: typeof v==='number'||['2 days ago','12m ago'].includes(v)?'var(--hf-mono)':'var(--hf-sans)', fontVariantNumeric:'tabular-nums'}}>{v}</div>
               </div>
             ))}
           </div>
@@ -285,15 +285,15 @@ function HFIssueDetail({ nav, goto, params }) {
 
       <HFKpiStrip items={[
         { label:'Affected now', value:String(count), tone:sevTone[sev], delta:<span style={{color:sevInk[sev]}}>+3 today</span> },
-        { label:'Affected 7d',  value:'84',  delta:<span style={{color:HF.errInk}}>+36 vs prev</span> },
-        { label:'Resolved 7d',  value:'12',  delta:<span style={{color:HF.okInk}}>manually</span>, tone:'ok' },
-        { label:'Avg delta',    value:'-15.9%', delta:<span style={{color:HF.errInk}}>abs · worsening</span>, tone:'err' },
-        { label:'MTTR',         value:'1.8d',    delta:<span style={{color:HF.ink3}}>median</span> },
+        { label:'Affected 7d',  value:'84',  delta:<span style={{color:'var(--hf-err-ink)'}}>+36 vs prev</span> },
+        { label:'Resolved 7d',  value:'12',  delta:<span style={{color:'var(--hf-ok-ink)'}}>manually</span>, tone:'ok' },
+        { label:'Avg delta',    value:'-15.9%', delta:<span style={{color:'var(--hf-err-ink)'}}>abs · worsening</span>, tone:'err' },
+        { label:'MTTR',         value:'1.8d',    delta:<span style={{color:'var(--hf-ink3)'}}>median</span> },
       ]}/>
 
-      <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Occurrences over time" sub="new issues per day · last 14 days">
-          <div style={{padding:`${HF.cardP}px`}}>
+          <div style={{padding:`var(--hf-card-p)`}}>
             <HFAreaChart data={trend} h={160} label="Issues per day"/>
           </div>
         </HFCard>
@@ -305,10 +305,10 @@ function HFIssueDetail({ nav, goto, params }) {
               { t:'Snooze until Monday',     d:'re-triage after weekend', act:'Snooze' },
               { t:'Mark all as resolved',    d:'mark without changes',    act:'Resolve', tone:'danger' },
             ].map((a, i, arr) => (
-              <div key={a.t} style={{padding:`12px ${HF.cardP}px`, borderBottom: i<arr.length-1?`1px solid ${HF.borderFaint}`:'none', display:'flex', gap:12, alignItems:'flex-start'}}>
+              <div key={a.t} style={{padding:`12px var(--hf-card-p)`, borderBottom: i<arr.length-1?`1px solid ${'var(--hf-border-faint)'}`:'none', display:'flex', gap:12, alignItems:'flex-start'}}>
                 <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:13, color:HF.ink, fontWeight:500}}>{a.t}</div>
-                  <div style={{fontSize:12, color:HF.ink3, marginTop:2, fontFamily:HF.mono}}>{a.d}</div>
+                  <div style={{fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>{a.t}</div>
+                  <div style={{fontSize:12, color:'var(--hf-ink3)', marginTop:2, fontFamily:'var(--hf-mono)'}}>{a.d}</div>
                 </div>
                 <HFButton size="sm" variant={a.tone || 'default'}>{a.act}</HFButton>
               </div>
@@ -319,7 +319,7 @@ function HFIssueDetail({ nav, goto, params }) {
 
       {/* Affected items table */}
       <HFCard title="Affected items" sub={`${affected.length} of ${count} · tap to open`}>
-        <div style={{padding:`8px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`, display:'flex', gap:8, alignItems:'center'}}>
+        <div style={{padding:`8px var(--hf-card-p)`, borderBottom:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', gap:8, alignItems:'center'}}>
           <HFSearch placeholder="Search affected items…" width={280}/>
           <HFFilter label="Shop" value="all" options={['all','vaga','knygos']} onChange={()=>{}}/>
           <HFFilter label="Status" value="open" options={['open','snoozed','resolved','all']} onChange={()=>{}}/>
@@ -329,17 +329,17 @@ function HFIssueDetail({ nav, goto, params }) {
         <HFTable
           onRowClick={(r) => goto('shop-book-detail', { id: r.id })}
           columns={[
-            { key:'id', label:'ID', w:'0.4fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
-            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500}}>{v}</span> },
+            { key:'id', label:'ID', w:'0.4fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
+            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
             { key:'shop', label:'Shop', w:'0.6fr', mono:true, muted:true, sortable:true },
             { key:'old', label:'Was', w:'0.6fr', mono:true, align:'right', muted:true, sortable:true },
-            { key:'neo', label:'Now', w:'0.6fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
+            { key:'neo', label:'Now', w:'0.6fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
             { key:'pct', label:'Δ', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => (
-              <span style={{color: v<0?HF.errInk:HF.okInk, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span>
+              <span style={{color: v<0?'var(--hf-err-ink)':'var(--hf-ok-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span>
             )},
             { key:'detected', label:'Detected', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'st', label:'Status', w:'0.7fr', sortable:true, cell:v => <HFPill tone={v==='open'?'err':v==='snoozed'?'warn':'ok'}>{v}</HFPill> },
-            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={affected}
         />

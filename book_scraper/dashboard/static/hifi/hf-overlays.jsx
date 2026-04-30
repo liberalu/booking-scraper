@@ -105,7 +105,7 @@ function HFModal({ open, onClose, width = 560, children, align = 'center', label
         display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center',
         justifyContent: 'center',
         paddingTop: align === 'top' ? 96 : 0,
-        fontFamily: HF.sans,
+        fontFamily: 'var(--hf-sans)',
         backdropFilter: 'blur(2px)',
       }}>
         <div
@@ -118,8 +118,8 @@ function HFModal({ open, onClose, width = 560, children, align = 'center', label
           onClick={(e) => e.stopPropagation()}
           style={{
             width, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)',
-            background: HF.surface, borderRadius: HF.r3,
-            border: `1px solid ${HF.border}`,
+            background: 'var(--hf-surface)', borderRadius: 'var(--hf-r3)',
+            border: `1px solid ${'var(--hf-border)'}`,
             boxShadow: '0 24px 48px -12px rgba(16,24,40,.25), 0 0 0 1px rgba(16,24,40,.04)',
             overflow: 'hidden', display: 'flex', flexDirection: 'column',
             outline: 'none',
@@ -137,24 +137,24 @@ function HFModalHead({ title, sub, onClose, icon }) {
   const ctx = React.useContext(_hfModalCtx);
   return (
     <div style={{
-      padding: '14px 18px', borderBottom: `1px solid ${HF.borderFaint}`,
+      padding: '14px 18px', borderBottom: `1px solid ${'var(--hf-border-faint)'}`,
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
       {icon && (
         <div aria-hidden="true" style={{
           width: 32, height: 32, borderRadius: 7,
-          background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
-          color: HF.accent,
+          background: 'var(--hf-accent-soft)', border: `1px solid ${'var(--hf-accent-border)'}`,
+          color: 'var(--hf-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{icon}</div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div id={ctx?.titleId} style={{ fontSize: 14, fontWeight: 600, color: HF.ink, letterSpacing: -0.1 }}>{title}</div>
-        {sub && <div style={{ fontSize: 12, color: HF.ink3, marginTop: 2 }}>{sub}</div>}
+        <div id={ctx?.titleId} style={{ fontSize: 14, fontWeight: 600, color: 'var(--hf-ink)', letterSpacing: -0.1 }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 2 }}>{sub}</div>}
       </div>
       {onClose && (
         <button onClick={onClose} aria-label="Close dialog" className="hf-btn" style={{
-          background: 'transparent', border: 'none', color: HF.ink3,
+          background: 'transparent', border: 'none', color: 'var(--hf-ink3)',
           width: 28, height: 28, borderRadius: 5, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
         }}>✕</button>
@@ -171,9 +171,9 @@ function HFModalFoot({ children }) {
   const HF = getHF();
   return (
     <div style={{
-      padding: '12px 18px', borderTop: `1px solid ${HF.borderFaint}`,
+      padding: '12px 18px', borderTop: `1px solid ${'var(--hf-border-faint)'}`,
       display: 'flex', gap: 8, justifyContent: 'flex-end',
-      background: HF.bg,
+      background: 'var(--hf-bg)',
     }}>{children}</div>
   );
 }
@@ -183,12 +183,12 @@ function HFField({ label, hint, children, required }) {
   const HF = getHF();
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: HF.ink2, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--hf-ink2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
         {label}
-        {required && <span style={{ color: HF.errInk }}>*</span>}
+        {required && <span style={{ color: 'var(--hf-err-ink)' }}>*</span>}
       </div>
       {children}
-      {hint && <div style={{ fontSize: 12, color: HF.ink3, marginTop: 5 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 5 }}>{hint}</div>}
     </div>
   );
 }
@@ -203,14 +203,14 @@ function HFInput({ value, onChange, placeholder, mono, style, autoFocus, ...rest
       style={{
         width: '100%', boxSizing: 'border-box',
         padding: '7px 10px', height: 34,
-        background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-        color: HF.ink, fontSize: 13,
-        fontFamily: mono ? HF.mono : HF.sans,
+        background: 'var(--hf-input)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+        color: 'var(--hf-ink)', fontSize: 13,
+        fontFamily: mono ? 'var(--hf-mono)' : 'var(--hf-sans)',
         outline: 'none',
         ...style,
       }}
-      onFocus={(e) => e.currentTarget.style.borderColor = HF.accent}
-      onBlur={(e) => e.currentTarget.style.borderColor = HF.borderStrong}
+      onFocus={(e) => e.currentTarget.style.borderColor = 'var(--hf-accent)'}
+      onBlur={(e) => e.currentTarget.style.borderColor = 'var(--hf-border-strong)'}
       {...rest}
     />
   );
@@ -222,8 +222,8 @@ function HFSelect({ value, onChange, options, style }) {
     <select value={value} onChange={(e) => onChange && onChange(e.target.value)} style={{
       width: '100%', boxSizing: 'border-box',
       padding: '6px 10px', height: 34,
-      background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-      color: HF.ink, fontSize: 13, fontFamily: HF.sans, cursor: 'pointer',
+      background: 'var(--hf-input)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+      color: 'var(--hf-ink)', fontSize: 13, fontFamily: 'var(--hf-sans)', cursor: 'pointer',
       outline: 'none',
       ...style,
     }}>
@@ -240,8 +240,8 @@ function HFSegmented({ value, onChange, options }) {
   const HF = getHF();
   return (
     <div style={{
-      display: 'inline-flex', background: HF.subtle,
-      border: `1px solid ${HF.border}`, borderRadius: 6, padding: 2, gap: 2,
+      display: 'inline-flex', background: 'var(--hf-subtle)',
+      border: `1px solid ${'var(--hf-border)'}`, borderRadius: 6, padding: 2, gap: 2,
       whiteSpace: 'nowrap',
     }}>
       {options.map(o => {
@@ -251,10 +251,10 @@ function HFSegmented({ value, onChange, options }) {
         return (
           <button key={v} onClick={() => onChange(v)} style={{
             padding: '5px 10px', fontSize: 12, height: 26,
-            background: sel ? HF.surface : 'transparent',
-            border: sel ? `1px solid ${HF.border}` : '1px solid transparent',
-            borderRadius: 4, color: sel ? HF.ink : HF.ink3,
-            fontWeight: sel ? 500 : 400, fontFamily: HF.sans, cursor: 'pointer',
+            background: sel ? 'var(--hf-surface)' : 'transparent',
+            border: sel ? `1px solid ${'var(--hf-border)'}` : '1px solid transparent',
+            borderRadius: 4, color: sel ? 'var(--hf-ink)' : 'var(--hf-ink3)',
+            fontWeight: sel ? 500 : 400, fontFamily: 'var(--hf-sans)', cursor: 'pointer',
             boxShadow: sel ? '0 1px 2px rgba(16,24,40,.04)' : 'none',
             whiteSpace: 'nowrap',
           }}>{l}</button>
@@ -334,10 +334,10 @@ function HFCommandK({ open, onClose, goto }) {
   return (
     <HFModal open={open} onClose={onClose} width={620} align="top">
       <div style={{
-        padding: '10px 14px', borderBottom: `1px solid ${HF.borderFaint}`,
+        padding: '10px 14px', borderBottom: `1px solid ${'var(--hf-border-faint)'}`,
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{ color: HF.ink3, display: 'flex' }}>{HF_ICONS.search}</span>
+        <span style={{ color: 'var(--hf-ink3)', display: 'flex' }}>{HF_ICONS.search}</span>
         <input
           autoFocus
           value={q}
@@ -346,19 +346,19 @@ function HFCommandK({ open, onClose, goto }) {
           placeholder="Search pages, actions, shops…"
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
-            color: HF.ink, fontSize: 15, fontFamily: HF.sans, padding: '4px 0',
+            color: 'var(--hf-ink)', fontSize: 15, fontFamily: 'var(--hf-sans)', padding: '4px 0',
           }}
         />
         <span style={{
-          fontFamily: HF.mono, fontSize: 11,
-          padding: '2px 6px', background: HF.subtle,
-          border: `1px solid ${HF.border}`, borderRadius: 4, color: HF.ink3,
+          fontFamily: 'var(--hf-mono)', fontSize: 11,
+          padding: '2px 6px', background: 'var(--hf-subtle)',
+          border: `1px solid ${'var(--hf-border)'}`, borderRadius: 4, color: 'var(--hf-ink3)',
         }}>esc</span>
       </div>
       <div className="hf-scroll" style={{ maxHeight: 420, overflow: 'auto', padding: 6 }}>
         {filtered.length === 0 && (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: HF.ink3, fontSize: 13 }}>
-            No matches for "<span style={{ fontFamily: HF.mono, color: HF.ink2 }}>{q}</span>"
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--hf-ink3)', fontSize: 13 }}>
+            No matches for "<span style={{ fontFamily: 'var(--hf-mono)', color: 'var(--hf-ink2)' }}>{q}</span>"
           </div>
         )}
         {sections.map(sec => {
@@ -366,7 +366,7 @@ function HFCommandK({ open, onClose, goto }) {
           return (
             <div key={sec.label}>
               <div style={{
-                fontSize: 11, color: HF.ink4, fontWeight: 600,
+                fontSize: 11, color: 'var(--hf-ink4)', fontWeight: 600,
                 textTransform: 'uppercase', letterSpacing: 0.6,
                 padding: '8px 10px 4px',
               }}>{sec.label}</div>
@@ -381,21 +381,21 @@ function HFCommandK({ open, onClose, goto }) {
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '7px 10px', margin: '1px 0',
                       borderRadius: 5, cursor: 'pointer',
-                      background: hl ? HF.accentSoft : 'transparent',
-                      color: hl ? HF.accentInk : HF.ink,
+                      background: hl ? 'var(--hf-accent-soft)' : 'transparent',
+                      color: hl ? 'var(--hf-accent-ink)' : 'var(--hf-ink)',
                     }}>
                     <span style={{
                       width: 22, height: 22, borderRadius: 4,
-                      background: hl ? HF.accentSoft2 : HF.subtle,
-                      color: hl ? HF.accent : HF.ink3,
+                      background: hl ? 'var(--hf-accent-soft2)' : 'var(--hf-subtle)',
+                      color: hl ? 'var(--hf-accent)' : 'var(--hf-ink3)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
                     }}>
                       {it.k === 'nav' ? HF_ICONS.arrow : it.k === 'jump' ? HF_ICONS.play : HF_ICONS.plus}
                     </span>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.t}</span>
-                    <span style={{ fontSize: 12, color: hl ? HF.accentInk : HF.ink3, fontFamily: HF.mono, whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.hint}</span>
-                    {hl && <span style={{ fontSize: 11, color: HF.accentInk, fontFamily: HF.mono }}>↵</span>}
+                    <span style={{ fontSize: 12, color: hl ? 'var(--hf-accent-ink)' : 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)', whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.hint}</span>
+                    {hl && <span style={{ fontSize: 11, color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-mono)' }}>↵</span>}
                   </div>
                 );
               })}
@@ -404,10 +404,10 @@ function HFCommandK({ open, onClose, goto }) {
         })}
       </div>
       <div style={{
-        padding: '8px 14px', borderTop: `1px solid ${HF.borderFaint}`,
-        background: HF.bg,
+        padding: '8px 14px', borderTop: `1px solid ${'var(--hf-border-faint)'}`,
+        background: 'var(--hf-bg)',
         display: 'flex', gap: 14, alignItems: 'center',
-        fontSize: 11, color: HF.ink3, fontFamily: HF.mono,
+        fontSize: 11, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)',
       }}>
         <span>↑↓ navigate</span>
         <span>↵ select</span>
@@ -515,13 +515,13 @@ function HFNewRunDialog({ open, onClose, goto }) {
         )}
         {error && (
           <div style={{
-            color: HF.errInk, fontSize: 13, padding: '8px 10px',
-            background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
+            color: 'var(--hf-err-ink)', fontSize: 13, padding: '8px 10px',
+            background: 'var(--hf-err-soft)', border: `1px solid ${'var(--hf-err-border)'}`, borderRadius: 6,
           }}>{error}</div>
         )}
       </HFModalBody>
       <HFModalFoot>
-        <div style={{ flex: 1, fontSize: 12, color: HF.ink3, fontFamily: HF.mono, display: 'flex', alignItems: 'center' }}>
+        <div style={{ flex: 1, fontSize: 12, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)', display: 'flex', alignItems: 'center' }}>
           {selShop ? `${urlCount.toLocaleString()} URLs available` : 'Loading shops…'}
         </div>
         <HFButton onClick={onClose}>Cancel</HFButton>
@@ -576,15 +576,15 @@ function HFNewScheduleDialog({ open, onClose }) {
             {presets.map(p => (
               <button key={p.v} onClick={() => pickPreset(p.v)} style={{
                 padding: '4px 9px', fontSize: 12, height: 26,
-                background: preset === p.v ? HF.accentSoft : HF.surface,
-                border: `1px solid ${preset === p.v ? HF.accentBorder : HF.borderStrong}`,
-                color: preset === p.v ? HF.accentInk : HF.ink2,
-                borderRadius: 5, cursor: 'pointer', fontFamily: HF.sans, fontWeight: 500,
+                background: preset === p.v ? 'var(--hf-accent-soft)' : 'var(--hf-surface)',
+                border: `1px solid ${preset === p.v ? 'var(--hf-accent-border)' : 'var(--hf-border-strong)'}`,
+                color: preset === p.v ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
+                borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--hf-sans)', fontWeight: 500,
               }}>{p.lbl}</button>
             ))}
           </div>
           <HFInput value={cron} onChange={(v) => { setCron(v); setPreset('custom'); }} mono placeholder="0 */2 * * *"/>
-          <div style={{ fontSize: 12, color: HF.ink3, marginTop: 6, fontFamily: HF.mono }}>
+          <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 6, fontFamily: 'var(--hf-mono)' }}>
             min · hr · day · mo · dow
           </div>
         </HFField>
@@ -640,20 +640,20 @@ function HFAddURLDialog({ open, onClose }) {
             <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} style={{
               width: '100%', boxSizing: 'border-box', minHeight: 120,
               padding: '8px 10px',
-              background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-              color: HF.ink, fontSize: 12, fontFamily: HF.mono, outline: 'none', resize: 'vertical',
+              background: 'var(--hf-input)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+              color: 'var(--hf-ink)', fontSize: 12, fontFamily: 'var(--hf-mono)', outline: 'none', resize: 'vertical',
             }} placeholder={'https://vaga.lt/knygos/sapiens\nhttps://vaga.lt/knygos/factfulness\n…'}/>
           </HFField>
         )}
         {mode === 'file' && (
           <div style={{
             padding: 28, textAlign: 'center',
-            background: HF.bg, border: `2px dashed ${HF.border}`, borderRadius: 8,
-            color: HF.ink3, fontSize: 13,
+            background: 'var(--hf-bg)', border: `2px dashed ${'var(--hf-border)'}`, borderRadius: 8,
+            color: 'var(--hf-ink3)', fontSize: 13,
           }}>
-            <div style={{ marginBottom: 8, color: HF.ink4, display: 'flex', justifyContent: 'center' }}>{HF_ICONS.download}</div>
-            <div style={{ color: HF.ink2, fontWeight: 500 }}>Drop CSV here</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Column: <span style={{ fontFamily: HF.mono }}>url</span> · optional: <span style={{ fontFamily: HF.mono }}>priority</span></div>
+            <div style={{ marginBottom: 8, color: 'var(--hf-ink4)', display: 'flex', justifyContent: 'center' }}>{HF_ICONS.download}</div>
+            <div style={{ color: 'var(--hf-ink2)', fontWeight: 500 }}>Drop CSV here</div>
+            <div style={{ fontSize: 12, marginTop: 4 }}>Column: <span style={{ fontFamily: 'var(--hf-mono)' }}>url</span> · optional: <span style={{ fontFamily: 'var(--hf-mono)' }}>priority</span></div>
           </div>
         )}
       </HFModalBody>
@@ -694,9 +694,9 @@ function HFAddShopDialog({ open, onClose, goto }) {
           </HFField>
         </div>
         <div style={{
-          padding: 10, background: HF.accentSoft,
-          border: `1px solid ${HF.accentBorder}`, borderRadius: 6,
-          fontSize: 12, color: HF.accentInk, display: 'flex', gap: 8, alignItems: 'flex-start',
+          padding: 10, background: 'var(--hf-accent-soft)',
+          border: `1px solid ${'var(--hf-accent-border)'}`, borderRadius: 6,
+          fontSize: 12, color: 'var(--hf-accent-ink)', display: 'flex', gap: 8, alignItems: 'flex-start',
         }}>
           <span style={{ marginTop: 1 }}>{HF_ICONS.bang}</span>
           <span>After creating, you'll be taken to the parser editor to set up selectors.</span>
@@ -763,20 +763,20 @@ function HFParserPicker({ open, onClose, goto }) {
       <HFModalHead title="Edit parser — pick a shop" onClose={onClose} icon={HF_ICONS.settings}/>
       <HFModalBody style={{ padding: 8 }}>
         {shops.map(s => {
-          const tone = s.health >= 95 ? HF.okInk : s.health >= 85 ? HF.warnInk : HF.errInk;
+          const tone = s.health >= 95 ? 'var(--hf-ok-ink)' : s.health >= 85 ? 'var(--hf-warn-ink)' : 'var(--hf-err-ink)';
           return (
             <div key={s.v} onClick={() => { onClose(); goto('parser', { shop: s.v }); }} style={{
               padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 12,
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = HF.subtle}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hf-subtle)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: HF.ink }}>{s.lbl}</div>
-                <div style={{ fontSize: 12, color: HF.ink3, fontFamily: HF.mono, marginTop: 2 }}>{s.parser}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--hf-ink)' }}>{s.lbl}</div>
+                <div style={{ fontSize: 12, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)', marginTop: 2 }}>{s.parser}</div>
               </div>
-              <span style={{ fontFamily: HF.mono, fontSize: 12, color: tone, fontVariantNumeric: 'tabular-nums' }}>{s.health}%</span>
-              <span style={{ color: HF.ink4, display: 'flex' }}>{HF_ICONS.arrow}</span>
+              <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 12, color: tone, fontVariantNumeric: 'tabular-nums' }}>{s.health}%</span>
+              <span style={{ color: 'var(--hf-ink4)', display: 'flex' }}>{HF_ICONS.arrow}</span>
             </div>
           );
         })}
@@ -800,20 +800,20 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
     <HFModal open={open} onClose={onClose} width={680}>
       <HFModalHead title="Settings" onClose={onClose} icon={HF_ICONS.settings}/>
       <div style={{ display: 'flex', minHeight: 380 }}>
-        <div style={{ width: 160, borderRight: `1px solid ${HF.borderFaint}`, padding: 8, background: HF.sidebar }}>
+        <div style={{ width: 160, borderRight: `1px solid ${'var(--hf-border-faint)'}`, padding: 8, background: 'var(--hf-sidebar)' }}>
           {tabs.map(([v, l]) => (
             <div key={v} onClick={() => setTab(v)} style={{
               padding: '7px 10px', margin: '1px 0', borderRadius: 5, cursor: 'pointer',
               fontSize: 13, fontWeight: tab === v ? 600 : 500,
-              color: tab === v ? HF.accentInk : HF.ink2,
-              background: tab === v ? HF.accentSoft : 'transparent',
+              color: tab === v ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
+              background: tab === v ? 'var(--hf-accent-soft)' : 'transparent',
             }}>{l}</div>
           ))}
         </div>
         <div className="hf-scroll" style={{ flex: 1, padding: 18, overflow: 'auto' }}>
           {tab === 'appearance' && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Accent color</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--hf-ink)', marginBottom: 10 }}>Accent color</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
                 {Object.keys(HF_ACCENTS).map(a => {
                   const c = HF_ACCENTS[a][500];
@@ -821,10 +821,10 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
                   return (
                     <button key={a} onClick={() => { setAccent(a); persist({ accent: a }); }} style={{
                       padding: '5px 11px', fontSize: 12, height: 30,
-                      background: sel ? HF_ACCENTS[a][50] : HF.surface,
-                      border: `1px solid ${sel ? c : HF.borderStrong}`, borderRadius: 6,
-                      color: sel ? HF_ACCENTS[a][700] : HF.ink2,
-                      fontFamily: HF.sans, cursor: 'pointer', fontWeight: sel ? 600 : 500,
+                      background: sel ? HF_ACCENTS[a][50] : 'var(--hf-surface)',
+                      border: `1px solid ${sel ? c : 'var(--hf-border-strong)'}`, borderRadius: 6,
+                      color: sel ? HF_ACCENTS[a][700] : 'var(--hf-ink2)',
+                      fontFamily: 'var(--hf-sans)', cursor: 'pointer', fontWeight: sel ? 600 : 500,
                       display: 'flex', alignItems: 'center', gap: 6, textTransform: 'capitalize',
                     }}>
                       <span style={{ width: 12, height: 12, borderRadius: 3, background: c }}/>
@@ -833,13 +833,13 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
                   );
                 })}
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Density</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--hf-ink)', marginBottom: 10 }}>Density</div>
               <HFSegmented value={density} onChange={(v) => { setDensity(v); persist({ density: v }); }} options={[
                 { value:'comfortable', label:'Comfortable' },
                 { value:'compact', label:'Compact' },
                 { value:'ultra', label:'Ultra' },
               ]}/>
-              <div style={{ fontSize: 12, color: HF.ink3, marginTop: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 8 }}>
                 Controls row height, card padding, and font size. {density === 'ultra' && 'Ultra is best for power users with 1440p+ displays.'}
               </div>
             </div>
@@ -855,12 +855,12 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
               ].map(([l, s, on]) => (
                 <label key={l} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 12px', borderBottom: `1px solid ${HF.borderFaint}`, cursor: 'pointer',
+                  padding: '10px 12px', borderBottom: `1px solid ${'var(--hf-border-faint)'}`, cursor: 'pointer',
                 }}>
-                  <input type="checkbox" defaultChecked={on} style={{ margin: 0, accentColor: HF.accent }}/>
+                  <input type="checkbox" defaultChecked={on} style={{ margin: 0, accentColor: 'var(--hf-accent)' }}/>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, color: HF.ink, fontWeight: 500 }}>{l}</div>
-                    <div style={{ fontSize: 12, color: HF.ink3, marginTop: 1 }}>{s}</div>
+                    <div style={{ fontSize: 13, color: 'var(--hf-ink)', fontWeight: 500 }}>{l}</div>
+                    <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 1 }}>{s}</div>
                   </div>
                 </label>
               ))}
@@ -870,7 +870,7 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
             <div>
               <HFField label="API key" hint="Use for programmatic access to runs, URLs, and books.">
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <HFInput value="bs_live_8f3a…k29Q" onChange={() => {}} mono readOnly style={{ fontFamily: HF.mono }}/>
+                  <HFInput value="bs_live_8f3a…k29Q" onChange={() => {}} mono readOnly style={{ fontFamily: 'var(--hf-mono)' }}/>
                   <HFButton>Rotate</HFButton>
                 </div>
               </HFField>
@@ -887,13 +887,13 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
                 <div style={{
                   width: 52, height: 52, borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${HF.accent}, ${HF.accentHover})`,
+                  background: `linear-gradient(135deg, ${'var(--hf-accent)'}, ${'var(--hf-accent-hover)'})`,
                   color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 20, fontWeight: 600,
                 }}>A</div>
                 <div>
-                  <div style={{ fontSize: 14, color: HF.ink, fontWeight: 600 }}>admin</div>
-                  <div style={{ fontSize: 12, color: HF.ink3 }}>admin@bookscraper.local · prod</div>
+                  <div style={{ fontSize: 14, color: 'var(--hf-ink)', fontWeight: 600 }}>admin</div>
+                  <div style={{ fontSize: 12, color: 'var(--hf-ink3)' }}>admin@bookscraper.local · prod</div>
                 </div>
               </div>
               <HFField label="Email">
@@ -968,17 +968,17 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
         onClick={(e) => e.stopPropagation()}
         style={{
           position: 'absolute', top: anchorRect.bottom + 6, right: 24,
-          width: 240, background: HF.surface,
-          border: `1px solid ${HF.border}`, borderRadius: 8,
+          width: 240, background: 'var(--hf-surface)',
+          border: `1px solid ${'var(--hf-border)'}`, borderRadius: 8,
           boxShadow: '0 12px 32px rgba(16,24,40,.18), 0 0 0 1px rgba(16,24,40,.03)',
-          padding: 4, fontFamily: HF.sans,
+          padding: 4, fontFamily: 'var(--hf-sans)',
         }}>
         {items.map((it, i) => {
-          if (it.divider) return <div key={i} role="separator" style={{ height: 1, background: HF.borderFaint, margin: '4px 0' }}/>;
+          if (it.divider) return <div key={i} role="separator" style={{ height: 1, background: 'var(--hf-border-faint)', margin: '4px 0' }}/>;
           if (it.head) return (
             <div key={i} style={{ padding: '8px 10px 6px' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: HF.ink }}>{it.label}</div>
-              <div style={{ fontSize: 11, color: HF.ink3, marginTop: 1 }}>{it.sub}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--hf-ink)' }}>{it.label}</div>
+              <div style={{ fontSize: 11, color: 'var(--hf-ink3)', marginTop: 1 }}>{it.sub}</div>
             </div>
           );
           return (
@@ -992,17 +992,17 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 padding: '7px 10px', borderRadius: 5,
                 display: 'flex', alignItems: 'center', gap: 10,
-                fontSize: 13, fontFamily: HF.sans,
-                color: it.danger ? HF.errInk : HF.ink2,
+                fontSize: 13, fontFamily: 'var(--hf-sans)',
+                color: it.danger ? 'var(--hf-err-ink)' : 'var(--hf-ink2)',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = HF.subtle}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hf-subtle)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-              <span aria-hidden="true" style={{ color: it.danger ? HF.errInk : HF.ink4, display: 'flex', width: 14 }}>{it.icon}</span>
+              <span aria-hidden="true" style={{ color: it.danger ? 'var(--hf-err-ink)' : 'var(--hf-ink4)', display: 'flex', width: 14 }}>{it.icon}</span>
               <span style={{ flex: 1 }}>{it.label}</span>
               {it.kbd && <span style={{
-                fontFamily: HF.mono, fontSize: 11,
-                padding: '1px 5px', background: HF.subtle, color: HF.ink3,
-                border: `1px solid ${HF.border}`, borderRadius: 3,
+                fontFamily: 'var(--hf-mono)', fontSize: 11,
+                padding: '1px 5px', background: 'var(--hf-subtle)', color: 'var(--hf-ink3)',
+                border: `1px solid ${'var(--hf-border)'}`, borderRadius: 3,
               }}>{it.kbd}</span>}
             </button>
           );
@@ -1070,7 +1070,7 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
       <HFModalHead title="Rate settings" sub={`Crawl pacing for ${shopName}`} onClose={onClose} icon={HF_ICONS.settings}/>
       <HFModalBody>
         {loadingSettings
-          ? <div style={{color: HF.ink3, fontSize: 13, padding: '8px 0'}}>Loading…</div>
+          ? <div style={{color: 'var(--hf-ink3)', fontSize: 13, padding: '8px 0'}}>Loading…</div>
           : <>
           <HFField label="Download delay (seconds)" hint="Minimum pause between requests. Range: 0.1 – 60 s.">
             <HFInput type="number" value={delay} onChange={setDelay} min="0.1" max="60" step="0.1" mono autoFocus/>
@@ -1082,14 +1082,14 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
         }
         {error && (
           <div style={{
-            color: HF.errInk, fontSize: 13, padding: '8px 10px',
-            background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
+            color: 'var(--hf-err-ink)', fontSize: 13, padding: '8px 10px',
+            background: 'var(--hf-err-soft)', border: `1px solid ${'var(--hf-err-border)'}`, borderRadius: 6,
           }}>{error}</div>
         )}
         {saved && (
           <div style={{
-            color: HF.okInk, fontSize: 13, padding: '8px 10px',
-            background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: 6,
+            color: 'var(--hf-ok-ink)', fontSize: 13, padding: '8px 10px',
+            background: 'var(--hf-ok-soft)', border: `1px solid ${'var(--hf-ok-border)'}`, borderRadius: 6,
           }}>Saved. Changes take effect on the next crawl.</div>
         )}
       </HFModalBody>
@@ -1114,7 +1114,7 @@ function HFConfirmDialog({ open, title, body, confirmLabel = 'Confirm', cancelLa
     <HFModal open={open} onClose={busy ? undefined : onCancel} width={460}>
       <HFModalHead title={title} onClose={busy ? undefined : onCancel}/>
       <HFModalBody>
-        <div style={{ fontSize: 13, color: HF.ink2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{body}</div>
+        <div style={{ fontSize: 13, color: 'var(--hf-ink2)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{body}</div>
       </HFModalBody>
       <HFModalFoot>
         <HFButton onClick={onCancel} disabled={busy}>{cancelLabel}</HFButton>
@@ -1140,7 +1140,7 @@ function HFAckGroupDialog({ open, group, runId, busy, onConfirm, onCancel }) {
     <HFModal open={open} onClose={busy ? undefined : onCancel} width={520}>
       <HFModalHead title="Mark group as known" sub={`Run #${runId} · ${label}`} onClose={busy ? undefined : onCancel}/>
       <HFModalBody>
-        <div style={{ fontSize: 13, color: HF.ink2, lineHeight: 1.5, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: 'var(--hf-ink2)', lineHeight: 1.5, marginBottom: 14 }}>
           The bucket will stop appearing on the Failures card. You can still find acknowledged groups via <strong>Show acknowledged</strong>.
         </div>
         <HFField label="Note" hint='Optional. e.g. "vendor outage 2026-04-28", "URL deleted upstream".'>
@@ -1152,11 +1152,11 @@ function HFAckGroupDialog({ open, group, runId, busy, onConfirm, onCancel }) {
             style={{
               width: '100%', boxSizing: 'border-box',
               padding: '8px 10px', resize: 'vertical', minHeight: 64,
-              background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-              color: HF.ink, fontSize: 13, fontFamily: HF.sans, outline: 'none',
+              background: 'var(--hf-input)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
+              color: 'var(--hf-ink)', fontSize: 13, fontFamily: 'var(--hf-sans)', outline: 'none',
             }}
-            onFocus={(e) => e.currentTarget.style.borderColor = HF.accent}
-            onBlur={(e) => e.currentTarget.style.borderColor = HF.borderStrong}
+            onFocus={(e) => e.currentTarget.style.borderColor = 'var(--hf-accent)'}
+            onBlur={(e) => e.currentTarget.style.borderColor = 'var(--hf-border-strong)'}
           />
         </HFField>
       </HFModalBody>
@@ -1202,11 +1202,11 @@ function HFToast({ toast, onDismiss }) {
   }, [toast.id, toast.ttl, onDismiss]);
 
   const tones = {
-    ok:      { bg: HF.okSoft,     bd: HF.okBorder,     fg: HF.okInk,     icon: HF_ICONS.check },
-    err:     { bg: HF.errSoft,    bd: HF.errBorder,    fg: HF.errInk,    icon: HF_ICONS.bang },
-    warn:    { bg: HF.warnSoft,   bd: HF.warnBorder,   fg: HF.warnInk,   icon: HF_ICONS.bang },
-    accent:  { bg: HF.accentSoft, bd: HF.accentBorder, fg: HF.accentInk, icon: HF_ICONS.bang },
-    neutral: { bg: HF.surface,    bd: HF.borderStrong, fg: HF.ink2,      icon: null },
+    ok:      { bg: 'var(--hf-ok-soft)',     bd: 'var(--hf-ok-border)',     fg: 'var(--hf-ok-ink)',     icon: HF_ICONS.check },
+    err:     { bg: 'var(--hf-err-soft)',    bd: 'var(--hf-err-border)',    fg: 'var(--hf-err-ink)',    icon: HF_ICONS.bang },
+    warn:    { bg: 'var(--hf-warn-soft)',   bd: 'var(--hf-warn-border)',   fg: 'var(--hf-warn-ink)',   icon: HF_ICONS.bang },
+    accent:  { bg: 'var(--hf-accent-soft)', bd: 'var(--hf-accent-border)', fg: 'var(--hf-accent-ink)', icon: HF_ICONS.bang },
+    neutral: { bg: 'var(--hf-surface)',    bd: 'var(--hf-border-strong)', fg: 'var(--hf-ink2)',      icon: null },
   };
   const t = tones[toast.tone] || tones.neutral;
 
@@ -1215,12 +1215,12 @@ function HFToast({ toast, onDismiss }) {
       display: 'flex', alignItems: 'flex-start', gap: 10,
       minWidth: 280, maxWidth: 420,
       padding: '10px 12px',
-      background: HF.surface,
+      background: 'var(--hf-surface)',
       border: `1px solid ${t.bd}`,
       borderLeft: `3px solid ${t.fg}`,
-      borderRadius: HF.r3,
-      boxShadow: HF.shadowLg,
-      fontFamily: HF.sans, fontSize: 13, color: HF.ink,
+      borderRadius: 'var(--hf-r3)',
+      boxShadow: 'var(--hf-shadow-lg)',
+      fontFamily: 'var(--hf-sans)', fontSize: 13, color: 'var(--hf-ink)',
       pointerEvents: 'auto',
     }}>
       {t.icon && (
@@ -1230,9 +1230,9 @@ function HFToast({ toast, onDismiss }) {
         }}>{t.icon}</span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 500, color: HF.ink, lineHeight: 1.35 }}>{toast.message}</div>
+        <div style={{ fontWeight: 500, color: 'var(--hf-ink)', lineHeight: 1.35 }}>{toast.message}</div>
         {toast.detail && (
-          <div style={{ fontSize: 12, color: HF.ink3, marginTop: 3, lineHeight: 1.4, wordBreak: 'break-word' }}>
+          <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 3, lineHeight: 1.4, wordBreak: 'break-word' }}>
             {toast.detail}
           </div>
         )}
@@ -1243,9 +1243,9 @@ function HFToast({ toast, onDismiss }) {
         className="hf-focus"
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: HF.ink4, fontSize: 16, lineHeight: 1, padding: '2px 4px',
+          color: 'var(--hf-ink4)', fontSize: 16, lineHeight: 1, padding: '2px 4px',
           borderRadius: 4, flexShrink: 0,
-          fontFamily: HF.sans,
+          fontFamily: 'var(--hf-sans)',
         }}
       >×</button>
     </div>

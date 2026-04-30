@@ -91,7 +91,7 @@ function HFRuns({ nav, goto }) {
   return (
     <HFShell {...nav} activePage="runs"
       title="Runs" subtitle="Every scrape execution — manual and scheduled. Click a row to open details."
-      breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Runs</span></>}
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Runs</span></>}
       actions={<>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> New run</HFButton>
@@ -100,16 +100,16 @@ function HFRuns({ nav, goto }) {
       {/* Repeated-failure banner — shows shops whose last N terminal
           runs all failed with the same error_reason. */}
       {repeatedFailures.length > 0 && (
-        <div style={{margin:`0 0 ${HF.gap}px`, padding:'12px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, color:HF.ink}}>
+        <div style={{margin:`0 0 var(--hf-gap)`, padding:'12px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, color:'var(--hf-ink)'}}>
           <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:6}}>
             <span style={{color:'#ef4444', fontWeight:600}}>● Repeated failures detected</span>
-            <span style={{fontSize:12, color:HF.ink3}}>The last {repeatedFailures[0].count} runs for these shops failed with the same reason — likely systemic, not transient.</span>
+            <span style={{fontSize:12, color:'var(--hf-ink3)'}}>The last {repeatedFailures[0].count} runs for these shops failed with the same reason — likely systemic, not transient.</span>
           </div>
           <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
             {repeatedFailures.map((rf, i) => (
               <a key={i} href="#" onClick={e=>{e.preventDefault(); goto('run-detail',{id:rf.latest_run_id});}}
-                 style={{padding:'4px 10px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:HF.ink, textDecoration:'none', fontFamily:HF.mono, fontSize:13}}>
-                {rf.shop}/{rf.phase} <span style={{color:HF.ink3}}>·</span> {rf.error_reason}
+                 style={{padding:'4px 10px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:'var(--hf-ink)', textDecoration:'none', fontFamily:'var(--hf-mono)', fontSize:13}}>
+                {rf.shop}/{rf.phase} <span style={{color:'var(--hf-ink3)'}}>·</span> {rf.error_reason}
               </a>
             ))}
           </div>
@@ -118,15 +118,15 @@ function HFRuns({ nav, goto }) {
 
       {/* Schedule badges — "Next run in Xh" + "Last success Xh ago" */}
       {scheduleItems.length > 0 && (
-        <div style={{display:'flex', gap:8, marginBottom:HF.gap, flexWrap:'wrap'}}>
+        <div style={{display:'flex', gap:8, marginBottom:'var(--hf-gap)', flexWrap:'wrap'}}>
           {scheduleItems.map((s, i) => (
-            <div key={i} style={{display:'flex', gap:8, padding:'6px 12px', background:HF.subtle, borderRadius:6, fontSize:12, color:HF.ink3, fontFamily:HF.mono, alignItems:'center'}}>
-              <span style={{color:HF.ink, fontWeight:500}}>{s.shop}/{s.phase}</span>
+            <div key={i} style={{display:'flex', gap:8, padding:'6px 12px', background:'var(--hf-subtle)', borderRadius:6, fontSize:12, color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)', alignItems:'center'}}>
+              <span style={{color:'var(--hf-ink)', fontWeight:500}}>{s.shop}/{s.phase}</span>
               {s.next_run_in_s != null && (
-                <span title={s.next_run_at || ''}>next in <strong style={{color:HF.ink}}>{_fmtSeconds(s.next_run_in_s)}</strong></span>
+                <span title={s.next_run_at || ''}>next in <strong style={{color:'var(--hf-ink)'}}>{_fmtSeconds(s.next_run_in_s)}</strong></span>
               )}
-              <span style={{color:HF.ink5}}>·</span>
-              <span title={s.last_success_at || ''}>last ok: <strong style={{color:HF.ink}}>{_fmtAgoIso(s.last_success_at)}</strong></span>
+              <span style={{color:'var(--hf-ink5)'}}>·</span>
+              <span title={s.last_success_at || ''}>last ok: <strong style={{color:'var(--hf-ink)'}}>{_fmtAgoIso(s.last_success_at)}</strong></span>
             </div>
           ))}
         </div>
@@ -134,18 +134,18 @@ function HFRuns({ nav, goto }) {
 
       {/* Summary strip — clickable filter shortcuts */}
       <HFKpiStrip items={[
-        { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:HF.okInk}}>● live</span>,
+        { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:'var(--hf-ok-ink)'}}>● live</span>,
           onClick: () => { setStatus('running'); setWhen('any'); } },
-        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:HF.ink3}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span>,
+        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:'var(--hf-ink3)'}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span>,
           onClick: () => { setStatus('all'); setWhen('24h'); } },
-        { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:HF.ink3}}>total runs</span>,
+        { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:'var(--hf-ink3)'}}>total runs</span>,
           onClick: clearAll },
       ]}/>
 
       {/* Filters — overflow:visible so the dropdown isn't clipped by the card */}
-      <HFCard style={{ marginBottom: HF.gap, overflow: 'visible' }} padding={12}>
+      <HFCard style={{ marginBottom: 'var(--hf-gap)', overflow: 'visible' }} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:12, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
+          <span style={{fontSize:12, color: activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
             {data.runs.length.toLocaleString()} of {(data.total || 0).toLocaleString()}
           </span>
           {activeCount > 0 && (
@@ -175,20 +175,20 @@ function HFRuns({ nav, goto }) {
             { w: '28px', skelW: 12, align: 'right' },
           ]}/>
         ) : filtered.length === 0 ? (
-          <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
-            <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
-            <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>
+          <div style={{padding:'60px 20px', textAlign:'center', color:'var(--hf-ink3)'}}>
+            <div style={{fontSize:28, marginBottom:8, color:'var(--hf-ink5)', display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
+            <div style={{fontSize:14, color:'var(--hf-ink)', fontWeight:500, marginBottom:4}}>
               {(data.kpis.all_time || 0) === 0 ? 'No runs yet' : 'No runs match these filters'}
             </div>
             {!loading && (
-              <div style={{fontSize:13, color:HF.ink3, marginBottom:14}}>
+              <div style={{fontSize:13, color:'var(--hf-ink3)', marginBottom:14}}>
                 {(data.kpis.all_time || 0) === 0
                   ? 'Trigger a run with the "New run" button.'
                   : `${data.kpis.all_time.toLocaleString()} runs in the database, but none match the active filters.`}
               </div>
             )}
             {!loading && activeCount > 0 && (
-              <div style={{fontSize:12, color:HF.ink4, fontFamily:HF.mono, marginBottom:14}}>
+              <div style={{fontSize:12, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginBottom:14}}>
                 shop={shop} · phase={phase} · status={status} · when={when}{q ? ` · q="${q}"` : ''}
               </div>
             )}
@@ -200,33 +200,33 @@ function HFRuns({ nav, goto }) {
         <HFTable
           onRowClick={(r) => goto('run-detail', { id: r.id })}
           columns={[
-            { key:'id', label:'Run', w:'0.55fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:HF.accentInk, fontWeight:500}}>#{v}</span> },
-            { key:'shop', label:'Shop', w:'0.6fr', sortable:true, cell: v => <span style={{color:HF.ink, fontWeight:500}}>{v}</span> },
+            { key:'id', label:'Run', w:'0.55fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
+            { key:'shop', label:'Shop', w:'0.6fr', sortable:true, cell: v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
             { key:'phase', label:'Phase / Type', w:'1fr', sortable:true, sortVal:r=>r.phase+':'+r.type, cell: (v, r) => (
               <span style={{display:'flex', flexDirection:'column', gap:3, minWidth:0}}>
-                <span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink, fontWeight:500}}>{v}</span>
+                <span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>{v}</span>
                 <HFPill tone={typeTone[r.type]} style={{width:'fit-content', height:17, fontSize:11, padding:'0 6px', letterSpacing:0.2}}>{r.type}</HFPill>
               </span>
             )},
             { key:'status', label:'Status', w:'0.85fr', sortable:true, cell: (v, r) => (
               <span style={{display:'inline-flex', alignItems:'center', gap:7}}>
                 <HFDot tone={statusTone[v]} pulse={v==='running'}/>
-                <span style={{color: v==='failed'? HF.errInk : HF.ink, fontWeight: v==='running'? 500 : 400}}>{v}</span>
+                <span style={{color: v==='failed'? 'var(--hf-err-ink)' : 'var(--hf-ink)', fontWeight: v==='running'? 500 : 400}}>{v}</span>
               </span>
             )},
             { key:'progress', label:'Progress', w:'1.3fr', sortable:true, sortVal:r=>r.progress, cell: (v, r) => (
               <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
-                <span style={{flex:1, maxWidth:160, height:5, background:HF.subtle, borderRadius:3, overflow:'hidden'}}>
-                  <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? HF.err : r.status==='running'? HF.accent : r.status==='queued'? HF.warn : HF.ink4, borderRadius:3}}/>
+                <span style={{flex:1, maxWidth:160, height:5, background:'var(--hf-subtle)', borderRadius:3, overflow:'hidden'}}>
+                  <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? 'var(--hf-err)' : r.status==='running'? 'var(--hf-accent)' : r.status==='queued'? 'var(--hf-warn)' : 'var(--hf-ink4)', borderRadius:3}}/>
                 </span>
-                <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink3, minWidth:32, fontVariantNumeric:'tabular-nums'}}>{v}%</span>
+                <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink3)', minWidth:32, fontVariantNumeric:'tabular-nums'}}>{v}%</span>
               </span>
             )},
             { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell: v => v ? v.toLocaleString() : '—' },
             { key:'elapsed', label:'Duration', w:'0.65fr', mono:true, muted:true, align:'right', sortable:true, sortVal:r=>r.elapsed },
             { key:'started', label:'Started', w:'0.9fr', muted:true, sortable:true, sortVal:r=>r.startedH },
             { key:'by', label:'Trigger', w:'0.9fr', mono:true, muted:true, sortable:true },
-            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+            { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={filtered}
         />
@@ -235,12 +235,12 @@ function HFRuns({ nav, goto }) {
 
       {/* Pagination footer */}
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
             {data.kpis.all_time > data.total && (
-              <span style={{color:HF.ink4}}> · {data.kpis.all_time.toLocaleString()} total in DB</span>
+              <span style={{color:'var(--hf-ink4)'}}> · {data.kpis.all_time.toLocaleString()} total in DB</span>
             )}
           </span>
           {data.pages > 1 && (
@@ -261,7 +261,7 @@ function HFRuns({ nav, goto }) {
                     onClick={() => setPage(n)}>{n}</HFButton>
                 );
                 const ell = (k) => buttons.push(
-                  <span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>
+                  <span key={k} style={{padding:'6px 4px', color:'var(--hf-ink4)'}}>…</span>
                 );
                 if (total <= 7) {
                   for (let i = 1; i <= total; i++) push(i);
@@ -485,10 +485,10 @@ function HFRunTimelineCard({ events, style }) {
   // color from the light-mode semantic ramp. Reuses the same tones already
   // returned by _eventTone so behavior stays consistent.
   const levelFor = (tone) => {
-    if (tone === 'err')  return { label: 'ERROR', color: HF.errInk };
-    if (tone === 'warn') return { label: 'WARN ', color: HF.warnInk };
-    if (tone === 'ok')   return { label: 'INFO ', color: HF.okInk };
-    return { label: 'INFO ', color: HF.accentInk };
+    if (tone === 'err')  return { label: 'ERROR', color: 'var(--hf-err-ink)' };
+    if (tone === 'warn') return { label: 'WARN ', color: 'var(--hf-warn-ink)' };
+    if (tone === 'ok')   return { label: 'INFO ', color: 'var(--hf-ok-ink)' };
+    return { label: 'INFO ', color: 'var(--hf-accent-ink)' };
   };
 
   return (
@@ -501,17 +501,17 @@ function HFRunTimelineCard({ events, style }) {
             ? `${list.length} events · showing latest ${LIMIT}`
             : list.length === 1 ? '1 event' : `${list.length} events`
       }
-      style={{ marginBottom: HF.gap, ...style }}
+      style={{ marginBottom: 'var(--hf-gap)', ...style }}
     >
       {visible.length === 0 ? (
-        <div style={{ padding: HF.cardP, color: HF.ink3, fontSize: 13 }}>
+        <div style={{ padding: 'var(--hf-card-p)', color: 'var(--hf-ink3)', fontSize: 13 }}>
           No events recorded for this run.
         </div>
       ) : (
         <div style={{
           padding: 14,
-          background: 'transparent', color: HF.ink,
-          fontFamily: HF.mono, fontSize: 12, lineHeight: 1.7,
+          background: 'transparent', color: 'var(--hf-ink)',
+          fontFamily: 'var(--hf-mono)', fontSize: 12, lineHeight: 1.7,
           maxHeight: expanded ? 480 : 'none',
           overflow: expanded ? 'auto' : 'visible',
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -525,14 +525,14 @@ function HFRunTimelineCard({ events, style }) {
             // Logger format: <YYYY-MM-DD HH:MM:SS>  <LEVEL>  <label> · <summary>
             return (
               <div key={ev.id}>
-                <span style={{color: HF.ink4, fontVariantNumeric: 'tabular-nums'}} title={t.absolute}>{t.full}</span>
+                <span style={{color: 'var(--hf-ink4)', fontVariantNumeric: 'tabular-nums'}} title={t.absolute}>{t.full}</span>
                 {' '}
                 <span style={{color: lvl.color, fontWeight: 600}}>{lvl.label}</span>
                 {' '}
-                <span style={{color: HF.ink}}>{meta.label}</span>
+                <span style={{color: 'var(--hf-ink)'}}>{meta.label}</span>
                 {summary ? <>
-                  {' '}<span style={{color: HF.ink5}}>·</span>{' '}
-                  <span style={{color: HF.ink3}}>{summary}</span>
+                  {' '}<span style={{color: 'var(--hf-ink5)'}}>·</span>{' '}
+                  <span style={{color: 'var(--hf-ink3)'}}>{summary}</span>
                 </> : null}
               </div>
             );
@@ -541,16 +541,16 @@ function HFRunTimelineCard({ events, style }) {
       )}
       {isClipped && (
         <div style={{
-          borderTop: `1px solid ${HF.borderFaint}`,
-          padding: '8px 0', textAlign: 'center', background: HF.bg,
+          borderTop: `1px solid ${'var(--hf-border-faint)'}`,
+          padding: '8px 0', textAlign: 'center', background: 'var(--hf-bg)',
         }}>
           <button
             onClick={() => setExpanded(v => !v)}
             aria-expanded={expanded}
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
-              color: HF.accentInk, fontFamily: HF.sans, fontSize: 12, fontWeight: 500,
-              padding: '4px 10px', borderRadius: HF.r2,
+              color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-sans)', fontSize: 12, fontWeight: 500,
+              padding: '4px 10px', borderRadius: 'var(--hf-r2)',
             }}
           >
             {expanded ? `Show latest ${LIMIT} only` : `Show all ${list.length} events`}
@@ -582,7 +582,7 @@ function HFRunHistoryCard({
   const HF = getHF();
   if (!urlData) {
     return (
-      <HFCard title="History" sub="loading…" style={{ marginBottom: HF.gap }}>
+      <HFCard title="History" sub="loading…" style={{ marginBottom: 'var(--hf-gap)' }}>
         <HFTableSkeleton rows={8} columns={[
           { w: '55px', skelW: 36, mono: true },
           { w: '1fr', skelW: 240 },
@@ -613,10 +613,10 @@ function HFRunHistoryCard({
       sub={urlData.source === 'live'
         ? `${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed · ${urlData.breakdown.pending.toLocaleString()} pending`
         : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
-      style={{ marginBottom: HF.gap }}
+      style={{ marginBottom: 'var(--hf-gap)' }}
     >
       {urlData.source === 'live' && (
-        <div style={{padding:`12px ${HF.cardP}px 0`}}>
+        <div style={{padding:`12px var(--hf-card-p) 0`}}>
           <HFTabs
             active={urlStatus}
             onChange={setUrlStatus}
@@ -641,14 +641,14 @@ function HFRunHistoryCard({
               <div style={{
                 display:'inline-flex', alignItems:'center', gap: 6,
                 marginTop: 8, padding: '4px 6px 4px 10px',
-                background: HF.errSoft, border: `1px solid ${HF.errBorder}`,
-                borderRadius: 4, fontFamily: HF.mono, fontSize: 12, color: HF.errInk,
+                background: 'var(--hf-err-soft)', border: `1px solid ${'var(--hf-err-border)'}`,
+                borderRadius: 4, fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-err-ink)',
               }}>
                 <span>failed{reasonLabel ? ` · ${reasonLabel}` : ''}{httpLabel ? ` · ${httpLabel}` : ''}</span>
                 <button onClick={clearGroupFilter} aria-label="Clear group filter" title="Clear group filter" style={{
                   background: 'transparent', border: 'none',
-                  cursor:'pointer', padding:'0 4px', color: HF.errInk, fontWeight: 600,
-                  fontFamily: HF.sans, fontSize: 14, lineHeight: 1,
+                  cursor:'pointer', padding:'0 4px', color: 'var(--hf-err-ink)', fontWeight: 600,
+                  fontFamily: 'var(--hf-sans)', fontSize: 14, lineHeight: 1,
                 }}>×</button>
               </div>
             );
@@ -657,7 +657,7 @@ function HFRunHistoryCard({
       )}
 
       {urlData.rows.length === 0 ? (
-        <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:13}}>
+        <div style={{padding:'24px', textAlign:'center', color:'var(--hf-ink3)', fontSize:13}}>
           No URLs in this filter.
         </div>
       ) : (
@@ -667,17 +667,17 @@ function HFRunHistoryCard({
             gridTemplateColumns: urlData.source === 'live'
               ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
               : '1fr 60px 70px 150px',
-            padding:`8px ${HF.cardP}px`,
-            borderBottom: `1px solid ${HF.border}`,
-            fontSize: 11, fontFamily: HF.mono, fontWeight: 500,
-            color: HF.ink3, textTransform: 'uppercase', letterSpacing: 0.4,
+            padding:`8px var(--hf-card-p)`,
+            borderBottom: `1px solid ${'var(--hf-border)'}`,
+            fontSize: 11, fontFamily: 'var(--hf-mono)', fontWeight: 500,
+            color: 'var(--hf-ink3)', textTransform: 'uppercase', letterSpacing: 0.4,
             gap: 10,
           }}>
             {(() => {
               const SortIcon = ({ active, dir }) => (
                 <svg aria-hidden="true" width="9" height="11" viewBox="0 0 9 11" style={{flexShrink:0, marginLeft:4, verticalAlign:'middle'}}>
-                  <path d="M4.5 0.5 L8 4 L1 4 Z" fill={active && dir==='asc' ? HF.ink : HF.ink5}/>
-                  <path d="M4.5 10.5 L1 7 L8 7 Z" fill={active && dir==='desc' ? HF.ink : HF.ink5}/>
+                  <path d="M4.5 0.5 L8 4 L1 4 Z" fill={active && dir==='asc' ? 'var(--hf-ink)' : 'var(--hf-ink5)'}/>
+                  <path d="M4.5 10.5 L1 7 L8 7 Z" fill={active && dir==='desc' ? 'var(--hf-ink)' : 'var(--hf-ink5)'}/>
                 </svg>
               );
               const SortHdr = ({ k, children, align }) => {
@@ -691,7 +691,7 @@ function HFRunHistoryCard({
                     style={{
                       cursor: 'pointer', background: 'transparent', border: 'none',
                       padding: 0, font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit',
-                      color: active ? HF.accentInk : HF.ink3,
+                      color: active ? 'var(--hf-accent-ink)' : 'var(--hf-ink3)',
                       userSelect: 'none',
                       textAlign: align || 'left',
                       display: 'inline-flex', alignItems: 'center',
@@ -735,7 +735,7 @@ function HFRunHistoryCard({
                   <span style={{display:'inline-flex', flexDirection:'column', gap:2, lineHeight:1.2}}>
                     <HFPill tone="err" style={{width:'fit-content'}}>failed{http ? ` · ${http}` : ''}</HFPill>
                     {u.error_reason && (
-                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.errInk, paddingLeft:2}}>{u.error_reason}</span>
+                      <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-err-ink)', paddingLeft:2}}>{u.error_reason}</span>
                     )}
                   </span>
                 );
@@ -754,12 +754,12 @@ function HFRunHistoryCard({
                 gridTemplateColumns: urlData.source === 'live'
                   ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
                   : '1fr 60px 70px 150px',
-                padding:`7px ${HF.cardP}px`,
-                borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                padding:`7px var(--hf-card-p)`,
+                borderBottom: i < urlData.rows.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
                 fontSize:13, alignItems:'center', gap:10,
               }}>
                 {urlData.source === 'live' && (
-                  <span style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                  <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-accent-ink)', fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
                         title={`item #${u.item_id}`}>
                     {u.item_id ?? '—'}
                   </span>
@@ -771,22 +771,22 @@ function HFRunHistoryCard({
                         <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(u.shop_book_id)})) || '#'}
                            onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('shop-book-detail', {id: String(u.shop_book_id)});}}
                            title={u.title}
-                           style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.accentInk, fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
+                           style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:'var(--hf-accent-ink)', fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
                           {u.title}
                         </a>
                       ) : (
-                        <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.ink, fontWeight:500}} title={u.title}>{u.title}</span>
+                        <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:'var(--hf-ink)', fontWeight:500}} title={u.title}>{u.title}</span>
                       )
                     )}
                     {u.discovered_url_id != null ? (
                       <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
                          onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('url-detail', {id: String(u.discovered_url_id)});}}
                          title={u.url}
-                         style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color:HF.accentInk, textDecoration:'none', cursor:'pointer'}}>
+                         style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:'var(--hf-mono)', fontSize: u.title ? 11 : 12, color:'var(--hf-accent-ink)', textDecoration:'none', cursor:'pointer'}}>
                         {u.url}
                       </a>
                     ) : (
-                      <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink}} title={u.url}>{u.url}</span>
+                      <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:'var(--hf-mono)', fontSize: u.title ? 11 : 12, color: u.title ? 'var(--hf-ink4)' : 'var(--hf-ink)'}} title={u.url}>{u.url}</span>
                     )}
                   </span>
                   <HFExtLink href={u.url}/>
@@ -797,22 +797,22 @@ function HFRunHistoryCard({
                     {u.discovered_url_id != null ? (
                       <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
                          onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
-                         style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
+                         style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-accent-ink)', fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
                         #{u.discovered_url_id}
                       </a>
                     ) : (
-                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5}}>—</span>
+                      <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink5)'}}>—</span>
                     )}
                     {statusCell}
-                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
-                    <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
-                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
+                    <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
+                    <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink4)'}}>{u.url_type}</span>
+                    <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
                     {(() => {
                       // Humanise response_bytes; highlight suspiciously small successful
                       // responses (< 1 KB on a 2xx) — common signature of an anti-bot stub.
                       const b = u.response_bytes;
                       if (b == null) {
-                        return <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, fontVariantNumeric:'tabular-nums'}}>—</span>;
+                        return <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink5)', fontVariantNumeric:'tabular-nums'}}>—</span>;
                       }
                       const fmt = b < 1024
                         ? `${b} B`
@@ -822,7 +822,7 @@ function HFRunHistoryCard({
                       const tiny = b < 1024 && u.status === 'done' && (u.http_status ?? 0) >= 200 && (u.http_status ?? 0) < 300;
                       return (
                         <span title={tiny ? 'Suspiciously small response on a 2xx — possible anti-bot stub' : `${b.toLocaleString()} bytes`}
-                              style={{fontFamily:HF.mono, fontSize:11, color: tiny ? HF.warnInk : HF.ink4, fontVariantNumeric:'tabular-nums'}}>
+                              style={{fontFamily:'var(--hf-mono)', fontSize:11, color: tiny ? 'var(--hf-warn-ink)' : 'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>
                           {fmt}
                         </span>
                       );
@@ -830,10 +830,10 @@ function HFRunHistoryCard({
                     {(() => {
                       const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
                       return <>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap'}} title={lbl.title || ''}>
+                        <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap'}} title={lbl.title || ''}>
                           {_fmtDelay(u.request_delay_s)}
                         </span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={lbl.title || u.delay_source || ''}>
+                        <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink5)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={lbl.title || u.delay_source || ''}>
                           {lbl.suffix || u.delay_source || '—'}
                         </span>
                       </>;
@@ -842,8 +842,8 @@ function HFRunHistoryCard({
                 ) : (
                   <>
                     <HFPill tone={httpTone} style={{width:'fit-content'}}>{u.last_http_status ?? '—'}</HFPill>
-                    <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
-                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.last_checked_at ? new Date(u.last_checked_at).toLocaleString() : '—'}</span>
+                    <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink4)'}}>{u.url_type}</span>
+                    <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>{u.last_checked_at ? new Date(u.last_checked_at).toLocaleString() : '—'}</span>
                   </>
                 )}
               </div>
@@ -854,10 +854,10 @@ function HFRunHistoryCard({
 
       <div style={{
         display:'flex', justifyContent:'space-between', alignItems:'center',
-        padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
-        fontSize:12, color:HF.ink3, flexWrap:'wrap', gap:8,
+        padding:`10px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`,
+        fontSize:12, color:'var(--hf-ink3)', flexWrap:'wrap', gap:8,
       }}>
-        <span style={{fontFamily:HF.mono, color:HF.ink4}}>
+        <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink4)'}}>
           {urlData.total.toLocaleString()} URLs
         </span>
         <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
@@ -865,7 +865,7 @@ function HFRunHistoryCard({
             || urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (
             <HFButton size="sm" variant="ghost" onClick={clearAllFilters}>Clear</HFButton>
           )}
-          <span style={{color:HF.ink4, fontSize:12, marginRight:2}}>Per page:</span>
+          <span style={{color:'var(--hf-ink4)', fontSize:12, marginRight:2}}>Per page:</span>
           {[10, 25, 50, 100].map(n => (
             <HFButton key={n} size="sm"
               variant={urlPerPage === n ? 'accent' : 'subtle'}
@@ -873,7 +873,7 @@ function HFRunHistoryCard({
               {n}
             </HFButton>
           ))}
-          <span style={{width:1, height:18, background:HF.border, margin:'0 4px'}}/>
+          <span style={{width:1, height:18, background:'var(--hf-border)', margin:'0 4px'}}/>
           <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
             aria-label="Previous page"
             onClick={() => setUrlPage(p => Math.max(1, p - 1))}>
@@ -888,7 +888,7 @@ function HFRunHistoryCard({
                 onClick={() => setUrlPage(n)}>{n}</HFButton>
             );
             const ell = (k) => btns.push(
-              <span key={k} style={{padding:'0 2px', color:HF.ink4}}>…</span>
+              <span key={k} style={{padding:'0 2px', color:'var(--hf-ink4)'}}>…</span>
             );
             if (total <= 7) {
               for (let i = 1; i <= total; i++) push(i);
@@ -955,19 +955,19 @@ function HFRunFailuresCard({
         <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => retryRun(null)}>Retry all</HFButton>
         <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(null)}>Open issues</HFButton>
       </>}
-      style={{marginBottom: HF.gap}}
+      style={{marginBottom: 'var(--hf-gap)'}}
     >
       <div style={{padding: 0}}>
         {failureGroups.map((g, i) => {
           const isHttpErr = g.http != null && g.http >= 500;
           const tone = isHttpErr ? 'err' : 'warn';
-          const tonebg = tone === 'err' ? HF.errSoft : HF.warnSoft;
-          const tonefg = tone === 'err' ? HF.errInk : HF.warnInk;
-          const toneb  = tone === 'err' ? HF.errBorder : HF.warnBorder;
+          const tonebg = tone === 'err' ? 'var(--hf-err-soft)' : 'var(--hf-warn-soft)';
+          const tonefg = tone === 'err' ? 'var(--hf-err-ink)' : 'var(--hf-warn-ink)';
+          const toneb  = tone === 'err' ? 'var(--hf-err-border)' : 'var(--hf-warn-border)';
           const open = expandedFailure === i;
           return (
             <div key={`${g.reason ?? '__null__'}|${g.http ?? '__null__'}`} style={{
-              borderTop: i === 0 ? 'none' : `1px solid ${HF.borderFaint}`,
+              borderTop: i === 0 ? 'none' : `1px solid ${'var(--hf-border-faint)'}`,
             }}>
               <div role="button"
                 tabIndex={0}
@@ -976,15 +976,15 @@ function HFRunFailuresCard({
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFailure(open ? -1 : i); } }}
                 onClick={() => setExpandedFailure(open ? -1 : i)}
                 style={{
-                padding: `10px ${HF.cardP}px`,
+                padding: `10px var(--hf-card-p)`,
                 display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
                 cursor: 'pointer',
-                background: open ? HF.subtle : 'transparent',
+                background: open ? 'var(--hf-subtle)' : 'transparent',
               }}>
                 <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0}}>
                   <span aria-hidden="true" style={{
                     display:'inline-flex', alignItems:'center', justifyContent:'center',
-                    width: 14, height: 14, color: HF.ink4,
+                    width: 14, height: 14, color: 'var(--hf-ink4)',
                     transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms',
                   }}>{HF_ICONS.chevron}</span>
                   {g.http != null && (
@@ -992,22 +992,22 @@ function HFRunFailuresCard({
                       display:'inline-flex', alignItems:'center', justifyContent:'center',
                       height: 22, padding: '0 8px',
                       background: tonebg, color: tonefg, border: `1px solid ${toneb}`,
-                      borderRadius: 4, fontFamily: HF.mono, fontSize: 12, fontWeight: 600,
+                      borderRadius: 4, fontFamily: 'var(--hf-mono)', fontSize: 12, fontWeight: 600,
                     }}>{g.http}</span>
                   )}
-                  <span style={{fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 600}}>
+                  <span style={{fontFamily: 'var(--hf-mono)', fontSize: 13, color: 'var(--hf-ink)', fontWeight: 600}}>
                     {g.reason_display ?? g.reason ?? 'unknown'}
                   </span>
-                  <span style={{fontFamily: HF.mono, fontSize: 12, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
+                  <span style={{fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-ink3)', fontVariantNumeric:'tabular-nums'}}>
                     × {g.count}
                   </span>
                   {(g.acked_count ?? 0) > 0 && (
                     <span title={`${g.acked_count} acknowledged event${g.acked_count === 1 ? '' : 's'} in this bucket`} style={{
                       display:'inline-flex', alignItems:'center', gap: 4,
                       height: 20, padding: '0 7px',
-                      background: HF.subtle, color: HF.ink3,
-                      border: `1px solid ${HF.border}`, borderRadius: 4,
-                      fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                      background: 'var(--hf-subtle)', color: 'var(--hf-ink3)',
+                      border: `1px solid ${'var(--hf-border)'}`, borderRadius: 4,
+                      fontFamily: 'var(--hf-mono)', fontSize: 11, fontWeight: 500,
                     }}>
                       <span aria-hidden="true" style={{display:'inline-flex'}}><HFIcon d={<><path d="M3 8 L7 12 L13 4"/></>} size={11} sw={2}/></span>
                       acked × {g.acked_count}
@@ -1017,9 +1017,9 @@ function HFRunFailuresCard({
                     <span title={`This bucket also failed in ${g.recurring_in_runs} of the last 5 prior runs for this shop`} style={{
                       display:'inline-flex', alignItems:'center', gap: 4,
                       height: 20, padding: '0 7px',
-                      background: HF.warnSoft, color: HF.warnInk,
-                      border: `1px solid ${HF.warnBorder}`, borderRadius: 4,
-                      fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                      background: 'var(--hf-warn-soft)', color: 'var(--hf-warn-ink)',
+                      border: `1px solid ${'var(--hf-warn-border)'}`, borderRadius: 4,
+                      fontFamily: 'var(--hf-mono)', fontSize: 11, fontWeight: 500,
                     }}>
                       <span aria-hidden="true" style={{display:'inline-flex'}}>{HF_ICONS.cycle}</span>
                       recurring × {g.recurring_in_runs}
@@ -1032,7 +1032,7 @@ function HFRunFailuresCard({
                 </div>
               </div>
               {open && (
-                <div style={{padding: `4px ${HF.cardP}px 14px`, paddingLeft: HF.cardP + 24}}>
+                <div style={{padding: `4px var(--hf-card-p) 14px`, paddingLeft: 'calc(var(--hf-card-p) + 24px)'}}>
                   <div style={{display:'flex', flexDirection:'column', gap: 6, marginBottom: 8}}>
                     {g.examples.map((ex, j) => {
                       // Older /live payloads returned plain URL strings;
@@ -1045,8 +1045,8 @@ function HFRunFailuresCard({
                       return (
                         <div key={j} style={{display:'flex', flexDirection:'column', gap: 4}}>
                           <div style={{display:'flex', alignItems:'center', gap: 6, minWidth: 0}}>
-                            <span style={{color: HF.ink5}}>·</span>
-                            <span title={exUrl} style={{flex: 1, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth: 0}}>
+                            <span style={{color: 'var(--hf-ink5)'}}>·</span>
+                            <span title={exUrl} style={{flex: 1, fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth: 0}}>
                               {exUrl}
                             </span>
                             {exDetail && (
@@ -1055,7 +1055,7 @@ function HFRunFailuresCard({
                                 onClick={() => setExpandedFailureDetail(detailOpen ? null : detailKey)}
                                 style={{
                                   background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                                  fontFamily: HF.mono, fontSize: 11, color: HF.accentInk,
+                                  fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-accent-ink)',
                                   textDecoration: 'none', whiteSpace: 'nowrap',
                                 }}>
                                 {detailOpen ? 'Hide details' : 'Show details'}
@@ -1065,9 +1065,9 @@ function HFRunFailuresCard({
                           {detailOpen && exDetail && (
                             <pre style={{
                               margin: 0, padding: '8px 10px',
-                              background: HF.subtle, border: `1px solid ${HF.borderFaint}`,
+                              background: 'var(--hf-subtle)', border: `1px solid ${'var(--hf-border-faint)'}`,
                               borderRadius: 4,
-                              fontFamily: HF.mono, fontSize: 11, color: HF.ink2,
+                              fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ink2)',
                               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                               maxHeight: 240, overflow: 'auto',
                             }}>{exDetail}</pre>
@@ -1078,7 +1078,7 @@ function HFRunFailuresCard({
                     {g.count > g.examples.length && (
                       <button onClick={() => applyGroupFilter(g)} style={{
                         background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                        fontFamily: HF.mono, fontSize: 12, color: HF.accentInk,
+                        fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-accent-ink)',
                         textDecoration: 'none', marginLeft: 12, marginTop: 2, textAlign: 'left',
                       }}>+ {g.count - g.examples.length} more (view in History)</button>
                     )}
@@ -1114,13 +1114,13 @@ function HFRunInFlightCard({
       title="In flight"
       sub={`${workerCount} ${workerCount === 1 ? 'URL' : 'URLs'} · ${liveData.eta_min != null ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m` : 'live'}`}
       action={liveHealth ? <HFPill tone={healthTone}><HFDot tone={healthTone} pulse={liveHealth==='healthy'} size={6}/> health: {liveHealth}</HFPill> : null}
-      style={{marginBottom: HF.gap}}
+      style={{marginBottom: 'var(--hf-gap)'}}
     >
-      <div style={{padding: HF.cardP, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: HF.gap, alignItems:'stretch'}}>
+      <div style={{padding: 'var(--hf-card-p)', display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: 'var(--hf-gap)', alignItems:'stretch'}}>
         {/* Active fetch tile */}
         <div style={{
-          background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
-          borderRadius: HF.r2, padding: '14px 16px',
+          background: 'var(--hf-accent-soft)', border: `1px solid ${'var(--hf-accent-border)'}`,
+          borderRadius: 'var(--hf-r2)', padding: '14px 16px',
           display:'flex', flexDirection:'column', gap: 8, position:'relative', overflow:'hidden',
           minHeight: 90,
         }}>
@@ -1128,17 +1128,17 @@ function HFRunInFlightCard({
             <>
               <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 2}}>
                 <HFDot tone="accent" pulse size={7}/>
-                <span style={{fontSize: 11, fontWeight: 600, color: HF.accentInk, letterSpacing: 0.6, textTransform:'uppercase'}}>
+                <span style={{fontSize: 11, fontWeight: 600, color: 'var(--hf-accent-ink)', letterSpacing: 0.6, textTransform:'uppercase'}}>
                   Now fetching
                 </span>
                 <span style={{flex: 1}}/>
-                <span style={{fontFamily: HF.mono, fontSize: 22, fontWeight: 600, color: HF.accentInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                <span style={{fontFamily: 'var(--hf-mono)', fontSize: 22, fontWeight: 600, color: 'var(--hf-accent-ink)', fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
                   {_fmtAge(inFlightFirst.claimed_age_s)}
                 </span>
               </div>
               <div style={{display:'flex', alignItems:'center', gap: 8, minWidth:0}}>
                 <span style={{
-                  fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 500,
+                  fontFamily: 'var(--hf-mono)', fontSize: 13, color: 'var(--hf-ink)', fontWeight: 500,
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex: 1,
                 }} title={inFlightFirst.url}>{inFlightFirst.url}</span>
                 <HFExtLink href={inFlightFirst.url} size={13}/>
@@ -1146,32 +1146,32 @@ function HFRunInFlightCard({
               {(() => {
                 const lbl = DELAY_SOURCE_LABELS[inFlightFirst.delay_source] || {};
                 return (
-                  <div style={{display:'flex', gap: 16, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, marginTop: 2, flexWrap:'wrap'}}>
-                    <span>claimed <span style={{color: HF.ink2}}>{_fmtClockTime(inFlightFirst.claimed_at)}</span></span>
+                  <div style={{display:'flex', gap: 16, fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-ink3)', marginTop: 2, flexWrap:'wrap'}}>
+                    <span>claimed <span style={{color: 'var(--hf-ink2)'}}>{_fmtClockTime(inFlightFirst.claimed_at)}</span></span>
                     <span title={lbl.title || ''}>
-                      throttle <span style={{color: HF.warnInk}}>{_fmtDelay(inFlightFirst.request_delay_s)}</span>
-                      {lbl.suffix ? <span style={{color: HF.ink4}}> · {lbl.suffix}</span> : null}
+                      throttle <span style={{color: 'var(--hf-warn-ink)'}}>{_fmtDelay(inFlightFirst.request_delay_s)}</span>
+                      {lbl.suffix ? <span style={{color: 'var(--hf-ink4)'}}> · {lbl.suffix}</span> : null}
                     </span>
                     {inFlightFirst.retry_count > 0 && (
-                      <span>retries <span style={{color: HF.ink2}}>{inFlightFirst.retry_count}</span></span>
+                      <span>retries <span style={{color: 'var(--hf-ink2)'}}>{inFlightFirst.retry_count}</span></span>
                     )}
                   </div>
                 );
               })()}
               <div style={{
                 position:'absolute', left:0, right:0, bottom:0, height: 3,
-                background: HF.accentSoft2,
+                background: 'var(--hf-accent-soft2)',
               }}>
-                <div style={{width:'40%', height:'100%', background: HF.accent, animation:'hfSweep 1.6s ease-in-out infinite'}}/>
+                <div style={{width:'40%', height:'100%', background: 'var(--hf-accent)', animation:'hfSweep 1.6s ease-in-out infinite'}}/>
               </div>
             </>
           ) : (tabCounts.processing ?? 0) > 0 ? (
-            <div style={{display:'flex', alignItems:'center', gap: 8, flex:1, color: HF.accentInk, fontFamily: HF.mono, fontSize: 13}}>
+            <div style={{display:'flex', alignItems:'center', gap: 8, flex:1, color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-mono)', fontSize: 13}}>
               <HFDot tone="accent" pulse size={7}/>
               {tabCounts.processing} URL{tabCounts.processing > 1 ? 's' : ''} processing · refreshing…
             </div>
           ) : (
-            <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 13}}>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)', fontSize: 13}}>
               {liveData ? 'between requests · waiting for next dispatch…' : 'loading…'}
             </div>
           )}
@@ -1179,30 +1179,30 @@ function HFRunInFlightCard({
 
         {/* Rate (last 60s) — done vs failed */}
         <div style={{display:'flex', flexDirection:'column', gap: 10}}>
-          <div style={{fontSize: 11, fontWeight: 600, color: HF.ink4, letterSpacing: 0.6, textTransform:'uppercase'}}>
+          <div style={{fontSize: 11, fontWeight: 600, color: 'var(--hf-ink4)', letterSpacing: 0.6, textTransform:'uppercase'}}>
             Rate · last {liveRate.window_s}s
           </div>
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, flex: 1}}>
             <div style={{
-              background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: HF.r2,
+              background: 'var(--hf-ok-soft)', border: `1px solid ${'var(--hf-ok-border)'}`, borderRadius: 'var(--hf-r2)',
               padding: '10px 12px',
             }}>
-              <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: HF.okInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+              <div style={{fontFamily: 'var(--hf-mono)', fontSize: 24, fontWeight: 600, color: 'var(--hf-ok-ink)', fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
                 {rateDone}
               </div>
-              <div style={{fontFamily: HF.mono, fontSize: 11, color: HF.okInk, marginTop: 5}}>
+              <div style={{fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ok-ink)', marginTop: 5}}>
                 done · {ratePerMin}/min
               </div>
             </div>
             <div style={{
-              background: rateFailed > 0 ? HF.errSoft : HF.subtle,
-              border: `1px solid ${rateFailed > 0 ? HF.errBorder : HF.border}`, borderRadius: HF.r2,
+              background: rateFailed > 0 ? 'var(--hf-err-soft)' : 'var(--hf-subtle)',
+              border: `1px solid ${rateFailed > 0 ? 'var(--hf-err-border)' : 'var(--hf-border)'}`, borderRadius: 'var(--hf-r2)',
               padding: '10px 12px',
             }}>
-              <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: rateFailed > 0 ? HF.errInk : HF.ink3, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+              <div style={{fontFamily: 'var(--hf-mono)', fontSize: 24, fontWeight: 600, color: rateFailed > 0 ? 'var(--hf-err-ink)' : 'var(--hf-ink3)', fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
                 {rateFailed}
               </div>
-              <div style={{fontFamily: HF.mono, fontSize: 11, color: rateFailed > 0 ? HF.errInk : HF.ink3, marginTop: 5}}>
+              <div style={{fontFamily: 'var(--hf-mono)', fontSize: 11, color: rateFailed > 0 ? 'var(--hf-err-ink)' : 'var(--hf-ink3)', marginTop: 5}}>
                 failed{rateFailed > 0 ? ` · ${failPct}% rate` : ''}
               </div>
             </div>
@@ -1252,8 +1252,8 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
   const totalCount = (itemsAdded ?? 0) + (itemsUpdated ?? 0);
   if (totalCount === 0 || !booksTab) {
     return (
-      <HFCard title="Books" style={{ marginBottom: HF.gap }}>
-        <div style={{padding:'40px 20px', textAlign:'center', color:HF.ink3, fontSize:13}}>
+      <HFCard title="Books" style={{ marginBottom: 'var(--hf-gap)' }}>
+        <div style={{padding:'40px 20px', textAlign:'center', color:'var(--hf-ink3)', fontSize:13}}>
           No books were added or updated by this run.
         </div>
       </HFCard>
@@ -1262,7 +1262,7 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
 
   return (
     <HFCard title="Books">
-      <div style={{padding:`0 ${HF.cardP}px`}}>
+      <div style={{padding:`0 var(--hf-card-p)`}}>
         <HFTabs
           active={booksTab}
           onChange={setBooksTab}
@@ -1277,42 +1277,42 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
               <thead>
-                <tr style={{borderBottom:`1px solid ${HF.border}`}}>
-                  <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Title</th>
-                  <th style={{padding:`7px 8px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Author</th>
-                  <th style={{padding:`7px 8px`, textAlign:'right', fontWeight:600, color:HF.ink3, fontSize:12}}>Price</th>
+                <tr style={{borderBottom:`1px solid ${'var(--hf-border)'}`}}>
+                  <th style={{padding:`7px var(--hf-card-p)`, textAlign:'left', fontWeight:600, color:'var(--hf-ink3)', fontSize:12}}>Title</th>
+                  <th style={{padding:`7px 8px`, textAlign:'left', fontWeight:600, color:'var(--hf-ink3)', fontSize:12}}>Author</th>
+                  <th style={{padding:`7px 8px`, textAlign:'right', fontWeight:600, color:'var(--hf-ink3)', fontSize:12}}>Price</th>
                   {booksTab === 'updated' && (
-                    <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Changed</th>
+                    <th style={{padding:`7px var(--hf-card-p)`, textAlign:'left', fontWeight:600, color:'var(--hf-ink3)', fontSize:12}}>Changed</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {booksData.books.length === 0 ? (
                   <tr>
-                    <td colSpan={booksTab === 'updated' ? 4 : 3} style={{padding:`16px ${HF.cardP}px`, color:HF.ink3, fontSize:13}}>
+                    <td colSpan={booksTab === 'updated' ? 4 : 3} style={{padding:`16px var(--hf-card-p)`, color:'var(--hf-ink3)', fontSize:13}}>
                       No books to show.
                     </td>
                   </tr>
                 ) : booksData.books.map((b, i) => (
-                  <tr key={b.id} style={{borderBottom: i < booksData.books.length - 1 ? `1px solid ${HF.borderFaint}` : 'none'}}>
-                    <td style={{padding:`7px ${HF.cardP}px`, maxWidth:320}}>
+                  <tr key={b.id} style={{borderBottom: i < booksData.books.length - 1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none'}}>
+                    <td style={{padding:`7px var(--hf-card-p)`, maxWidth:320}}>
                       <a
                         href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(b.id)})) || '#'}
-                        style={{color:HF.accent, textDecoration:'none', fontWeight:500}}
+                        style={{color:'var(--hf-accent)', textDecoration:'none', fontWeight:500}}
                         onClick={e => { if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('shop-book-detail', {id: String(b.id)}); }}
                         onMouseEnter={e => e.target.style.textDecoration='underline'}
                         onMouseLeave={e => e.target.style.textDecoration='none'}>
                         {b.title}
                       </a>
                     </td>
-                    <td style={{padding:`7px 8px`, color:HF.ink3, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.author}</td>
-                    <td style={{padding:`7px 8px`, textAlign:'right', fontFamily:HF.mono, fontSize:13, whiteSpace:'nowrap'}}>{b.price}</td>
+                    <td style={{padding:`7px 8px`, color:'var(--hf-ink3)', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.author}</td>
+                    <td style={{padding:`7px 8px`, textAlign:'right', fontFamily:'var(--hf-mono)', fontSize:13, whiteSpace:'nowrap'}}>{b.price}</td>
                     {booksTab === 'updated' && (
-                      <td style={{padding:`7px ${HF.cardP}px`}}>
+                      <td style={{padding:`7px var(--hf-card-p)`}}>
                         {(b.changed_fields || '').split(', ').filter(Boolean).map(f => (
                           <code key={f} style={{
                             fontSize:11, padding:'1px 5px', borderRadius:3, marginRight:4,
-                            background:HF.subtle, color:HF.ink3, fontFamily:HF.mono,
+                            background:'var(--hf-subtle)', color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)',
                           }}>{f}</code>
                         ))}
                       </td>
@@ -1324,11 +1324,11 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
           </div>
           <div style={{
             display:'flex', justifyContent:'space-between', alignItems:'center',
-            padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
+            padding:`10px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`,
           }}>
-            <span style={{fontSize:13, color:HF.ink3}}>{booksData.total.toLocaleString()} books</span>
+            <span style={{fontSize:13, color:'var(--hf-ink3)'}}>{booksData.total.toLocaleString()} books</span>
             <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
-              <span style={{fontSize:12, color:HF.ink3}}>Per page:</span>
+              <span style={{fontSize:12, color:'var(--hf-ink3)'}}>Per page:</span>
               {[25, 50, 100].map(n => (
                 <HFButton key={n} size="sm" variant={booksPerPage === n ? 'accent' : 'subtle'}
                   onClick={() => setBooksPerPage(n)}>{n}</HFButton>
@@ -1345,7 +1345,7 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
                   <HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'subtle'}
                     onClick={() => setBooksPage(n)}>{n}</HFButton>
                 );
-                const ell = k => btns.push(<span key={k} style={{padding:'0 2px', color:HF.ink3}}>…</span>);
+                const ell = k => btns.push(<span key={k} style={{padding:'0 2px', color:'var(--hf-ink3)'}}>…</span>);
                 if (total <= 7) {
                   for (let i = 1; i <= total; i++) push(i);
                 } else {
@@ -1802,14 +1802,14 @@ function HFRunDetail({ nav, goto, params }) {
     return (
       <HFShell {...nav} activePage="runs" title={`Run #${runId}`}
         breadcrumb={<>
-          <a href={runsHref} onClick={onBreadcrumbClick} style={{color:HF.ink3, textDecoration:'none'}}>Runs</a>
-          <span style={{color:HF.ink5}}>/</span>
-          <span style={{fontFamily:HF.mono}}>#{runId}</span>
+          <a href={runsHref} onClick={onBreadcrumbClick} style={{color:'var(--hf-ink3)', textDecoration:'none'}}>Runs</a>
+          <span style={{color:'var(--hf-ink5)'}}>/</span>
+          <span style={{fontFamily:'var(--hf-mono)'}}>#{runId}</span>
         </>}>
         <HFKpiStripSkeleton count={5}/>
-        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
           <HFCard title="Timeline" sub="loading…">
-            <div style={{padding: HF.cardP, display:'flex', flexDirection:'column', gap: 10}}>
+            <div style={{padding: 'var(--hf-card-p)', display:'flex', flexDirection:'column', gap: 10}}>
               {[0,1,2,3,4].map(i => (
                 <div key={i} style={{display:'flex', alignItems:'center', gap: 10}}>
                   <HFSkeleton w={140} h={11}/>
@@ -1820,7 +1820,7 @@ function HFRunDetail({ nav, goto, params }) {
             </div>
           </HFCard>
           <HFCard title="Throughput" sub="loading…">
-            <div style={{padding: HF.cardP}}>
+            <div style={{padding: 'var(--hf-card-p)'}}>
               <HFSkeleton w="100%" h={140}/>
             </div>
           </HFCard>
@@ -1904,7 +1904,7 @@ function HFRunDetail({ nav, goto, params }) {
   return (
     <HFShell {...nav} activePage="runs"
       title={<span style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
-        <span style={{fontFamily:HF.mono, fontSize:24, fontWeight:600, color:HF.ink}}>Run #{id}</span>
+        <span style={{fontFamily:'var(--hf-mono)', fontSize:24, fontWeight:600, color:'var(--hf-ink)'}}>Run #{id}</span>
         <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
         {/* Live indicator — page is auto-refreshing every 2s while the run
             is in an active state. Distinct from the run-status pill: even
@@ -1913,20 +1913,20 @@ function HFRunDetail({ nav, goto, params }) {
         {(runStatus === 'running' || runStatus === 'stopping' || runStatus === 'paused') && (
           <HFPill tone="muted" title="This page is auto-refreshing every 2 seconds">
             <HFDot tone="ok" pulse size={6}/>
-            <span style={{fontFamily:HF.mono, fontSize:11, letterSpacing:0.4, textTransform:'uppercase'}}>Live</span>
+            <span style={{fontFamily:'var(--hf-mono)', fontSize:11, letterSpacing:0.4, textTransform:'uppercase'}}>Live</span>
           </HFPill>
         )}
         {isTerminal && closeReason && (
           <HFPill tone={closeReasonTone} title={`close_reason: ${closeReason}`}>
-            <span style={{fontFamily:HF.mono, fontSize:11}}>{closeReason}</span>
+            <span style={{fontFamily:'var(--hf-mono)', fontSize:11}}>{closeReason}</span>
           </HFPill>
         )}
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>shop={data.shop} · phase={data.phase} · started {data.started_ago} · triggered by {data.by}</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>shop={data.shop} · phase={data.phase} · started {data.started_ago} · triggered by {data.by}</span>}
       breadcrumb={<>
-        <a href={runsHref} onClick={onBreadcrumbClick} style={{color:HF.ink3, textDecoration:'none'}}>Runs</a>
-        <span style={{color:HF.ink5}}>/</span>
-        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>#{id}</span>
+        <a href={runsHref} onClick={onBreadcrumbClick} style={{color:'var(--hf-ink3)', textDecoration:'none'}}>Runs</a>
+        <span style={{color:'var(--hf-ink5)'}}>/</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>#{id}</span>
       </>}
       actions={<>
         <HFButton disabled><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
@@ -1960,13 +1960,13 @@ function HFRunDetail({ nav, goto, params }) {
       {/* KPI strip — Progress · Elapsed · Errors · Workers */}
       <HFKpiStrip items={[
         { label:'Progress', value:`${data.progress}%`,
-          delta:<span style={{color:HF.ink3}}>
+          delta:<span style={{color:'var(--hf-ink3)'}}>
             {data.urls_total
               ? `${progressNumerator.toLocaleString()} of ${data.urls_total.toLocaleString()}`
               : (data.items ? `${data.items.toLocaleString()} items` : '—')}
           </span> },
         { label:'Elapsed', value:data.elapsed || '—',
-          delta:<span style={{color:HF.ink3}}>
+          delta:<span style={{color:'var(--hf-ink3)'}}>
             {liveData?.eta_min != null
               ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m`
               : 'duration'}
@@ -1974,20 +1974,20 @@ function HFRunDetail({ nav, goto, params }) {
         { label:'Errors', value:errorCount.toLocaleString(),
           delta: (() => {
             const a = data.errors_4xx ?? 0, b = data.errors_5xx ?? 0;
-            if (a === 0 && b === 0) return <span style={{color:HF.ink3}}>failed URLs</span>;
-            return <span style={{color:HF.ink3}}>{a} 4xx · {b} 5xx</span>;
+            if (a === 0 && b === 0) return <span style={{color:'var(--hf-ink3)'}}>failed URLs</span>;
+            return <span style={{color:'var(--hf-ink3)'}}>{a} 4xx · {b} 5xx</span>;
           })() },
         { label:'Workers', value:String(workerCount),
-          delta:<span style={{color:HF.ink3}} title="CONCURRENT_REQUESTS_PER_DOMAIN controls max simultaneous fetches">in flight</span> },
+          delta:<span style={{color:'var(--hf-ink3)'}} title="CONCURRENT_REQUESTS_PER_DOMAIN controls max simultaneous fetches">in flight</span> },
         { label:'Val. Issues', value:validationIssueCount.toLocaleString(),
           ...(validationIssueCount > 0 ? { href: `/issues?run_id=${id}` } : {}),
-          delta:<span style={{color: validationIssueCount > 0 ? HF.accentInk : HF.ink3}}>
+          delta:<span style={{color: validationIssueCount > 0 ? 'var(--hf-accent-ink)' : 'var(--hf-ink3)'}}>
             {validationIssueCount > 0 ? 'view →' : 'none'}
           </span> },
       ]}/>
 
       {/* Section tabs — pivot between run health, URL history, and books */}
-      <div style={{marginBottom: HF.gap}}>
+      <div style={{marginBottom: 'var(--hf-gap)'}}>
         <HFTabs
           active={tab}
           onChange={setTab}
@@ -2001,7 +2001,7 @@ function HFRunDetail({ nav, goto, params }) {
 
       {tab === 'general' && <>
       {/* Timeline + Throughput — paired summary row */}
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFRunTimelineCard events={liveData?.events ?? data.events ?? []} style={{marginBottom: 0}}/>
         {(() => {
           const ratePerMinFailed = liveRate.window_s > 0
@@ -2016,37 +2016,37 @@ function HFRunDetail({ nav, goto, params }) {
             <HFCard
               title="Throughput"
               sub={`items / minute · 2s samples · last ${Math.round(THROUGHPUT_MAX_SAMPLES * 2 / 60)}m window`}
-              action={<div style={{display:'flex', gap:14, fontFamily:HF.mono, fontSize:12}}>
+              action={<div style={{display:'flex', gap:14, fontFamily:'var(--hf-mono)', fontSize:12}}>
                 <span style={{display:'flex', alignItems:'center', gap:5}}>
-                  <span style={{width:8, height:8, borderRadius:2, background:HF.ok}}/>
-                  <span style={{color:HF.ink3}}>done</span>
-                  <span style={{color:HF.ink2, fontWeight:600}}>
+                  <span style={{width:8, height:8, borderRadius:2, background:'var(--hf-ok)'}}/>
+                  <span style={{color:'var(--hf-ink3)'}}>done</span>
+                  <span style={{color:'var(--hf-ink2)', fontWeight:600}}>
                     {throughputHistory.length > 0 ? `${throughputHistory[throughputHistory.length-1]}/min` : '—'}
                   </span>
                 </span>
                 <span style={{display:'flex', alignItems:'center', gap:5}}>
-                  <span style={{width:8, height:8, borderRadius:2, background:HF.err}}/>
-                  <span style={{color:HF.ink3}}>failed</span>
-                  <span style={{color: rateFailed > 0 ? HF.errInk : HF.ink3, fontWeight:600}}>
+                  <span style={{width:8, height:8, borderRadius:2, background:'var(--hf-err)'}}/>
+                  <span style={{color:'var(--hf-ink3)'}}>failed</span>
+                  <span style={{color: rateFailed > 0 ? 'var(--hf-err-ink)' : 'var(--hf-ink3)', fontWeight:600}}>
                     {ratePerMinFailed}/min
                   </span>
                 </span>
               </div>}
             >
-              <div style={{padding: HF.cardP}}>
+              <div style={{padding: 'var(--hf-card-p)'}}>
                 <div style={{display:'grid', gridTemplateColumns:'34px 1fr', gap: 8}}>
-                  <div style={{display:'flex', flexDirection:'column', justifyContent:'space-between', alignItems:'flex-end', fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', height: 140, paddingRight: 4}}>
+                  <div style={{display:'flex', flexDirection:'column', justifyContent:'space-between', alignItems:'flex-end', fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums', height: 140, paddingRight: 4}}>
                     {yTicks.map(v => <span key={v}>{v}</span>)}
                   </div>
                   <div style={{minWidth: 0}}>
                     {throughputHistory.length > 1 ? (
                       <HFAreaChart data={throughputHistory} h={140} label="Throughput per sample"/>
                     ) : (
-                      <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:12}}>
+                      <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:12}}>
                         {throughputHistory.length === 0 ? 'Waiting for first poll…' : 'Collecting samples…'}
                       </div>
                     )}
-                    <div style={{display:'flex', justifyContent:'space-between', fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', marginTop: 6}}>
+                    <div style={{display:'flex', justifyContent:'space-between', fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums', marginTop: 6}}>
                       <span>−{sampleAgeS(throughputHistory.length)}s</span>
                       <span>−{sampleAgeS(Math.floor(throughputHistory.length * 3 / 4))}s</span>
                       <span>−{sampleAgeS(Math.floor(throughputHistory.length / 2))}s</span>

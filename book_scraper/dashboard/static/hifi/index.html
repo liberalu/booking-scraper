@@ -92,10 +92,19 @@ function App() {
   const [addBookOpen, setAddBookOpen]         = React.useState(false);
   const [cmdKOpen, setCmdKOpen]               = React.useState(false);
   const [avatarMenu, setAvatarMenu]           = React.useState({ open: false, rect: null });
-  const [, force] = React.useReducer(x => x + 1, 0);
-
-  React.useEffect(() => { window.HF_ACCENT = accent; localStorage.setItem('hf_accent', accent); force(); }, [accent]);
-  React.useEffect(() => { window.HF_DENSITY = density; localStorage.setItem('hf_density', density); force(); }, [density]);
+  // Accent/density swap: tokens are CSS custom properties published from
+  // getHF(). The cascade applies new values without React re-rendering.
+  // We just trigger one getHF() call so the setProperty publisher runs.
+  React.useEffect(() => {
+    window.HF_ACCENT = accent;
+    localStorage.setItem('hf_accent', accent);
+    if (window.getHF) window.getHF();
+  }, [accent]);
+  React.useEffect(() => {
+    window.HF_DENSITY = density;
+    localStorage.setItem('hf_density', density);
+    if (window.getHF) window.getHF();
+  }, [density]);
 
   React.useEffect(() => {
     const onPop = () => {

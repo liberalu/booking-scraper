@@ -53,16 +53,16 @@ function HFCron({ nav, goto }) {
   return (
     <HFShell {...nav} activePage="cron"
       title="Schedules" subtitle="Cron-driven scrape jobs. Disable, edit, or trigger manually."
-      breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Schedules</span></>}
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Schedules</span></>}
       actions={<HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewSchedule()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> New schedule</HFButton>}
     >
       <HFKpiStrip items={[
-        { label:'Schedules',   value: String(jobs.length), delta:<span style={{color:HF.ink3}}>{jobs.filter(j=>j.enabled).length} enabled</span> },
+        { label:'Schedules',   value: String(jobs.length), delta:<span style={{color:'var(--hf-ink3)'}}>{jobs.filter(j=>j.enabled).length} enabled</span> },
       ]}/>
 
-      <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
+      <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+          <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
             {filters.filtered.length} of {jobs.length}
           </span>
           {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -80,18 +80,18 @@ function HFCron({ nav, goto }) {
         <HFTable
           onRowClick={(r) => goto('schedule-detail', { name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus })}
           columns={[
-            { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? HF.ink : HF.ink4, fontWeight:500}}>{v}</span> },
+            { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{v}</span> },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'shop', label:'Shop', w:'0.6fr', sortable:true },
-            { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? HF.errInk : HF.ink}}>{r.last}</span></span> },
-            { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? HF.accentInk : HF.ink4, fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
+            { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
+            { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
             { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
             { key:'enabled', label:'', w:'0.5fr', align:'right', cell:(v, r) => (
               <span
                 onClick={(e) => { e.stopPropagation(); toggleJob(r); }}
                 style={{
                   display:'inline-flex', width:32, height:18, borderRadius:10,
-                  background: v? HF.accent : HF.border, padding:2, alignItems:'center',
+                  background: v? 'var(--hf-accent)' : 'var(--hf-border)', padding:2, alignItems:'center',
                   justifyContent: v? 'flex-end' : 'flex-start', transition:'all 120ms',
                   cursor:'pointer',
                 }}>
@@ -235,8 +235,8 @@ function HFIssues({ nav, goto }) {
     >
       <span style={{
         width:14, height:14, borderRadius:3,
-        border:`1.5px solid ${checked ? HF.accentInk : HF.ink5}`,
-        background: checked ? HF.accentInk : 'transparent',
+        border:`1.5px solid ${checked ? 'var(--hf-accent-ink)' : 'var(--hf-ink5)'}`,
+        background: checked ? 'var(--hf-accent-ink)' : 'transparent',
         display:'flex', alignItems:'center', justifyContent:'center',
         transition:'all 0.12s',
       }}>
@@ -260,8 +260,8 @@ function HFIssues({ nav, goto }) {
       >
         <span style={{
           width:14, height:14, borderRadius:3,
-          border:`1.5px solid ${state !== 'none' ? HF.accentInk : HF.ink5}`,
-          background: state !== 'none' ? HF.accentInk : 'transparent',
+          border:`1.5px solid ${state !== 'none' ? 'var(--hf-accent-ink)' : 'var(--hf-ink5)'}`,
+          background: state !== 'none' ? 'var(--hf-accent-ink)' : 'transparent',
           display:'flex', alignItems:'center', justifyContent:'center',
         }}>
           {state === 'all' && (
@@ -286,22 +286,22 @@ function HFIssues({ nav, goto }) {
     <HFShell {...nav} activePage="issues"
       title={<span style={{display:'flex', alignItems:'center', gap:10}}>
         Issues
-        {runId && <HFPill tone="accent"><span style={{fontFamily:HF.mono, fontSize:11}}>run #{runId}</span></HFPill>}
+        {runId && <HFPill tone="accent"><span style={{fontFamily:'var(--hf-mono)', fontSize:11}}>run #{runId}</span></HFPill>}
       </span>}
       subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
-      breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Issues</span></>}
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Issues</span></>}
       actions={<>
-        {runId && <a href="/issues" style={{fontSize:12, color:HF.ink3, textDecoration:'none'}}>← All issues</a>}
+        {runId && <a href="/issues" style={{fontSize:12, color:'var(--hf-ink3)', textDecoration:'none'}}>← All issues</a>}
         <HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton>
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Open',      value: String(byTab.open), delta:<span style={{color:HF.errInk}}>open</span>, tone: byTab.open > 0 ? 'err' : 'ok' },
-        { label:'Known',     value: String(byTab.known), delta:<span style={{color:HF.ink3}}>acknowledged</span> },
+        { label:'Open',      value: String(byTab.open), delta:<span style={{color:'var(--hf-err-ink)'}}>open</span>, tone: byTab.open > 0 ? 'err' : 'ok' },
+        { label:'Known',     value: String(byTab.known), delta:<span style={{color:'var(--hf-ink3)'}}>acknowledged</span> },
       ]}/>
 
-      <HFCard style={{marginBottom:HF.gap}}>
-        <div style={{padding:`0 ${HF.cardP}px`}}>
+      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
+        <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
             { id:'open', label:'Open', count: byTab.open },
             { id:'triage', label:'Needs triage' },
@@ -315,14 +315,14 @@ function HFIssues({ nav, goto }) {
 
       {/* Bulk action bar — replaces filter bar when ≥1 selected */}
       {selectedCount > 0 ? (
-        <HFCard style={{marginBottom:HF.gap, background:HF.accentSoft, border:`1px solid ${HF.accentBorder}`}} padding={12}>
+        <HFCard style={{marginBottom:'var(--hf-gap)', background:'var(--hf-accent-soft)', border:`1px solid ${'var(--hf-accent-border)'}`}} padding={12}>
           <div style={{display:'flex', alignItems:'center', gap:12, padding:'2px 4px'}}>
             <span style={{
               display:'inline-flex', alignItems:'center', justifyContent:'center',
-              width:22, height:22, borderRadius:4, background:HF.accentInk, color:'#fff',
-              fontFamily:HF.mono, fontSize:11, fontWeight:600, fontVariantNumeric:'tabular-nums',
+              width:22, height:22, borderRadius:4, background:'var(--hf-accent-ink)', color:'#fff',
+              fontFamily:'var(--hf-mono)', fontSize:11, fontWeight:600, fontVariantNumeric:'tabular-nums',
             }}>{selectedCount}</span>
-            <span style={{fontSize:13, color:HF.ink, fontWeight:500}}>
+            <span style={{fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>
               {selectedCount === 1 ? '1 issue' : `${selectedCount} issues`} selected
             </span>
             <span style={{flex:1}}/>
@@ -341,9 +341,9 @@ function HFIssues({ nav, goto }) {
           </div>
         </HFCard>
       ) : (
-        <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
+        <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
           <HFFilterBar right={<>
-            <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+            <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
               {filters.filtered.length} of {tabSource.length}
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -379,25 +379,25 @@ function HFIssues({ nav, goto }) {
             { key:'_chk',  label:(<HeaderCheck/>), w:'36px', align:'center',
               cell:(_, r) => <CheckCell id={r.id} checked={selected.has(r.id)}/> },
             { key:'id',   label:'ID',       w:'0.7fr', mono:true, sortable:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3, fontVariantNumeric:'tabular-nums'}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)', fontVariantNumeric:'tabular-nums'}}>{v}</span>) },
             { key:'sev',  label:'Severity', w:'0.75fr', sortable:true, sortVal:r=>({high:3,medium:2,low:1}[r.sev]||0),
               cell:(v, r) => dimIfKnown(r, <span style={{display:'inline-flex', alignItems:'center', gap:6}}>
                 <HFPill tone={sevTone[v]}>{v}</HFPill>
                 {r.known && <HFPill tone="neutral">known</HFPill>}
               </span>) },
             { key:'type', label:'Type',     w:'1fr',   mono:true, sortable:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink2}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink2)'}}>{v}</span>) },
             { key:'shop', label:'Shop',     w:'0.6fr', sortable:true, muted:true, mono:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)'}}>{v}</span>) },
             { key:'book', label:'Book',     w:'1.3fr', sortable:true,
-              cell:(v, r) => dimIfKnown(r, v === '—' ? <span style={{color:HF.ink4}}>—</span> : <span style={{color:HF.ink, fontWeight:500}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, v === '—' ? <span style={{color:'var(--hf-ink4)'}}>—</span> : <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span>) },
             { key:'url',  label:'URL',      w:'1.2fr', mono:true, muted:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block'}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block'}}>{v}</span>) },
             { key:'detail', label:'Detail', w:'1.6fr',
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink2, fontSize:13}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink2)', fontSize:13}}>{v}</span>) },
             { key:'age',  label:'When',     w:'0.8fr', mono:true, muted:true, sortable:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3}}>{v}</span>) },
-            { key:'_',    label:'',         w:'28px',  align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)'}}>{v}</span>) },
+            { key:'_',    label:'',         w:'28px',  align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={filters.filtered}
         />
@@ -405,7 +405,7 @@ function HFIssues({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
@@ -423,7 +423,7 @@ function HFIssues({ nav, goto }) {
                 const buttons = [];
                 const total = data.pages, cur = data.page;
                 const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
-                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>);
+                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:'var(--hf-ink4)'}}>…</span>);
                 if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
                 else {
                   push(1);
@@ -495,18 +495,18 @@ function HFPrices({ nav, goto }) {
   return (
     <HFShell {...nav} activePage="prices"
       title="Prices" subtitle="Price records across all books and shops."
-      breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Prices</span></>}
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Prices</span></>}
       actions={<HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>}
     >
       <HFKpiStrip items={[
-        { label:'Recent changes', value: (data.total || 0).toLocaleString(), delta:<span style={{color:HF.ink3}}>last 7 days</span>, tone:'ok' },
+        { label:'Recent changes', value: (data.total || 0).toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>last 7 days</span>, tone:'ok' },
       ]}/>
 
-      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
+      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Change distribution" sub="daily price deltas · last 7 days">
-          <div style={{padding:`${HF.cardP}px`}}>
+          <div style={{padding:`var(--hf-card-p)`}}>
             <HFBarChart data={deltas} h={140} colorFn={(v,i,h) => v < 0 ? h.err : v > 0 ? h.ok : h.ink4} label="Daily price deltas"/>
-            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:8, fontVariantNumeric:'tabular-nums'}}>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:8, fontVariantNumeric:'tabular-nums'}}>
               <span>−€2</span><span>−€1</span><span>0</span><span>+€1</span><span>+€2</span><span>+€3</span>
             </div>
           </div>
@@ -521,10 +521,10 @@ function HFPrices({ nav, goto }) {
               ['Academic',   32.10,  0.0],
               ['Art',        28.70, +0.4],
             ].map(([cat, avg, chg], i, arr) => (
-              <div key={cat} style={{padding:`8px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1fr 80px 60px', alignItems:'center', borderBottom: i<arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none', fontSize:13}}>
-                <span style={{color:HF.ink, fontWeight:500}}>{cat}</span>
-                <span style={{fontFamily:HF.mono, color:HF.ink, fontWeight:500, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>€{avg.toFixed(2)}</span>
-                <span style={{fontFamily:HF.mono, color: chg<0?HF.errInk:chg>0?HF.okInk:HF.ink4, textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{chg>0?'+':''}{chg.toFixed(1)}%</span>
+              <div key={cat} style={{padding:`8px var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1fr 80px 60px', alignItems:'center', borderBottom: i<arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none', fontSize:13}}>
+                <span style={{color:'var(--hf-ink)', fontWeight:500}}>{cat}</span>
+                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink)', fontWeight:500, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>€{avg.toFixed(2)}</span>
+                <span style={{fontFamily:'var(--hf-mono)', color: chg<0?'var(--hf-err-ink)':chg>0?'var(--hf-ok-ink)':'var(--hf-ink4)', textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{chg>0?'+':''}{chg.toFixed(1)}%</span>
               </div>
             ))}
           </div>
@@ -532,9 +532,9 @@ function HFPrices({ nav, goto }) {
       </div>
 
       <HFCard title="Recent changes" sub="non-zero price movements · last 7 days">
-        <div style={{padding:`10px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`}}>
+        <div style={{padding:`10px var(--hf-card-p)`, borderBottom:`1px solid ${'var(--hf-border-faint)'}`}}>
           <HFFilterBar right={<>
-            <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+            <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
               {filters.filtered.length} of {rows.length}
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -550,11 +550,11 @@ function HFPrices({ nav, goto }) {
         ) : (
         <HFTable
           columns={[
-            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500}}>{v}</span> },
+            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
             { key:'shop', label:'Shop', w:'0.7fr', sortable:true },
             { key:'old', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true },
-            { key:'new', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:HF.ink, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
-            { key:'pct', label:'Δ %', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => <span style={{color: v<0?HF.errInk:v>0?HF.okInk:HF.ink3, fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v}%</span> },
+            { key:'new', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
+            { key:'pct', label:'Δ %', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => <span style={{color: v<0?'var(--hf-err-ink)':v>0?'var(--hf-ok-ink)':'var(--hf-ink3)', fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v}%</span> },
             { key:'when', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
           ]}
           rows={filters.filtered}
@@ -563,7 +563,7 @@ function HFPrices({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} change{data.total === 1 ? '' : 's'}
@@ -581,7 +581,7 @@ function HFPrices({ nav, goto }) {
                 const buttons = [];
                 const total = data.pages, cur = data.page;
                 const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
-                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:HF.ink4}}>…</span>);
+                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:'var(--hf-ink4)'}}>…</span>);
                 if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
                 else {
                   push(1);
