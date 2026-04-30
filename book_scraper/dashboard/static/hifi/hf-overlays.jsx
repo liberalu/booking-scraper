@@ -1,49 +1,147 @@
 // Hi-fi global overlays — command palette, avatar menu, settings, add/new dialogs.
 // Registers window.HF_APP with openers. Any page can call them.
 
+// Module-level scroll-lock counter so stacked modals don't unlock the body
+// before the topmost one closes.
+let _hfOpenModalCount = 0;
+
+// Focusable selector — used by the focus trap and the initial focus pass.
+const _HF_FOCUSABLE_SEL = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+const _hfModalCtx = React.createContext(null);
+
 // ══════════════════════════════ Base Modal ══════════════════════════════
-function HFModal({ open, onClose, width = 560, children, align = 'center' }) {
+function HFModal({ open, onClose, width = 560, children, align = 'center', label }) {
   const HF = getHF();
+  const panelRef = React.useRef(null);
+  const lastFocusedRef = React.useRef(null);
+  const titleId = React.useId();
+
+  // Save trigger focus on open; restore it on close so keyboard users return
+  // to the button that launched the dialog instead of falling back to <body>.
+  // Initial-focus pass moves focus to the first interactive element inside
+  // the panel (or the panel itself if none), so the dialog is announced
+  // and immediately operable by keyboard.
   React.useEffect(() => {
     if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose && onClose(); };
+    lastFocusedRef.current = document.activeElement;
+    const id = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const els = panel.querySelectorAll(_HF_FOCUSABLE_SEL);
+      const first = Array.from(els).find(el => el.offsetParent !== null);
+      (first || panel).focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      const el = lastFocusedRef.current;
+      if (el && typeof el.focus === 'function') {
+        try { el.focus({ preventScroll: true }); } catch (_) { /* node detached */ }
+      }
+    };
+  }, [open]);
+
+  // Body scroll lock. Counter pattern handles nested modals correctly.
+  React.useEffect(() => {
+    if (!open) return;
+    _hfOpenModalCount += 1;
+    if (_hfOpenModalCount === 1) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      _hfOpenModalCount = Math.max(0, _hfOpenModalCount - 1);
+      if (_hfOpenModalCount === 0) {
+        document.body.style.overflow = '';
+      }
+    };
+  }, [open]);
+
+  // Escape closes; Tab/Shift+Tab cycles inside the panel (focus trap).
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (onClose) { e.stopPropagation(); onClose(); }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const els = Array.from(panel.querySelectorAll(_HF_FOCUSABLE_SEL))
+        .filter(el => el.offsetParent !== null);
+      if (els.length === 0) {
+        e.preventDefault();
+        panel.focus({ preventScroll: true });
+        return;
+      }
+      const first = els[0];
+      const last = els[els.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
   if (!open) return null;
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(16,24,40,.35)',
-      display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center',
-      justifyContent: 'center',
-      paddingTop: align === 'top' ? 96 : 0,
-      fontFamily: HF.sans,
-      backdropFilter: 'blur(2px)',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)',
-        background: HF.surface, borderRadius: HF.r3,
-        border: `1px solid ${HF.border}`,
-        boxShadow: '0 24px 48px -12px rgba(16,24,40,.25), 0 0 0 1px rgba(16,24,40,.04)',
-        overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    <_hfModalCtx.Provider value={{ titleId }}>
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(16,24,40,.35)',
+        display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center',
+        justifyContent: 'center',
+        paddingTop: align === 'top' ? 96 : 0,
+        fontFamily: HF.sans,
+        backdropFilter: 'blur(2px)',
       }}>
-        {children}
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={label ? undefined : titleId}
+          aria-label={label}
+          tabIndex={-1}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)',
+            background: HF.surface, borderRadius: HF.r3,
+            border: `1px solid ${HF.border}`,
+            boxShadow: '0 24px 48px -12px rgba(16,24,40,.25), 0 0 0 1px rgba(16,24,40,.04)',
+            overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            outline: 'none',
+          }}>
+          {children}
+        </div>
       </div>
-    </div>
+    </_hfModalCtx.Provider>
   );
 }
 
 // Modal header/footer/body primitives
 function HFModalHead({ title, sub, onClose, icon }) {
   const HF = getHF();
+  const ctx = React.useContext(_hfModalCtx);
   return (
     <div style={{
       padding: '14px 18px', borderBottom: `1px solid ${HF.borderFaint}`,
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
       {icon && (
-        <div style={{
+        <div aria-hidden="true" style={{
           width: 32, height: 32, borderRadius: 7,
           background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
           color: HF.accent,
@@ -51,11 +149,11 @@ function HFModalHead({ title, sub, onClose, icon }) {
         }}>{icon}</div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: HF.ink, letterSpacing: -0.1 }}>{title}</div>
+        <div id={ctx?.titleId} style={{ fontSize: 14, fontWeight: 600, color: HF.ink, letterSpacing: -0.1 }}>{title}</div>
         {sub && <div style={{ fontSize: 12, color: HF.ink3, marginTop: 2 }}>{sub}</div>}
       </div>
       {onClose && (
-        <button onClick={onClose} className="hf-btn" style={{
+        <button onClick={onClose} aria-label="Close dialog" className="hf-btn" style={{
           background: 'transparent', border: 'none', color: HF.ink3,
           width: 28, height: 28, borderRadius: 5, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
@@ -85,12 +183,12 @@ function HFField({ label, hint, children, required }) {
   const HF = getHF();
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: HF.ink2, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: HF.ink2, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
         {label}
         {required && <span style={{ color: HF.errInk }}>*</span>}
       </div>
       {children}
-      {hint && <div style={{ fontSize: 11.5, color: HF.ink3, marginTop: 5 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 12, color: HF.ink3, marginTop: 5 }}>{hint}</div>}
     </div>
   );
 }
@@ -106,7 +204,7 @@ function HFInput({ value, onChange, placeholder, mono, style, autoFocus, ...rest
         width: '100%', boxSizing: 'border-box',
         padding: '7px 10px', height: 34,
         background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-        color: HF.ink, fontSize: 12.5,
+        color: HF.ink, fontSize: 13,
         fontFamily: mono ? HF.mono : HF.sans,
         outline: 'none',
         ...style,
@@ -125,7 +223,7 @@ function HFSelect({ value, onChange, options, style }) {
       width: '100%', boxSizing: 'border-box',
       padding: '6px 10px', height: 34,
       background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-      color: HF.ink, fontSize: 12.5, fontFamily: HF.sans, cursor: 'pointer',
+      color: HF.ink, fontSize: 13, fontFamily: HF.sans, cursor: 'pointer',
       outline: 'none',
       ...style,
     }}>
@@ -248,11 +346,11 @@ function HFCommandK({ open, onClose, goto }) {
           placeholder="Search pages, actions, shops…"
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
-            color: HF.ink, fontSize: 14.5, fontFamily: HF.sans, padding: '4px 0',
+            color: HF.ink, fontSize: 15, fontFamily: HF.sans, padding: '4px 0',
           }}
         />
         <span style={{
-          fontFamily: HF.mono, fontSize: 10.5,
+          fontFamily: HF.mono, fontSize: 11,
           padding: '2px 6px', background: HF.subtle,
           border: `1px solid ${HF.border}`, borderRadius: 4, color: HF.ink3,
         }}>esc</span>
@@ -268,7 +366,7 @@ function HFCommandK({ open, onClose, goto }) {
           return (
             <div key={sec.label}>
               <div style={{
-                fontSize: 10.5, color: HF.ink4, fontWeight: 600,
+                fontSize: 11, color: HF.ink4, fontWeight: 600,
                 textTransform: 'uppercase', letterSpacing: 0.6,
                 padding: '8px 10px 4px',
               }}>{sec.label}</div>
@@ -296,7 +394,7 @@ function HFCommandK({ open, onClose, goto }) {
                       {it.k === 'nav' ? HF_ICONS.arrow : it.k === 'jump' ? HF_ICONS.play : HF_ICONS.plus}
                     </span>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.t}</span>
-                    <span style={{ fontSize: 11.5, color: hl ? HF.accentInk : HF.ink3, fontFamily: HF.mono, whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.hint}</span>
+                    <span style={{ fontSize: 12, color: hl ? HF.accentInk : HF.ink3, fontFamily: HF.mono, whiteSpace: 'nowrap', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.hint}</span>
                     {hl && <span style={{ fontSize: 11, color: HF.accentInk, fontFamily: HF.mono }}>↵</span>}
                   </div>
                 );
@@ -417,13 +515,13 @@ function HFNewRunDialog({ open, onClose, goto }) {
         )}
         {error && (
           <div style={{
-            color: HF.errInk, fontSize: 12.5, padding: '8px 10px',
+            color: HF.errInk, fontSize: 13, padding: '8px 10px',
             background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
           }}>{error}</div>
         )}
       </HFModalBody>
       <HFModalFoot>
-        <div style={{ flex: 1, fontSize: 11.5, color: HF.ink3, fontFamily: HF.mono, display: 'flex', alignItems: 'center' }}>
+        <div style={{ flex: 1, fontSize: 12, color: HF.ink3, fontFamily: HF.mono, display: 'flex', alignItems: 'center' }}>
           {selShop ? `${urlCount.toLocaleString()} URLs available` : 'Loading shops…'}
         </div>
         <HFButton onClick={onClose}>Cancel</HFButton>
@@ -477,7 +575,7 @@ function HFNewScheduleDialog({ open, onClose }) {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             {presets.map(p => (
               <button key={p.v} onClick={() => pickPreset(p.v)} style={{
-                padding: '4px 9px', fontSize: 11.5, height: 26,
+                padding: '4px 9px', fontSize: 12, height: 26,
                 background: preset === p.v ? HF.accentSoft : HF.surface,
                 border: `1px solid ${preset === p.v ? HF.accentBorder : HF.borderStrong}`,
                 color: preset === p.v ? HF.accentInk : HF.ink2,
@@ -486,7 +584,7 @@ function HFNewScheduleDialog({ open, onClose }) {
             ))}
           </div>
           <HFInput value={cron} onChange={(v) => { setCron(v); setPreset('custom'); }} mono placeholder="0 */2 * * *"/>
-          <div style={{ fontSize: 11.5, color: HF.ink3, marginTop: 6, fontFamily: HF.mono }}>
+          <div style={{ fontSize: 12, color: HF.ink3, marginTop: 6, fontFamily: HF.mono }}>
             min · hr · day · mo · dow
           </div>
         </HFField>
@@ -555,7 +653,7 @@ function HFAddURLDialog({ open, onClose }) {
           }}>
             <div style={{ marginBottom: 8, color: HF.ink4, display: 'flex', justifyContent: 'center' }}>{HF_ICONS.download}</div>
             <div style={{ color: HF.ink2, fontWeight: 500 }}>Drop CSV here</div>
-            <div style={{ fontSize: 11.5, marginTop: 4 }}>Column: <span style={{ fontFamily: HF.mono }}>url</span> · optional: <span style={{ fontFamily: HF.mono }}>priority</span></div>
+            <div style={{ fontSize: 12, marginTop: 4 }}>Column: <span style={{ fontFamily: HF.mono }}>url</span> · optional: <span style={{ fontFamily: HF.mono }}>priority</span></div>
           </div>
         )}
       </HFModalBody>
@@ -675,7 +773,7 @@ function HFParserPicker({ open, onClose, goto }) {
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: HF.ink }}>{s.lbl}</div>
-                <div style={{ fontSize: 11.5, color: HF.ink3, fontFamily: HF.mono, marginTop: 2 }}>{s.parser}</div>
+                <div style={{ fontSize: 12, color: HF.ink3, fontFamily: HF.mono, marginTop: 2 }}>{s.parser}</div>
               </div>
               <span style={{ fontFamily: HF.mono, fontSize: 12, color: tone, fontVariantNumeric: 'tabular-nums' }}>{s.health}%</span>
               <span style={{ color: HF.ink4, display: 'flex' }}>{HF_ICONS.arrow}</span>
@@ -706,7 +804,7 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
           {tabs.map(([v, l]) => (
             <div key={v} onClick={() => setTab(v)} style={{
               padding: '7px 10px', margin: '1px 0', borderRadius: 5, cursor: 'pointer',
-              fontSize: 12.5, fontWeight: tab === v ? 600 : 500,
+              fontSize: 13, fontWeight: tab === v ? 600 : 500,
               color: tab === v ? HF.accentInk : HF.ink2,
               background: tab === v ? HF.accentSoft : 'transparent',
             }}>{l}</div>
@@ -715,7 +813,7 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
         <div className="hf-scroll" style={{ flex: 1, padding: 18, overflow: 'auto' }}>
           {tab === 'appearance' && (
             <div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Accent color</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Accent color</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
                 {Object.keys(HF_ACCENTS).map(a => {
                   const c = HF_ACCENTS[a][500];
@@ -735,13 +833,13 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
                   );
                 })}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Density</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: HF.ink, marginBottom: 10 }}>Density</div>
               <HFSegmented value={density} onChange={(v) => { setDensity(v); persist({ density: v }); }} options={[
                 { value:'comfortable', label:'Comfortable' },
                 { value:'compact', label:'Compact' },
                 { value:'ultra', label:'Ultra' },
               ]}/>
-              <div style={{ fontSize: 11.5, color: HF.ink3, marginTop: 8 }}>
+              <div style={{ fontSize: 12, color: HF.ink3, marginTop: 8 }}>
                 Controls row height, card padding, and font size. {density === 'ultra' && 'Ultra is best for power users with 1440p+ displays.'}
               </div>
             </div>
@@ -761,8 +859,8 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
                 }}>
                   <input type="checkbox" defaultChecked={on} style={{ margin: 0, accentColor: HF.accent }}/>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5, color: HF.ink, fontWeight: 500 }}>{l}</div>
-                    <div style={{ fontSize: 11.5, color: HF.ink3, marginTop: 1 }}>{s}</div>
+                    <div style={{ fontSize: 13, color: HF.ink, fontWeight: 500 }}>{l}</div>
+                    <div style={{ fontSize: 12, color: HF.ink3, marginTop: 1 }}>{s}</div>
                   </div>
                 </label>
               ))}
@@ -818,6 +916,43 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
 // ══════════════════════════════ Avatar menu (popover) ══════════════════════════════
 function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
   const HF = getHF();
+  const lastFocusedRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    lastFocusedRef.current = document.activeElement;
+    const id = requestAnimationFrame(() => {
+      const first = menuRef.current?.querySelector('[role="menuitem"]');
+      first?.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      const el = lastFocusedRef.current;
+      if (el && typeof el.focus === 'function') {
+        try { el.focus({ preventScroll: true }); } catch (_) { /* node detached */ }
+      }
+    };
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose && onClose(); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab') return;
+      const items = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || []);
+      if (items.length === 0) return;
+      const i = items.indexOf(document.activeElement);
+      let next = i;
+      if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) next = (i + 1) % items.length;
+      else next = (i - 1 + items.length) % items.length;
+      e.preventDefault();
+      items[next]?.focus({ preventScroll: true });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open || !anchorRect) return null;
   const items = [
     { label: 'Signed in as admin', head: true, sub: 'admin@bookscraper.local' },
@@ -826,15 +961,20 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
   ];
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        position: 'absolute', top: anchorRect.bottom + 6, right: 24,
-        width: 240, background: HF.surface,
-        border: `1px solid ${HF.border}`, borderRadius: 8,
-        boxShadow: '0 12px 32px rgba(16,24,40,.18), 0 0 0 1px rgba(16,24,40,.03)',
-        padding: 4, fontFamily: HF.sans,
-      }}>
+      <div
+        ref={menuRef}
+        role="menu"
+        aria-label="Account menu"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute', top: anchorRect.bottom + 6, right: 24,
+          width: 240, background: HF.surface,
+          border: `1px solid ${HF.border}`, borderRadius: 8,
+          boxShadow: '0 12px 32px rgba(16,24,40,.18), 0 0 0 1px rgba(16,24,40,.03)',
+          padding: 4, fontFamily: HF.sans,
+        }}>
         {items.map((it, i) => {
-          if (it.divider) return <div key={i} style={{ height: 1, background: HF.borderFaint, margin: '4px 0' }}/>;
+          if (it.divider) return <div key={i} role="separator" style={{ height: 1, background: HF.borderFaint, margin: '4px 0' }}/>;
           if (it.head) return (
             <div key={i} style={{ padding: '8px 10px 6px' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: HF.ink }}>{it.label}</div>
@@ -842,21 +982,29 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
             </div>
           );
           return (
-            <div key={i} onClick={it.action} style={{
-              padding: '7px 10px', borderRadius: 5, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 10,
-              fontSize: 12.5, color: it.danger ? HF.errInk : HF.ink2,
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = HF.subtle}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-              <span style={{ color: it.danger ? HF.errInk : HF.ink4, display: 'flex', width: 14 }}>{it.icon}</span>
+            <button
+              key={i}
+              role="menuitem"
+              onClick={it.action}
+              className="hf-focus"
+              style={{
+                width: '100%', textAlign: 'left',
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                padding: '7px 10px', borderRadius: 5,
+                display: 'flex', alignItems: 'center', gap: 10,
+                fontSize: 13, fontFamily: HF.sans,
+                color: it.danger ? HF.errInk : HF.ink2,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = HF.subtle}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+              <span aria-hidden="true" style={{ color: it.danger ? HF.errInk : HF.ink4, display: 'flex', width: 14 }}>{it.icon}</span>
               <span style={{ flex: 1 }}>{it.label}</span>
               {it.kbd && <span style={{
-                fontFamily: HF.mono, fontSize: 10.5,
+                fontFamily: HF.mono, fontSize: 11,
                 padding: '1px 5px', background: HF.subtle, color: HF.ink3,
                 border: `1px solid ${HF.border}`, borderRadius: 3,
               }}>{it.kbd}</span>}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -934,13 +1082,13 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
         }
         {error && (
           <div style={{
-            color: HF.errInk, fontSize: 12.5, padding: '8px 10px',
+            color: HF.errInk, fontSize: 13, padding: '8px 10px',
             background: HF.errSoft, border: `1px solid ${HF.errBorder}`, borderRadius: 6,
           }}>{error}</div>
         )}
         {saved && (
           <div style={{
-            color: HF.okInk, fontSize: 12.5, padding: '8px 10px',
+            color: HF.okInk, fontSize: 13, padding: '8px 10px',
             background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: 6,
           }}>Saved. Changes take effect on the next crawl.</div>
         )}
@@ -956,6 +1104,181 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
   );
 }
 
+// ══════════════════════════════ Confirm dialog ══════════════════════════════
+// Drop-in replacement for window.confirm(): renders a styled modal so action
+// flows match the rest of the dashboard. `danger` swaps the primary button to
+// the danger variant for destructive actions (Stop run, Re-run, etc.).
+function HFConfirmDialog({ open, title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger, busy, onConfirm, onCancel }) {
+  const HF = getHF();
+  return (
+    <HFModal open={open} onClose={busy ? undefined : onCancel} width={460}>
+      <HFModalHead title={title} onClose={busy ? undefined : onCancel}/>
+      <HFModalBody>
+        <div style={{ fontSize: 13, color: HF.ink2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{body}</div>
+      </HFModalBody>
+      <HFModalFoot>
+        <HFButton onClick={onCancel} disabled={busy}>{cancelLabel}</HFButton>
+        <HFButton variant={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={busy}>
+          {busy ? 'Working…' : confirmLabel}
+        </HFButton>
+      </HFModalFoot>
+    </HFModal>
+  );
+}
+
+// ══════════════════════════════ Acknowledge failure-group dialog ══════════════════════════════
+// Replaces a multi-line window.prompt() — operators come back to acked buckets
+// months later, so a labelled textarea with a real placeholder is much better
+// UX than the OS prompt with `\n`-padded body text.
+function HFAckGroupDialog({ open, group, runId, busy, onConfirm, onCancel }) {
+  const HF = getHF();
+  const [note, setNote] = React.useState('');
+  React.useEffect(() => { if (open) setNote(''); }, [open, group]);
+  if (!group) return null;
+  const label = `${group.reason_display ?? group.reason ?? 'unknown'}${group.http != null ? ` · HTTP ${group.http}` : ''}`;
+  return (
+    <HFModal open={open} onClose={busy ? undefined : onCancel} width={520}>
+      <HFModalHead title="Mark group as known" sub={`Run #${runId} · ${label}`} onClose={busy ? undefined : onCancel}/>
+      <HFModalBody>
+        <div style={{ fontSize: 13, color: HF.ink2, lineHeight: 1.5, marginBottom: 14 }}>
+          The bucket will stop appearing on the Failures card. You can still find acknowledged groups via <strong>Show acknowledged</strong>.
+        </div>
+        <HFField label="Note" hint='Optional. e.g. "vendor outage 2026-04-28", "URL deleted upstream".'>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Why is this safe to ignore?"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '8px 10px', resize: 'vertical', minHeight: 64,
+              background: HF.input, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
+              color: HF.ink, fontSize: 13, fontFamily: HF.sans, outline: 'none',
+            }}
+            onFocus={(e) => e.currentTarget.style.borderColor = HF.accent}
+            onBlur={(e) => e.currentTarget.style.borderColor = HF.borderStrong}
+          />
+        </HFField>
+      </HFModalBody>
+      <HFModalFoot>
+        <HFButton onClick={onCancel} disabled={busy}>Cancel</HFButton>
+        <HFButton variant="primary" onClick={() => onConfirm(note.trim())} disabled={busy}>
+          {busy ? 'Acknowledging…' : 'Mark as known'}
+        </HFButton>
+      </HFModalFoot>
+    </HFModal>
+  );
+}
+
+// ══════════════════════════════ Toasts ══════════════════════════════
+// Pub/sub bus + global push/dismiss. HFToastHost subscribes once and renders
+// the stack at bottom-right. Any code can call window.HF_APP.toast({...}).
+const _hfToastListeners = new Set();
+let _hfToastSeq = 0;
+function _hfPushToast(t) {
+  const id = ++_hfToastSeq;
+  // Tone-based default TTL: errors stay longer so operators can read them.
+  const ttlByTone = { ok: 3500, accent: 3500, warn: 5500, err: 7000, neutral: 4000 };
+  const toast = {
+    id,
+    tone: t.tone || 'neutral',
+    message: t.message || '',
+    detail: t.detail || '',
+    ttl: t.ttl != null ? t.ttl : (ttlByTone[t.tone] ?? 4000),
+  };
+  _hfToastListeners.forEach(l => l({ kind: 'add', toast }));
+  return id;
+}
+function _hfDismissToast(id) {
+  _hfToastListeners.forEach(l => l({ kind: 'remove', id }));
+}
+
+function HFToast({ toast, onDismiss }) {
+  const HF = getHF();
+  React.useEffect(() => {
+    if (!toast.ttl || toast.ttl <= 0) return;
+    const t = setTimeout(() => onDismiss(toast.id), toast.ttl);
+    return () => clearTimeout(t);
+  }, [toast.id, toast.ttl, onDismiss]);
+
+  const tones = {
+    ok:      { bg: HF.okSoft,     bd: HF.okBorder,     fg: HF.okInk,     icon: HF_ICONS.check },
+    err:     { bg: HF.errSoft,    bd: HF.errBorder,    fg: HF.errInk,    icon: HF_ICONS.bang },
+    warn:    { bg: HF.warnSoft,   bd: HF.warnBorder,   fg: HF.warnInk,   icon: HF_ICONS.bang },
+    accent:  { bg: HF.accentSoft, bd: HF.accentBorder, fg: HF.accentInk, icon: HF_ICONS.bang },
+    neutral: { bg: HF.surface,    bd: HF.borderStrong, fg: HF.ink2,      icon: null },
+  };
+  const t = tones[toast.tone] || tones.neutral;
+
+  return (
+    <div role="status" style={{
+      display: 'flex', alignItems: 'flex-start', gap: 10,
+      minWidth: 280, maxWidth: 420,
+      padding: '10px 12px',
+      background: HF.surface,
+      border: `1px solid ${t.bd}`,
+      borderLeft: `3px solid ${t.fg}`,
+      borderRadius: HF.r3,
+      boxShadow: HF.shadowLg,
+      fontFamily: HF.sans, fontSize: 13, color: HF.ink,
+      pointerEvents: 'auto',
+    }}>
+      {t.icon && (
+        <span aria-hidden="true" style={{
+          color: t.fg, display: 'flex', flexShrink: 0,
+          marginTop: 1,
+        }}>{t.icon}</span>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 500, color: HF.ink, lineHeight: 1.35 }}>{toast.message}</div>
+        {toast.detail && (
+          <div style={{ fontSize: 12, color: HF.ink3, marginTop: 3, lineHeight: 1.4, wordBreak: 'break-word' }}>
+            {toast.detail}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => onDismiss(toast.id)}
+        aria-label="Dismiss"
+        className="hf-focus"
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: HF.ink4, fontSize: 16, lineHeight: 1, padding: '2px 4px',
+          borderRadius: 4, flexShrink: 0,
+          fontFamily: HF.sans,
+        }}
+      >×</button>
+    </div>
+  );
+}
+
+function HFToastHost() {
+  const [toasts, setToasts] = React.useState([]);
+  React.useEffect(() => {
+    const handler = (ev) => {
+      if (ev.kind === 'add')    setToasts(prev => [...prev, ev.toast]);
+      if (ev.kind === 'remove') setToasts(prev => prev.filter(x => x.id !== ev.id));
+    };
+    _hfToastListeners.add(handler);
+    return () => _hfToastListeners.delete(handler);
+  }, []);
+  const onDismiss = React.useCallback((id) => _hfDismissToast(id), []);
+
+  return (
+    <div
+      aria-live="polite"
+      aria-atomic="false"
+      style={{
+        position: 'fixed', right: 20, bottom: 20, zIndex: 200,
+        display: 'flex', flexDirection: 'column-reverse', gap: 8,
+        pointerEvents: 'none',
+      }}
+    >
+      {toasts.map(t => <HFToast key={t.id} toast={t} onDismiss={onDismiss}/>)}
+    </div>
+  );
+}
+
 // ══════════════════════════════ Exports ══════════════════════════════
 Object.assign(window, {
   HFModal, HFModalHead, HFModalBody, HFModalFoot,
@@ -964,4 +1287,7 @@ Object.assign(window, {
   HFAddURLDialog, HFAddShopDialog, HFAddBookDialog,
   HFParserPicker, HFSettings, HFAvatarMenu,
   HFRateSettingsDialog,
+  HFConfirmDialog, HFAckGroupDialog,
+  HFToast, HFToastHost,
+  _hfPushToast, _hfDismissToast,
 });

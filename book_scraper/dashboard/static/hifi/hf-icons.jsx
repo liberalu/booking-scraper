@@ -29,6 +29,8 @@ const HF_ICONS = {
   download: <HFIcon d={<><path d="M8 2 V11 M4 7 L8 11 L12 7 M3 13 H13"/></>} />,
   stop:     <HFIcon d={<><rect x="4" y="4" width="8" height="8" rx="1"/></>} />,
   play:     <HFIcon d={<><path d="M5 3 L12 8 L5 13 Z"/></>} />,
+  pause:    <HFIcon d={<><rect x="4" y="3" width="3" height="10" rx="0.5"/><rect x="9" y="3" width="3" height="10" rx="0.5"/></>} />,
+  cycle:    <HFIcon d={<><path d="M14 4 V8 H10 M2 12 V8 H6"/><path d="M3 6 A5 5 0 0 1 12 5 M13 10 A5 5 0 0 1 4 11"/></>} />,
   settings: <HFIcon d={<><circle cx="8" cy="8" r="2"/><path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15 M3 3 L4.5 4.5 M11.5 11.5 L13 13 M3 13 L4.5 11.5 M11.5 4.5 L13 3"/></>} />,
   check:    <HFIcon d={<><path d="M3 8 L7 12 L13 4"/></>} />,
   bang:     <HFIcon d={<><circle cx="8" cy="8" r="6"/><path d="M8 5 V9 M8 11 V11.1"/></>} />,

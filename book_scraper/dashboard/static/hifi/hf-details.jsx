@@ -17,7 +17,7 @@ function HFUrlDetail({ nav, goto, params }) {
   if (loading || !data) {
     return (
       <HFShell {...nav} activePage="urls" title="URL detail" subtitle="Loading…"
-        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('urls');}}>URLs</a><span>/</span><span>#{urlId}</span></>}>
+        breadcrumb={<><HFBreadcrumbLink page="urls" goto={goto}>URLs</HFBreadcrumbLink><span>/</span><span>#{urlId}</span></>}>
         <div style={{padding:40, color:HF.ink3}}>Loading…</div>
       </HFShell>
     );
@@ -45,9 +45,9 @@ function HFUrlDetail({ nav, goto, params }) {
           <HFPill tone={code>=400?'err':code>=300?'warn':'ok'}>HTTP {code}</HFPill>
         </span>
       }
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
       breadcrumb={<>
-        <a href="#" onClick={(e)=>{e.preventDefault(); goto('urls');}} style={{color:HF.ink3, textDecoration:'none'}}>URLs</a>
+        <HFBreadcrumbLink page="urls" goto={goto}>URLs</HFBreadcrumbLink>
         <span style={{color:HF.ink5}}>/</span>
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono, overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>{urlPath}</span>
       </>}
@@ -73,7 +73,7 @@ function HFUrlDetail({ nav, goto, params }) {
             <div style={{color:HF.err, display:'flex', marginTop:1}}>{HF_ICONS.bang}</div>
             <div style={{flex:1, minWidth:0}}>
               <div style={{fontSize:13, fontWeight:600, color:HF.errInk, marginBottom:2}}>URL has been failing for 6 consecutive checks</div>
-              <div style={{fontSize:12.5, color:HF.ink2, lineHeight:1.5}}>
+              <div style={{fontSize:13, color:HF.ink2, lineHeight:1.5}}>
                 Returns <span style={{fontFamily:HF.mono, fontWeight:500}}>HTTP 404</span> since <span style={{fontFamily:HF.mono}}>2d ago</span>. Last successful response on <span style={{fontFamily:HF.mono}}>4d ago</span> was <span style={{fontFamily:HF.mono}}>HTTP 200</span>. This URL resolves to <span style={{color:HF.ink, fontWeight:500}}>Sapiens (alias)</span> — consider removing the alias or updating the parser.
               </div>
             </div>
@@ -114,7 +114,7 @@ function HFUrlDetail({ nav, goto, params }) {
               <div key={k} style={{
                 display:'flex', padding:`8px ${HF.cardP}px`,
                 borderBottom: i<arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-                fontSize:12.5, gap:12, alignItems:'center',
+                fontSize:13, gap:12, alignItems:'center',
               }}>
                 <span style={{color:HF.ink4, minWidth:110}}>{k}</span>
                 <span style={{
@@ -239,9 +239,9 @@ function HFIssueDetail({ nav, goto, params }) {
         <span>{m.title}</span>
         <HFPill tone={sevTone[sev]}>{sev} severity</HFPill>
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>type={type} · first seen 2 days ago · {count} affected</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>type={type} · first seen 2 days ago · {count} affected</span>}
       breadcrumb={<>
-        <a href="#" onClick={(e)=>{e.preventDefault(); goto('issues');}} style={{color:HF.ink3, textDecoration:'none'}}>Issues</a>
+        <HFBreadcrumbLink page="issues" goto={goto}>Issues</HFBreadcrumbLink>
         <span style={{color:HF.ink5}}>/</span>
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{type}</span>
       </>}
@@ -260,7 +260,7 @@ function HFIssueDetail({ nav, goto, params }) {
             <div style={{
               marginTop:14, padding:'8px 10px',
               background:HF.subtle, border:`1px solid ${HF.borderFaint}`, borderRadius:5,
-              fontFamily:HF.mono, fontSize:11.5, color:HF.ink2,
+              fontFamily:HF.mono, fontSize:12, color:HF.ink2,
             }}>
               <span style={{color:HF.ink4, marginRight:8}}>rule:</span>{m.rule}
             </div>
@@ -275,8 +275,8 @@ function HFIssueDetail({ nav, goto, params }) {
               ['Assigned',     'unassigned', HF.ink4],
             ].map(([k,v,c]) => (
               <div key={k}>
-                <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
-                <div style={{fontSize:13.5, color: c||HF.ink, marginTop:3, fontWeight: c?500:400, fontFamily: typeof v==='number'||['2 days ago','12m ago'].includes(v)?HF.mono:HF.sans, fontVariantNumeric:'tabular-nums'}}>{v}</div>
+                <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
+                <div style={{fontSize:14, color: c||HF.ink, marginTop:3, fontWeight: c?500:400, fontFamily: typeof v==='number'||['2 days ago','12m ago'].includes(v)?HF.mono:HF.sans, fontVariantNumeric:'tabular-nums'}}>{v}</div>
               </div>
             ))}
           </div>
@@ -284,8 +284,8 @@ function HFIssueDetail({ nav, goto, params }) {
       </HFCard>
 
       <HFKpiStrip items={[
-        { label:'Affected now', value:String(count), tone:sevTone[sev], delta:<span style={{color:sevInk[sev]}}>▲ 3 today</span> },
-        { label:'Affected 7d',  value:'84',  delta:<span style={{color:HF.errInk}}>▲ 36 vs prev</span> },
+        { label:'Affected now', value:String(count), tone:sevTone[sev], delta:<span style={{color:sevInk[sev]}}>+3 today</span> },
+        { label:'Affected 7d',  value:'84',  delta:<span style={{color:HF.errInk}}>+36 vs prev</span> },
         { label:'Resolved 7d',  value:'12',  delta:<span style={{color:HF.okInk}}>manually</span>, tone:'ok' },
         { label:'Avg delta',    value:'-15.9%', delta:<span style={{color:HF.errInk}}>abs · worsening</span>, tone:'err' },
         { label:'MTTR',         value:'1.8d',    delta:<span style={{color:HF.ink3}}>median</span> },
@@ -294,7 +294,7 @@ function HFIssueDetail({ nav, goto, params }) {
       <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
         <HFCard title="Occurrences over time" sub="new issues per day · last 14 days">
           <div style={{padding:`${HF.cardP}px`}}>
-            <HFAreaChart data={trend} h={160}/>
+            <HFAreaChart data={trend} h={160} label="Issues per day"/>
           </div>
         </HFCard>
         <HFCard title="Suggested actions">
@@ -307,8 +307,8 @@ function HFIssueDetail({ nav, goto, params }) {
             ].map((a, i, arr) => (
               <div key={a.t} style={{padding:`12px ${HF.cardP}px`, borderBottom: i<arr.length-1?`1px solid ${HF.borderFaint}`:'none', display:'flex', gap:12, alignItems:'flex-start'}}>
                 <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:12.5, color:HF.ink, fontWeight:500}}>{a.t}</div>
-                  <div style={{fontSize:11.5, color:HF.ink3, marginTop:2, fontFamily:HF.mono}}>{a.d}</div>
+                  <div style={{fontSize:13, color:HF.ink, fontWeight:500}}>{a.t}</div>
+                  <div style={{fontSize:12, color:HF.ink3, marginTop:2, fontFamily:HF.mono}}>{a.d}</div>
                 </div>
                 <HFButton size="sm" variant={a.tone || 'default'}>{a.act}</HFButton>
               </div>

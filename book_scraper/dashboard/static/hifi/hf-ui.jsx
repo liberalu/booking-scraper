@@ -37,6 +37,81 @@ function useHFFilters(rows, spec) {
   return { q, setQ, vals, setVal, filtered, activeCount, clearAll };
 }
 
+// Skeleton — animated placeholder block. Use w/h to size; defaults to a
+// 12px-tall pill that mimics a line of body text. Set `circle` for round
+// avatars/dots. The `hfShimmer` keyframe is defined globally and respects
+// prefers-reduced-motion via the global media-query guard.
+function HFSkeleton({ w = '100%', h = 12, br = 4, circle, style, inline }) {
+  const HF = getHF();
+  return (
+    <span aria-hidden="true" style={{
+      display: inline ? 'inline-block' : 'block',
+      width: circle ? h : w, height: h,
+      borderRadius: circle ? '50%' : br,
+      background: `linear-gradient(90deg, ${HF.subtle} 0%, ${HF.border} 50%, ${HF.subtle} 100%)`,
+      backgroundSize: '200% 100%',
+      animation: 'hfShimmer 1.5s ease-in-out infinite',
+      flexShrink: 0,
+      ...style,
+    }}/>
+  );
+}
+
+// Repeating skeleton table rows that match HFTable's column rhythm.
+// Pass the same `columns` you'd pass to HFTable + how many rows to render.
+function HFTableSkeleton({ columns, rows = 6, density }) {
+  const HF = getHF();
+  const gridCols = columns.map(c => c.w || '1fr').join(' ');
+  return (
+    <div role="status" aria-label="Loading table">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{
+          display: 'grid', gridTemplateColumns: gridCols,
+          padding: `${HF.cellY}px ${HF.cardP}px`,
+          minHeight: HF.rowH,
+          borderBottom: i < rows - 1 ? `1px solid ${HF.borderFaint}` : 'none',
+          alignItems: 'center', gap: 0,
+        }}>
+          {columns.map((c, j) => (
+            <div key={j} style={{
+              paddingRight: j < columns.length - 1 ? 12 : 0,
+              display: 'flex',
+              justifyContent: c.align === 'right' ? 'flex-end' : 'flex-start',
+            }}>
+              <HFSkeleton w={c.skelW || (c.mono ? 64 : 120)} h={12}/>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// KPI strip skeleton — same chrome as HFKpiStrip, with shimmer placeholders
+// in each tile. `count` defaults to 5 (matching the typical strip width).
+function HFKpiStripSkeleton({ count = 5 }) {
+  const HF = getHF();
+  return (
+    <div role="status" aria-label="Loading metrics" style={{
+      display: 'grid', gridTemplateColumns: `repeat(${count}, 1fr)`,
+      border: `1px solid ${HF.border}`, borderRadius: HF.r3,
+      background: HF.surface, boxShadow: HF.shadow,
+      overflow: 'hidden', marginBottom: HF.gap,
+    }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{
+          padding: `${HF.kpiP}px ${HF.kpiP + 2}px`,
+          borderRight: i < count - 1 ? `1px solid ${HF.border}` : 'none',
+        }}>
+          <HFSkeleton w={70} h={9} style={{ marginBottom: 10 }}/>
+          <HFSkeleton w={90} h={22} style={{ marginBottom: 10 }}/>
+          <HFSkeleton w={60} h={10}/>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Standard empty-state card body (wrap in HFCard)
 function HFEmptyState({ title, sub, onClear, actionLabel = 'Clear filters' }) {
   const HF = getHF();
@@ -44,7 +119,7 @@ function HFEmptyState({ title, sub, onClear, actionLabel = 'Clear filters' }) {
     <div style={{padding:'60px 20px', textAlign:'center', color:HF.ink3}}>
       <div style={{fontSize:28, marginBottom:8, color:HF.ink5, display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
       <div style={{fontSize:14, color:HF.ink, fontWeight:500, marginBottom:4}}>{title}</div>
-      {sub && <div style={{fontSize:12.5, color:HF.ink3, marginBottom:14, maxWidth:360, margin:'0 auto 14px', lineHeight:1.5}}>{sub}</div>}
+      {sub && <div style={{fontSize:13, color:HF.ink3, marginBottom:14, maxWidth:360, margin:'0 auto 14px', lineHeight:1.5}}>{sub}</div>}
       {onClear && <HFButton size="sm" onClick={onClear}>{actionLabel}</HFButton>}
     </div>
   );
@@ -55,7 +130,7 @@ function HFButton({ children, variant = 'default', size = 'md', style, ...rest }
   const sizes = {
     sm: { padding: '4px 9px', fontSize: 12, height: 26 },
     md: { padding: '6px 12px', fontSize: 13, height: 32 },
-    lg: { padding: '8px 16px', fontSize: 13.5, height: 36 },
+    lg: { padding: '8px 16px', fontSize: 14, height: 36 },
   };
   const variants = {
     default: { background: HF.surface, border: `1px solid ${HF.borderStrong}`, color: HF.ink, boxShadow: '0 1px 2px rgba(16,24,40,.04)' },
@@ -97,7 +172,7 @@ function HFPill({ children, tone = 'neutral', soft = true, style }) {
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: '1px 8px', height: 20,
       background: t.bg, color: t.fg, border: `1px solid ${t.bd}`,
-      borderRadius: 4, fontSize: 11.5, fontWeight: 500,
+      borderRadius: 4, fontSize: 12, fontWeight: 500,
       fontFamily: HF.sans, whiteSpace: 'nowrap', lineHeight: '18px',
       ...style,
     }}>{children}</span>
@@ -151,7 +226,7 @@ function HFFilter({ label, value, options, onChange, active, allLabel = 'all' })
         border: `1px solid ${isActive ? HF.accentBorder : HF.borderStrong}`,
         borderRadius: 6,
         color: HF.ink,
-        fontSize: 12.5, fontFamily: HF.sans,
+        fontSize: 13, fontFamily: HF.sans,
         cursor: options ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 6,
         boxShadow: '0 1px 2px rgba(16,24,40,.03)',
       }}>
@@ -172,7 +247,7 @@ function HFFilter({ label, value, options, onChange, active, allLabel = 'all' })
             const sel = v === value;
             return (
               <div key={v} onClick={() => handlePick(v)} style={{
-                padding: '6px 10px', fontSize: 12.5,
+                padding: '6px 10px', fontSize: 13,
                 borderRadius: 4, cursor: 'pointer',
                 color: sel ? HF.accentInk : HF.ink2,
                 background: sel ? HF.accentSoft : 'transparent',
@@ -200,7 +275,7 @@ function HFSearch({ placeholder = 'Search…', width = 260, value, onChange }) {
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '0 10px', height: 32,
       background: HF.surface, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-      color: HF.ink4, fontSize: 12.5, width,
+      color: HF.ink4, fontSize: 13, width,
       boxShadow: '0 1px 2px rgba(16,24,40,.03)',
       cursor: 'text',
     }}>
@@ -212,7 +287,7 @@ function HFSearch({ placeholder = 'Search…', width = 260, value, onChange }) {
         onChange={(e) => onChange && onChange(e.target.value)}
         style={{
           flex: 1, border: 'none', outline: 'none', background: 'transparent',
-          color: HF.ink, fontSize: 12.5, fontFamily: HF.sans, padding: 0,
+          color: HF.ink, fontSize: 13, fontFamily: HF.sans, padding: 0,
           minWidth: 0,
         }}
       />
@@ -242,7 +317,7 @@ function HFCard({ title, sub, action, children, style, padding, flush }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
         }}>
           <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            {title && <div style={{ fontSize: 13.5, fontWeight: 600, color: HF.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: -0.1 }}>{title}</div>}
+            {title && <div style={{ fontSize: 14, fontWeight: 600, color: HF.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: -0.1 }}>{title}</div>}
             {sub && <div style={{ fontSize: 12, color: HF.ink3, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
           </div>
           {action && <div style={{ flexShrink: 0, display:'flex', gap:8 }}>{action}</div>}
@@ -402,13 +477,27 @@ function HFTabs({ tabs, active, onChange }) {
   );
 }
 
+// Build a short aria-summary for a numeric series. `label` is the data subject
+// ("Scrape activity per day"); defaults to a generic noun.
+function hfChartSummary(data, label = 'Series') {
+  if (!data || data.length === 0) return `${label}: no data`;
+  const peak = Math.max(...data);
+  const latest = data[data.length - 1];
+  const fmt = (n) => Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2);
+  return `${label}, ${data.length} points. Peak ${fmt(peak)}. Latest ${fmt(latest)}.`;
+}
+
 // Sparkline / area chart
-function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8 }) {
+function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8, label = 'Trend' }) {
   const HF = getHF();
+  if (!data || data.length === 0) {
+    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: HF.ink4, fontSize: 12 }}>No data</div>;
+  }
   const max = Math.max(...data), min = Math.min(...data);
   const range = max - min || 1;
+  const denom = data.length === 1 ? 1 : data.length - 1;
   const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
+    const x = (i / denom) * w;
     const y = h - ((v - min) / range) * (h - 14) - 7;
     return [x, y];
   });
@@ -417,8 +506,10 @@ function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8 }) {
   const gid = 'hfA_' + Math.random().toString(36).slice(2, 8);
   // gridlines
   const lines = [0.25, 0.5, 0.75].map(p => h * p);
+  const summary = hfChartSummary(data, label);
   return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }} role="img" aria-label={summary}>
+      <title>{summary}</title>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={HF.chartFillFrom} stopOpacity="0.9"/>
@@ -434,11 +525,14 @@ function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8 }) {
   );
 }
 
-function HFBarChart({ data, h = 140, colorFn }) {
+function HFBarChart({ data, h = 140, colorFn, label = 'Bar chart' }) {
   const HF = getHF();
-  const max = Math.max(...data.map(d => Math.abs(d)));
+  if (!data || data.length === 0) {
+    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: HF.ink4, fontSize: 12 }}>No data</div>;
+  }
+  const max = Math.max(...data.map(d => Math.abs(d))) || 1;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
+    <div role="img" aria-label={hfChartSummary(data, label)} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
       {data.map((v, i) => {
         const c = colorFn ? colorFn(v, i, HF) : (v >= 0 ? HF.accent : HF.err);
         return (
@@ -455,11 +549,14 @@ function HFBarChart({ data, h = 140, colorFn }) {
   );
 }
 
-function HFSparkBars({ data, h = 80 }) {
+function HFSparkBars({ data, h = 80, label = 'Activity' }) {
   const HF = getHF();
-  const max = Math.max(...data);
+  if (!data || data.length === 0) {
+    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: HF.ink4, fontSize: 12 }}>No data</div>;
+  }
+  const max = Math.max(...data) || 1;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
+    <div role="img" aria-label={hfChartSummary(data, label)} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
       {data.map((v, i) => (
         <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
           <div style={{
@@ -474,13 +571,19 @@ function HFSparkBars({ data, h = 80 }) {
   );
 }
 
-function HFKpiTile({ label, value, delta, tone, href = '#', last, icon, onClick }) {
+function HFKpiTile({ label, value, delta, tone, href, last, icon, onClick }) {
   const HF = getHF();
   const toneColor = tone === 'ok' ? HF.okInk : tone === 'warn' ? HF.warnInk : tone === 'err' ? HF.errInk : tone === 'accent' ? HF.accentInk : HF.ink3;
-  const clickable = !!onClick;
+  const clickable = !!onClick || !!href;
+  const handleClick = onClick ? (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    onClick();
+  } : undefined;
   return (
-    <a href={href}
-       onClick={clickable ? (e) => { e.preventDefault(); onClick(); } : undefined}
+    <a href={href || '#'}
+       onClick={handleClick}
+       aria-label={`${label}: ${value}`}
        className="hf-link" style={{
       display: 'block', textDecoration: 'none', color: HF.ink,
       padding: `${HF.kpiP}px ${HF.kpiP + 2}px`,
@@ -492,7 +595,7 @@ function HFKpiTile({ label, value, delta, tone, href = '#', last, icon, onClick 
     onMouseEnter={clickable ? (e) => { e.currentTarget.style.background = HF.subtle; } : undefined}
     onMouseLeave={clickable ? (e) => { e.currentTarget.style.background = HF.surface; } : undefined}>
       <div style={{
-        fontSize: 11.5, color: HF.ink3, fontWeight: 500,
+        fontSize: 12, color: HF.ink3, fontWeight: 500,
         textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
       }}>{label}</div>
       <div style={{
@@ -522,10 +625,29 @@ function HFKpiStrip({ items }) {
 }
 
 const hfLink = (HF) => ({
-  fontSize: 12.5, color: HF.accentInk,
+  fontSize: 13, color: HF.accentInk,
   textDecoration: 'none', fontFamily: HF.sans, fontWeight: 500,
   display: 'inline-flex', alignItems: 'center', gap: 4,
 });
+
+// SPA-friendly breadcrumb anchor. Renders a real <a href> from
+// window.HF_BUILD_PATH so middle-click and cmd/ctrl-click open in a new tab,
+// while normal clicks intercept and call goto(). Drop-in for the
+// `<a href="#" onClick={e => { e.preventDefault(); goto(page); }}>` pattern.
+function HFBreadcrumbLink({ page, params, goto, children, style }) {
+  const HF = getHF();
+  const href = (window.HF_BUILD_PATH && window.HF_BUILD_PATH(page, params)) || '#';
+  const onClick = (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    goto && goto(page, params);
+  };
+  return (
+    <a href={href} onClick={onClick} className="hf-link" style={{ color: HF.ink3, textDecoration: 'none', ...style }}>
+      {children}
+    </a>
+  );
+}
 
 // "Open in new tab" icon link — pairs with mono URL text inside table cells.
 // Stops row-click propagation so clicking the icon doesn't also open the row.
@@ -560,4 +682,6 @@ Object.assign(window, {
   HFButton, HFPill, HFDot, HFFilterBar, HFFilter, HFSearch,
   HFTable, HFTabs, HFAreaChart, HFBarChart, HFSparkBars,
   HFKpiTile, HFKpiStrip, HFCard, hfLink, HFExtLink,
+  HFSkeleton, HFTableSkeleton, HFKpiStripSkeleton,
+  HFBreadcrumbLink,
 });

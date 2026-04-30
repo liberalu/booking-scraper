@@ -67,7 +67,7 @@ function HFShopBooks({ nav, goto }) {
 
       <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:11.5, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
+          <span style={{fontSize:12, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
             {rows.length.toLocaleString()} of {(data.total || 0).toLocaleString()}
           </span>
           {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
@@ -100,7 +100,7 @@ function HFShopBooks({ nav, goto }) {
             { key:'title', label:'Title', w:'2.4fr', sortable:true, cell: (v,r) => (
               <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
                 <span style={{color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
-                <span style={{color:HF.ink3, fontSize:11.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.author}</span>
+                <span style={{color:HF.ink3, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.author}</span>
               </span>
             )},
             { key:'shop', label:'Shop', w:'0.7fr', sortable:true, cell: v => <span style={{color:HF.ink}}>{v}</span> },
@@ -116,7 +116,7 @@ function HFShopBooks({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
@@ -124,8 +124,12 @@ function HFShopBooks({ nav, goto }) {
           {data.pages > 1 && (
             <div style={{display:'flex', gap:6, alignItems:'center'}}>
               <HFButton size="sm" variant="ghost"
+                aria-label="Previous page"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={data.page <= 1}>‹ Prev</HFButton>
+                disabled={data.page <= 1}>
+                <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
+                Prev
+              </HFButton>
               {(() => {
                 const buttons = [];
                 const total = data.pages, cur = data.page;
@@ -150,8 +154,12 @@ function HFShopBooks({ nav, goto }) {
                 return buttons;
               })()}
               <HFButton size="sm" variant="ghost"
+                aria-label="Next page"
                 onClick={() => setPage(p => Math.min(data.pages, p + 1))}
-                disabled={data.page >= data.pages}>Next ›</HFButton>
+                disabled={data.page >= data.pages}>
+                Next
+                <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+              </HFButton>
             </div>
           )}
         </div>
@@ -180,7 +188,7 @@ function HFShopBookDetail({ nav, goto, params }) {
   if (loading || !data) {
     return (
       <HFShell {...nav} activePage="shop-books" title="Book detail" subtitle="Loading…"
-        breadcrumb={<><a href="#" onClick={e=>{e.preventDefault();goto('shop-books');}}>Shop Books</a><span>/</span><span>#{bookId}</span></>}>
+        breadcrumb={<><HFBreadcrumbLink page="shop-books" goto={goto}>Shop Books</HFBreadcrumbLink><span>/</span><span>#{bookId}</span></>}>
         <div style={{padding:40, color:HF.ink3}}>Loading…</div>
       </HFShell>
     );
@@ -197,7 +205,7 @@ function HFShopBookDetail({ nav, goto, params }) {
       </span>}
       subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:HF.mono, color:HF.ink3}}>#{id}</span> · shop <span style={{color:HF.ink2, fontWeight:500}}>{data.shop}</span></span>}
       breadcrumb={<>
-        <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-books');}} style={{color:HF.ink3, textDecoration:'none'}}>Shop Books</a>
+        <HFBreadcrumbLink page="shop-books" goto={goto}>Shop Books</HFBreadcrumbLink>
         <span style={{color:HF.ink5}}>/</span>
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>#{id}</span>
       </>}
@@ -230,7 +238,7 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'urls'   && (
         <HFCard title="Source URLs" sub="all URLs that point to this book">
           {data.url ? (
-            <div style={{padding:`10px ${HF.cardP}px`, display:'flex', alignItems:'center', gap:10, fontSize:12.5}}>
+            <div style={{padding:`10px ${HF.cardP}px`, display:'flex', alignItems:'center', gap:10, fontSize:13}}>
               <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
               <HFPill tone="accent">primary</HFPill>
               <HFPill tone="ok">ok</HFPill>
@@ -243,7 +251,7 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'raw' && (
         <HFCard title="Raw extracted data" sub={`API response for book #${id}`}
                 action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export JSON</HFButton>}>
-          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:11.5, lineHeight:1.65, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`, whiteSpace:'pre', overflow:'auto'}}>
+          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:12, lineHeight:1.65, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`, whiteSpace:'pre', overflow:'auto'}}>
             {JSON.stringify(data, null, 2)}
           </div>
         </HFCard>
@@ -254,7 +262,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         <HFCard title="Price history" sub={`${priceHistory.length} data points`}>
           <div style={{padding:`${HF.cardP}px`}}>
             {priceHistory.length > 0 ? (
-              <HFAreaChart data={priceHistory.map(p => typeof p === 'number' ? p : p.price || 0)} h={180}/>
+              <HFAreaChart data={priceHistory.map(p => typeof p === 'number' ? p : p.price || 0)} h={180} label="Price per scrape"/>
             ) : (
               <div style={{height:180, display:'flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:13}}>No price history yet</div>
             )}
@@ -275,9 +283,9 @@ function HFShopBookDetail({ nav, goto, params }) {
                 display:'grid', gridTemplateColumns:'110px 1fr 14px',
                 padding:`7px ${HF.cardP}px`, alignItems:'center',
                 borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-                fontSize:12.5,
+                fontSize:13,
               }}>
-                <span style={{color:HF.ink3, fontFamily:HF.mono, fontSize:11.5}}>{k}</span>
+                <span style={{color:HF.ink3, fontFamily:HF.mono, fontSize:12}}>{k}</span>
                 <span style={{color: v==='—'? HF.ink4 : HF.ink, fontWeight: v==='—'? 400 : 500}}>{v}</span>
                 <span style={{color: tone==='ok'? HF.ok : HF.warn, display:'flex', justifyContent:'flex-end'}}>
                   {tone==='ok' ? HF_ICONS.check : HF_ICONS.bang}
@@ -295,14 +303,14 @@ function HFShopBookDetail({ nav, goto, params }) {
               <div style={{
                 padding:`10px ${HF.cardP}px`,
                 display:'flex', alignItems:'center', gap:10,
-                fontSize:12.5,
+                fontSize:13,
               }}>
                 <span style={{fontFamily:HF.mono, color:HF.ink2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
                 <HFPill tone="accent">primary</HFPill>
                 <HFPill tone="ok">ok</HFPill>
               </div>
             ) : (
-              <div style={{padding:`10px ${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No URL available</div>
+              <div style={{padding:`10px ${HF.cardP}px`, color:HF.ink4, fontSize:13}}>No URL available</div>
             )}
           </div>
         </HFCard>
@@ -318,7 +326,7 @@ function HFShopBookDetail({ nav, goto, params }) {
               rows={priceHistory.slice(0, 5)}
             />
           ) : (
-            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:12.5}}>No price history yet</div>
+            <div style={{padding:`${HF.cardP}px`, color:HF.ink4, fontSize:13}}>No price history yet</div>
           )}
         </HFCard>
       </div>

@@ -51,11 +51,11 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12, fontWeight: 700, letterSpacing: -0.3,
-            boxShadow: '0 1px 2px rgba(16,24,40,.12)',
+            boxShadow: HF.shadowSm,
           }}>BS</div>
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.1, color: HF.ink }}>BookScraper</div>
+              <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1, color: HF.ink }}>BookScraper</div>
               <div style={{ fontSize: 11, color: HF.ink3, lineHeight: 1.2, marginTop: 2 }}>admin · prod</div>
             </div>
           )}
@@ -64,22 +64,23 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
         {/* Search */}
         {!collapsed && (
           <div style={{ padding: '12px 10px 6px' }}>
-            <div onClick={openCmdK} style={{
+            <button onClick={openCmdK} aria-label="Open command palette" className="hf-btn" style={{
+              width: '100%',
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '7px 10px', background: HF.surface,
               border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
-              color: HF.ink4, fontSize: 12.5,
+              color: HF.ink4, fontSize: 13, fontFamily: HF.sans,
               boxShadow: '0 1px 2px rgba(16,24,40,.03)',
-              cursor: 'pointer',
+              cursor: 'pointer', textAlign: 'left',
             }}>
-              <span style={{ color: HF.ink4 }}>{HF_ICONS.search}</span>
+              <span style={{ color: HF.ink4, display: 'flex' }}>{HF_ICONS.search}</span>
               <span style={{ flex: 1 }}>Search…</span>
               <span style={{
-                fontFamily: HF.mono, fontSize: 10.5,
+                fontFamily: HF.mono, fontSize: 11,
                 padding: '1px 5px', background: HF.subtle,
                 border: `1px solid ${HF.border}`, borderRadius: 3, color: HF.ink3,
               }}>⌘K</span>
-            </div>
+            </button>
           </div>
         )}
 
@@ -89,15 +90,25 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             <div key={g.group} style={{ marginBottom: 14 }}>
               {!collapsed && (
                 <div style={{
-                  fontSize: 10.5, color: HF.ink4, fontWeight: 600,
+                  fontSize: 11, color: HF.ink4, fontWeight: 600,
                   textTransform: 'uppercase', letterSpacing: 0.7,
                   padding: '4px 8px 6px',
                 }}>{g.group}</div>
               )}
               {g.items.map(([id, label, icon, badge]) => {
                 const a = id === activePage;
+                const href = (window.HF_BUILD_PATH && window.HF_BUILD_PATH(id)) || '#';
+                const onNavClick = (e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                  e.preventDefault();
+                  setPage && setPage(id);
+                };
                 return (
-                  <a key={id} href="#" onClick={(e)=>{e.preventDefault(); setPage && setPage(id);}} className="hf-navlink" style={{
+                  <a key={id} href={href} onClick={onNavClick}
+                     aria-current={a ? 'page' : undefined}
+                     aria-label={collapsed ? label : undefined}
+                     title={collapsed ? label : undefined}
+                     className="hf-navlink" style={{
                     display: 'flex', alignItems: 'center',
                     gap: collapsed ? 0 : 10,
                     justifyContent: collapsed ? 'center' : 'flex-start',
@@ -118,7 +129,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
                         <span style={{ flex: 1 }}>{label}</span>
                         {badge && (
                           <span style={{
-                            fontFamily: HF.mono, fontSize: 10.5, fontWeight: 500,
+                            fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
                             padding: '1px 6px',
                             background: a ? HF.surface : HF.subtle,
                             color: a ? HF.accentInk : HF.ink2,
@@ -142,12 +153,16 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: 10,
         }}>
           {!collapsed && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: HF.ink2 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: HF.ink2 }}>
               <HFDot tone="ok" size={7}/>
               <span>all systems ok</span>
             </div>
           )}
-          <button onClick={() => setCollapsed(!collapsed)} className="hf-btn" style={{
+          <button onClick={() => setCollapsed(!collapsed)} className="hf-btn"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
             background: HF.surface, border: `1px solid ${HF.borderStrong}`, borderRadius: 6,
             color: HF.ink3, cursor: 'pointer', padding: '5px 7px',
             display: 'flex', alignItems: 'center',
@@ -164,12 +179,12 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
         {/* Topbar */}
         <div style={{
           height: 56, flexShrink: 0,
-          padding: '0 24px',
+          padding: `0 ${HF.contentX}px`,
           borderBottom: `1px solid ${HF.border}`,
           display: 'flex', alignItems: 'center', gap: 14,
           background: HF.surface,
         }}>
-          <div style={{ fontSize: 12.5, color: HF.ink3, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 13, color: HF.ink3, display: 'flex', alignItems: 'center', gap: 6 }}>
             {breadcrumb}
           </div>
           <div style={{ flex: 1 }}/>
@@ -179,32 +194,37 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
             <HFButton size="md" variant="primary" onClick={openNewRun}>
               <span style={{ display: 'flex' }}>{HF_ICONS.plus}</span> New run
             </HFButton>
-            <div ref={avatarRef} onClick={openAvatar} style={{
+            <button ref={avatarRef} onClick={openAvatar}
+              aria-label="Open account menu"
+              aria-haspopup="menu"
+              className="hf-focus" style={{
               width: 30, height: 30, borderRadius: '50%',
               background: `linear-gradient(135deg, ${HF.accent}, ${HF.accentHover})`,
+              border: 'none', padding: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11.5, color: '#fff', fontWeight: 600,
-              boxShadow: '0 1px 2px rgba(16,24,40,.1)', cursor: 'pointer',
-            }}>A</div>
+              fontSize: 12, color: '#fff', fontWeight: 600,
+              boxShadow: HF.shadowSm, cursor: 'pointer',
+              fontFamily: HF.sans,
+            }}>A</button>
           </div>
         </div>
 
         {/* Page head */}
         <div style={{
-          padding: '24px 28px 18px',
+          padding: `24px ${HF.contentX}px 18px`,
           borderBottom: `1px solid ${HF.border}`,
           display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16,
           background: HF.surface,
         }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1.15, color: HF.ink }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 13.5, color: HF.ink3, marginTop: 6 }}>{subtitle}</div>}
+            {subtitle && <div style={{ fontSize: 14, color: HF.ink3, marginTop: 6 }}>{subtitle}</div>}
           </div>
           {actions && <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>{actions}</div>}
         </div>
 
         {/* Content */}
-        <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: '20px 28px 48px', background: HF.bg }}>
+        <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: `20px ${HF.contentX}px 48px`, background: HF.bg }}>
           <div style={{ minWidth: 1100 }}>
             {children}
           </div>

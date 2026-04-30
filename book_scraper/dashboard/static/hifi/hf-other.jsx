@@ -62,7 +62,7 @@ function HFCron({ nav, goto }) {
 
       <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
         <HFFilterBar right={<>
-          <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+          <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
             {filters.filtered.length} of {jobs.length}
           </span>
           {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -322,7 +322,7 @@ function HFIssues({ nav, goto }) {
               width:22, height:22, borderRadius:4, background:HF.accentInk, color:'#fff',
               fontFamily:HF.mono, fontSize:11, fontWeight:600, fontVariantNumeric:'tabular-nums',
             }}>{selectedCount}</span>
-            <span style={{fontSize:12.5, color:HF.ink, fontWeight:500}}>
+            <span style={{fontSize:13, color:HF.ink, fontWeight:500}}>
               {selectedCount === 1 ? '1 issue' : `${selectedCount} issues`} selected
             </span>
             <span style={{flex:1}}/>
@@ -343,7 +343,7 @@ function HFIssues({ nav, goto }) {
       ) : (
         <HFCard style={{marginBottom:HF.gap, overflow:"visible"}} padding={12}>
           <HFFilterBar right={<>
-            <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+            <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
               {filters.filtered.length} of {tabSource.length}
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -394,7 +394,7 @@ function HFIssues({ nav, goto }) {
             { key:'url',  label:'URL',      w:'1.2fr', mono:true, muted:true,
               cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block'}}>{v}</span>) },
             { key:'detail', label:'Detail', w:'1.6fr',
-              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink2, fontSize:12.5}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink2, fontSize:13}}>{v}</span>) },
             { key:'age',  label:'When',     w:'0.8fr', mono:true, muted:true, sortable:true,
               cell:(v, r) => dimIfKnown(r, <span style={{color:HF.ink3}}>{v}</span>) },
             { key:'_',    label:'',         w:'28px',  align:'right', cell:() => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
@@ -405,14 +405,20 @@ function HFIssues({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} match{data.total === 1 ? '' : 'es'}
           </span>
           {data.pages > 1 && (
             <div style={{display:'flex', gap:6, alignItems:'center'}}>
-              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={data.page <= 1}>‹ Prev</HFButton>
+              <HFButton size="sm" variant="ghost"
+                aria-label="Previous page"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={data.page <= 1}>
+                <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
+                Prev
+              </HFButton>
               {(() => {
                 const buttons = [];
                 const total = data.pages, cur = data.page;
@@ -429,7 +435,13 @@ function HFIssues({ nav, goto }) {
                 }
                 return buttons;
               })()}
-              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={data.page >= data.pages}>Next ›</HFButton>
+              <HFButton size="sm" variant="ghost"
+                aria-label="Next page"
+                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                disabled={data.page >= data.pages}>
+                Next
+                <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+              </HFButton>
             </div>
           )}
         </div>
@@ -493,7 +505,7 @@ function HFPrices({ nav, goto }) {
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap}}>
         <HFCard title="Change distribution" sub="daily price deltas · last 7 days">
           <div style={{padding:`${HF.cardP}px`}}>
-            <HFBarChart data={deltas} h={140} colorFn={(v,i,h) => v < 0 ? h.err : v > 0 ? h.ok : h.ink4}/>
+            <HFBarChart data={deltas} h={140} colorFn={(v,i,h) => v < 0 ? h.err : v > 0 ? h.ok : h.ink4} label="Daily price deltas"/>
             <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:8, fontVariantNumeric:'tabular-nums'}}>
               <span>−€2</span><span>−€1</span><span>0</span><span>+€1</span><span>+€2</span><span>+€3</span>
             </div>
@@ -509,7 +521,7 @@ function HFPrices({ nav, goto }) {
               ['Academic',   32.10,  0.0],
               ['Art',        28.70, +0.4],
             ].map(([cat, avg, chg], i, arr) => (
-              <div key={cat} style={{padding:`8px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1fr 80px 60px', alignItems:'center', borderBottom: i<arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none', fontSize:12.5}}>
+              <div key={cat} style={{padding:`8px ${HF.cardP}px`, display:'grid', gridTemplateColumns:'1fr 80px 60px', alignItems:'center', borderBottom: i<arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none', fontSize:13}}>
                 <span style={{color:HF.ink, fontWeight:500}}>{cat}</span>
                 <span style={{fontFamily:HF.mono, color:HF.ink, fontWeight:500, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>€{avg.toFixed(2)}</span>
                 <span style={{fontFamily:HF.mono, color: chg<0?HF.errInk:chg>0?HF.okInk:HF.ink4, textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{chg>0?'+':''}{chg.toFixed(1)}%</span>
@@ -522,7 +534,7 @@ function HFPrices({ nav, goto }) {
       <HFCard title="Recent changes" sub="non-zero price movements · last 7 days">
         <div style={{padding:`10px ${HF.cardP}px`, borderBottom:`1px solid ${HF.borderFaint}`}}>
           <HFFilterBar right={<>
-            <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+            <span style={{fontSize:12, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
               {filters.filtered.length} of {rows.length}
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
@@ -551,14 +563,20 @@ function HFPrices({ nav, goto }) {
       </HFCard>
 
       {(data.total || 0) > 0 && (
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:HF.ink3}}>
           <span>
             Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
             {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} change{data.total === 1 ? '' : 's'}
           </span>
           {data.pages > 1 && (
             <div style={{display:'flex', gap:6, alignItems:'center'}}>
-              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={data.page <= 1}>‹ Prev</HFButton>
+              <HFButton size="sm" variant="ghost"
+                aria-label="Previous page"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={data.page <= 1}>
+                <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
+                Prev
+              </HFButton>
               {(() => {
                 const buttons = [];
                 const total = data.pages, cur = data.page;
@@ -575,7 +593,13 @@ function HFPrices({ nav, goto }) {
                 }
                 return buttons;
               })()}
-              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={data.page >= data.pages}>Next ›</HFButton>
+              <HFButton size="sm" variant="ghost"
+                aria-label="Next page"
+                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                disabled={data.page >= data.pages}>
+                Next
+                <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+              </HFButton>
             </div>
           )}
         </div>

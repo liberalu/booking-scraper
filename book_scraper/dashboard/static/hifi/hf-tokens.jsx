@@ -13,9 +13,9 @@ const HF_ACCENTS = {
 };
 
 const HF_DENSITIES = {
-  comfortable: { rowH: 40, cellY: 10, cardP: 16, cardHeadY: 14, kpiP: 16, gap: 16, fsBody: 13.5, fsSmall: 12, fsKpi: 26, fsMono: 12.5 },
-  compact:     { rowH: 34, cellY: 8,  cardP: 14, cardHeadY: 12, kpiP: 14, gap: 14, fsBody: 13,   fsSmall: 11.5, fsKpi: 24, fsMono: 12 },
-  ultra:       { rowH: 28, cellY: 6,  cardP: 12, cardHeadY: 10, kpiP: 12, gap: 12, fsBody: 12.5, fsSmall: 11,   fsKpi: 22, fsMono: 11.5 },
+  comfortable: { rowH: 40, cellY: 10, cardP: 16, cardHeadY: 14, kpiP: 16, gap: 16, fsBody: 14, fsSmall: 12, fsKpi: 26, fsMono: 13 },
+  compact:     { rowH: 34, cellY: 8,  cardP: 14, cardHeadY: 12, kpiP: 14, gap: 14, fsBody: 13, fsSmall: 12, fsKpi: 24, fsMono: 12 },
+  ultra:       { rowH: 28, cellY: 6,  cardP: 12, cardHeadY: 10, kpiP: 12, gap: 12, fsBody: 12, fsSmall: 11, fsKpi: 22, fsMono: 12 },
 };
 
 function getHF() {
@@ -23,6 +23,10 @@ function getHF() {
   const densityKey = window.HF_DENSITY || 'comfortable';
   const a = HF_ACCENTS[accentKey] || HF_ACCENTS.teal;
   const d = HF_DENSITIES[densityKey] || HF_DENSITIES.comfortable;
+
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.style.setProperty('--hf-accent', a[500]);
+  }
 
   return {
     // surfaces
@@ -78,11 +82,16 @@ function getHF() {
     chartAxis:      '#9ca3af',
 
     // elevation
+    shadowSm: '0 1px 2px rgba(16,24,40,.08)',           // inputs, small chips, avatars
     shadow:   '0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06)',
     shadowMd: '0 4px 8px -2px rgba(16,24,40,.06), 0 2px 4px -2px rgba(16,24,40,.04)',
+    shadowLg: '0 8px 24px rgba(16,24,40,.12)',          // floating menus, dropdowns, popovers
 
     // radius
     r1: 4, r2: 6, r3: 8, r4: 10, r5: 12,
+
+    // layout — use everywhere instead of magic numbers in inline styles
+    contentX: 28,
 
     // fonts
     sans: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -111,6 +120,8 @@ function getHF() {
   s.id = 'hf-base';
   s.textContent = `
     @keyframes hfPulse { 0% { transform: scale(1); opacity: .35 } 100% { transform: scale(2.4); opacity: 0 } }
+    @keyframes hfSweep { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
+    @keyframes hfShimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
     .hf-scroll::-webkit-scrollbar { width: 10px; height: 10px }
     .hf-scroll::-webkit-scrollbar-track { background: transparent }
     .hf-scroll::-webkit-scrollbar-thumb { background: #d4d7de; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box }
@@ -121,6 +132,24 @@ function getHF() {
     .hf-btn-primary:hover { filter: brightness(0.95) }
     .hf-link { color: inherit; text-decoration: none }
     .hf-link:hover { text-decoration: underline; text-underline-offset: 2px }
+    .hf-focus:focus-visible,
+    .hf-btn:focus-visible,
+    .hf-navlink:focus-visible,
+    .hf-row:focus-visible,
+    .hf-link:focus-visible,
+    [role="menuitem"]:focus-visible,
+    [role="menuitemradio"]:focus-visible {
+      outline: 2px solid var(--hf-accent, #2f7a4d);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   `;
   document.head.appendChild(s);
 })();

@@ -27,11 +27,11 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
       <HFCard style={{marginBottom:HF.gap}} padding={14}>
         <div style={{display:'flex', alignItems:'center', gap:14}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>Active parser</div>
+            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:4}}>Active parser</div>
             <div style={{display:'flex', alignItems:'center', gap:10}}>
               <span style={{fontFamily:HF.mono, fontSize:15, color:HF.ink, fontWeight:500}}>{version.current}</span>
               <HFPill tone="ok">deployed</HFPill>
-              <span style={{fontSize:11.5, color:HF.ink3, fontFamily:HF.mono}}>{version.deployed}</span>
+              <span style={{fontSize:12, color:HF.ink3, fontFamily:HF.mono}}>{version.deployed}</span>
             </div>
           </div>
           <div style={{display:'flex', gap:6}}>
@@ -53,7 +53,7 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
               </span>
             )},
             { key:'type', label:'Type', w:'0.6fr', mono:true, muted:true },
-            { key:'sel', label:'Selector', w:'2.2fr', mono:true, cell:v => <span style={{color:HF.ink2, fontSize:11.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span> },
+            { key:'sel', label:'Selector', w:'2.2fr', mono:true, cell:v => <span style={{color:HF.ink2, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span> },
             { key:'success', label:'Success', w:'0.9fr', align:'right', sortable:true, sortVal:r=>r.success, cell:v => {
               const tone = v >= 90 ? 'ok' : v >= 70 ? 'warn' : 'err';
               const ink = tone==='ok'? HF.okInk : tone==='warn'? HF.warnInk : HF.errInk;
@@ -62,7 +62,7 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
                   <span style={{width:40, height:4, background:HF.subtle, borderRadius:2, overflow:'hidden'}}>
                     <span style={{display:'block', width:`${v}%`, height:'100%', background: tone==='ok'? HF.ok : tone==='warn'? HF.warn : HF.err}}/>
                   </span>
-                  <span style={{fontFamily:HF.mono, color:ink, fontWeight:500, fontSize:11.5, fontVariantNumeric:'tabular-nums', minWidth:40, textAlign:'right'}}>{v}%</span>
+                  <span style={{fontFamily:HF.mono, color:ink, fontWeight:500, fontSize:12, fontVariantNumeric:'tabular-nums', minWidth:40, textAlign:'right'}}>{v}%</span>
                 </span>
               );
             }},
@@ -77,7 +77,7 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:HF.gap}}>
         <HFCard title="Last test" sub="ran against /knygos/sapiens-yuval-noah-harari · 2h ago"
                 action={<HFPill tone="ok">9/10 fields ok</HFPill>}>
-          <div style={{padding:14, fontFamily:HF.mono, fontSize:11.5, lineHeight:1.7, color:HF.ink2, background:HF.subtle, borderTop:`1px solid ${HF.borderFaint}`}}>
+          <div style={{padding:14, fontFamily:HF.mono, fontSize:12, lineHeight:1.7, color:HF.ink2, background:HF.subtle, borderTop:`1px solid ${HF.borderFaint}`}}>
             <div><span style={{color:HF.ink4}}>title</span>   <span style={{color:HF.okInk}}>→</span> "Sapiens: A Brief History of Humankind"</div>
             <div><span style={{color:HF.ink4}}>author</span>  <span style={{color:HF.okInk}}>→</span> "Yuval Noah Harari"</div>
             <div><span style={{color:HF.ink4}}>price</span>   <span style={{color:HF.okInk}}>→</span> 19.90</div>
@@ -97,7 +97,7 @@ function HFParserConfigPanel({ shop = 'vaga', scope = 'shop', goto }) {
               { f:'isbn',        n:89,  pct:18.6, tone:'warn' },
               { f:'year',        n:62,  pct:31.8, tone:'warn' },
             ].map((r, i, arr) => (
-              <div key={r.f} style={{padding:`10px ${HF.cardP}px`, borderBottom: i<arr.length-1?`1px solid ${HF.borderFaint}`:'none', display:'grid', gridTemplateColumns:'1fr 80px 80px', alignItems:'center', fontSize:12.5}}>
+              <div key={r.f} style={{padding:`10px ${HF.cardP}px`, borderBottom: i<arr.length-1?`1px solid ${HF.borderFaint}`:'none', display:'grid', gridTemplateColumns:'1fr 80px 80px', alignItems:'center', fontSize:13}}>
                 <span style={{fontFamily:HF.mono, color:HF.ink}}>{r.f}</span>
                 <span style={{fontFamily:HF.mono, color:HF.ink2, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>{r.n} miss</span>
                 <span style={{fontFamily:HF.mono, color: r.tone==='err'? HF.errInk : HF.warnInk, textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{r.pct.toFixed(1)}%</span>
@@ -165,7 +165,7 @@ function HFPricesPanel() {
   return (
     <div>
       <HFKpiStrip items={[
-        { label:'Current',      value:'€19.90', delta:<span style={{color:HF.errInk}}>▼ €1.10 · 12m ago</span>, tone:'err' },
+        { label:'Current',      value:'€19.90', delta:<span style={{color:HF.errInk}}>−€1.10 · 12m ago</span>, tone:'err' },
         { label:'30d avg',      value:'€19.92', delta:<span style={{color:HF.ink3}}>σ €0.84</span> },
         { label:'All-time low', value:'€18.50', delta:<span style={{color:HF.ink3}}>Mar 22</span> },
         { label:'All-time high',value:'€21.00', delta:<span style={{color:HF.ink3}}>Apr 2</span> },
@@ -173,9 +173,9 @@ function HFPricesPanel() {
       ]}/>
 
       <HFCard title="Price trajectory" sub="30 data points · last 30 days" style={{marginBottom:HF.gap}}
-              action={<HFPill tone="err">▼ 5.2% vs 30d avg</HFPill>}>
+              action={<HFPill tone="err">−5.2% vs 30d avg</HFPill>}>
         <div style={{padding:HF.cardP}}>
-          <HFAreaChart data={history} h={200}/>
+          <HFAreaChart data={history} h={200} label="Price per day"/>
           <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:HF.ink4, fontFamily:HF.mono, marginTop:10, fontVariantNumeric:'tabular-nums'}}>
             <span>Mar 20</span><span>Mar 27</span><span>Apr 3</span><span>Apr 10</span><span>Apr 17</span>
           </div>
@@ -267,9 +267,9 @@ function HFScheduleDetail({ nav, goto, params }) {
           ? <HFPill tone={lastStatus==='fail'?'err':'ok'}>{lastStatus==='fail'?'failing':'active'}</HFPill>
           : <HFPill tone="neutral">disabled</HFPill>}
       </span>}
-      subtitle={<span style={{fontFamily:HF.mono, fontSize:12.5, color:HF.ink3}}>{cron} · {cronHuman} · shop={shop}</span>}
+      subtitle={<span style={{fontFamily:HF.mono, fontSize:13, color:HF.ink3}}>{cron} · {cronHuman} · shop={shop}</span>}
       breadcrumb={<>
-        <a href="#" onClick={e=>{e.preventDefault(); goto('cron');}} style={{color:HF.ink3, textDecoration:'none'}}>Schedules</a>
+        <HFBreadcrumbLink page="cron" goto={goto}>Schedules</HFBreadcrumbLink>
         <span style={{color:HF.ink5}}>/</span>
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{name}</span>
       </>}
@@ -306,13 +306,13 @@ function HFScheduleDetail({ nav, goto, params }) {
               ['Owner',           'data-eng'],
             ].map(([k,v,mono]) => (
               <div key={k}>
-                <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
+                <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
                 <div style={{marginTop:3, fontSize:13, color:HF.ink, fontFamily: mono? HF.mono : HF.sans, fontWeight:500}}>{v}</div>
               </div>
             ))}
           </div>
           <div style={{padding:`12px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`, background:HF.subtle}}>
-            <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>Last 24h history</div>
+            <div style={{fontSize:11, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>Last 24h history</div>
             <div style={{display:'flex', gap:3}}>
               {last24.map((s, i) => (
                 <div key={i} title={`${24-i}h ago: ${s}`} style={{
@@ -332,15 +332,15 @@ function HFScheduleDetail({ nav, goto, params }) {
           {!enabledState ? (
             <div style={{padding:'28px 16px', textAlign:'center'}}>
               <div style={{color:HF.ink4, marginBottom:6, display:'flex', justifyContent:'center'}}>{HF_ICONS.stop}</div>
-              <div style={{fontSize:12.5, color:HF.ink3}}>No upcoming runs — job is disabled.</div>
+              <div style={{fontSize:13, color:HF.ink3}}>No upcoming runs — job is disabled.</div>
             </div>
           ) : (
             <div style={{padding:'4px 0'}}>
               {upcoming.map((r, i, arr) => (
-                <div key={i} style={{padding:`11px ${HF.cardP}px`, borderBottom: i<arr.length-1? `1px solid ${HF.borderFaint}` : 'none', display:'flex', alignItems:'center', gap:12, fontSize:12.5}}>
+                <div key={i} style={{padding:`11px ${HF.cardP}px`, borderBottom: i<arr.length-1? `1px solid ${HF.borderFaint}` : 'none', display:'flex', alignItems:'center', gap:12, fontSize:13}}>
                   <span style={{color: i===0? HF.accentInk : HF.ink3, fontFamily:HF.mono, fontWeight: i===0? 600 : 400, minWidth:80, fontVariantNumeric:'tabular-nums'}}>{r.when}</span>
                   <span style={{color:HF.ink2, fontFamily:HF.mono}}>{r.at}</span>
-                  <span style={{color:HF.ink4, fontFamily:HF.mono, fontSize:11.5}}>{r.date}</span>
+                  <span style={{color:HF.ink4, fontFamily:HF.mono, fontSize:12}}>{r.date}</span>
                   {i===0 && <HFPill tone="accent" style={{marginLeft:'auto'}}>next</HFPill>}
                 </div>
               ))}
@@ -380,7 +380,7 @@ function HFScheduleDetail({ nav, goto, params }) {
       {tab === 'logs' && (
         <HFCard title="Latest logs" sub="from run #4820 · 12m ago"
                 action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Download log</HFButton>}>
-          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:11.5, lineHeight:1.7, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`}}>
+          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:HF.mono, fontSize:12, lineHeight:1.7, borderTop:`1px solid ${HF.borderFaint}`, borderRadius:`0 0 ${HF.cardR}px ${HF.cardR}px`}}>
             {logs.map((l, i) => {
               const lvlColor = l.lvl === 'WARN' ? '#F5B041' : l.lvl === 'ERROR' ? '#E74C3C' : '#58B3E0';
               return (

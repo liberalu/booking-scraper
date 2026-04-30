@@ -76,6 +76,7 @@ function buildPath(page, params) {
   const fn = URL_BUILDERS[page] || (() => '/');
   return fn(params || {});
 }
+window.HF_BUILD_PATH = buildPath;
 
 function App() {
   const initial = parsePath(window.location.pathname);
@@ -136,6 +137,8 @@ function App() {
     openAddBook:     () => setAddBookOpen(true),
     openCmdK:        () => setCmdKOpen(true),
     openAvatarMenu:  (rect) => setAvatarMenu({ open: true, rect }),
+    toast:           (opts) => window._hfPushToast(opts),
+    dismissToast:    (id) => window._hfDismissToast(id),
   };
 
   const pages = {
@@ -168,6 +171,7 @@ function App() {
       <HFCommandK          open={cmdKOpen}        onClose={() => setCmdKOpen(false)}        goto={goto}/>
       <HFAvatarMenu        open={avatarMenu.open} anchorRect={avatarMenu.rect}
                            onClose={() => setAvatarMenu({ open: false, rect: null })} goto={goto}/>
+      <HFToastHost/>
     </>
   );
 }
