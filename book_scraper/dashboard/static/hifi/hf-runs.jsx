@@ -562,6 +562,823 @@ function HFRunTimelineCard({ events, style }) {
 }
 
 
+// ─── History card — URL queue / discovered-URLs table w/ filters & paging ──
+// All state stays in HFRunDetail so applyGroupFilter (called from the
+// failures card) can reach the setters. Component is pure-render given
+// that state.
+function HFRunHistoryCard({
+  urlData, historyRef, goto,
+  urlStatus, setUrlStatus,
+  urlSort, urlOrder, toggleSort,
+  urlPage, setUrlPage,
+  urlPerPage, setUrlPerPage,
+  urlReason, setUrlReason,
+  urlReasonIsNull, setUrlReasonIsNull,
+  urlHttp, setUrlHttp,
+  urlHttpIsNull, setUrlHttpIsNull,
+  tabAllCount, tabCounts,
+  clearAllFilters,
+}) {
+  const HF = getHF();
+  if (!urlData) {
+    return (
+      <HFCard title="History" sub="loading…" style={{ marginBottom: HF.gap }}>
+        <HFTableSkeleton rows={8} columns={[
+          { w: '55px', skelW: 36, mono: true },
+          { w: '1fr', skelW: 240 },
+          { w: '85px', skelW: 50, mono: true },
+          { w: '120px', skelW: 80 },
+          { w: '80px', skelW: 60, mono: true },
+          { w: '70px', skelW: 50, mono: true },
+          { w: '70px', skelW: 50, mono: true },
+          { w: '75px', skelW: 50, mono: true },
+          { w: '60px', skelW: 40, mono: true },
+          { w: '85px', skelW: 60, mono: true },
+        ]}/>
+      </HFCard>
+    );
+  }
+  if (urlData.source !== 'live' && urlData.total === 0) return null;
+
+  const fmtDur = (ms) => {
+    if (ms == null) return '—';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  return (
+    <div ref={historyRef}>
+    <HFCard
+      title="History"
+      sub={urlData.source === 'live'
+        ? `${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed · ${urlData.breakdown.pending.toLocaleString()} pending`
+        : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
+      style={{ marginBottom: HF.gap }}
+    >
+      {urlData.source === 'live' && (
+        <div style={{padding:`12px ${HF.cardP}px 0`}}>
+          <HFTabs
+            active={urlStatus}
+            onChange={setUrlStatus}
+            tabs={[
+              { id:'all',        label:'all',        count: tabAllCount },
+              { id:'pending',    label:'pending',    count: tabCounts.pending ?? 0 },
+              { id:'processing', label:'processing', count: tabCounts.processing ?? 0 },
+              { id:'done',       label:'done',       count: tabCounts.done ?? 0 },
+              { id:'failed',     label:'failed',     count: tabCounts.failed ?? 0 },
+            ]}
+          />
+          {(urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (() => {
+            const reasonLabel = urlReasonIsNull ? 'unknown' : urlReason;
+            const httpLabel = urlHttp != null ? `HTTP ${urlHttp}` : urlHttpIsNull ? 'no response' : '';
+            const clearGroupFilter = () => {
+              setUrlReason('');
+              setUrlReasonIsNull(false);
+              setUrlHttp(null);
+              setUrlHttpIsNull(false);
+            };
+            return (
+              <div style={{
+                display:'inline-flex', alignItems:'center', gap: 6,
+                marginTop: 8, padding: '4px 6px 4px 10px',
+                background: HF.errSoft, border: `1px solid ${HF.errBorder}`,
+                borderRadius: 4, fontFamily: HF.mono, fontSize: 12, color: HF.errInk,
+              }}>
+                <span>failed{reasonLabel ? ` · ${reasonLabel}` : ''}{httpLabel ? ` · ${httpLabel}` : ''}</span>
+                <button onClick={clearGroupFilter} aria-label="Clear group filter" title="Clear group filter" style={{
+                  background: 'transparent', border: 'none',
+                  cursor:'pointer', padding:'0 4px', color: HF.errInk, fontWeight: 600,
+                  fontFamily: HF.sans, fontSize: 14, lineHeight: 1,
+                }}>×</button>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {urlData.rows.length === 0 ? (
+        <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:13}}>
+          No URLs in this filter.
+        </div>
+      ) : (
+        <div style={{padding:`4px 0`}}>
+          <div style={{
+            display:'grid',
+            gridTemplateColumns: urlData.source === 'live'
+              ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
+              : '1fr 60px 70px 150px',
+            padding:`8px ${HF.cardP}px`,
+            borderBottom: `1px solid ${HF.border}`,
+            fontSize: 11, fontFamily: HF.mono, fontWeight: 500,
+            color: HF.ink3, textTransform: 'uppercase', letterSpacing: 0.4,
+            gap: 10,
+          }}>
+            {(() => {
+              const SortIcon = ({ active, dir }) => (
+                <svg aria-hidden="true" width="9" height="11" viewBox="0 0 9 11" style={{flexShrink:0, marginLeft:4, verticalAlign:'middle'}}>
+                  <path d="M4.5 0.5 L8 4 L1 4 Z" fill={active && dir==='asc' ? HF.ink : HF.ink5}/>
+                  <path d="M4.5 10.5 L1 7 L8 7 Z" fill={active && dir==='desc' ? HF.ink : HF.ink5}/>
+                </svg>
+              );
+              const SortHdr = ({ k, children, align }) => {
+                const active = urlSort === k;
+                const ariaSort = active ? (urlOrder === 'asc' ? 'ascending' : 'descending') : 'none';
+                return (
+                  <button
+                    onClick={() => toggleSort(k)}
+                    aria-sort={ariaSort}
+                    aria-label={`Sort by ${k}${active ? ` (currently ${ariaSort})` : ''}`}
+                    style={{
+                      cursor: 'pointer', background: 'transparent', border: 'none',
+                      padding: 0, font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit',
+                      color: active ? HF.accentInk : HF.ink3,
+                      userSelect: 'none',
+                      textAlign: align || 'left',
+                      display: 'inline-flex', alignItems: 'center',
+                    }}
+                    title={`Sort by ${k}`}
+                  >
+                    {children}<SortIcon active={active} dir={urlOrder}/>
+                  </button>
+                );
+              };
+              return urlData.source === 'live' ? (
+                <>
+                  <SortHdr k="id">ID</SortHdr>
+                  <SortHdr k="title">URL</SortHdr>
+                  <span>Disc. URL</span>
+                  <SortHdr k="status">Status</SortHdr>
+                  <SortHdr k="started">Started</SortHdr>
+                  <SortHdr k="url_type">Type</SortHdr>
+                  <SortHdr k="duration">Duration</SortHdr>
+                  <span>Size</span>
+                  <span>Throttle</span>
+                  <span>Source</span>
+                </>
+              ) : (
+                <>
+                  <span>URL</span>
+                  <span>HTTP</span>
+                  <span>Type</span>
+                  <span>Last checked</span>
+                </>
+              );
+            })()}
+          </div>
+          {urlData.rows.map((u, i) => {
+            const http = u.http_status ?? u.last_http_status;
+            const httpTone = http && http >= 400 ? 'err' : http ? 'ok' : 'neutral';
+            const statusCell = (() => {
+              if (urlData.source !== 'live') return null;
+              if (u.status === 'failed') {
+                return (
+                  <span style={{display:'inline-flex', flexDirection:'column', gap:2, lineHeight:1.2}}>
+                    <HFPill tone="err" style={{width:'fit-content'}}>failed{http ? ` · ${http}` : ''}</HFPill>
+                    {u.error_reason && (
+                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.errInk, paddingLeft:2}}>{u.error_reason}</span>
+                    )}
+                  </span>
+                );
+              }
+              if (u.status === 'processing') {
+                return <HFPill tone="accent" style={{width:'fit-content'}}><HFDot tone="accent" pulse size={6}/>processing</HFPill>;
+              }
+              if (u.status === 'pending') {
+                return <HFPill tone="neutral" style={{width:'fit-content'}}>pending</HFPill>;
+              }
+              return <HFPill tone="ok" style={{width:'fit-content'}}>{http ? `done · ${http}` : 'done'}</HFPill>;
+            })();
+            return (
+              <div key={i} style={{
+                display:'grid',
+                gridTemplateColumns: urlData.source === 'live'
+                  ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
+                  : '1fr 60px 70px 150px',
+                padding:`7px ${HF.cardP}px`,
+                borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                fontSize:13, alignItems:'center', gap:10,
+              }}>
+                {urlData.source === 'live' && (
+                  <span style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                        title={`item #${u.item_id}`}>
+                    {u.item_id ?? '—'}
+                  </span>
+                )}
+                <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                  <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0, flex:1}}>
+                    {u.title && (
+                      u.shop_book_id != null ? (
+                        <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(u.shop_book_id)})) || '#'}
+                           onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('shop-book-detail', {id: String(u.shop_book_id)});}}
+                           title={u.title}
+                           style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.accentInk, fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
+                          {u.title}
+                        </a>
+                      ) : (
+                        <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.ink, fontWeight:500}} title={u.title}>{u.title}</span>
+                      )
+                    )}
+                    {u.discovered_url_id != null ? (
+                      <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
+                         onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('url-detail', {id: String(u.discovered_url_id)});}}
+                         title={u.url}
+                         style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color:HF.accentInk, textDecoration:'none', cursor:'pointer'}}>
+                        {u.url}
+                      </a>
+                    ) : (
+                      <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink}} title={u.url}>{u.url}</span>
+                    )}
+                  </span>
+                  <HFExtLink href={u.url}/>
+                </span>
+                {urlData.source === 'live' ? (
+                  <>
+                    {/* Disc. URL — column 3, right after URL */}
+                    {u.discovered_url_id != null ? (
+                      <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
+                         onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
+                         style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
+                        #{u.discovered_url_id}
+                      </a>
+                    ) : (
+                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5}}>—</span>
+                    )}
+                    {statusCell}
+                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
+                    <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
+                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
+                    {(() => {
+                      // Humanise response_bytes; highlight suspiciously small successful
+                      // responses (< 1 KB on a 2xx) — common signature of an anti-bot stub.
+                      const b = u.response_bytes;
+                      if (b == null) {
+                        return <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, fontVariantNumeric:'tabular-nums'}}>—</span>;
+                      }
+                      const fmt = b < 1024
+                        ? `${b} B`
+                        : b < 1024 * 1024
+                          ? `${(b / 1024).toFixed(1)} KB`
+                          : `${(b / 1024 / 1024).toFixed(2)} MB`;
+                      const tiny = b < 1024 && u.status === 'done' && (u.http_status ?? 0) >= 200 && (u.http_status ?? 0) < 300;
+                      return (
+                        <span title={tiny ? 'Suspiciously small response on a 2xx — possible anti-bot stub' : `${b.toLocaleString()} bytes`}
+                              style={{fontFamily:HF.mono, fontSize:11, color: tiny ? HF.warnInk : HF.ink4, fontVariantNumeric:'tabular-nums'}}>
+                          {fmt}
+                        </span>
+                      );
+                    })()}
+                    {(() => {
+                      const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
+                      return <>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap'}} title={lbl.title || ''}>
+                          {_fmtDelay(u.request_delay_s)}
+                        </span>
+                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={lbl.title || u.delay_source || ''}>
+                          {lbl.suffix || u.delay_source || '—'}
+                        </span>
+                      </>;
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    <HFPill tone={httpTone} style={{width:'fit-content'}}>{u.last_http_status ?? '—'}</HFPill>
+                    <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
+                    <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.last_checked_at ? new Date(u.last_checked_at).toLocaleString() : '—'}</span>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{
+        display:'flex', justifyContent:'space-between', alignItems:'center',
+        padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
+        fontSize:12, color:HF.ink3, flexWrap:'wrap', gap:8,
+      }}>
+        <span style={{fontFamily:HF.mono, color:HF.ink4}}>
+          {urlData.total.toLocaleString()} URLs
+        </span>
+        <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+          {(urlStatus !== 'all' || urlSort !== 'started' || urlOrder !== 'desc' || urlPage !== 1
+            || urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (
+            <HFButton size="sm" variant="ghost" onClick={clearAllFilters}>Clear</HFButton>
+          )}
+          <span style={{color:HF.ink4, fontSize:12, marginRight:2}}>Per page:</span>
+          {[10, 25, 50, 100].map(n => (
+            <HFButton key={n} size="sm"
+              variant={urlPerPage === n ? 'accent' : 'subtle'}
+              onClick={() => setUrlPerPage(n)}>
+              {n}
+            </HFButton>
+          ))}
+          <span style={{width:1, height:18, background:HF.border, margin:'0 4px'}}/>
+          <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
+            aria-label="Previous page"
+            onClick={() => setUrlPage(p => Math.max(1, p - 1))}>
+              <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
+            </HFButton>
+          {(() => {
+            const cur = urlData.page, total = urlData.pages;
+            const btns = [];
+            const push = (n) => btns.push(
+              <HFButton key={n} size="sm"
+                variant={n === cur ? 'accent' : 'subtle'}
+                onClick={() => setUrlPage(n)}>{n}</HFButton>
+            );
+            const ell = (k) => btns.push(
+              <span key={k} style={{padding:'0 2px', color:HF.ink4}}>…</span>
+            );
+            if (total <= 7) {
+              for (let i = 1; i <= total; i++) push(i);
+            } else {
+              push(1);
+              if (cur > 4) ell('l');
+              const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+              for (let i = lo; i <= hi; i++) push(i);
+              if (cur < total - 3) ell('r');
+              push(total);
+            }
+            return btns;
+          })()}
+          <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
+            aria-label="Next page"
+            onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>
+              <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+            </HFButton>
+        </div>
+      </div>
+    </HFCard>
+    </div>
+  );
+}
+
+
+// ─── Failures card — server-aggregated failure groups w/ retry & ack ──
+// Owns its own disclosure state (expanded group + which example detail is
+// open). All actions go to handlers passed in by the parent.
+function HFRunFailuresCard({
+  failureGroups, showAckedFailures, setShowAckedFailures,
+  actionPending, retryRun, ackGroup, applyGroupFilter,
+}) {
+  const HF = getHF();
+  const [expandedFailure, setExpandedFailure] = React.useState(-1);
+  const [expandedFailureDetail, setExpandedFailureDetail] = React.useState(null);
+
+  if (failureGroups.length === 0 && !showAckedFailures) return null;
+
+  // Sum unacked / acked across visible groups so the header reflects what's
+  // on screen given the toggle. Falls back to legacy `count` when older
+  // payloads lack the explicit split.
+  const sumUnacked = failureGroups.reduce(
+    (a, g) => a + (g.unacked_count ?? g.count ?? 0), 0);
+  const sumAcked = failureGroups.reduce(
+    (a, g) => a + (g.acked_count ?? 0), 0);
+  const total = sumUnacked + sumAcked;
+  const subParts = [`${sumUnacked} unacknowledged`];
+  if (showAckedFailures) {
+    subParts.push(`${sumAcked} acknowledged`);
+    subParts.push(`${total} total`);
+  }
+
+  return (
+    <HFCard
+      title="Failures"
+      sub={subParts.join(' · ') + ' · grouped by reason'}
+      action={<>
+        <HFButton size="sm" variant="subtle"
+          onClick={() => setShowAckedFailures(v => !v)}
+          title="Toggle visibility of failure groups whose latest events have been acknowledged">
+          {showAckedFailures ? 'Hide acknowledged' : 'Show acknowledged'}
+        </HFButton>
+        <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => retryRun(null)}>Retry all</HFButton>
+        <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(null)}>Open issues</HFButton>
+      </>}
+      style={{marginBottom: HF.gap}}
+    >
+      <div style={{padding: 0}}>
+        {failureGroups.map((g, i) => {
+          const isHttpErr = g.http != null && g.http >= 500;
+          const tone = isHttpErr ? 'err' : 'warn';
+          const tonebg = tone === 'err' ? HF.errSoft : HF.warnSoft;
+          const tonefg = tone === 'err' ? HF.errInk : HF.warnInk;
+          const toneb  = tone === 'err' ? HF.errBorder : HF.warnBorder;
+          const open = expandedFailure === i;
+          return (
+            <div key={`${g.reason ?? '__null__'}|${g.http ?? '__null__'}`} style={{
+              borderTop: i === 0 ? 'none' : `1px solid ${HF.borderFaint}`,
+            }}>
+              <div role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                aria-label={`${open ? 'Collapse' : 'Expand'} failure group ${g.reason_display ?? g.reason ?? 'unknown'}`}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFailure(open ? -1 : i); } }}
+                onClick={() => setExpandedFailure(open ? -1 : i)}
+                style={{
+                padding: `10px ${HF.cardP}px`,
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
+                cursor: 'pointer',
+                background: open ? HF.subtle : 'transparent',
+              }}>
+                <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0}}>
+                  <span aria-hidden="true" style={{
+                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                    width: 14, height: 14, color: HF.ink4,
+                    transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms',
+                  }}>{HF_ICONS.chevron}</span>
+                  {g.http != null && (
+                    <span style={{
+                      display:'inline-flex', alignItems:'center', justifyContent:'center',
+                      height: 22, padding: '0 8px',
+                      background: tonebg, color: tonefg, border: `1px solid ${toneb}`,
+                      borderRadius: 4, fontFamily: HF.mono, fontSize: 12, fontWeight: 600,
+                    }}>{g.http}</span>
+                  )}
+                  <span style={{fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 600}}>
+                    {g.reason_display ?? g.reason ?? 'unknown'}
+                  </span>
+                  <span style={{fontFamily: HF.mono, fontSize: 12, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
+                    × {g.count}
+                  </span>
+                  {(g.acked_count ?? 0) > 0 && (
+                    <span title={`${g.acked_count} acknowledged event${g.acked_count === 1 ? '' : 's'} in this bucket`} style={{
+                      display:'inline-flex', alignItems:'center', gap: 4,
+                      height: 20, padding: '0 7px',
+                      background: HF.subtle, color: HF.ink3,
+                      border: `1px solid ${HF.border}`, borderRadius: 4,
+                      fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                    }}>
+                      <span aria-hidden="true" style={{display:'inline-flex'}}><HFIcon d={<><path d="M3 8 L7 12 L13 4"/></>} size={11} sw={2}/></span>
+                      acked × {g.acked_count}
+                    </span>
+                  )}
+                  {g.recurring_in_runs > 0 && (
+                    <span title={`This bucket also failed in ${g.recurring_in_runs} of the last 5 prior runs for this shop`} style={{
+                      display:'inline-flex', alignItems:'center', gap: 4,
+                      height: 20, padding: '0 7px',
+                      background: HF.warnSoft, color: HF.warnInk,
+                      border: `1px solid ${HF.warnBorder}`, borderRadius: 4,
+                      fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
+                    }}>
+                      <span aria-hidden="true" style={{display:'inline-flex'}}>{HF_ICONS.cycle}</span>
+                      recurring × {g.recurring_in_runs}
+                    </span>
+                  )}
+                </div>
+                <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
+                  <HFButton size="sm" disabled={actionPending} onClick={() => retryRun(g)}>Retry group</HFButton>
+                  <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>Open issues</HFButton>
+                </div>
+              </div>
+              {open && (
+                <div style={{padding: `4px ${HF.cardP}px 14px`, paddingLeft: HF.cardP + 24}}>
+                  <div style={{display:'flex', flexDirection:'column', gap: 6, marginBottom: 8}}>
+                    {g.examples.map((ex, j) => {
+                      // Older /live payloads returned plain URL strings;
+                      // newer ones return { url, error_detail }. Accept both
+                      // so a stale browser tab doesn't break.
+                      const exUrl = typeof ex === 'string' ? ex : ex?.url ?? '';
+                      const exDetail = typeof ex === 'string' ? null : ex?.error_detail ?? null;
+                      const detailKey = `${i}-${j}`;
+                      const detailOpen = expandedFailureDetail === detailKey;
+                      return (
+                        <div key={j} style={{display:'flex', flexDirection:'column', gap: 4}}>
+                          <div style={{display:'flex', alignItems:'center', gap: 6, minWidth: 0}}>
+                            <span style={{color: HF.ink5}}>·</span>
+                            <span title={exUrl} style={{flex: 1, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth: 0}}>
+                              {exUrl}
+                            </span>
+                            {exDetail && (
+                              <button
+                                aria-expanded={detailOpen}
+                                onClick={() => setExpandedFailureDetail(detailOpen ? null : detailKey)}
+                                style={{
+                                  background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                                  fontFamily: HF.mono, fontSize: 11, color: HF.accentInk,
+                                  textDecoration: 'none', whiteSpace: 'nowrap',
+                                }}>
+                                {detailOpen ? 'Hide details' : 'Show details'}
+                              </button>
+                            )}
+                          </div>
+                          {detailOpen && exDetail && (
+                            <pre style={{
+                              margin: 0, padding: '8px 10px',
+                              background: HF.subtle, border: `1px solid ${HF.borderFaint}`,
+                              borderRadius: 4,
+                              fontFamily: HF.mono, fontSize: 11, color: HF.ink2,
+                              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                              maxHeight: 240, overflow: 'auto',
+                            }}>{exDetail}</pre>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {g.count > g.examples.length && (
+                      <button onClick={() => applyGroupFilter(g)} style={{
+                        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                        fontFamily: HF.mono, fontSize: 12, color: HF.accentInk,
+                        textDecoration: 'none', marginLeft: 12, marginTop: 2, textAlign: 'left',
+                      }}>+ {g.count - g.examples.length} more (view in History)</button>
+                    )}
+                  </div>
+                  <div style={{display:'flex', gap: 6}}>
+                    <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => ackGroup(g)}>Mark as known</HFButton>
+                    <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>View all {g.count}</HFButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </HFCard>
+  );
+}
+
+
+// ─── In-flight card — what's happening RIGHT NOW (only when live) ────
+// Pure-render given the current liveData snapshot + derived counts.
+function HFRunInFlightCard({
+  liveData, runStatus, workerCount, inFlightFirst,
+  liveHealth, healthTone, liveRate, rateDone, rateFailed,
+  ratePerMin, failPct, tabCounts,
+}) {
+  const HF = getHF();
+  if (!liveData || !(runStatus === 'running' || runStatus === 'paused' || runStatus === 'stopping')) {
+    return null;
+  }
+  return (
+    <HFCard
+      title="In flight"
+      sub={`${workerCount} ${workerCount === 1 ? 'URL' : 'URLs'} · ${liveData.eta_min != null ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m` : 'live'}`}
+      action={liveHealth ? <HFPill tone={healthTone}><HFDot tone={healthTone} pulse={liveHealth==='healthy'} size={6}/> health: {liveHealth}</HFPill> : null}
+      style={{marginBottom: HF.gap}}
+    >
+      <div style={{padding: HF.cardP, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: HF.gap, alignItems:'stretch'}}>
+        {/* Active fetch tile */}
+        <div style={{
+          background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
+          borderRadius: HF.r2, padding: '14px 16px',
+          display:'flex', flexDirection:'column', gap: 8, position:'relative', overflow:'hidden',
+          minHeight: 90,
+        }}>
+          {inFlightFirst ? (
+            <>
+              <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 2}}>
+                <HFDot tone="accent" pulse size={7}/>
+                <span style={{fontSize: 11, fontWeight: 600, color: HF.accentInk, letterSpacing: 0.6, textTransform:'uppercase'}}>
+                  Now fetching
+                </span>
+                <span style={{flex: 1}}/>
+                <span style={{fontFamily: HF.mono, fontSize: 22, fontWeight: 600, color: HF.accentInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                  {_fmtAge(inFlightFirst.claimed_age_s)}
+                </span>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap: 8, minWidth:0}}>
+                <span style={{
+                  fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 500,
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex: 1,
+                }} title={inFlightFirst.url}>{inFlightFirst.url}</span>
+                <HFExtLink href={inFlightFirst.url} size={13}/>
+              </div>
+              {(() => {
+                const lbl = DELAY_SOURCE_LABELS[inFlightFirst.delay_source] || {};
+                return (
+                  <div style={{display:'flex', gap: 16, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, marginTop: 2, flexWrap:'wrap'}}>
+                    <span>claimed <span style={{color: HF.ink2}}>{_fmtClockTime(inFlightFirst.claimed_at)}</span></span>
+                    <span title={lbl.title || ''}>
+                      throttle <span style={{color: HF.warnInk}}>{_fmtDelay(inFlightFirst.request_delay_s)}</span>
+                      {lbl.suffix ? <span style={{color: HF.ink4}}> · {lbl.suffix}</span> : null}
+                    </span>
+                    {inFlightFirst.retry_count > 0 && (
+                      <span>retries <span style={{color: HF.ink2}}>{inFlightFirst.retry_count}</span></span>
+                    )}
+                  </div>
+                );
+              })()}
+              <div style={{
+                position:'absolute', left:0, right:0, bottom:0, height: 3,
+                background: HF.accentSoft2,
+              }}>
+                <div style={{width:'40%', height:'100%', background: HF.accent, animation:'hfSweep 1.6s ease-in-out infinite'}}/>
+              </div>
+            </>
+          ) : (tabCounts.processing ?? 0) > 0 ? (
+            <div style={{display:'flex', alignItems:'center', gap: 8, flex:1, color: HF.accentInk, fontFamily: HF.mono, fontSize: 13}}>
+              <HFDot tone="accent" pulse size={7}/>
+              {tabCounts.processing} URL{tabCounts.processing > 1 ? 's' : ''} processing · refreshing…
+            </div>
+          ) : (
+            <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 13}}>
+              {liveData ? 'between requests · waiting for next dispatch…' : 'loading…'}
+            </div>
+          )}
+        </div>
+
+        {/* Rate (last 60s) — done vs failed */}
+        <div style={{display:'flex', flexDirection:'column', gap: 10}}>
+          <div style={{fontSize: 11, fontWeight: 600, color: HF.ink4, letterSpacing: 0.6, textTransform:'uppercase'}}>
+            Rate · last {liveRate.window_s}s
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, flex: 1}}>
+            <div style={{
+              background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: HF.r2,
+              padding: '10px 12px',
+            }}>
+              <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: HF.okInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                {rateDone}
+              </div>
+              <div style={{fontFamily: HF.mono, fontSize: 11, color: HF.okInk, marginTop: 5}}>
+                done · {ratePerMin}/min
+              </div>
+            </div>
+            <div style={{
+              background: rateFailed > 0 ? HF.errSoft : HF.subtle,
+              border: `1px solid ${rateFailed > 0 ? HF.errBorder : HF.border}`, borderRadius: HF.r2,
+              padding: '10px 12px',
+            }}>
+              <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: rateFailed > 0 ? HF.errInk : HF.ink3, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
+                {rateFailed}
+              </div>
+              <div style={{fontFamily: HF.mono, fontSize: 11, color: rateFailed > 0 ? HF.errInk : HF.ink3, marginTop: 5}}>
+                failed{rateFailed > 0 ? ` · ${failPct}% rate` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </HFCard>
+  );
+}
+
+
+// ─── Books card — books added/updated by this run, paginated ────────
+// Self-contained: owns its own tab/page state + data fetch. Parent only
+// passes the run id, the added/updated counts (used to choose default
+// inner tab), and the SPA navigator.
+function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
+  const HF = getHF();
+  const [booksTab, setBooksTab] = React.useState(null);
+  const [booksPage, setBooksPage] = React.useState(1);
+  const [booksPerPage, setBooksPerPage] = React.useState(25);
+  const [booksData, setBooksData] = React.useState(null);
+
+  // Default inner tab once counts are known: prefer 'added' if any added, else 'updated'.
+  React.useEffect(() => {
+    if (booksTab !== null) return;
+    setBooksTab((itemsAdded ?? 0) > 0 ? 'added' : 'updated');
+  }, [itemsAdded, itemsUpdated, booksTab]);
+
+  // Reset page when the inner tab or per-page selection changes.
+  React.useEffect(() => { setBooksPage(1); }, [booksTab, booksPerPage]);
+
+  React.useEffect(() => {
+    if (!runId || !booksTab) return;
+    let cancelled = false;
+    const params = new URLSearchParams({
+      type: booksTab,
+      page: String(booksPage),
+      per_page: String(booksPerPage),
+    });
+    fetch(`/api/runs/${runId}/books?${params}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setBooksData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [runId, booksTab, booksPage, booksPerPage]);
+
+  const totalCount = (itemsAdded ?? 0) + (itemsUpdated ?? 0);
+  if (totalCount === 0 || !booksTab) {
+    return (
+      <HFCard title="Books" style={{ marginBottom: HF.gap }}>
+        <div style={{padding:'40px 20px', textAlign:'center', color:HF.ink3, fontSize:13}}>
+          No books were added or updated by this run.
+        </div>
+      </HFCard>
+    );
+  }
+
+  return (
+    <HFCard title="Books">
+      <div style={{padding:`0 ${HF.cardP}px`}}>
+        <HFTabs
+          active={booksTab}
+          onChange={setBooksTab}
+          tabs={[
+            { id:'added',   label:'Added',   count: itemsAdded ?? 0 },
+            { id:'updated', label:'Updated', count: itemsUpdated ?? 0 },
+          ]}
+        />
+      </div>
+      {booksData ? (
+        <>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${HF.border}`}}>
+                  <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Title</th>
+                  <th style={{padding:`7px 8px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Author</th>
+                  <th style={{padding:`7px 8px`, textAlign:'right', fontWeight:600, color:HF.ink3, fontSize:12}}>Price</th>
+                  {booksTab === 'updated' && (
+                    <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Changed</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {booksData.books.length === 0 ? (
+                  <tr>
+                    <td colSpan={booksTab === 'updated' ? 4 : 3} style={{padding:`16px ${HF.cardP}px`, color:HF.ink3, fontSize:13}}>
+                      No books to show.
+                    </td>
+                  </tr>
+                ) : booksData.books.map((b, i) => (
+                  <tr key={b.id} style={{borderBottom: i < booksData.books.length - 1 ? `1px solid ${HF.borderFaint}` : 'none'}}>
+                    <td style={{padding:`7px ${HF.cardP}px`, maxWidth:320}}>
+                      <a
+                        href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(b.id)})) || '#'}
+                        style={{color:HF.accent, textDecoration:'none', fontWeight:500}}
+                        onClick={e => { if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('shop-book-detail', {id: String(b.id)}); }}
+                        onMouseEnter={e => e.target.style.textDecoration='underline'}
+                        onMouseLeave={e => e.target.style.textDecoration='none'}>
+                        {b.title}
+                      </a>
+                    </td>
+                    <td style={{padding:`7px 8px`, color:HF.ink3, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.author}</td>
+                    <td style={{padding:`7px 8px`, textAlign:'right', fontFamily:HF.mono, fontSize:13, whiteSpace:'nowrap'}}>{b.price}</td>
+                    {booksTab === 'updated' && (
+                      <td style={{padding:`7px ${HF.cardP}px`}}>
+                        {(b.changed_fields || '').split(', ').filter(Boolean).map(f => (
+                          <code key={f} style={{
+                            fontSize:11, padding:'1px 5px', borderRadius:3, marginRight:4,
+                            background:HF.subtle, color:HF.ink3, fontFamily:HF.mono,
+                          }}>{f}</code>
+                        ))}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{
+            display:'flex', justifyContent:'space-between', alignItems:'center',
+            padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
+          }}>
+            <span style={{fontSize:13, color:HF.ink3}}>{booksData.total.toLocaleString()} books</span>
+            <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+              <span style={{fontSize:12, color:HF.ink3}}>Per page:</span>
+              {[25, 50, 100].map(n => (
+                <HFButton key={n} size="sm" variant={booksPerPage === n ? 'accent' : 'subtle'}
+                  onClick={() => setBooksPerPage(n)}>{n}</HFButton>
+              ))}
+              <HFButton size="sm" variant="subtle" disabled={booksData.page <= 1}
+                aria-label="Previous page"
+                onClick={() => setBooksPage(p => Math.max(1, p - 1))}>
+                  <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
+                </HFButton>
+              {(() => {
+                const cur = booksData.page, total = booksData.pages;
+                const btns = [];
+                const push = n => btns.push(
+                  <HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'subtle'}
+                    onClick={() => setBooksPage(n)}>{n}</HFButton>
+                );
+                const ell = k => btns.push(<span key={k} style={{padding:'0 2px', color:HF.ink3}}>…</span>);
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) push(i);
+                } else {
+                  push(1);
+                  if (cur > 4) ell('l');
+                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
+                  for (let i = lo; i <= hi; i++) push(i);
+                  if (cur < total - 3) ell('r');
+                  push(total);
+                }
+                return btns;
+              })()}
+              <HFButton size="sm" variant="subtle" disabled={booksData.page >= booksData.pages}
+                aria-label="Next page"
+                onClick={() => setBooksPage(p => Math.min(booksData.pages, p + 1))}>
+                  <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+                </HFButton>
+            </div>
+          </div>
+        </>
+      ) : (
+        <HFTableSkeleton rows={6} columns={[
+          { w: '1fr', skelW: 240 },
+          { w: '180px', skelW: 120 },
+          { w: '80px', skelW: 50, mono: true, align: 'right' },
+          ...(booksTab === 'updated' ? [{ w: '160px', skelW: 100 }] : []),
+        ]}/>
+      )}
+    </HFCard>
+  );
+}
+
+
 // ───────────────────────────── Run Detail ─────────────────────────────
 
 function HFRunDetail({ nav, goto, params }) {
@@ -754,37 +1571,6 @@ function HFRunDetail({ nav, goto, params }) {
   }, [runId, urlStatus, urlPage, urlPerPage, urlSort, urlOrder,
       urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull, data?.status]);
 
-  // Books added / updated list state
-  const [booksTab, setBooksTab] = React.useState(null);
-  const [booksPage, setBooksPage] = React.useState(1);
-  const [booksPerPage, setBooksPerPage] = React.useState(25);
-  const [booksData, setBooksData] = React.useState(null);
-
-  // Set default tab once data loads: prefer 'added' if any added, else 'updated'.
-  React.useEffect(() => {
-    if (booksTab !== null || !data) return;
-    const hasAdded = (data.items_added ?? 0) > 0;
-    setBooksTab(hasAdded ? 'added' : 'updated');
-  }, [data, booksTab]);
-
-  // Reset page when tab or per-page changes.
-  React.useEffect(() => { setBooksPage(1); }, [booksTab, booksPerPage]);
-
-  React.useEffect(() => {
-    if (!runId || !booksTab) return;
-    let cancelled = false;
-    const params = new URLSearchParams({
-      type: booksTab,
-      page: String(booksPage),
-      per_page: String(booksPerPage),
-    });
-    fetch(`/api/runs/${runId}/books?${params}`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setBooksData(d); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [runId, booksTab, booksPage, booksPerPage]);
-
   const id = data?.id ?? runId;
   const [actionPending, setActionPending] = React.useState(false);
   // Action feedback flows through window.HF_APP.toast — short helper keeps
@@ -794,11 +1580,7 @@ function HFRunDetail({ nav, goto, params }) {
       window.HF_APP.toast(opts);
     }
   }, []);
-  const [expandedFailure, setExpandedFailure] = React.useState(-1);
-  // Tracks which (failureGroupIndex, exampleIndex) pair has its error_detail
-  // disclosure open. Keyed `${i}-${j}` so only one detail opens at a time per
-  // group; toggling another collapses the previous one.
-  const [expandedFailureDetail, setExpandedFailureDetail] = React.useState(null);
+  // (Failure-group disclosure state lives inside HFRunFailuresCard now.)
   // Confirm-action dialog state. `confirmDialog` carries title/body/onConfirm
   // for stop/rerun/continue/retry; `ackDialog` carries the failure group for
   // the labelled-note ack flow (replaces window.prompt).
@@ -1124,6 +1906,16 @@ function HFRunDetail({ nav, goto, params }) {
       title={<span style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
         <span style={{fontFamily:HF.mono, fontSize:24, fontWeight:600, color:HF.ink}}>Run #{id}</span>
         <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
+        {/* Live indicator — page is auto-refreshing every 2s while the run
+            is in an active state. Distinct from the run-status pill: even
+            a paused run is still being polled, so this tells operators the
+            data they're seeing is fresh. */}
+        {(runStatus === 'running' || runStatus === 'stopping' || runStatus === 'paused') && (
+          <HFPill tone="muted" title="This page is auto-refreshing every 2 seconds">
+            <HFDot tone="ok" pulse size={6}/>
+            <span style={{fontFamily:HF.mono, fontSize:11, letterSpacing:0.4, textTransform:'uppercase'}}>Live</span>
+          </HFPill>
+        )}
         {isTerminal && closeReason && (
           <HFPill tone={closeReasonTone} title={`close_reason: ${closeReason}`}>
             <span style={{fontFamily:HF.mono, fontSize:11}}>{closeReason}</span>
@@ -1270,751 +2062,70 @@ function HFRunDetail({ nav, goto, params }) {
       </div>
 
       {/* In-flight card — what's happening RIGHT NOW (only when live) */}
-      {liveData && (runStatus === 'running' || runStatus === 'paused' || runStatus === 'stopping') && (
-        <HFCard
-          title="In flight"
-          sub={`${workerCount} ${workerCount === 1 ? 'URL' : 'URLs'} · ${liveData.eta_min != null ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m` : 'live'}`}
-          action={liveHealth ? <HFPill tone={healthTone}><HFDot tone={healthTone} pulse={liveHealth==='healthy'} size={6}/> health: {liveHealth}</HFPill> : null}
-          style={{marginBottom: HF.gap}}
-        >
-          <div style={{padding: HF.cardP, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: HF.gap, alignItems:'stretch'}}>
-            {/* Active fetch tile */}
-            <div style={{
-              background: HF.accentSoft, border: `1px solid ${HF.accentBorder}`,
-              borderRadius: HF.r2, padding: '14px 16px',
-              display:'flex', flexDirection:'column', gap: 8, position:'relative', overflow:'hidden',
-              minHeight: 90,
-            }}>
-              {inFlightFirst ? (
-                <>
-                  <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 2}}>
-                    <HFDot tone="accent" pulse size={7}/>
-                    <span style={{fontSize: 11, fontWeight: 600, color: HF.accentInk, letterSpacing: 0.6, textTransform:'uppercase'}}>
-                      Now fetching
-                    </span>
-                    <span style={{flex: 1}}/>
-                    <span style={{fontFamily: HF.mono, fontSize: 22, fontWeight: 600, color: HF.accentInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
-                      {_fmtAge(inFlightFirst.claimed_age_s)}
-                    </span>
-                  </div>
-                  <div style={{display:'flex', alignItems:'center', gap: 8, minWidth:0}}>
-                    <span style={{
-                      fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 500,
-                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex: 1,
-                    }} title={inFlightFirst.url}>{inFlightFirst.url}</span>
-                    <HFExtLink href={inFlightFirst.url} size={13}/>
-                  </div>
-                  {(() => {
-                    const lbl = DELAY_SOURCE_LABELS[inFlightFirst.delay_source] || {};
-                    return (
-                      <div style={{display:'flex', gap: 16, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, marginTop: 2, flexWrap:'wrap'}}>
-                        <span>claimed <span style={{color: HF.ink2}}>{_fmtClockTime(inFlightFirst.claimed_at)}</span></span>
-                        <span title={lbl.title || ''}>
-                          throttle <span style={{color: HF.warnInk}}>{_fmtDelay(inFlightFirst.request_delay_s)}</span>
-                          {lbl.suffix ? <span style={{color: HF.ink4}}> · {lbl.suffix}</span> : null}
-                        </span>
-                        {inFlightFirst.retry_count > 0 && (
-                          <span>retries <span style={{color: HF.ink2}}>{inFlightFirst.retry_count}</span></span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <div style={{
-                    position:'absolute', left:0, right:0, bottom:0, height: 3,
-                    background: HF.accentSoft2,
-                  }}>
-                    <div style={{width:'40%', height:'100%', background: HF.accent, animation:'hfSweep 1.6s ease-in-out infinite'}}/>
-                  </div>
-                </>
-              ) : (tabCounts.processing ?? 0) > 0 ? (
-                <div style={{display:'flex', alignItems:'center', gap: 8, flex:1, color: HF.accentInk, fontFamily: HF.mono, fontSize: 13}}>
-                  <HFDot tone="accent" pulse size={7}/>
-                  {tabCounts.processing} URL{tabCounts.processing > 1 ? 's' : ''} processing · refreshing…
-                </div>
-              ) : (
-                <div style={{display:'flex', alignItems:'center', justifyContent:'center', flex:1, color: HF.ink4, fontFamily: HF.mono, fontSize: 13}}>
-                  {liveData ? 'between requests · waiting for next dispatch…' : 'loading…'}
-                </div>
-              )}
-            </div>
-
-            {/* Rate (last 60s) — done vs failed */}
-            <div style={{display:'flex', flexDirection:'column', gap: 10}}>
-              <div style={{fontSize: 11, fontWeight: 600, color: HF.ink4, letterSpacing: 0.6, textTransform:'uppercase'}}>
-                Rate · last {liveRate.window_s}s
-              </div>
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, flex: 1}}>
-                <div style={{
-                  background: HF.okSoft, border: `1px solid ${HF.okBorder}`, borderRadius: HF.r2,
-                  padding: '10px 12px',
-                }}>
-                  <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: HF.okInk, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
-                    {rateDone}
-                  </div>
-                  <div style={{fontFamily: HF.mono, fontSize: 11, color: HF.okInk, marginTop: 5}}>
-                    done · {ratePerMin}/min
-                  </div>
-                </div>
-                <div style={{
-                  background: rateFailed > 0 ? HF.errSoft : HF.subtle,
-                  border: `1px solid ${rateFailed > 0 ? HF.errBorder : HF.border}`, borderRadius: HF.r2,
-                  padding: '10px 12px',
-                }}>
-                  <div style={{fontFamily: HF.mono, fontSize: 24, fontWeight: 600, color: rateFailed > 0 ? HF.errInk : HF.ink3, fontVariantNumeric:'tabular-nums', lineHeight: 1}}>
-                    {rateFailed}
-                  </div>
-                  <div style={{fontFamily: HF.mono, fontSize: 11, color: rateFailed > 0 ? HF.errInk : HF.ink3, marginTop: 5}}>
-                    failed{rateFailed > 0 ? ` · ${failPct}% rate` : ''}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </HFCard>
-      )}
+      <HFRunInFlightCard
+        liveData={liveData}
+        runStatus={runStatus}
+        workerCount={workerCount}
+        inFlightFirst={inFlightFirst}
+        liveHealth={liveHealth}
+        healthTone={healthTone}
+        liveRate={liveRate}
+        rateDone={rateDone}
+        rateFailed={rateFailed}
+        ratePerMin={ratePerMin}
+        failPct={failPct}
+        tabCounts={tabCounts}
+      />
 
       {/* Failures card — grouped by error_reason from recent_failures */}
-      {(failureGroups.length > 0 || showAckedFailures) && (() => {
-        // Sum unacked / acked across visible groups so the header reflects
-        // exactly what's on screen given the toggle. Falls back to legacy
-        // `count` when older payloads lack the explicit split.
-        const sumUnacked = failureGroups.reduce(
-          (a, g) => a + (g.unacked_count ?? g.count ?? 0), 0);
-        const sumAcked = failureGroups.reduce(
-          (a, g) => a + (g.acked_count ?? 0), 0);
-        const total = sumUnacked + sumAcked;
-        const subParts = [];
-        subParts.push(`${sumUnacked} unacknowledged`);
-        if (showAckedFailures) {
-          subParts.push(`${sumAcked} acknowledged`);
-          subParts.push(`${total} total`);
-        }
-        return (
-        <HFCard
-          title="Failures"
-          sub={subParts.join(' · ') + ' · grouped by reason'}
-          action={<>
-            <HFButton size="sm" variant="subtle"
-              onClick={() => setShowAckedFailures(v => !v)}
-              title="Toggle visibility of failure groups whose latest events have been acknowledged">
-              {showAckedFailures ? 'Hide acknowledged' : 'Show acknowledged'}
-            </HFButton>
-            <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => retryRun(null)}>Retry all</HFButton>
-            <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(null)}>Open issues</HFButton>
-          </>}
-          style={{marginBottom: HF.gap}}
-        >
-          <div style={{padding: 0}}>
-            {failureGroups.map((g, i) => {
-              const isHttpErr = g.http != null && g.http >= 500;
-              const tone = isHttpErr ? 'err' : 'warn';
-              const tonebg = tone === 'err' ? HF.errSoft : HF.warnSoft;
-              const tonefg = tone === 'err' ? HF.errInk : HF.warnInk;
-              const toneb  = tone === 'err' ? HF.errBorder : HF.warnBorder;
-              const open = expandedFailure === i;
-              return (
-                <div key={`${g.reason ?? '__null__'}|${g.http ?? '__null__'}`} style={{
-                  borderTop: i === 0 ? 'none' : `1px solid ${HF.borderFaint}`,
-                }}>
-                  <div role="button"
-                    tabIndex={0}
-                    aria-expanded={open}
-                    aria-label={`${open ? 'Collapse' : 'Expand'} failure group ${g.reason_display ?? g.reason ?? 'unknown'}`}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFailure(open ? -1 : i); } }}
-                    onClick={() => setExpandedFailure(open ? -1 : i)}
-                    style={{
-                    padding: `10px ${HF.cardP}px`,
-                    display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
-                    cursor: 'pointer',
-                    background: open ? HF.subtle : 'transparent',
-                  }}>
-                    <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0}}>
-                      <span aria-hidden="true" style={{
-                        display:'inline-flex', alignItems:'center', justifyContent:'center',
-                        width: 14, height: 14, color: HF.ink4,
-                        transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms',
-                      }}>{HF_ICONS.chevron}</span>
-                      {g.http != null && (
-                        <span style={{
-                          display:'inline-flex', alignItems:'center', justifyContent:'center',
-                          height: 22, padding: '0 8px',
-                          background: tonebg, color: tonefg, border: `1px solid ${toneb}`,
-                          borderRadius: 4, fontFamily: HF.mono, fontSize: 12, fontWeight: 600,
-                        }}>{g.http}</span>
-                      )}
-                      <span style={{fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 600}}>
-                        {g.reason_display ?? g.reason ?? 'unknown'}
-                      </span>
-                      <span style={{fontFamily: HF.mono, fontSize: 12, color: HF.ink3, fontVariantNumeric:'tabular-nums'}}>
-                        × {g.count}
-                      </span>
-                      {(g.acked_count ?? 0) > 0 && (
-                        <span title={`${g.acked_count} acknowledged event${g.acked_count === 1 ? '' : 's'} in this bucket`} style={{
-                          display:'inline-flex', alignItems:'center', gap: 4,
-                          height: 20, padding: '0 7px',
-                          background: HF.subtle, color: HF.ink3,
-                          border: `1px solid ${HF.border}`, borderRadius: 4,
-                          fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
-                        }}>
-                          <span aria-hidden="true" style={{display:'inline-flex'}}><HFIcon d={<><path d="M3 8 L7 12 L13 4"/></>} size={11} sw={2}/></span>
-                          acked × {g.acked_count}
-                        </span>
-                      )}
-                      {g.recurring_in_runs > 0 && (
-                        <span title={`This bucket also failed in ${g.recurring_in_runs} of the last 5 prior runs for this shop`} style={{
-                          display:'inline-flex', alignItems:'center', gap: 4,
-                          height: 20, padding: '0 7px',
-                          background: HF.warnSoft, color: HF.warnInk,
-                          border: `1px solid ${HF.warnBorder}`, borderRadius: 4,
-                          fontFamily: HF.mono, fontSize: 11, fontWeight: 500,
-                        }}>
-                          <span aria-hidden="true" style={{display:'inline-flex'}}>{HF_ICONS.cycle}</span>
-                          recurring × {g.recurring_in_runs}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{display:'flex', gap: 6, alignItems:'center'}} onClick={(e)=>e.stopPropagation()}>
-                      <HFButton size="sm" disabled={actionPending} onClick={() => retryRun(g)}>Retry group</HFButton>
-                      <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>Open issues</HFButton>
-                    </div>
-                  </div>
-                  {open && (
-                    <div style={{padding: `4px ${HF.cardP}px 14px`, paddingLeft: HF.cardP + 24}}>
-                      <div style={{display:'flex', flexDirection:'column', gap: 6, marginBottom: 8}}>
-                        {g.examples.map((ex, j) => {
-                          // Older /live payloads returned plain URL strings;
-                          // newer ones return { url, error_detail }. Accept both
-                          // so a stale browser tab doesn't break.
-                          const exUrl = typeof ex === 'string' ? ex : ex?.url ?? '';
-                          const exDetail = typeof ex === 'string' ? null : ex?.error_detail ?? null;
-                          const detailKey = `${i}-${j}`;
-                          const detailOpen = expandedFailureDetail === detailKey;
-                          return (
-                            <div key={j} style={{display:'flex', flexDirection:'column', gap: 4}}>
-                              <div style={{display:'flex', alignItems:'center', gap: 6, minWidth: 0}}>
-                                <span style={{color: HF.ink5}}>·</span>
-                                <span title={exUrl} style={{flex: 1, fontFamily: HF.mono, fontSize: 12, color: HF.ink3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth: 0}}>
-                                  {exUrl}
-                                </span>
-                                {exDetail && (
-                                  <button
-                                    aria-expanded={detailOpen}
-                                    onClick={() => setExpandedFailureDetail(detailOpen ? null : detailKey)}
-                                    style={{
-                                      background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                                      fontFamily: HF.mono, fontSize: 11, color: HF.accentInk,
-                                      textDecoration: 'none', whiteSpace: 'nowrap',
-                                    }}>
-                                    {detailOpen ? 'Hide details' : 'Show details'}
-                                  </button>
-                                )}
-                              </div>
-                              {detailOpen && exDetail && (
-                                <pre style={{
-                                  margin: 0, padding: '8px 10px',
-                                  background: HF.subtle, border: `1px solid ${HF.borderFaint}`,
-                                  borderRadius: 4,
-                                  fontFamily: HF.mono, fontSize: 11, color: HF.ink2,
-                                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                                  maxHeight: 240, overflow: 'auto',
-                                }}>{exDetail}</pre>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {g.count > g.examples.length && (
-                          <button onClick={() => applyGroupFilter(g)} style={{
-                            background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                            fontFamily: HF.mono, fontSize: 12, color: HF.accentInk,
-                            textDecoration: 'none', marginLeft: 12, marginTop: 2, textAlign: 'left',
-                          }}>+ {g.count - g.examples.length} more (view in History)</button>
-                        )}
-                      </div>
-                      <div style={{display:'flex', gap: 6}}>
-                        <HFButton size="sm" variant="subtle" disabled={actionPending} onClick={() => ackGroup(g)}>Mark as known</HFButton>
-                        <HFButton size="sm" variant="subtle" onClick={() => applyGroupFilter(g)}>View all {g.count}</HFButton>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </HFCard>
-        );
-      })()}
+      <HFRunFailuresCard
+        failureGroups={failureGroups}
+        showAckedFailures={showAckedFailures}
+        setShowAckedFailures={setShowAckedFailures}
+        actionPending={actionPending}
+        retryRun={retryRun}
+        ackGroup={ackGroup}
+        applyGroupFilter={applyGroupFilter}
+      />
 
       </>}
 
       {tab === 'history' && <>
       {/* History card — tabbed URL queue / discovered URL history */}
-      {!urlData ? (
-        <HFCard title="History" sub="loading…" style={{ marginBottom: HF.gap }}>
-          <HFTableSkeleton rows={8} columns={[
-            { w: '55px', skelW: 36, mono: true },
-            { w: '1fr', skelW: 240 },
-            { w: '85px', skelW: 50, mono: true },
-            { w: '120px', skelW: 80 },
-            { w: '80px', skelW: 60, mono: true },
-            { w: '70px', skelW: 50, mono: true },
-            { w: '70px', skelW: 50, mono: true },
-            { w: '75px', skelW: 50, mono: true },
-            { w: '60px', skelW: 40, mono: true },
-            { w: '85px', skelW: 60, mono: true },
-          ]}/>
-        </HFCard>
-      ) : (urlData.source === 'live' || urlData.total > 0) && (
-        <div ref={historyRef}>
-        <HFCard
-          title="History"
-          sub={urlData.source === 'live'
-            ? `${urlData.breakdown.done} done · ${urlData.breakdown.failed} failed · ${urlData.breakdown.pending.toLocaleString()} pending`
-            : `${urlData.total.toLocaleString()} URLs from discovered_urls (live queue cleaned up at run finish)`}
-          style={{ marginBottom: HF.gap }}
-        >
-          {urlData.source === 'live' && (
-            <div style={{padding:`12px ${HF.cardP}px 0`}}>
-              <HFTabs
-                active={urlStatus}
-                onChange={setUrlStatus}
-                tabs={[
-                  { id:'all',        label:'all',        count: tabAllCount },
-                  { id:'pending',    label:'pending',    count: tabCounts.pending ?? 0 },
-                  { id:'processing', label:'processing', count: tabCounts.processing ?? 0 },
-                  { id:'done',       label:'done',       count: tabCounts.done ?? 0 },
-                  { id:'failed',     label:'failed',     count: tabCounts.failed ?? 0 },
-                ]}
-              />
-              {(urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (() => {
-                const reasonLabel = urlReasonIsNull ? 'unknown' : urlReason;
-                const httpLabel = urlHttp != null ? `HTTP ${urlHttp}` : urlHttpIsNull ? 'no response' : '';
-                const clearGroupFilter = () => {
-                  setUrlReason('');
-                  setUrlReasonIsNull(false);
-                  setUrlHttp(null);
-                  setUrlHttpIsNull(false);
-                };
-                return (
-                  <div style={{
-                    display:'inline-flex', alignItems:'center', gap: 6,
-                    marginTop: 8, padding: '4px 6px 4px 10px',
-                    background: HF.errSoft, border: `1px solid ${HF.errBorder}`,
-                    borderRadius: 4, fontFamily: HF.mono, fontSize: 12, color: HF.errInk,
-                  }}>
-                    <span>failed{reasonLabel ? ` · ${reasonLabel}` : ''}{httpLabel ? ` · ${httpLabel}` : ''}</span>
-                    <button onClick={clearGroupFilter} aria-label="Clear group filter" title="Clear group filter" style={{
-                      background: 'transparent', border: 'none',
-                      cursor:'pointer', padding:'0 4px', color: HF.errInk, fontWeight: 600,
-                      fontFamily: HF.sans, fontSize: 14, lineHeight: 1,
-                    }}>×</button>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {urlData.rows.length === 0 ? (
-            <div style={{padding:'24px', textAlign:'center', color:HF.ink3, fontSize:13}}>
-              No URLs in this filter.
-            </div>
-          ) : (
-            <div style={{padding:`4px 0`}}>
-              <div style={{
-                display:'grid',
-                gridTemplateColumns: urlData.source === 'live'
-                  ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
-                  : '1fr 60px 70px 150px',
-                padding:`8px ${HF.cardP}px`,
-                borderBottom: `1px solid ${HF.border}`,
-                fontSize: 11, fontFamily: HF.mono, fontWeight: 500,
-                color: HF.ink3, textTransform: 'uppercase', letterSpacing: 0.4,
-                gap: 10,
-              }}>
-                {(() => {
-                  const SortIcon = ({ active, dir }) => (
-                    <svg aria-hidden="true" width="9" height="11" viewBox="0 0 9 11" style={{flexShrink:0, marginLeft:4, verticalAlign:'middle'}}>
-                      <path d="M4.5 0.5 L8 4 L1 4 Z" fill={active && dir==='asc' ? HF.ink : HF.ink5}/>
-                      <path d="M4.5 10.5 L1 7 L8 7 Z" fill={active && dir==='desc' ? HF.ink : HF.ink5}/>
-                    </svg>
-                  );
-                  const SortHdr = ({ k, children, align }) => {
-                    const active = urlSort === k;
-                    const ariaSort = active ? (urlOrder === 'asc' ? 'ascending' : 'descending') : 'none';
-                    return (
-                      <button
-                        onClick={() => toggleSort(k)}
-                        aria-sort={ariaSort}
-                        aria-label={`Sort by ${k}${active ? ` (currently ${ariaSort})` : ''}`}
-                        style={{
-                          cursor: 'pointer', background: 'transparent', border: 'none',
-                          padding: 0, font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit',
-                          color: active ? HF.accentInk : HF.ink3,
-                          userSelect: 'none',
-                          textAlign: align || 'left',
-                          display: 'inline-flex', alignItems: 'center',
-                        }}
-                        title={`Sort by ${k}`}
-                      >
-                        {children}<SortIcon active={active} dir={urlOrder}/>
-                      </button>
-                    );
-                  };
-                  return urlData.source === 'live' ? (
-                    <>
-                      <SortHdr k="id">ID</SortHdr>
-                      <SortHdr k="title">URL</SortHdr>
-                      <span>Disc. URL</span>
-                      <SortHdr k="status">Status</SortHdr>
-                      <SortHdr k="started">Started</SortHdr>
-                      <SortHdr k="url_type">Type</SortHdr>
-                      <SortHdr k="duration">Duration</SortHdr>
-                      <span>Size</span>
-                      <span>Throttle</span>
-                      <span>Source</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>URL</span>
-                      <span>HTTP</span>
-                      <span>Type</span>
-                      <span>Last checked</span>
-                    </>
-                  );
-                })()}
-              </div>
-              {urlData.rows.map((u, i) => {
-                const tone = u.status === 'done' ? 'ok'
-                  : u.status === 'failed' ? 'err'
-                  : u.status === 'processing' ? 'accent'
-                  : 'neutral';
-                const http = u.http_status ?? u.last_http_status;
-                const httpTone = http && http >= 400 ? 'err' : http ? 'ok' : 'neutral';
-                const fmtDur = (ms) => {
-                  if (ms == null) return '—';
-                  if (ms < 1000) return `${ms}ms`;
-                  return `${(ms / 1000).toFixed(1)}s`;
-                };
-                const statusCell = (() => {
-                  if (urlData.source !== 'live') return null;
-                  if (u.status === 'failed') {
-                    return (
-                      <span style={{display:'inline-flex', flexDirection:'column', gap:2, lineHeight:1.2}}>
-                        <HFPill tone="err" style={{width:'fit-content'}}>failed{http ? ` · ${http}` : ''}</HFPill>
-                        {u.error_reason && (
-                          <span style={{fontFamily:HF.mono, fontSize:11, color:HF.errInk, paddingLeft:2}}>{u.error_reason}</span>
-                        )}
-                      </span>
-                    );
-                  }
-                  if (u.status === 'processing') {
-                    return <HFPill tone="accent" style={{width:'fit-content'}}><HFDot tone="accent" pulse size={6}/>processing</HFPill>;
-                  }
-                  if (u.status === 'pending') {
-                    return <HFPill tone="neutral" style={{width:'fit-content'}}>pending</HFPill>;
-                  }
-                  return <HFPill tone="ok" style={{width:'fit-content'}}>{http ? `done · ${http}` : 'done'}</HFPill>;
-                })();
-                return (
-                  <div key={i} style={{
-                    display:'grid',
-                    gridTemplateColumns: urlData.source === 'live'
-                      ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
-                      : '1fr 60px 70px 150px',
-                    padding:`7px ${HF.cardP}px`,
-                    borderBottom: i < urlData.rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-                    fontSize:13, alignItems:'center', gap:10,
-                  }}>
-                    {urlData.source === 'live' && (
-                      <span style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
-                            title={`item #${u.item_id}`}>
-                        {u.item_id ?? '—'}
-                      </span>
-                    )}
-                    <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-                      <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0, flex:1}}>
-                        {u.title && (
-                          u.shop_book_id != null ? (
-                            <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(u.shop_book_id)})) || '#'}
-                               onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('shop-book-detail', {id: String(u.shop_book_id)});}}
-                               title={u.title}
-                               style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.accentInk, fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
-                              {u.title}
-                            </a>
-                          ) : (
-                            <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:13, color:HF.ink, fontWeight:500}} title={u.title}>{u.title}</span>
-                          )
-                        )}
-                        {u.discovered_url_id != null ? (
-                          <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
-                             onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); e.stopPropagation(); goto('url-detail', {id: String(u.discovered_url_id)});}}
-                             title={u.url}
-                             style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color:HF.accentInk, textDecoration:'none', cursor:'pointer'}}>
-                            {u.url}
-                          </a>
-                        ) : (
-                          <span style={{display:'block', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:HF.mono, fontSize: u.title ? 11 : 12, color: u.title ? HF.ink4 : HF.ink}} title={u.url}>{u.url}</span>
-                        )}
-                      </span>
-                      <HFExtLink href={u.url}/>
-                    </span>
-                    {urlData.source === 'live' ? (
-                      <>
-                        {/* Disc. URL — column 3, right after URL */}
-                        {u.discovered_url_id != null ? (
-                          <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
-                             onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
-                             style={{fontFamily:HF.mono, fontSize:11, color:HF.accentInk, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
-                            #{u.discovered_url_id}
-                          </a>
-                        ) : (
-                          <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5}}>—</span>
-                        )}
-                        {statusCell}
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.claimed_at ? new Date(u.claimed_at).toLocaleTimeString() : '—'}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
-                        {(() => {
-                          // Humanise response_bytes: bytes < 1 KB, KB up to 1 MB, then MB.
-                          // Highlight suspiciously small successful responses (< 1 KB on
-                          // a 200 OK) — common signature of an anti-bot stub page.
-                          const b = u.response_bytes;
-                          if (b == null) {
-                            return <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, fontVariantNumeric:'tabular-nums'}}>—</span>;
-                          }
-                          const fmt = b < 1024
-                            ? `${b} B`
-                            : b < 1024 * 1024
-                              ? `${(b / 1024).toFixed(1)} KB`
-                              : `${(b / 1024 / 1024).toFixed(2)} MB`;
-                          const tiny = b < 1024 && u.status === 'done' && (u.http_status ?? 0) >= 200 && (u.http_status ?? 0) < 300;
-                          return (
-                            <span title={tiny ? 'Suspiciously small response on a 2xx — possible anti-bot stub' : `${b.toLocaleString()} bytes`}
-                                  style={{fontFamily:HF.mono, fontSize:11, color: tiny ? HF.warnInk : HF.ink4, fontVariantNumeric:'tabular-nums'}}>
-                              {fmt}
-                            </span>
-                          );
-                        })()}
-                        {(() => {
-                          const lbl = DELAY_SOURCE_LABELS[u.delay_source] || {};
-                          return <>
-                            <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap'}} title={lbl.title || ''}>
-                              {_fmtDelay(u.request_delay_s)}
-                            </span>
-                            <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={lbl.title || u.delay_source || ''}>
-                              {lbl.suffix || u.delay_source || '—'}
-                            </span>
-                          </>;
-                        })()}
-                      </>
-                    ) : (
-                      <>
-                        <HFPill tone={httpTone} style={{width:'fit-content'}}>{u.last_http_status ?? '—'}</HFPill>
-                        <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink4}}>{u.url_type}</span>
-                        <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, fontVariantNumeric:'tabular-nums'}}>{u.last_checked_at ? new Date(u.last_checked_at).toLocaleString() : '—'}</span>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div style={{
-            display:'flex', justifyContent:'space-between', alignItems:'center',
-            padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
-            fontSize:12, color:HF.ink3, flexWrap:'wrap', gap:8,
-          }}>
-            <span style={{fontFamily:HF.mono, color:HF.ink4}}>
-              {urlData.total.toLocaleString()} URLs
-            </span>
-            <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
-              {(urlStatus !== 'all' || urlSort !== 'started' || urlOrder !== 'desc' || urlPage !== 1
-                || urlReason || urlReasonIsNull || urlHttp != null || urlHttpIsNull) && (
-                <HFButton size="sm" variant="ghost" onClick={() => {
-                  setUrlStatus('all');
-                  setUrlSort('started');
-                  setUrlOrder('desc');
-                  setUrlPage(1);
-                  setUrlReason('');
-                  setUrlReasonIsNull(false);
-                  setUrlHttp(null);
-                  setUrlHttpIsNull(false);
-                }}>Clear</HFButton>
-              )}
-              <span style={{color:HF.ink4, fontSize:12, marginRight:2}}>Per page:</span>
-              {[10, 25, 50, 100].map(n => (
-                <HFButton key={n} size="sm"
-                  variant={urlPerPage === n ? 'accent' : 'subtle'}
-                  onClick={() => setUrlPerPage(n)}>
-                  {n}
-                </HFButton>
-              ))}
-              <span style={{width:1, height:18, background:HF.border, margin:'0 4px'}}/>
-              <HFButton size="sm" variant="ghost" disabled={urlData.page <= 1}
-                aria-label="Previous page"
-                onClick={() => setUrlPage(p => Math.max(1, p - 1))}>
-                  <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
-                </HFButton>
-              {(() => {
-                const cur = urlData.page, total = urlData.pages;
-                const btns = [];
-                const push = (n) => btns.push(
-                  <HFButton key={n} size="sm"
-                    variant={n === cur ? 'accent' : 'subtle'}
-                    onClick={() => setUrlPage(n)}>{n}</HFButton>
-                );
-                const ell = (k) => btns.push(
-                  <span key={k} style={{padding:'0 2px', color:HF.ink4}}>…</span>
-                );
-                if (total <= 7) {
-                  for (let i = 1; i <= total; i++) push(i);
-                } else {
-                  push(1);
-                  if (cur > 4) ell('l');
-                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
-                  for (let i = lo; i <= hi; i++) push(i);
-                  if (cur < total - 3) ell('r');
-                  push(total);
-                }
-                return btns;
-              })()}
-              <HFButton size="sm" variant="ghost" disabled={urlData.page >= urlData.pages}
-                aria-label="Next page"
-                onClick={() => setUrlPage(p => Math.min(urlData.pages, p + 1))}>
-                  <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
-                </HFButton>
-            </div>
-          </div>
-        </HFCard>
-        </div>
-      )}
+      <HFRunHistoryCard
+        urlData={urlData}
+        historyRef={historyRef}
+        goto={goto}
+        urlStatus={urlStatus} setUrlStatus={setUrlStatus}
+        urlSort={urlSort} urlOrder={urlOrder} toggleSort={toggleSort}
+        urlPage={urlPage} setUrlPage={setUrlPage}
+        urlPerPage={urlPerPage} setUrlPerPage={setUrlPerPage}
+        urlReason={urlReason} setUrlReason={setUrlReason}
+        urlReasonIsNull={urlReasonIsNull} setUrlReasonIsNull={setUrlReasonIsNull}
+        urlHttp={urlHttp} setUrlHttp={setUrlHttp}
+        urlHttpIsNull={urlHttpIsNull} setUrlHttpIsNull={setUrlHttpIsNull}
+        tabAllCount={tabAllCount} tabCounts={tabCounts}
+        clearAllFilters={() => {
+          setUrlStatus('all');
+          setUrlSort('started');
+          setUrlOrder('desc');
+          setUrlPage(1);
+          setUrlReason('');
+          setUrlReasonIsNull(false);
+          setUrlHttp(null);
+          setUrlHttpIsNull(false);
+        }}
+      />
 
       </>}
 
       {tab === 'books' && (
-        ((data.items_added ?? 0) + (data.items_updated ?? 0) > 0) && booksTab ? (
-        <HFCard title="Books">
-          <div style={{padding:`0 ${HF.cardP}px`}}>
-            <HFTabs
-              active={booksTab}
-              onChange={t => { setBooksTab(t); }}
-              tabs={[
-                { id:'added',   label:'Added',   count: data.items_added ?? 0 },
-                { id:'updated', label:'Updated',  count: data.items_updated ?? 0 },
-              ]}
-            />
-          </div>
-          {booksData ? (
-            <>
-              <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%', borderCollapse:'collapse', fontSize:13}}>
-                  <thead>
-                    <tr style={{borderBottom:`1px solid ${HF.border}`}}>
-                      <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Title</th>
-                      <th style={{padding:`7px 8px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Author</th>
-                      <th style={{padding:`7px 8px`, textAlign:'right', fontWeight:600, color:HF.ink3, fontSize:12}}>Price</th>
-                      {booksTab === 'updated' && (
-                        <th style={{padding:`7px ${HF.cardP}px`, textAlign:'left', fontWeight:600, color:HF.ink3, fontSize:12}}>Changed</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {booksData.books.length === 0 ? (
-                      <tr>
-                        <td colSpan={booksTab === 'updated' ? 4 : 3} style={{padding:`16px ${HF.cardP}px`, color:HF.ink3, fontSize:13}}>
-                          No books to show.
-                        </td>
-                      </tr>
-                    ) : booksData.books.map((b, i) => (
-                      <tr key={b.id} style={{borderBottom: i < booksData.books.length - 1 ? `1px solid ${HF.borderFaint}` : 'none'}}>
-                        <td style={{padding:`7px ${HF.cardP}px`, maxWidth:320}}>
-                          <a
-                            href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('shop-book-detail', {id: String(b.id)})) || '#'}
-                            style={{color:HF.accent, textDecoration:'none', fontWeight:500}}
-                            onClick={e => { if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('shop-book-detail', {id: String(b.id)}); }}
-                            onMouseEnter={e => e.target.style.textDecoration='underline'}
-                            onMouseLeave={e => e.target.style.textDecoration='none'}>
-                            {b.title}
-                          </a>
-                        </td>
-                        <td style={{padding:`7px 8px`, color:HF.ink3, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.author}</td>
-                        <td style={{padding:`7px 8px`, textAlign:'right', fontFamily:HF.mono, fontSize:13, whiteSpace:'nowrap'}}>{b.price}</td>
-                        {booksTab === 'updated' && (
-                          <td style={{padding:`7px ${HF.cardP}px`}}>
-                            {(b.changed_fields || '').split(', ').filter(Boolean).map(f => (
-                              <code key={f} style={{
-                                fontSize:11, padding:'1px 5px', borderRadius:3, marginRight:4,
-                                background:HF.subtle, color:HF.ink3, fontFamily:HF.mono,
-                              }}>{f}</code>
-                            ))}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {/* Pagination */}
-              <div style={{
-                display:'flex', justifyContent:'space-between', alignItems:'center',
-                padding:`10px ${HF.cardP}px`, borderTop:`1px solid ${HF.borderFaint}`,
-              }}>
-                <span style={{fontSize:13, color:HF.ink3}}>{booksData.total.toLocaleString()} books</span>
-                <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
-                  <span style={{fontSize:12, color:HF.ink3}}>Per page:</span>
-                  {[25, 50, 100].map(n => (
-                    <HFButton key={n} size="sm" variant={booksPerPage === n ? 'accent' : 'subtle'}
-                      onClick={() => setBooksPerPage(n)}>{n}</HFButton>
-                  ))}
-                  <HFButton size="sm" variant="subtle" disabled={booksData.page <= 1}
-                    aria-label="Previous page"
-                    onClick={() => setBooksPage(p => Math.max(1, p - 1))}>
-                      <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
-                    </HFButton>
-                  {(() => {
-                    const cur = booksData.page, total = booksData.pages;
-                    const btns = [];
-                    const push = n => btns.push(
-                      <HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'subtle'}
-                        onClick={() => setBooksPage(n)}>{n}</HFButton>
-                    );
-                    const ell = k => btns.push(<span key={k} style={{padding:'0 2px', color:HF.ink3}}>…</span>);
-                    if (total <= 7) {
-                      for (let i = 1; i <= total; i++) push(i);
-                    } else {
-                      push(1);
-                      if (cur > 4) ell('l');
-                      const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
-                      for (let i = lo; i <= hi; i++) push(i);
-                      if (cur < total - 3) ell('r');
-                      push(total);
-                    }
-                    return btns;
-                  })()}
-                  <HFButton size="sm" variant="subtle" disabled={booksData.page >= booksData.pages}
-                    aria-label="Next page"
-                    onClick={() => setBooksPage(p => Math.min(booksData.pages, p + 1))}>
-                      <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
-                    </HFButton>
-                </div>
-              </div>
-            </>
-          ) : (
-            <HFTableSkeleton rows={6} columns={[
-              { w: '1fr', skelW: 240 },
-              { w: '180px', skelW: 120 },
-              { w: '80px', skelW: 50, mono: true, align: 'right' },
-              ...(booksTab === 'updated' ? [{ w: '160px', skelW: 100 }] : []),
-            ]}/>
-          )}
-        </HFCard>
-        ) : (
-          <HFCard title="Books" style={{ marginBottom: HF.gap }}>
-            <div style={{padding:'40px 20px', textAlign:'center', color:HF.ink3, fontSize:13}}>
-              No books were added or updated by this run.
-            </div>
-          </HFCard>
-        )
+        <HFRunBooksCard
+          runId={id}
+          itemsAdded={data.items_added}
+          itemsUpdated={data.items_updated}
+          goto={goto}
+        />
       )}
 
       {/* Action dialogs — replaces window.confirm/prompt for stop/retry/ack/etc. */}

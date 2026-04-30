@@ -6,13 +6,36 @@ function HFOverview({ nav, goto }) {
 
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  React.useEffect(() => {
+  // Shared loader — used for the initial mount fetch and the manual
+  // Refresh button. `manual=true` toggles the toast feedback so the
+  // first paint stays silent.
+  const loadOverview = React.useCallback((manual = false) => {
+    setRefreshing(true);
     fetch('/api/overview')
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t || r.statusText); }))
+      .then(d => {
+        setData(d);
+        setLoading(false);
+        if (manual && window.HF_APP && window.HF_APP.toast) {
+          window.HF_APP.toast({ tone: 'ok', message: 'Overview refreshed' });
+        }
+      })
+      .catch(e => {
+        setLoading(false);
+        if (window.HF_APP && window.HF_APP.toast) {
+          window.HF_APP.toast({
+            tone: 'err',
+            message: 'Refresh failed',
+            detail: String(e.message || e),
+          });
+        }
+      })
+      .finally(() => setRefreshing(false));
   }, []);
+
+  React.useEffect(() => { loadOverview(false); }, [loadOverview]);
 
   if (loading || !data) {
     return (
@@ -92,7 +115,10 @@ function HFOverview({ nav, goto }) {
         <span style={{ color: HF.ink, fontWeight: 500 }}>Overview</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Refresh</HFButton>
+        <HFButton disabled={refreshing} onClick={() => loadOverview(true)}>
+          <span style={{display:'flex'}}>{HF_ICONS.refresh}</span>
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </HFButton>
         <HFButton>Last 7 days <span style={{display:'flex', opacity:.7}}>{HF_ICONS.chevronD}</span></HFButton>
       </>}
     >
