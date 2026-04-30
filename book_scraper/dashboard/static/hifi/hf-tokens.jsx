@@ -18,15 +18,79 @@ const HF_DENSITIES = {
   ultra:       { rowH: 28, cellY: 6,  cardP: 12, cardHeadY: 10, kpiP: 12, gap: 12, fsBody: 12, fsSmall: 11, fsKpi: 22, fsMono: 12 },
 };
 
+// Publish the full token set as CSS custom properties on :root. Called from
+// getHF() so values always track the current accent/density. Components can
+// reference tokens via `var(--hf-...)` in inline styles or class-based CSS
+// — accent/density swap then propagates through the cascade with no React
+// re-render required.
+function _hfPublish(a, d) {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  const r = document.documentElement.style;
+  // Surfaces
+  r.setProperty('--hf-bg',           '#f7f8fa');
+  r.setProperty('--hf-surface',      '#ffffff');
+  r.setProperty('--hf-sidebar',      '#fbfcfd');
+  r.setProperty('--hf-raised',       '#ffffff');
+  r.setProperty('--hf-subtle',       '#f3f4f7');
+  r.setProperty('--hf-hover',        '#f5f6f9');
+  r.setProperty('--hf-input',        '#ffffff');
+  // Borders
+  r.setProperty('--hf-border',         '#e5e7ec');
+  r.setProperty('--hf-border-strong',  '#d4d7de');
+  r.setProperty('--hf-border-faint',   '#eef0f4');
+  // Ink ramp
+  r.setProperty('--hf-ink',  '#111827');
+  r.setProperty('--hf-ink2', '#374151');
+  r.setProperty('--hf-ink3', '#6b7280');
+  r.setProperty('--hf-ink4', '#9ca3af');
+  r.setProperty('--hf-ink5', '#c7cbd3');
+  // Accent (drives focus rings + interactive surfaces)
+  r.setProperty('--hf-accent',        a[500]);
+  r.setProperty('--hf-accent-hover',  a[600]);
+  r.setProperty('--hf-accent-soft',   a[50]);
+  r.setProperty('--hf-accent-soft2',  a[100]);
+  r.setProperty('--hf-accent-border', a[200]);
+  r.setProperty('--hf-accent-ink',    a[700]);
+  // Semantic
+  r.setProperty('--hf-ok',         '#16a34a');
+  r.setProperty('--hf-ok-soft',    '#f0fdf4');
+  r.setProperty('--hf-ok-border',  '#bbf7d0');
+  r.setProperty('--hf-ok-ink',     '#15803d');
+  r.setProperty('--hf-warn',       '#ca8a04');
+  r.setProperty('--hf-warn-soft',  '#fefce8');
+  r.setProperty('--hf-warn-border','#fde68a');
+  r.setProperty('--hf-warn-ink',   '#a16207');
+  r.setProperty('--hf-err',        '#dc2626');
+  r.setProperty('--hf-err-soft',   '#fef2f2');
+  r.setProperty('--hf-err-border', '#fecaca');
+  r.setProperty('--hf-err-ink',    '#b91c1c');
+  // Elevation
+  r.setProperty('--hf-shadow-sm', '0 1px 2px rgba(16,24,40,.08)');
+  r.setProperty('--hf-shadow',    '0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06)');
+  r.setProperty('--hf-shadow-md', '0 4px 8px -2px rgba(16,24,40,.06), 0 2px 4px -2px rgba(16,24,40,.04)');
+  r.setProperty('--hf-shadow-lg', '0 8px 24px rgba(16,24,40,.12)');
+  // Density-derived
+  r.setProperty('--hf-row-h',      `${d.rowH}px`);
+  r.setProperty('--hf-cell-y',     `${d.cellY}px`);
+  r.setProperty('--hf-card-p',     `${d.cardP}px`);
+  r.setProperty('--hf-card-head-y',`${d.cardHeadY}px`);
+  r.setProperty('--hf-kpi-p',      `${d.kpiP}px`);
+  r.setProperty('--hf-gap',        `${d.gap}px`);
+  r.setProperty('--hf-fs-body',    `${d.fsBody}px`);
+  r.setProperty('--hf-fs-small',   `${d.fsSmall}px`);
+  r.setProperty('--hf-fs-kpi',     `${d.fsKpi}px`);
+  r.setProperty('--hf-fs-mono',    `${d.fsMono}px`);
+  // Layout
+  r.setProperty('--hf-content-x',  '28px');
+}
+
 function getHF() {
   const accentKey = window.HF_ACCENT || 'teal';
   const densityKey = window.HF_DENSITY || 'comfortable';
   const a = HF_ACCENTS[accentKey] || HF_ACCENTS.teal;
   const d = HF_DENSITIES[densityKey] || HF_DENSITIES.comfortable;
 
-  if (typeof document !== 'undefined' && document.documentElement) {
-    document.documentElement.style.setProperty('--hf-accent', a[500]);
-  }
+  _hfPublish(a, d);
 
   return {
     // surfaces
