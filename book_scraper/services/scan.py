@@ -320,5 +320,5 @@ class ScanService:
 
         # NOTE: scrape_url_items rows are kept after the run finishes —
         # they are the source of truth for per-URL run history, surfaced
-        # on the run detail page. Used to be deleted via cleanup_scrape_url_items.
+        # on the run detail page.
         self.session.commit()

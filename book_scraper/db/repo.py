@@ -275,6 +275,7 @@ def upsert_shop_book(
             in_stock=in_stock,
             last_run_id=run_id,
             last_run_action="created",
+            created_run_id=run_id,
             first_seen_at=now,
             last_seen_at=now,
         )
@@ -1854,19 +1855,3 @@ def mark_cron_job_ran_if_matches(
         session.flush()
 
 
-def cleanup_scrape_url_items(session: Session, run_id: int) -> int:
-    """Delete all scrape_url_items for a finished run.
-
-    scrape_url_items is a staging table — rows are deleted when the run
-    ends (completed or failed). Progress is already persisted to
-    discovered_urls, shop_books, and prices via pipelines.
-
-    Returns the number of rows deleted.
-    """
-    deleted = (
-        session.query(ScrapeUrlItem)
-        .filter(ScrapeUrlItem.run_id == run_id)
-        .delete(synchronize_session=False)
-    )
-    session.flush()
-    return deleted

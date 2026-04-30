@@ -126,6 +126,9 @@ class ShopBook(Base):
         ForeignKey("scrape_runs.id"), nullable=True
     )
     last_run_action: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_run_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("scrape_runs.id"), nullable=True, index=True
+    )
 
     # Lifecycle
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

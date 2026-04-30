@@ -1,6 +1,7 @@
 # book_scraper/dashboard/routes/api.py
 from __future__ import annotations
 
+import math
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -24,6 +25,8 @@ from book_scraper.dashboard.queries import (
     get_price_history,
     get_recent_runs,
     get_repeated_failures,
+    get_run_books_added,
+    get_run_books_updated,
     get_run_close_reason,
     get_run_discovered_urls,
     get_run_eta,
@@ -1127,8 +1130,41 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     }
 
 
+@router.get("/runs/{run_id}/books")
+def api_run_books(
+    run_id: int,
+    type: str = "added",
+    page: int = 1,
+    per_page: int = 50,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    run = session.get(ScrapeRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if type not in ("added", "updated"):
+        raise HTTPException(status_code=400, detail="type must be 'added' or 'updated'")
+    page = max(1, page)
+    per_page = max(1, min(100, per_page))
+    if type == "added":
+        books, total = get_run_books_added(
+            session, run_id, page=page, per_page=per_page
+        )
+        serialised = [_book_dict(b) for b in books]
+    else:
+        rows, total = get_run_books_updated(
+            session, run_id, page=page, per_page=per_page
+        )
+        serialised = [{**_book_dict(sb), "changed_fields": cf} for sb, cf in rows]
+    pages = max(math.ceil(total / per_page), 1)
+    return {"books": serialised, "total": total, "page": page, "pages": pages}
+
+
 @router.get("/runs/{run_id}/live")
-def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
+def api_run_live(
+    run_id: int,
+    include_acked: bool = False,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
     """Live observability snapshot for a single run.
 
     Polled by HFRunDetail every ~2s while the run is 'running'.
@@ -1153,7 +1189,9 @@ def api_run_live(run_id: int, session: Session = Depends(get_db)) -> dict[str, A
 
     in_flight = get_run_in_flight(session, run_id)
     rate = get_run_rate_window(session, run_id)
-    failure_groups = get_run_failure_groups(session, run_id)
+    failure_groups = get_run_failure_groups(
+        session, run_id, include_acked=include_acked
+    )
     recent_activity = get_run_recent_activity(session, run_id, limit=20)
     events = get_scrape_run_events(session, run_id)
 
@@ -1259,6 +1297,7 @@ def api_run_urls(
                     "duration_ms": duration_ms,
                     "request_delay_s": it.request_delay_s,
                     "delay_source": it.delay_source,
+                    "response_bytes": it.response_bytes,
                     "item_id": it.id,
                     "discovered_url_id": it.discovered_url_id,
                     "shop_book_id": shop_book_id,
@@ -1266,8 +1305,8 @@ def api_run_urls(
             )
         source = "live"
     else:
-        # Discover-run history fallback (last_seen_run_id). Scan runs always
-        # have live rows now (cleanup_scrape_url_items was removed).
+        # Fallback for old discover runs that completed before items were kept.
+        # New runs (both scan and discover) always have live rows.
         items_du, total = get_run_discovered_urls(
             session, run_id, page=page, per_page=per_page
         )
@@ -1625,7 +1664,12 @@ def api_issues(
         kind=kind,
     )
     counts = get_validation_lifecycle_counts(
-        session, shop_id=shop_id, issue_type=issue_type, run_id=run_id_int, severity=severity, q=q
+        session,
+        shop_id=shop_id,
+        issue_type=issue_type,
+        run_id=run_id_int,
+        severity=severity,
+        q=q,
     )
 
     issues = [

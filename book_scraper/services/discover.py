@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from book_scraper.db.models import ScrapeUrlItem
 from book_scraper.db.repo import (
-    cleanup_scrape_url_items,
     create_scrape_run,
     find_resumable_run,
     finish_scrape_run,
@@ -146,5 +145,4 @@ class DiscoverService:
                 self.session, run_row.shop_id, phase="discover", strategy=strategy
             )
 
-        cleanup_scrape_url_items(self.session, run_id)
         self.session.commit()

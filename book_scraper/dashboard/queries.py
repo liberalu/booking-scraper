@@ -3,7 +3,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.shop_book_filters import (
@@ -484,19 +484,14 @@ def get_run_item_counts(session: Session, run_id: int) -> dict[str, int]:
     More reliable than ScrapeRun.items_added/items_updated, which are
     spider-side batch counters that don't flush on a reaped failure.
 
-    - created: shop_books whose last_run_id == run_id and
-               last_run_action == 'created'.  Only accurate for the most
-               recent run that touched each book, but good enough for
-               current and recent runs.
+    - created: shop_books whose created_run_id == run_id (immutable, set once).
+               Runs before the created_run_id migration return 0 (forward-only).
     - updated: DISTINCT shop_book_ids in shop_book_changes for this run.
                This table is append-only — survives crashed/reaped runs.
     """
     created = (
         session.query(func.count(ShopBook.id))
-        .filter(
-            ShopBook.last_run_id == run_id,
-            ShopBook.last_run_action == "created",
-        )
+        .filter(ShopBook.created_run_id == run_id)
         .scalar()
         or 0
     )
@@ -507,6 +502,51 @@ def get_run_item_counts(session: Session, run_id: int) -> dict[str, int]:
         or 0
     )
     return {"items_added": int(created), "items_updated": int(updated)}
+
+
+def get_run_books_added(
+    session: Session, run_id: int, page: int = 1, per_page: int = 50
+) -> tuple[list[ShopBook], int]:
+    """Return paginated shop_books created in this run (immutable created_run_id)."""
+    query = (
+        session.query(ShopBook)
+        .options(joinedload(ShopBook.shop))
+        .filter(ShopBook.created_run_id == run_id)
+        .order_by(ShopBook.title)
+    )
+    total = query.count()
+    books = query.offset((page - 1) * per_page).limit(per_page).all()
+    return books, total
+
+
+def get_run_books_updated(
+    session: Session, run_id: int, page: int = 1, per_page: int = 50
+) -> tuple[list[tuple[ShopBook, str]], int]:
+    """Return paginated shop_books that had tracked field changes in this run.
+
+    Each result is (ShopBook, changed_fields) where changed_fields is a
+    comma-separated string of distinct field names that changed (e.g. "price, title").
+    """
+    subq = (
+        session.query(
+            ShopBookChange.shop_book_id,
+            func.string_agg(
+                func.distinct(ShopBookChange.field), ", "
+            ).label("changed_fields"),
+        )
+        .filter(ShopBookChange.scrape_run_id == run_id)
+        .group_by(ShopBookChange.shop_book_id)
+        .subquery()
+    )
+    query = (
+        session.query(ShopBook, subq.c.changed_fields)
+        .options(joinedload(ShopBook.shop))
+        .join(subq, ShopBook.id == subq.c.shop_book_id)
+        .order_by(ShopBook.title)
+    )
+    total = query.count()
+    rows = query.offset((page - 1) * per_page).limit(per_page).all()
+    return [(sb, cf) for sb, cf in rows], total
 
 
 # ─────────────────── Live observability (Stage 2) ────────────────────
@@ -745,6 +785,7 @@ def get_run_failure_groups(
             ScrapeFailure.error_reason,
             ScrapeFailure.http_status,
             ScrapeFailure.lifecycle_state,
+            ScrapeFailure.error_detail,
             func.row_number()
             .over(
                 partition_by=ScrapeFailure.scrape_url_item_id,
@@ -759,23 +800,32 @@ def get_run_failure_groups(
         .subquery()
     )
 
+    # Conditional aggregation: count latest-failed events per bucket, split
+    # by lifecycle state so the UI can show "(N unacked · M total)" without
+    # a second roundtrip.
+    unacked_expr = func.sum(
+        case((latest.c.lifecycle_state != "already_seen", 1), else_=0)
+    ).label("unacked_count")
+    acked_expr = func.sum(
+        case((latest.c.lifecycle_state == "already_seen", 1), else_=0)
+    ).label("acked_count")
+
     base = (
         session.query(
             latest.c.error_reason,
             latest.c.http_status,
-            func.count(ScrapeUrlItem.id).label("count"),
+            unacked_expr,
+            acked_expr,
         )
         .join(ScrapeUrlItem, ScrapeUrlItem.id == latest.c.scrape_url_item_id)
         .filter(latest.c.rn == 1, ScrapeUrlItem.status == "failed")
+        .group_by(latest.c.error_reason, latest.c.http_status)
     )
     if not include_acked:
-        base = base.filter(latest.c.lifecycle_state != "already_seen")
+        # Hide buckets where every latest event is already_seen.
+        base = base.having(unacked_expr > 0)
 
-    rows = (
-        base.group_by(latest.c.error_reason, latest.c.http_status)
-        .order_by(func.count(ScrapeUrlItem.id).desc())
-        .all()
-    )
+    rows = base.order_by(unacked_expr.desc(), acked_expr.desc()).all()
 
     # Recurrence lookup: for each (reason, http) bucket in this run, count
     # how many of the last N prior runs (same shop) had ≥1 scrape_failures
@@ -798,7 +848,9 @@ def get_run_failure_groups(
         ]
 
     out: list[dict[str, Any]] = []
-    for reason, http, count in rows:
+    for reason, http, unacked_count, acked_count in rows:
+        unacked_count = int(unacked_count or 0)
+        acked_count = int(acked_count or 0)
         recurring_runs = 0
         if prior_run_ids:
             reason_pred = (
@@ -824,6 +876,8 @@ def get_run_failure_groups(
 
         # Examples come from the same latest-failed slice the count was
         # computed from — so retried-and-succeeded URLs are excluded.
+        # Each example carries `error_detail` (full traceback / message) so
+        # the UI can show it inline without a second roundtrip.
         examples_reason_pred = (
             latest.c.error_reason.is_(None)
             if reason is None
@@ -835,7 +889,7 @@ def get_run_failure_groups(
             else latest.c.http_status == http
         )
         examples_q = (
-            session.query(ScrapeUrlItem.url)
+            session.query(ScrapeUrlItem.url, latest.c.error_detail)
             .join(latest, latest.c.scrape_url_item_id == ScrapeUrlItem.id)
             .filter(
                 latest.c.rn == 1,
@@ -848,7 +902,20 @@ def get_run_failure_groups(
             examples_q = examples_q.filter(
                 latest.c.lifecycle_state != "already_seen"
             )
-        examples = [u for (u,) in examples_q.limit(limit_examples).all()]
+        examples = [
+            {
+                "url": url,
+                # Cap detail to keep payloads small even with monster tracebacks.
+                "error_detail": (detail[:4000] if detail else None),
+            }
+            for url, detail in examples_q.limit(limit_examples).all()
+        ]
+
+        # `count` preserves prior contract: when default include_acked=False,
+        # it equals the number of currently-failed unacked rows. When
+        # include_acked=True, it equals total latest-failed rows in the
+        # bucket so headers can still sum to a meaningful total.
+        count = unacked_count if not include_acked else unacked_count + acked_count
 
         out.append(
             {
@@ -857,7 +924,9 @@ def get_run_failure_groups(
                 "reason_is_null": reason is None,
                 "http": http,
                 "http_is_null": http is None,
-                "count": int(count),
+                "count": count,
+                "unacked_count": unacked_count,
+                "acked_count": acked_count,
                 "recurring_in_runs": int(recurring_runs),
                 "examples": examples,
             }
@@ -920,10 +989,11 @@ RUN_URL_STATUSES = ("pending", "processing", "done", "failed")
 
 
 def get_run_url_breakdown(session: Session, run_id: int) -> dict[str, int]:
-    """Counts of scrape_url_items per status for a still-running run.
+    """Counts of scrape_url_items per status for a run.
 
-    Returns zeros for finished runs (rows are cleaned up on finish — see
-    `cleanup_scrape_url_items`).
+    scrape_url_items rows are now kept after the run finishes (used to be
+    deleted via the removed `cleanup_scrape_url_items`), so this returns
+    real counts for both live and terminal runs.
     """
     rows = (
         session.query(ScrapeUrlItem.status, func.count(ScrapeUrlItem.id))
@@ -1098,6 +1168,13 @@ def get_run_url_items(
     ], total
 
 
+_PHASE_TO_SOURCE: dict[str, str] = {
+    "discover_sitemap": "sitemap",
+    "discover_categories": "category",
+    "discover_full_crawl": "full_crawl",
+}
+
+
 def get_run_discovered_urls(
     session: Session,
     run_id: int,
@@ -1116,6 +1193,9 @@ def get_run_discovered_urls(
     query = session.query(DiscoveredUrl).filter(
         DiscoveredUrl.last_seen_run_id == run_id
     )
+    source = _PHASE_TO_SOURCE.get(run.phase)
+    if source:
+        query = query.filter(DiscoveredUrl.source == source)
     total = query.count()
     rows = (
         query.order_by(DiscoveredUrl.last_checked_at.desc().nulls_last())
