@@ -128,7 +128,7 @@ def test_mark_orphan_runs_failed_emits_failed(db_session):
     run = create_scrape_run(db_session, shop.id, "scan")
     db_session.commit()
     n = mark_orphan_runs_failed(db_session)
-    assert n >= 1
+    assert len(n) >= 1
     db_session.expire_all()
     types = [e.event_type for e in _events_of(db_session, run.id)]
     assert types == [run_event_types.STARTED, run_event_types.FAILED]

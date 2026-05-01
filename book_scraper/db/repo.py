@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import or_, select, update
 from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import (
@@ -240,6 +240,9 @@ def upsert_shop_book(
     price: Decimal | None = None,
     price_original: Decimal | None = None,
     in_stock: bool = True,
+    planned_availability_date: Any | None = None,
+    rating: Decimal | None = None,
+    review_count: int | None = None,
     run_id: int | None = None,
 ) -> tuple[ShopBook, bool, Decimal | None, list[dict[str, Any]]]:
     """Upsert a shop_book. Returns (shop_book, created, old_price, changes)."""
@@ -273,6 +276,9 @@ def upsert_shop_book(
             price=price,
             price_original=price_original,
             in_stock=in_stock,
+            planned_availability_date=planned_availability_date,
+            rating=rating,
+            review_count=review_count,
             last_run_id=run_id,
             last_run_action="created",
             created_run_id=run_id,
@@ -308,7 +314,6 @@ def upsert_shop_book(
             "year": year,
             "format": format,
             "description": description,
-            "image_url": image_url,
         }
 
         for field_name, new_val in tracked_fields.items():
@@ -335,6 +340,9 @@ def upsert_shop_book(
                         }
                     )
                 setattr(shop_book, cond_field, cond_val)
+
+        if image_url is not None:
+            shop_book.image_url = image_url
 
         if type is not None:
             shop_book.type = type
@@ -363,6 +371,12 @@ def upsert_shop_book(
         if price_original is not None:
             shop_book.price_original = price_original
         shop_book.in_stock = in_stock
+        if planned_availability_date is not None:
+            shop_book.planned_availability_date = planned_availability_date
+        if rating is not None:
+            shop_book.rating = rating
+        if review_count is not None:
+            shop_book.review_count = review_count
         shop_book.last_seen_at = now
         shop_book.is_active = True
         # Clear the transition stamp when a previously-vanished shop_book
@@ -461,6 +475,8 @@ def upsert_discovered_url(
             existing.last_seen_run_id = run_id
         if shop_book_id is not None and existing.shop_book_id != shop_book_id:
             existing.shop_book_id = shop_book_id
+        if shop_book_id is not None and existing.url_type == "unknown":
+            existing.url_type = "product"
         session.flush()
         return existing
     record = DiscoveredUrl(
@@ -468,6 +484,7 @@ def upsert_discovered_url(
         url=url,
         normalized_url=normalized,
         source=source,
+        url_type="product" if shop_book_id is not None else "unknown",
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
@@ -500,6 +517,8 @@ def link_discovered_url_to_shop_book(
     if existing is not None:
         if existing.shop_book_id != shop_book_id:
             existing.shop_book_id = shop_book_id
+        if existing.url_type == "unknown":
+            existing.url_type = "product"
         existing.last_seen_at = now
         if run_id is not None:
             existing.last_seen_run_id = run_id
@@ -510,6 +529,7 @@ def link_discovered_url_to_shop_book(
         url=url,
         normalized_url=normalized,
         source="category",
+        url_type="product",
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
@@ -518,6 +538,10 @@ def link_discovered_url_to_shop_book(
     session.add(record)
     session.flush()
     return record
+
+
+# Failures before a URL is considered unreachable (mirrors get_pending_scan_urls default).
+_UNREACHABLE_THRESHOLD = 3
 
 
 def update_discovered_url_status(
@@ -530,15 +554,40 @@ def update_discovered_url_status(
     record = session.get(DiscoveredUrl, url_id)
     if record is None:
         return
-    record.last_checked_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    record.last_checked_at = now
     if http_status is not None:
         record.last_http_status = http_status
-    if url_type is not None:
-        record.url_type = url_type
+
     if increment_fail:
         record.fail_count += 1
+        # Promote to "unreachable" when fail threshold is first reached.
+        # Skip if already unreachable or classified as non_product (those
+        # pages return 404/non-2xx by design from the scraper's perspective
+        # but aren't "unreachable" in the user-facing sense).
+        if (
+            record.fail_count >= _UNREACHABLE_THRESHOLD
+            and record.url_type not in ("non_product", "unreachable")
+        ):
+            record.url_type = "unreachable"
+            # Inactivate the linked shop_book — it was scraped from this URL
+            # and the URL is now dead, so the listing is gone.
+            if record.shop_book_id is not None:
+                sb = session.get(ShopBook, record.shop_book_id)
+                if sb is not None and sb.is_active:
+                    sb.is_active = False
+                    sb.inactive_since = now
     else:
+        # Successful fetch — reset failure state.
+        if record.url_type == "unreachable":
+            # Put back to "unknown" so the next parse re-classifies it.
+            # The shop_book will be re-activated by upsert_shop_book if the
+            # page is still a valid product.
+            record.url_type = url_type if url_type is not None else "unknown"
+        elif url_type is not None:
+            record.url_type = url_type
         record.fail_count = 0
+
     session.flush()
 
 
@@ -1026,17 +1075,27 @@ def find_resumable_run(
     return session.execute(stmt).scalar_one_or_none()
 
 
-def mark_orphan_runs_failed(session: Session) -> int:
+def mark_orphan_runs_failed(
+    session: Session,
+) -> list[tuple[int, str, str]]:
     """Fail every run still flagged 'running'. Call on scraper boot —
     any row still 'running' belongs to a process the restart killed.
 
     Orphans had a real spider doing real work; flag them
     ``resumable_after_failure`` so the next scheduled run inherits any
     pending items rather than dropping them on the floor.
+
+    Returns a list of (run_id, shop_name, phase) tuples for the caller
+    to optionally spawn automatic restarts.
     """
     now = datetime.now(UTC)
-    stmt = select(ScrapeRun).where(ScrapeRun.status == "running")
+    stmt = (
+        select(ScrapeRun)
+        .where(ScrapeRun.status == "running")
+        .options(joinedload(ScrapeRun.shop))
+    )
     orphans = list(session.execute(stmt).scalars().all())
+    orphan_info: list[tuple[int, str, str]] = []
     for run in orphans:
         run.status = "failed"
         run.finished_at = now
@@ -1056,9 +1115,10 @@ def mark_orphan_runs_failed(session: Session) -> int:
             },
             actor=run_event_types.ACTOR_SYSTEM,
         )
+        orphan_info.append((run.id, run.shop.name, run.phase))
         logger.info("scrape_run %d -> failed (reason=orphan_on_boot)", run.id)
     session.flush()
-    return len(orphans)
+    return orphan_info
 
 
 def get_latest_completed_run(

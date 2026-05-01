@@ -185,8 +185,8 @@ def test_mark_orphan_runs_failed_spans_shops_and_phases(db_session):
     finish_scrape_run(db_session, run_id=completed.id, status="completed")
     db_session.flush()
 
-    count = mark_orphan_runs_failed(db_session)
-    assert count == 2
+    orphans = mark_orphan_runs_failed(db_session)
+    assert len(orphans) == 2
 
     db_session.refresh(orphan_scan)
     db_session.refresh(orphan_discover)
@@ -208,7 +208,7 @@ def test_mark_orphan_runs_failed_noop_when_none_running(db_session):
     finish_scrape_run(db_session, run_id=run.id, status="completed")
     db_session.flush()
 
-    assert mark_orphan_runs_failed(db_session) == 0
+    assert len(mark_orphan_runs_failed(db_session)) == 0
 
 
 def test_update_scrape_run_progress(db_session):
