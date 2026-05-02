@@ -1909,12 +1909,12 @@ function HFRunDetail({ nav, goto, params }) {
       </>}
       actions={<>
         <HFButton disabled><span style={{display:'flex'}}>{HF_ICONS.download}</span> Logs</HFButton>
-        {runStatus === 'running' && data.phase_type === 'scan' && (
+        {runStatus === 'running' && (
           <HFButton disabled={actionPending} onClick={pauseRun}>
             <span style={{display:'flex'}}>{HF_ICONS.pause}</span> Pause
           </HFButton>
         )}
-        {runStatus === 'paused' && data.phase_type === 'scan' && (
+        {runStatus === 'paused' && (
           <HFButton variant="primary" disabled={actionPending} onClick={resumeRun}>
             <span style={{display:'flex'}}>{HF_ICONS.play}</span> Resume
           </HFButton>
@@ -1980,15 +1980,9 @@ function HFRunDetail({ nav, goto, params }) {
           <span style={{fontSize:18, lineHeight:1}}>{HF_ICONS.pause}</span>
           <span style={{flex:1}}>
             <strong style={{color:'var(--hf-warn-ink)'}}>Run paused</strong>
-            {data.phase_type === 'scan'
-              ? <span style={{color:'var(--hf-ink3)', marginLeft:8, fontSize:13}}>Spider is idle but alive — heartbeat is still ticking. Resume to continue scraping.</span>
-              : <span style={{color:'var(--hf-ink3)', marginLeft:8, fontSize:13}}>Discover runs cannot be resumed mid-flight. Re-run to restart from where it left off.</span>
-            }
+            <span style={{color:'var(--hf-ink3)', marginLeft:8, fontSize:13}}>Spider is idle but alive — heartbeat is still ticking. Resume to continue scraping.</span>
           </span>
-          {data.phase_type === 'scan'
-            ? <HFButton variant="primary" disabled={actionPending} onClick={resumeRun}><span style={{display:'flex'}}>{HF_ICONS.play}</span> Resume</HFButton>
-            : <HFButton variant="primary" disabled={actionPending} onClick={rerunRun}><span style={{display:'flex'}}>{HF_ICONS.cycle}</span> Re-run</HFButton>
-          }
+          <HFButton variant="primary" disabled={actionPending} onClick={resumeRun}><span style={{display:'flex'}}>{HF_ICONS.play}</span> Resume</HFButton>
         </div>
       )}
 

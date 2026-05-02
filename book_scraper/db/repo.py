@@ -1189,8 +1189,9 @@ def update_scrape_run_progress(
         return
     # Terminal-state guard: a reaped run is final. Late progress writes
     # from a spider that hadn't yet noticed the reap must not undo the
-    # transition.
-    if run.status != "running":
+    # transition. Allow 'paused' so the heartbeat keeps ticking during
+    # a pause and the reaper doesn't kill an idle-but-alive run.
+    if run.status not in ("running", "paused"):
         return
     run.urls_processed = urls_processed
     run.last_heartbeat = datetime.now(UTC)

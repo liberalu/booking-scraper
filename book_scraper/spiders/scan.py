@@ -13,6 +13,7 @@ from book_scraper.db.repo import (
     increment_scrape_run_stats,
     mark_scrape_url_item_response,
     reset_processing_scrape_url_items,
+    update_scrape_run_progress,
 )
 from book_scraper.db.session import get_session_factory
 from book_scraper.event_log import log_response_event
@@ -292,6 +293,7 @@ class ScanSpider(scrapy.Spider):
                             self.logger.debug(
                                 "Run %d paused — waiting 5s", self._run_id
                             )
+                            self._touch_heartbeat()
                             await asyncio.sleep(5)
                             continue
                         if run_status == "stopping":
@@ -634,6 +636,21 @@ class ScanSpider(scrapy.Spider):
             bytes_=response_bytes,
             error_reason=error_reason,
         )
+
+    def _touch_heartbeat(self) -> None:
+        """Stamp last_heartbeat while paused so the reaper won't kill the run."""
+        if self._run_id is None:
+            return
+        database_url = self.settings.get("DATABASE_URL")
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            update_scrape_run_progress(session, self._run_id, self._urls_processed)
+            session.commit()
+        except Exception:
+            self.logger.exception("Heartbeat touch failed for run %d", self._run_id)
+        finally:
+            session.close()
 
     def _poll_run_status(self) -> str | None:
         """Read `scrape_runs.status` for the current run.
