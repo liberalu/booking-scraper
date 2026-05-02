@@ -12,10 +12,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from book_scraper.db.models import ScrapeUrlItem
+from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.repo import (
     create_scrape_run,
+    emit_scrape_run_event,
     find_resumable_run,
     finish_scrape_run,
+    inherit_pending_items,
     insert_scrape_url_item,
     mark_cron_job_ran_if_matches,
     mark_stale_runs_failed,
@@ -68,8 +71,31 @@ class DiscoverService:
                 .filter_by(run_id=resumable.id, status="pending")
                 .count()
             )
+            # Running run: reuse the same row (queue already owned).
+            if resumable.status == "running":
+                self.session.commit()
+                return DiscoverPlan(
+                    run_id=resumable.id, shop_id=shop.id, urls_total=pending
+                )
+            # Failed-but-resumable run: create a fresh run that inherits
+            # the pending queue. Old row stays `failed` for postmortem.
+            run = create_scrape_run(
+                self.session,
+                shop.id,
+                phase,
+                extra_payload={"strategy": strategy},
+            )
+            emit_scrape_run_event(
+                self.session,
+                run.id,
+                run_event_types.RESUMED_AFTER_FAILURE,
+                payload={"previous_run_id": resumable.id},
+                actor=run_event_types.ACTOR_SYSTEM,
+            )
+            inherit_pending_items(self.session, resumable.id, run.id)
+            self.session.commit()
             return DiscoverPlan(
-                run_id=resumable.id, shop_id=shop.id, urls_total=pending
+                run_id=run.id, shop_id=shop.id, urls_total=pending
             )
 
         mark_stale_runs_failed(self.session, shop.id, phase)
