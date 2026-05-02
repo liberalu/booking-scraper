@@ -174,169 +174,232 @@ function HFUrlDetail({ nav, goto, params }) {
 
 // ─────────────────────────────── Issue detail ───────────────────────────────
 
+// Human-readable labels for issue type keys
+const ISSUE_TITLES = {
+  missing_price:             'Missing price',
+  zero_price:                'Zero price',
+  price_higher_than_original:'Price exceeds original',
+  invalid_price:             'Invalid price',
+  invalid_price_original:    'Invalid original price',
+  missing_title:             'Missing title',
+  suspicious_title:          'Suspicious title',
+  html_in_text:              'HTML in text field',
+  format_mismatch:           'Format mismatch',
+  attribute_unknown_key:     'Unknown attribute key',
+  attribute_invalid_value:   'Invalid attribute value',
+  field_cleared:             'Field cleared',
+  scrape_run_failed:         'Scrape run failed',
+  invalid_isbn:              'Invalid ISBN',
+  invalid_year:              'Invalid year',
+  year_pages_swap:           'Year / pages swapped',
+  discover_fetch_failed:     'Discovery fetch failed',
+};
+
 function HFIssueDetail({ nav, goto, params }) {
   const HF = getHF();
-  const type = params?.type || 'price_regression';
-  const sev = params?.sev || 'high';
-  const count = params?.n || 48;
+  const rawId = params?.id || '';
+  const numericId = parseInt(rawId.replace(/^ISS-/i, ''), 10);
 
-  const sevTone = { high:'err', medium:'warn', low:'neutral' };
-  const sevInk  = { high:'var(--hf-err-ink)', medium:'var(--hf-warn-ink)', low:'var(--hf-ink3)' };
+  const [data, setData]     = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [acting, setActing]   = React.useState(false);
 
-  // Titles & descriptions per issue type
-  const meta = {
-    price_regression: {
-      title: 'Price regression detected',
-      desc:  'Price dropped by more than 10% in a single run without a corresponding promo marker. Likely a parser misalignment picking up a discount banner instead of the list price.',
-      rule:  'abs(delta_pct) > 10  AND  promo_flag = false',
-    },
-    missing_isbn: {
-      title: 'Missing ISBN',
-      desc:  'Book was scraped successfully but the ISBN-13 field could not be extracted. Parser likely needs a new selector.',
-      rule:  'isbn IS NULL  AND  status = "active"',
-    },
-    parser_error: {
-      title: 'Parser threw exception',
-      desc:  'Extraction code raised an exception on this page. Check the shop\'s parser version and recent selector changes.',
-      rule:  'exception_raised = true',
-    },
-    broken_url: {
-      title: 'Broken URL',
-      desc:  'URL returned 4xx or 5xx for 3+ consecutive checks.',
-      rule:  'status_code >= 400  AND  consecutive_failures >= 3',
-    },
+  React.useEffect(() => {
+    if (!numericId) { setLoading(false); return; }
+    fetch(`/api/issues/${numericId}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [numericId]);
+
+  const lifecycle = async (state) => {
+    if (acting) return;
+    setActing(true);
+    try {
+      const r = await fetch(`/api/issues/${numericId}/lifecycle?state=${state}`, { method: 'PATCH' });
+      if (r.ok) {
+        const updated = await r.json();
+        setData(prev => ({ ...prev, lifecycle_state: updated.lifecycle_state }));
+        window.HF_APP?.toast({ tone: 'ok', message: `Issue marked as ${state.replace('_', ' ')}` });
+      }
+    } finally { setActing(false); }
   };
-  const m = meta[type] || { title:type, desc:'—', rule:'—' };
 
-  // Affected items
-  const affected = [
-    { id:3421, book:'Clean Code',            shop:'vaga', old:'€32.90', neo:'€28.50', pct:-13.4, detected:'12m ago',  st:'open' },
-    { id:3418, book:'The Pragmatic Programmer', shop:'vaga', old:'€29.90', neo:'€24.90', pct:-16.7, detected:'1h ago',   st:'open' },
-    { id:3412, book:'Refactoring',           shop:'vaga', old:'€44.00', neo:'€35.00', pct:-20.5, detected:'2h ago',   st:'open' },
-    { id:3405, book:'Domain-Driven Design',  shop:'vaga', old:'€58.00', neo:'€49.50', pct:-14.7, detected:'3h ago',   st:'open' },
-    { id:3398, book:'Design Patterns (GoF)', shop:'vaga', old:'€52.00', neo:'€44.00', pct:-15.4, detected:'5h ago',   st:'snoozed' },
-    { id:3391, book:'Code Complete',         shop:'vaga', old:'€42.00', neo:'€36.00', pct:-14.3, detected:'7h ago',   st:'open' },
-    { id:3384, book:'Working Effectively with Legacy Code', shop:'vaga', old:'€48.00', neo:'€39.00', pct:-18.8, detected:'10h ago', st:'open' },
-    { id:3377, book:'You Don\'t Know JS',    shop:'vaga', old:'€22.00', neo:'€18.50', pct:-15.9, detected:'1d ago',   st:'open' },
-    { id:3370, book:'The Mythical Man-Month', shop:'vaga', old:'€26.00', neo:'€21.50', pct:-17.3, detected:'1d 4h ago', st:'open' },
-    { id:3363, book:'Peopleware',            shop:'vaga', old:'€24.00', neo:'€20.00', pct:-16.7, detected:'2d ago',   st:'open' },
-  ];
+  if (loading) {
+    return (
+      <HFShell {...nav} activePage="issues" title="Issue detail" subtitle="Loading…"
+        breadcrumb={<><HFBreadcrumbLink page="issues" goto={goto}>Issues</HFBreadcrumbLink><span>/</span><span>…</span></>}>
+        <div style={{padding:40, color:'var(--hf-ink3)'}}>Loading…</div>
+      </HFShell>
+    );
+  }
+  if (!data) {
+    return (
+      <HFShell {...nav} activePage="issues" title="Issue not found" subtitle={rawId}
+        breadcrumb={<><HFBreadcrumbLink page="issues" goto={goto}>Issues</HFBreadcrumbLink><span>/</span><span>{rawId}</span></>}>
+        <HFEmptyState title="Issue not found" sub={`No issue with ID ${rawId} exists.`} onClear={() => goto('issues')}/>
+      </HFShell>
+    );
+  }
 
-  // 14d trend
-  const trend = [6, 8, 4, 5, 7, 12, 15, 18, 22, 28, 35, 41, 45, 48];
+  const sevTone  = data.severity === 'critical' ? 'err' : data.severity === 'warning' ? 'warn' : 'neutral';
+  const sevInk   = data.severity === 'critical' ? 'var(--hf-err-ink)' : data.severity === 'warning' ? 'var(--hf-warn-ink)' : 'var(--hf-ink3)';
+  const lcTone   = { new:'err', recurring:'warn', already_seen:'ok' };
+  const lcLabel  = { new:'new', recurring:'recurring', already_seen:'known' };
+  const issueTitle = ISSUE_TITLES[data.issue] || data.issue;
+  const isKnown = data.lifecycle_state === 'already_seen';
+
+  const shortUrl = data.url
+    ? data.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    : '—';
 
   return (
     <HFShell {...nav} activePage="issues"
-      title={<span style={{display:'flex', alignItems:'center', gap:12, minWidth:0}}>
-        <span style={{color:sevInk[sev], display:'flex'}}>{HF_ICONS.bang}</span>
-        <span>{m.title}</span>
-        <HFPill tone={sevTone[sev]}>{sev} severity</HFPill>
-      </span>}
-      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>type={type} · first seen 2 days ago · {count} affected</span>}
+      title={
+        <span style={{display:'flex', alignItems:'center', gap:10, minWidth:0, flexWrap:'wrap'}}>
+          <span style={{color:sevInk, display:'flex', flexShrink:0}}>{HF_ICONS.bang}</span>
+          <span style={{fontWeight:600}}>{issueTitle}</span>
+          <HFPill tone={sevTone}>{data.severity}</HFPill>
+          <HFPill tone={lcTone[data.lifecycle_state] || 'neutral'}>{lcLabel[data.lifecycle_state] || data.lifecycle_state}</HFPill>
+        </span>
+      }
+      subtitle={
+        <span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>
+          {rawId} · field={data.field} · {data.added_ago}
+          {data.shop_book_title ? ` · "${data.shop_book_title}"` : ''}
+        </span>
+      }
       breadcrumb={<>
         <HFBreadcrumbLink page="issues" goto={goto}>Issues</HFBreadcrumbLink>
         <span style={{color:'var(--hf-ink5)'}}>/</span>
-        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>{type}</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>{rawId}</span>
       </>}
       actions={<>
-        <HFButton>Snooze 7d</HFButton>
-        <HFButton>Assign…</HFButton>
-        <HFButton variant="primary"><span style={{display:'flex'}}>{HF_ICONS.check}</span> Mark all resolved</HFButton>
+        {!isKnown
+          ? <HFButton onClick={() => lifecycle('already_seen')} disabled={acting}>
+              <span style={{display:'flex'}}>{HF_ICONS.check}</span> Mark known
+            </HFButton>
+          : <HFButton onClick={() => lifecycle('open')} disabled={acting}>Reopen</HFButton>
+        }
+        <HFButton variant="primary" onClick={() => goto('issues')}>
+          Back to issues
+        </HFButton>
       </>}
     >
-      {/* Description card */}
-      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
-        <div style={{padding:`var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)'}}>
-          <div>
-            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>What this means</div>
-            <div style={{fontSize:13, color:'var(--hf-ink)', lineHeight:1.55, textWrap:'pretty'}}>{m.desc}</div>
-            <div style={{
-              marginTop:14, padding:'8px 10px',
-              background:'var(--hf-subtle)', border:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:5,
-              fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink2)',
-            }}>
-              <span style={{color:'var(--hf-ink4)', marginRight:8}}>rule:</span>{m.rule}
-            </div>
-          </div>
-          <div style={{borderLeft:`1px solid ${'var(--hf-border-faint)'}`, paddingLeft:'var(--hf-gap)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
-            {[
-              ['Severity',     sev, sevInk[sev]],
-              ['First seen',   '2 days ago'],
-              ['Last seen',    '12m ago'],
-              ['Affected',     count, 'var(--hf-ink)'],
-              ['Shops',        'vaga'],
-              ['Assigned',     'unassigned', 'var(--hf-ink4)'],
-            ].map(([k,v,c]) => (
-              <div key={k}>
-                <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
-                <div style={{fontSize:14, color: c||'var(--hf-ink)', marginTop:3, fontWeight: c?500:400, fontFamily: typeof v==='number'||['2 days ago','12m ago'].includes(v)?'var(--hf-mono)':'var(--hf-sans)', fontVariantNumeric:'tabular-nums'}}>{v}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </HFCard>
-
+      {/* KPI strip */}
       <HFKpiStrip items={[
-        { label:'Affected now', value:String(count), tone:sevTone[sev], delta:<span style={{color:sevInk[sev]}}>+3 today</span> },
-        { label:'Affected 7d',  value:'84',  delta:<span style={{color:'var(--hf-err-ink)'}}>+36 vs prev</span> },
-        { label:'Resolved 7d',  value:'12',  delta:<span style={{color:'var(--hf-ok-ink)'}}>manually</span>, tone:'ok' },
-        { label:'Avg delta',    value:'-15.9%', delta:<span style={{color:'var(--hf-err-ink)'}}>abs · worsening</span>, tone:'err' },
-        { label:'MTTR',         value:'1.8d',    delta:<span style={{color:'var(--hf-ink3)'}}>median</span> },
+        { label:'Severity',  value: data.severity,  tone: sevTone },
+        { label:'Lifecycle', value: lcLabel[data.lifecycle_state] || data.lifecycle_state, tone: lcTone[data.lifecycle_state] || 'neutral' },
+        { label:'Detected',  value: data.added_ago, delta: <span style={{color:'var(--hf-ink3)'}}>from run #{data.scrape_run_id}</span> },
+        { label:'Field',     value: data.field, delta: <span style={{color:'var(--hf-ink3)'}}>affected</span> },
       ]}/>
 
-      <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
-        <HFCard title="Occurrences over time" sub="new issues per day · last 14 days">
+      {/* Main 2-col: description left, failure details right */}
+      <div style={{display:'grid', gridTemplateColumns:'3fr 2fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
+
+        {/* What this means */}
+        <HFCard title="What this means" sub={`issue type: ${data.issue}`}>
           <div style={{padding:`var(--hf-card-p)`}}>
-            <HFAreaChart data={trend} h={160} label="Issues per day"/>
+            {data.description ? (
+              <p style={{margin:'0 0 14px', fontSize:13, color:'var(--hf-ink)', lineHeight:1.6}}>
+                {data.description}
+              </p>
+            ) : (
+              <p style={{margin:'0 0 14px', fontSize:13, color:'var(--hf-ink3)', fontStyle:'italic'}}>
+                No description available for this issue type.
+              </p>
+            )}
+            {data.raw_value && (
+              <div style={{marginTop:6}}>
+                <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>
+                  Raw scraped value
+                </div>
+                <div style={{
+                  padding:'9px 12px',
+                  background:'var(--hf-subtle)', border:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:5,
+                  fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink2)',
+                  wordBreak:'break-all',
+                }}>
+                  {data.raw_value}
+                </div>
+              </div>
+            )}
           </div>
         </HFCard>
-        <HFCard title="Suggested actions">
+
+        {/* Failure details */}
+        <HFCard title="Failure details">
           <div style={{padding:`4px 0`}}>
             {[
-              { t:'Review parser selector',  d:'price.v3 → price_value', act:'Open parser', tone:'accent' },
-              { t:'Exclude books on promo', d:'add promo_flag=true guard', act:'Edit rule' },
-              { t:'Snooze until Monday',     d:'re-triage after weekend', act:'Snooze' },
-              { t:'Mark all as resolved',    d:'mark without changes',    act:'Resolve', tone:'danger' },
-            ].map((a, i, arr) => (
-              <div key={a.t} style={{padding:`12px var(--hf-card-p)`, borderBottom: i<arr.length-1?`1px solid ${'var(--hf-border-faint)'}`:'none', display:'flex', gap:12, alignItems:'flex-start'}}>
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>{a.t}</div>
-                  <div style={{fontSize:12, color:'var(--hf-ink3)', marginTop:2, fontFamily:'var(--hf-mono)'}}>{a.d}</div>
-                </div>
-                <HFButton size="sm" variant={a.tone || 'default'}>{a.act}</HFButton>
+              ['Field',     data.field,                    true],
+              ['Issue',     data.issue,                    true],
+              ['Severity',  data.severity,                 false],
+              ['Lifecycle', lcLabel[data.lifecycle_state] || data.lifecycle_state, false],
+              ['Detected',  data.added_ago,                true],
+              ['Run',       `#${data.scrape_run_id}`,      true, data.scrape_run_id],
+              ['Shop',      data.shop_name || '—',         false],
+            ].map(([k, v, mono, runLink], i, arr) => (
+              <div key={k} style={{
+                display:'flex', padding:`8px var(--hf-card-p)`,
+                borderBottom: i < arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
+                fontSize:13, gap:10, alignItems:'center',
+              }}>
+                <span style={{color:'var(--hf-ink4)', minWidth:80, flexShrink:0, fontSize:12}}>{k}</span>
+                {runLink
+                  ? <a onClick={(e)=>{e.preventDefault(); goto('run-detail',{id:runLink});}} href="#"
+                       style={{color:'var(--hf-accent-ink)', fontWeight:500, fontFamily:'var(--hf-mono)', fontSize:12, textDecoration:'none', cursor:'pointer'}}>
+                      {v}
+                    </a>
+                  : <span style={{
+                      color: v==='—'?'var(--hf-ink4)':'var(--hf-ink)',
+                      fontFamily: mono ? 'var(--hf-mono)' : 'inherit',
+                      fontSize: mono ? 12 : 13, fontWeight: 500,
+                    }}>{v}</span>
+                }
               </div>
             ))}
+            {data.url && (
+              <div style={{padding:`8px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', gap:10, alignItems:'center', fontSize:13}}>
+                <span style={{color:'var(--hf-ink4)', minWidth:80, flexShrink:0, fontSize:12}}>URL</span>
+                <a href={data.url} target="_blank" rel="noopener noreferrer"
+                   style={{color:'var(--hf-accent-ink)', fontFamily:'var(--hf-mono)', fontSize:11, wordBreak:'break-all', textDecoration:'none'}}>
+                  {shortUrl}
+                </a>
+              </div>
+            )}
           </div>
         </HFCard>
       </div>
 
-      {/* Affected items table */}
-      <HFCard title="Affected items" sub={`${affected.length} of ${count} · tap to open`}>
-        <div style={{padding:`8px var(--hf-card-p)`, borderBottom:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', gap:8, alignItems:'center'}}>
-          <HFSearch placeholder="Search affected items…" width={280}/>
-          <HFFilter label="Shop" value="all" options={['all','vaga','knygos']} onChange={()=>{}}/>
-          <HFFilter label="Status" value="open" options={['open','snoozed','resolved','all']} onChange={()=>{}}/>
-          <span style={{flex:1}}/>
-          <HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>
-        </div>
-        <HFTable
-          onRowClick={(r) => goto('shop-book-detail', { id: r.id })}
-          columns={[
-            { key:'id', label:'ID', w:'0.4fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
-            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
-            { key:'shop', label:'Shop', w:'0.6fr', mono:true, muted:true, sortable:true },
-            { key:'old', label:'Was', w:'0.6fr', mono:true, align:'right', muted:true, sortable:true },
-            { key:'neo', label:'Now', w:'0.6fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
-            { key:'pct', label:'Δ', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => (
-              <span style={{color: v<0?'var(--hf-err-ink)':'var(--hf-ok-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v.toFixed(1)}%</span>
-            )},
-            { key:'detected', label:'Detected', w:'0.9fr', mono:true, muted:true, sortable:true },
-            { key:'st', label:'Status', w:'0.7fr', sortable:true, cell:v => <HFPill tone={v==='open'?'err':v==='snoozed'?'warn':'ok'}>{v}</HFPill> },
-            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
-          ]}
-          rows={affected}
-        />
-      </HFCard>
+      {/* Affected book */}
+      {data.shop_book_id && (
+        <HFCard title="Affected book" sub="book where this issue was detected">
+          <div style={{
+            padding:`14px var(--hf-card-p)`,
+            display:'flex', alignItems:'center', gap:16,
+          }}>
+            <div style={{
+              width:42, height:42, borderRadius:8, flexShrink:0,
+              background:`linear-gradient(135deg, ${'var(--hf-accent)'} 0%, ${'var(--hf-accent-hover)'} 100%)`,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              color:'#fff', fontSize:18, opacity:0.85,
+            }}>
+              {HF_ICONS.books}
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:14, fontWeight:600, color:'var(--hf-ink)', lineHeight:1.3}}>
+                {data.shop_book_title || `Shop book #${data.shop_book_id}`}
+              </div>
+              <div style={{fontSize:12, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:3}}>
+                #{data.shop_book_id}{data.shop_name ? ` · ${data.shop_name}` : ''}
+              </div>
+            </div>
+            <HFButton onClick={() => goto('shop-book-detail', { id: data.shop_book_id })}>
+              <span style={{display:'flex'}}>{HF_ICONS.external}</span> Open book
+            </HFButton>
+          </div>
+        </HFCard>
+      )}
     </HFShell>
   );
 }

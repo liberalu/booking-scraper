@@ -125,25 +125,31 @@ function HFIssues({ nav, goto }) {
   });
   const [loading, setLoading] = React.useState(true);
 
-  const [runId] = React.useState(() => {
-    const v = parseInt(new URLSearchParams(window.location.search).get('run_id') || '0', 10);
-    return v > 0 ? v : null;
-  });
+  // Server-side filters — changes trigger a fresh API fetch
+  const [runIdInput, setRunIdInput] = React.useState(() =>
+    new URLSearchParams(window.location.search).get('run_id') || ''
+  );
+  const [urlTypeFilter, setUrlTypeFilter] = React.useState('all');
+  const [bookTypeFilter, setBookTypeFilter] = React.useState('all');
 
-  // Reset to page 1 when tab changes.
-  React.useEffect(() => { setPage(1); }, [tab]);
+  const runId = parseInt(runIdInput, 10) > 0 ? parseInt(runIdInput, 10) : null;
+
+  // Reset to page 1 when any filter or tab changes.
+  React.useEffect(() => { setPage(1); }, [tab, runId, urlTypeFilter, bookTypeFilter]);
 
   React.useEffect(() => {
     let cancelled = false;
     const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
     const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE), kind: 'validation' });
     if (runId) params.set('run_id', String(runId));
+    if (urlTypeFilter && urlTypeFilter !== 'all') params.set('url_type', urlTypeFilter);
+    if (bookTypeFilter && bookTypeFilter !== 'all') params.set('book_type', bookTypeFilter);
     fetch(`/api/issues?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tab, page, runId]);
+  }, [tab, page, runId, urlTypeFilter, bookTypeFilter]);
 
   const seed = data.issues.map(i => ({
     id: `ISS-${i.id}`,
@@ -152,6 +158,8 @@ function HFIssues({ nav, goto }) {
     shop: '—',
     book: i.shop_book_title || '—',
     url: i.url || '—',
+    url_type: i.url_type || '—',
+    run_id: i.scrape_run_id,
     detail: i.description || i.raw_value || '—',
     age: i.added_ago,
     known: i.lifecycle_state === 'already_seen',
@@ -287,11 +295,17 @@ function HFIssues({ nav, goto }) {
       title={<span style={{display:'flex', alignItems:'center', gap:10}}>
         Issues
         {runId && <HFPill tone="accent"><span style={{fontFamily:'var(--hf-mono)', fontSize:11}}>run #{runId}</span></HFPill>}
+        {urlTypeFilter !== 'all' && <HFPill tone="warn"><span style={{fontFamily:'var(--hf-mono)', fontSize:11}}>{urlTypeFilter}</span></HFPill>}
+        {bookTypeFilter !== 'all' && <HFPill tone="neutral"><span style={{fontFamily:'var(--hf-mono)', fontSize:11}}>{bookTypeFilter}</span></HFPill>}
       </span>}
       subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
       breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Issues</span></>}
       actions={<>
-        {runId && <a href="/issues" style={{fontSize:12, color:'var(--hf-ink3)', textDecoration:'none'}}>← All issues</a>}
+        {(runId || urlTypeFilter !== 'all' || bookTypeFilter !== 'all') && (
+          <HFButton size="sm" variant="subtle" onClick={() => { setRunIdInput(''); setUrlTypeFilter('all'); setBookTypeFilter('all'); }}>
+            Clear filters
+          </HFButton>
+        )}
         <HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton>
       </>}
     >
@@ -344,14 +358,31 @@ function HFIssues({ nav, goto }) {
         <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
           <HFFilterBar right={<>
             <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
-              {filters.filtered.length} of {tabSource.length}
+              {data.total.toLocaleString()} total
             </span>
             {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
           </>}>
-            <HFSearch placeholder="Search ID, book, URL, detail…" width={320} value={filters.q} onChange={filters.setQ}/>
+            <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={filters.q} onChange={filters.setQ}/>
             <HFFilter label="Severity" value={filters.vals.sev}  options={['all','high','medium','low']} onChange={v=>filters.setVal('sev',v)}/>
-            <HFFilter label="Shop"     value={filters.vals.shop} options={['all','vaga','knygos']}       onChange={v=>filters.setVal('shop',v)}/>
             <HFFilter label="Type"     value={filters.vals.type} options={typeOptions}                   onChange={v=>filters.setVal('type',v)}/>
+            <HFFilter label="URL type" value={urlTypeFilter} options={['all','product','non_product','unreachable']} onChange={setUrlTypeFilter}/>
+            <HFFilter label="Book type" value={bookTypeFilter} options={['all','book','non_book','audio','ebook']} onChange={setBookTypeFilter}/>
+            <div style={{display:'flex', alignItems:'center', gap:6}}>
+              <span style={{fontSize:12, color:'var(--hf-ink4)', whiteSpace:'nowrap'}}>Run</span>
+              <input
+                type="number"
+                placeholder="any"
+                value={runIdInput}
+                onChange={e => setRunIdInput(e.target.value)}
+                style={{
+                  width:80, height:30, padding:'0 8px',
+                  border:`1px solid ${'var(--hf-border-strong)'}`, borderRadius:6,
+                  background:'var(--hf-surface)', color:'var(--hf-ink)',
+                  fontFamily:'var(--hf-mono)', fontSize:12,
+                  outline:'none',
+                }}
+              />
+            </div>
           </HFFilterBar>
         </HFCard>
       )}
@@ -484,6 +515,7 @@ function HFPrices({ nav, goto }) {
     pct: c.prev_price && c.prev_price !== 0 ? ((c.change / c.prev_price) * 100) : 0,
     absChg: c.change,
     when: c.scraped_ago,
+    date: c.scraped_at ? c.scraped_at.slice(0, 10) : '—',
     shop: c.shop || '—',
   }));
 
@@ -547,6 +579,8 @@ function HFPrices({ nav, goto }) {
         <HFTable
           onRowClick={r => goto('shop-book-detail', { id: r.id })}
           columns={[
+            { key:'id',   label:'ID',   w:'0.45fr', mono:true, muted:true, sortable:true,
+              cell:v => <span style={{color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>{v}</span> },
             { key:'title', label:'Book', w:'2.5fr', sortable:true, cell:(v,r) => (
               <span style={{display:'flex', flexDirection:'column', gap:2}}>
                 <span style={{color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
@@ -561,6 +595,7 @@ function HFPrices({ nav, goto }) {
                 {v>0?'+':''}{rounded.toFixed(1)}%
               </span>;
             }},
+            { key:'date', label:'Date', w:'0.85fr', mono:true, muted:true, sortable:true },
             { key:'when', label:'When', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}

@@ -62,6 +62,7 @@ from book_scraper.db.models import (
     Shop,
     ShopBook,
     ShopBookChange,
+    UrlClassification,
     ValidationIssue,
 )
 from book_scraper.db.repo import (
@@ -1601,12 +1602,14 @@ def api_shop_book_detail(
         t_map = _run_terminal_counts(session, [r.id for r in runs_q])
         recent_runs = [_run_dict(r, terminal_count=t_map.get(r.id)) for r in runs_q]
 
-    # URL reachability — join by shop_book_id FK (set when the book was scraped)
+    # URL reachability + classification — join by shop_book_id FK
     linked_url = (
         session.query(DiscoveredUrl)
+        .options(joinedload(DiscoveredUrl.classification))
         .filter(DiscoveredUrl.shop_book_id == book_id)
         .first()
     )
+    cls = linked_url.classification if linked_url else None
 
     d = _book_dict(sb)
     d["issues"] = len(issues)
@@ -1621,6 +1624,13 @@ def api_shop_book_detail(
     d["runs"] = recent_runs
     d["url_status"] = linked_url.url_type if linked_url else None
     d["url_fail_count"] = linked_url.fail_count if linked_url else 0
+    d["classification"] = {
+        "book_score": cls.book_score,
+        "is_book_product": cls.is_book_product,
+        "reasons": cls.reasons or [],
+        "classified_at": cls.classified_at.isoformat() if cls.classified_at else None,
+        "classified_ago": _rel(cls.classified_at),
+    } if cls else None
     return d
 
 
@@ -2151,6 +2161,8 @@ def api_issues(
     shop: str = "",
     issue_type: str = "",
     run_id: int = 0,
+    url_type: str = "",
+    book_type: str = "",
     severity: str = "",
     q: str = "",
     page: int = 1,
@@ -2173,6 +2185,8 @@ def api_issues(
         shop_id = s.id if s else -1
 
     run_id_int = run_id if run_id > 0 else None
+    url_type_filter = url_type if url_type and url_type != "all" else ""
+    book_type_filter = book_type if book_type and book_type != "all" else ""
     page = max(1, page)
     per_page = max(1, min(per_page, 200))
     if kind not in ("all", "validation", "scrape_failure"):
@@ -2184,6 +2198,8 @@ def api_issues(
         issue_type=issue_type,
         run_id=run_id_int,
         severity=severity,
+        url_type=url_type_filter,
+        book_type=book_type_filter,
         q=q,
         page=page,
         per_page=per_page,
@@ -2211,6 +2227,8 @@ def api_issues(
             "scrape_run_id": r["scrape_run_id"],
             "shop_book_id": r["shop_book_id"],
             "shop_book_title": r["shop_book_title"],
+            "url_type": r.get("url_type"),
+            "book_type": r.get("book_type"),
             "lifecycle_state": r["lifecycle_state"],
             "severity": r["severity"],
             "added_at": r["added_at"].isoformat() if r["added_at"] else None,
@@ -2230,6 +2248,68 @@ def api_issues(
         "counts": counts,
         "kind": kind,
     }
+
+
+@router.get("/issues/{issue_id}")
+def api_issue_detail(
+    issue_id: int,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import ISSUE_DESCRIPTIONS, ISSUE_SEVERITY
+
+    row = (
+        session.query(ValidationIssue, ScrapeRun, ShopBook, Shop)
+        .join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
+        .outerjoin(Shop, ScrapeRun.shop_id == Shop.id)
+        .filter(ValidationIssue.id == issue_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    issue, run, shop_book, shop = row
+    return {
+        "id": issue.id,
+        "kind": "validation",
+        "url": issue.url,
+        "field": issue.field,
+        "issue": issue.issue,
+        "raw_value": issue.raw_value,
+        "scrape_run_id": issue.scrape_run_id,
+        "shop_book_id": issue.shop_book_id,
+        "shop_book_title": shop_book.title if shop_book else None,
+        "shop_name": shop.name if shop else None,
+        "lifecycle_state": issue.lifecycle_state,
+        "acknowledged_at": issue.acknowledged_at.isoformat() if issue.acknowledged_at else None,
+        "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
+        "added_at": run.started_at.isoformat() if run.started_at else None,
+        "added_ago": _rel(run.started_at),
+        "description": ISSUE_DESCRIPTIONS.get(issue.issue, ""),
+    }
+
+
+@router.patch("/issues/{issue_id}/lifecycle")
+def api_issue_lifecycle(
+    issue_id: int,
+    state: str,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    allowed = {"new", "recurring", "already_seen"}
+    if state not in allowed:
+        raise HTTPException(status_code=400, detail=f"state must be one of {allowed}")
+
+    issue = session.get(ValidationIssue, issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    issue.lifecycle_state = state
+    if state == "already_seen":
+        issue.acknowledged_at = datetime.now(UTC)
+    else:
+        issue.acknowledged_at = None
+    session.commit()
+    return {"id": issue_id, "lifecycle_state": state}
 
 
 # ─── Prices ──────────────────────────────────────────────────────────────────

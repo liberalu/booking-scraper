@@ -75,6 +75,23 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         "A scrape run ended with status=failed. Inspect the run's detail page"
         " to see why (stall, kill, orphan on boot, or downstream error)."
     ),
+    "invalid_isbn": (
+        "The scraped ISBN-13 value fails the standard Luhn/check-digit validation"
+        " or has the wrong digit count. Often an EAN-13 barcode picked up"
+        " instead of the book's ISBN."
+    ),
+    "invalid_year": (
+        "Publication year is outside the plausible range (before 1400 or in the future)."
+        " Parser may be selecting a wrong numeric element."
+    ),
+    "year_pages_swap": (
+        "Year and page-count appear to be swapped — e.g. year=312 and pages=2024."
+        " Check the parser's attribute extraction order."
+    ),
+    "discover_fetch_failed": (
+        "Category or sitemap page returned an error or timed out during URL discovery."
+        " Transient network issues or a shop-side block."
+    ),
 }
 
 ISSUE_SEVERITY: dict[str, str] = {
@@ -91,6 +108,10 @@ ISSUE_SEVERITY: dict[str, str] = {
     "attribute_invalid_value": "warning",
     "field_cleared": "critical",
     "scrape_run_failed": "critical",
+    "invalid_isbn": "warning",
+    "invalid_year": "warning",
+    "year_pages_swap": "warning",
+    "discover_fetch_failed": "warning",
 }
 
 
@@ -1298,6 +1319,8 @@ def get_issues_page(
     run_id: int | None = None,
     q: str = "",
     severity: str = "",
+    url_type: str = "",
+    book_type: str = "",
     order: str = "desc",
     page: int = 1,
     per_page: int = 50,
@@ -1337,6 +1360,8 @@ def get_issues_page(
             run_id=run_id,
             q=q,
             severity=severity,
+            url_type=url_type,
+            book_type=book_type,
             order=order,
             page=helper_page,
             per_page=helper_per_page,
@@ -1382,16 +1407,21 @@ def _get_validation_issues_page(
     run_id: int | None,
     q: str,
     severity: str,
+    url_type: str,
+    book_type: str,
     order: str,
     page: int,
     per_page: int,
 ) -> tuple[list[dict[str, Any]], int]:
-    from sqlalchemy import or_
-
     query = (
-        session.query(ValidationIssue, ScrapeRun, ShopBook)
+        session.query(ValidationIssue, ScrapeRun, ShopBook, DiscoveredUrl)
         .join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
         .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
+        .outerjoin(
+            DiscoveredUrl,
+            (DiscoveredUrl.url == ValidationIssue.url)
+            & (DiscoveredUrl.shop_id == ScrapeRun.shop_id),
+        )
     )
 
     if state in {"new", "recurring", "already_seen"}:
@@ -1408,6 +1438,10 @@ def _get_validation_issues_page(
         query = query.filter(ValidationIssue.issue.in_(severity_types))
     if run_id is not None:
         query = query.filter(ValidationIssue.scrape_run_id == run_id)
+    if url_type:
+        query = query.filter(DiscoveredUrl.url_type == url_type)
+    if book_type:
+        query = query.filter(ShopBook.type == book_type)
     if q:
         pattern = f"%{q}%"
         query = query.filter(
@@ -1427,7 +1461,7 @@ def _get_validation_issues_page(
 
     rows = query.offset((page - 1) * per_page).limit(per_page).all()
     result: list[dict[str, Any]] = []
-    for issue, run, shop_book in rows:
+    for issue, run, shop_book, disc_url in rows:
         result.append(
             {
                 "id": issue.id,
@@ -1441,6 +1475,8 @@ def _get_validation_issues_page(
                 "scrape_run_id": issue.scrape_run_id,
                 "shop_book_id": issue.shop_book_id,
                 "shop_book_title": shop_book.title if shop_book else None,
+                "url_type": disc_url.url_type if disc_url else None,
+                "book_type": shop_book.type if shop_book else None,
                 "lifecycle_state": issue.lifecycle_state,
                 "added_at": run.started_at,
                 "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),

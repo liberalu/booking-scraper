@@ -59,6 +59,28 @@ function HFChangesPanel({ changes, fmtDate }) {
   );
 }
 
+// Lightweight markdown → HTML converter (no deps, covers common shop description patterns)
+function mdToHtml(text) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/_(.+?)_/g,'<em>$1</em>');
+  return text.split(/\n\n+/).map(block => {
+    const lines = block.split('\n');
+    const first = lines[0];
+    if (/^###\s/.test(first)) return `<h5 style="margin:0 0 4px">${inline(first.replace(/^###\s*/,''))}</h5>`;
+    if (/^##\s/.test(first))  return `<h4 style="margin:0 0 6px">${inline(first.replace(/^##\s*/,''))}</h4>`;
+    if (/^#\s/.test(first))   return `<h3 style="margin:0 0 8px">${inline(first.replace(/^#\s*/,''))}</h3>`;
+    if (lines.every(l => /^[-*]\s/.test(l.trim()) || !l.trim())) {
+      const items = lines.filter(l => /^[-*]\s/.test(l.trim()))
+        .map(l => `<li>${inline(l.replace(/^[-*]\s*/,''))}</li>`).join('');
+      return `<ul style="margin:0 0 6px;padding-left:20px">${items}</ul>`;
+    }
+    return `<p style="margin:0 0 8px">${lines.map(inline).join('<br>')}</p>`;
+  }).join('');
+}
+
 // Price chart with hover tooltip showing exact date + price
 function HFPriceChart({ priceHistory, h = 160 }) {
   const [tooltip, setTooltip] = React.useState(null); // { x, y, label }
@@ -352,9 +374,12 @@ function HFShopBookDetail({ nav, goto, params }) {
 
   return (
     <HFShell {...nav} activePage="shop-books"
-      title={<span style={{display:'flex', alignItems:'baseline', gap:12}}>
+      title={<span style={{display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap'}}>
         <span>{data.title || 'Book detail'}</span>
         <HFPill tone={data.is_active ? 'ok' : 'neutral'}>{data.status || 'unknown'}</HFPill>
+        {data.type && <HFPill tone={data.type === 'book' ? 'accent' : data.type === 'non_book' ? 'err' : 'warn'}>
+          {data.type.replace('_', ' ')}
+        </HFPill>}
       </span>}
       subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink3)'}}>#{id}</span> · shop <span style={{color:'var(--hf-ink2)', fontWeight:500}}>{data.shop}</span></span>}
       breadcrumb={<>
@@ -396,13 +421,14 @@ function HFShopBookDetail({ nav, goto, params }) {
       <HFCard style={{marginBottom:'var(--hf-gap)'}}>
         <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
-            { id:'overview', label:'Overview' },
-            { id:'prices',   label:'Prices',   count: priceHistory.length || undefined },
-            { id:'changes',  label:'Changes',  count: changes.length || undefined },
-            { id:'issues',   label:'Issues',   count: data.issues || undefined },
-            { id:'urls',     label:'URLs',     count: data.url_count || undefined },
-            { id:'runs',     label:'Runs',     count: data.run_count || undefined },
-            { id:'raw',      label:'Raw data' },
+            { id:'overview',       label:'Overview' },
+            { id:'prices',         label:'Prices',         count: priceHistory.length || undefined },
+            { id:'changes',        label:'Changes',        count: changes.length || undefined },
+            { id:'issues',         label:'Issues',         count: data.issues || undefined },
+            { id:'classification', label:'Classification' },
+            { id:'urls',           label:'URLs',           count: data.url_count || undefined },
+            { id:'runs',           label:'Runs',           count: data.run_count || undefined },
+            { id:'raw',            label:'Raw data' },
           ]}/>
         </div>
       </HFCard>
@@ -445,11 +471,15 @@ function HFShopBookDetail({ nav, goto, params }) {
         <HFCard title="Metadata" sub="extracted fields">
           <div style={{padding:`2px 0 6px`}}>
             {[
+              ['Type',        data.type ? data.type.replace('_', ' ') : '—', data.type && data.type !== 'non_book'],
+              ['URL type',    data.url_status || '—',   data.url_status && data.url_status !== 'non_product'],
               ['ISBN',        data.isbn || '—',        data.isbn],
               ['Author',      data.author || '—',      data.author],
               ['Publisher',   data.publisher || '—',   data.publisher],
               ['Year',        data.year ? String(data.year) : '—', data.year],
               ['Format',      data.format || '—',      data.format],
+              ['Rating',      data.rating != null ? `${Number(data.rating).toFixed(1)} / 5.0` : '—', data.rating != null],
+              ['Reviews',     data.review_count != null ? Number(data.review_count).toLocaleString() : '—', data.review_count != null],
               ['In stock',    data.in_stock ? 'yes' : 'no',  data.in_stock !== null],
               ['First seen',  fmtDate(data.first_seen_at),   true],
               ['Last seen',   fmtDate(data.last_seen_at),    true],
@@ -497,9 +527,10 @@ function HFShopBookDetail({ nav, goto, params }) {
       {/* Description */}
       {data.description && (
         <HFCard title="Description" sub="from shop listing">
-          <div style={{padding:`12px var(--hf-card-p)`, fontSize:13, color:'var(--hf-ink2)', lineHeight:1.65, whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:220, overflow:'auto'}}>
-            {data.description}
-          </div>
+          <div
+            style={{padding:`12px var(--hf-card-p)`, fontSize:13, color:'var(--hf-ink2)', lineHeight:1.65, wordBreak:'break-word', maxHeight:260, overflow:'auto'}}
+            dangerouslySetInnerHTML={{__html: mdToHtml(data.description)}}
+          />
         </HFCard>
       )}
       </>}
@@ -618,6 +649,184 @@ function HFShopBookDetail({ nav, goto, params }) {
       )}
 
       {/* ── Raw ── */}
+      {/* ── Classification ── */}
+      {tab === 'classification' && (() => {
+        const cls = data.classification;
+        const SIGNAL_META = {
+          book_categories:           { label:'In book category',          dir:1, max:3, desc:'Title belongs to a known book category label (e.g. "Knygos").' },
+          valid_isbn:                { label:'Valid ISBN-13',              dir:1, max:3, desc:'ISBN-13 passes the standard check-digit algorithm.' },
+          author_present:            { label:'Author field present',      dir:1, max:2, desc:'The author field is non-empty after scraping.' },
+          book_metadata:             { label:'Book metadata present',     dir:1, max:2, desc:'At least one of: pages, cover type, year, translator, narrator, duration, format.' },
+          game_toy_title:            { label:'Game / toy keyword in title', dir:-1, max:-3, desc:'Title contains keywords like "žaidimas", "dėlionė", "konstruktorius", etc.' },
+          non_book_categories:       { label:'In non-book category',      dir:-1, max:-4, desc:'Category matches a known non-book keyword or label.' },
+          blocked_non_book_category: { label:'Blocked — non-book category', dir:-1, max:0, desc:'Non-book category blocked classification (no overriding book signal).' },
+          game_toy_blocked:          { label:'Blocked — game/toy title',  dir:-1, max:0, desc:'Game/toy title blocked classification (no overriding book signal).' },
+          no_title:                  { label:'No title',                  dir:-1, max:0, desc:'Title field missing or empty — cannot classify.' },
+          book_schema:               { label:'Structured book schema',    dir:1,  max:2, desc:'Schema.org Book type detected in page markup.' },
+        };
+        const MAX_POSITIVE = 10;  // 3+3+2+2
+        const THRESHOLD = 3;
+
+        if (!cls) return (
+          <HFCard title="Classification" sub="no data yet">
+            <HFEmptyState title="Not classified yet" sub="Classification runs automatically during the scan phase. Re-scrape the book to trigger it." onClear={null}/>
+          </HFCard>
+        );
+
+        const isBook = cls.is_book_product;
+        const score = cls.book_score;
+        const reasons = cls.reasons || [];
+        const storedType = data.type;
+
+        // Separate positive and negative signals
+        const posPoints = reasons.reduce((s, r) => r.points > 0 ? s + r.points : s, 0);
+        const negPoints = reasons.reduce((s, r) => r.points < 0 ? s + r.points : s, 0);
+
+        // Score bar: 0–10 range, threshold at 3
+        const barPct = Math.min(100, Math.max(0, (posPoints / MAX_POSITIVE) * 100));
+        const threshPct = (THRESHOLD / MAX_POSITIVE) * 100;
+
+        return (<>
+          {/* Verdict card */}
+          <HFCard style={{marginBottom:'var(--hf-gap)'}}>
+            <div style={{padding:`18px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:20}}>
+              {/* Big verdict icon */}
+              <div style={{
+                width:52, height:52, borderRadius:14, flexShrink:0,
+                background: isBook ? 'var(--hf-ok)' : 'var(--hf-err)',
+                opacity:0.15, position:'absolute',
+              }}/>
+              <div style={{
+                width:52, height:52, borderRadius:14, flexShrink:0,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                background: isBook ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                border:`1.5px solid ${isBook ? 'var(--hf-ok)' : 'var(--hf-err)'}`,
+              }}>
+                <span style={{fontSize:22, display:'flex', color: isBook ? 'var(--hf-ok)' : 'var(--hf-err)'}}>
+                  {isBook ? HF_ICONS.check : HF_ICONS.bang}
+                </span>
+              </div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:17, fontWeight:700, color: isBook ? 'var(--hf-ok-ink)' : 'var(--hf-err-ink)', marginBottom:3}}>
+                  {isBook ? 'Classified as a book' : 'Classified as non-book'}
+                </div>
+                <div style={{fontSize:13, color:'var(--hf-ink3)', display:'flex', gap:16, flexWrap:'wrap'}}>
+                  <span>Score <strong style={{color:'var(--hf-ink)', fontFamily:'var(--hf-mono)'}}>{score}</strong> / threshold {THRESHOLD}</span>
+                  <span>Stored type <strong style={{color:'var(--hf-ink)', fontFamily:'var(--hf-mono)'}}>{storedType || '—'}</strong></span>
+                  {cls.classified_ago && <span>Classified <strong style={{color:'var(--hf-ink)'}}>{cls.classified_ago}</strong></span>}
+                </div>
+              </div>
+              <div style={{flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', gap:2}}>
+                <div style={{fontFamily:'var(--hf-mono)', fontSize:28, fontWeight:700, color: isBook ? 'var(--hf-ok-ink)' : 'var(--hf-err-ink)', lineHeight:1, fontVariantNumeric:'tabular-nums'}}>
+                  {score >= 0 ? '+' : ''}{score}
+                </div>
+                <div style={{fontSize:11, color:'var(--hf-ink4)'}}>total score</div>
+              </div>
+            </div>
+
+            {/* Score bar */}
+            <div style={{padding:`0 var(--hf-card-p) 16px`}}>
+              <div style={{fontSize:11, color:'var(--hf-ink4)', marginBottom:6, display:'flex', justifyContent:'space-between'}}>
+                <span>Score contribution (positive signals only)</span>
+                <span style={{fontFamily:'var(--hf-mono)'}}>{posPoints} / {MAX_POSITIVE} pts</span>
+              </div>
+              <div style={{height:8, borderRadius:4, background:'var(--hf-subtle)', border:`1px solid ${'var(--hf-border-faint)'}`, position:'relative', overflow:'visible'}}>
+                <div style={{
+                  height:'100%', borderRadius:4,
+                  width:`${barPct}%`,
+                  background: posPoints >= THRESHOLD ? 'var(--hf-ok)' : 'var(--hf-warn)',
+                  transition:'width 0.3s ease',
+                }}/>
+                {/* Threshold marker */}
+                <div style={{
+                  position:'absolute', top:-4, left:`${threshPct}%`,
+                  height:16, width:2, background:'var(--hf-accent)',
+                  borderRadius:1, transform:'translateX(-50%)',
+                }} title={`Threshold: ${THRESHOLD} pts`}/>
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:4}}>
+                <span>0</span>
+                <span style={{color:'var(--hf-accent)', fontWeight:600}}>threshold ({THRESHOLD})</span>
+                <span>{MAX_POSITIVE}</span>
+              </div>
+            </div>
+          </HFCard>
+
+          {/* Signal breakdown */}
+          <HFCard title="Signal breakdown" sub={`${reasons.length} signals evaluated`}>
+            <div style={{padding:`4px 0`}}>
+              {reasons.map((r, i) => {
+                const meta = SIGNAL_META[r.key] || { label: r.key, dir: r.points >= 0 ? 1 : -1, max: r.points, desc: '' };
+                const fired = r.points !== 0;
+                const isPositive = r.points > 0;
+                const isNegative = r.points < 0;
+                const isBlocker = r.points === 0 && meta.dir < 0;
+                return (
+                  <div key={r.key} style={{
+                    display:'grid', gridTemplateColumns:'24px 1fr auto',
+                    padding:`10px var(--hf-card-p)`,
+                    borderBottom: i < reasons.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
+                    gap:12, alignItems:'center',
+                    opacity: fired ? 1 : 0.65,
+                  }}>
+                    {/* Status dot */}
+                    <div style={{display:'flex', justifyContent:'center'}}>
+                      {isPositive ? (
+                        <span style={{color:'var(--hf-ok)', display:'flex'}}>{HF_ICONS.check}</span>
+                      ) : isNegative ? (
+                        <span style={{color:'var(--hf-err)', display:'flex'}}>{HF_ICONS.bang}</span>
+                      ) : isBlocker ? (
+                        <span style={{color:'var(--hf-warn)', display:'flex'}}>{HF_ICONS.bang}</span>
+                      ) : (
+                        <div style={{width:8, height:8, borderRadius:'50%', background:'var(--hf-border-strong)', marginLeft:2}}/>
+                      )}
+                    </div>
+                    {/* Label + description */}
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:13, fontWeight: fired ? 600 : 400, color: isPositive ? 'var(--hf-ok-ink)' : isNegative ? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>
+                        {meta.label}
+                      </div>
+                      {meta.desc && <div style={{fontSize:12, color:'var(--hf-ink4)', marginTop:1}}>{meta.desc}</div>}
+                    </div>
+                    {/* Points badge */}
+                    <div style={{
+                      fontFamily:'var(--hf-mono)', fontSize:13, fontWeight:700,
+                      color: isPositive ? 'var(--hf-ok-ink)' : isNegative ? 'var(--hf-err-ink)' : 'var(--hf-ink4)',
+                      minWidth:36, textAlign:'right', fontVariantNumeric:'tabular-nums',
+                    }}>
+                      {r.points > 0 ? `+${r.points}` : r.points === 0 ? '—' : r.points}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {negPoints < 0 && (
+              <div style={{padding:`10px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--hf-ink3)'}}>
+                <span>Penalty total</span>
+                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-err-ink)', fontWeight:600}}>{negPoints}</span>
+              </div>
+            )}
+          </HFCard>
+
+          {/* Rule explanation */}
+          <HFCard title="How classification works" sub="decision logic" style={{marginTop:'var(--hf-gap)'}}>
+            <div style={{padding:`12px var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+              {[
+                { k:'Threshold',           v:`score ≥ ${THRESHOLD}` },
+                { k:'Primary signal req.', v:'book category OR valid ISBN OR (author + metadata)' },
+                { k:'Hard blockers',       v:'non-book category / game title (without book signals) → always non-book' },
+                { k:'Max positive score',  v:`${MAX_POSITIVE} pts (categories +3, ISBN +3, author +2, metadata +2)` },
+              ].map(({k,v}) => (
+                <div key={k}>
+                  <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:3}}>{k}</div>
+                  <div style={{fontSize:13, color:'var(--hf-ink)', lineHeight:1.45}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </HFCard>
+        </>);
+      })()}
+
       {tab === 'raw' && (
         <HFCard title="Raw extracted data" sub={`API response for book #${id}`}>
           <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:'var(--hf-mono)', fontSize:12, lineHeight:1.65, borderTop:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:`0 0 var(--hf-r3) var(--hf-r3)`, whiteSpace:'pre', overflow:'auto'}}>
