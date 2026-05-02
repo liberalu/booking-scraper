@@ -273,9 +273,15 @@ def get_schedule_info(session: Session) -> list[dict[str, Any]]:
             next_dt = None
             next_in_s = None
 
-        # scrape_runs stores the combined phase (e.g. 'discover_sitemap');
-        # cron_jobs stores phase + strategy separately.
-        run_phase = f"{job.phase}_{job.strategy}" if job.strategy else job.phase
+        # scrape_runs stores the combined phase (e.g. 'discover_sitemap').
+        # cron_jobs stores phase + strategy separately. Scan has no suffix
+        # regardless of strategy — avoid invalid 'scan_delta' enum value.
+        if job.phase == "scan":
+            run_phase = "scan"
+        elif job.phase == "discover" and job.strategy:
+            run_phase = f"discover_{job.strategy}"
+        else:
+            run_phase = job.phase
         last_ok = (
             session.query(ScrapeRun)
             .filter(
@@ -1854,6 +1860,7 @@ def get_shop_books_page(
     shop_id: int | None = None,
     active_filter: str = "",
     has_isbn: bool = False,
+    url_unreachable: bool = False,
     sort_by: str = "",
     sort_order: str = "asc",
     field_filters: dict[str, ShopBookFieldFilter] | None = None,
@@ -1866,7 +1873,14 @@ def get_shop_books_page(
     if shop_id:
         query = query.filter(ShopBook.shop_id == shop_id)
     if search:
-        query = query.filter(ShopBook.title.ilike(f"%{search}%"))
+        from sqlalchemy import or_ as _or
+        query = query.filter(
+            _or(
+                ShopBook.title.ilike(f"%{search}%"),
+                ShopBook.author.ilike(f"%{search}%"),
+                ShopBook.isbn.ilike(f"%{search}%"),
+            )
+        )
     if author:
         query = query.filter(ShopBook.author.ilike(f"%{author}%"))
     if publisher:
@@ -1904,6 +1918,12 @@ def get_shop_books_page(
     # "all" or "" — no active/inactive filter applied
     if has_isbn:
         query = query.filter(ShopBook.isbn.isnot(None))
+    if url_unreachable:
+        query = query.join(
+            DiscoveredUrl,
+            (DiscoveredUrl.shop_book_id == ShopBook.id)
+            & (DiscoveredUrl.url_type == "unreachable"),
+        )
     if attr_key:
         from sqlalchemy import exists
 
@@ -2209,6 +2229,7 @@ DISCOVERED_URL_SORT_COLUMNS = {
     "fails": DiscoveredUrl.fail_count,
     "discovered": DiscoveredUrl.first_seen_at,
     "score": UrlClassification.book_score,
+    "book": ShopBook.title,
 }
 
 
@@ -2243,17 +2264,22 @@ def get_discovered_urls_page(
     search: str = "",
     score_min: int | None = None,
     is_book: str = "",
+    has_book: bool = False,
     sort_by: str = "discovered",
     sort_order: str = "desc",
+    failing: bool = False,
 ) -> tuple[list, int]:
     """Return paginated discovered URLs with filters."""
+    needs_book_join = sort_by == "book" or has_book
     query = (
         session.query(DiscoveredUrl)
-        .options(joinedload(DiscoveredUrl.shop))
+        .options(joinedload(DiscoveredUrl.shop), joinedload(DiscoveredUrl.shop_book))
         .outerjoin(
             UrlClassification, UrlClassification.discovered_url_id == DiscoveredUrl.id
         )
     )
+    if needs_book_join:
+        query = query.outerjoin(ShopBook, ShopBook.id == DiscoveredUrl.shop_book_id)
     if shop_id:
         query = query.filter(DiscoveredUrl.shop_id == shop_id)
     if source:
@@ -2265,9 +2291,20 @@ def get_discovered_urls_page(
     if score_min is not None:
         query = query.filter(UrlClassification.book_score >= score_min)
     if is_book == "book":
-        query = query.filter(UrlClassification.is_book_product.is_(True))
+        # URLs either classified as books OR linked to a shop_book via FK
+        from sqlalchemy import or_ as _or
+        query = query.filter(
+            _or(
+                UrlClassification.is_book_product.is_(True),
+                DiscoveredUrl.shop_book_id.isnot(None),
+            )
+        )
     elif is_book == "not_book":
         query = query.filter(UrlClassification.is_book_product.is_(False))
+    if failing:
+        query = query.filter(DiscoveredUrl.fail_count >= 3)
+    if has_book:
+        query = query.filter(DiscoveredUrl.shop_book_id.isnot(None))
     total = query.count()
     order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.first_seen_at)
     if sort_order == "asc":

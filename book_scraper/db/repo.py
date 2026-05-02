@@ -664,6 +664,42 @@ def try_acquire_scan_lock(session: Session, shop_id: int, phase: str) -> bool:
     return bool(result)
 
 
+_RETRYABLE_FAILURE_REASONS = frozenset({"run_aborted", "stuck_in_processing"})
+
+
+def _reset_retryable_failures(session: Session, run_id: int) -> int:
+    """Reset failed URL items with retryable error reasons back to pending.
+
+    run_aborted: items that were in-flight when the run was killed.
+    stuck_in_processing: items that timed out in the processing state.
+    Both are transient failures that should be retried on the next run.
+    """
+    retryable_item_ids = (
+        session.query(ScrapeUrlItem.id)
+        .join(
+            ScrapeFailure,
+            ScrapeFailure.scrape_url_item_id == ScrapeUrlItem.id,
+        )
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+            ScrapeFailure.run_id == run_id,
+            ScrapeFailure.error_reason.in_(_RETRYABLE_FAILURE_REASONS),
+        )
+        .distinct()
+    )
+    stmt = (
+        update(ScrapeUrlItem)
+        .where(ScrapeUrlItem.id.in_(retryable_item_ids.subquery().select()))
+        .values(status="pending", done_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(stmt)
+    session.flush()
+    rowcount = getattr(result, "rowcount", 0)
+    return int(rowcount) if rowcount is not None else 0
+
+
 def inherit_pending_items(
     session: Session,
     old_run_id: int,
@@ -674,7 +710,11 @@ def inherit_pending_items(
     Used when a previously-`failed` run was flagged
     `resumable_after_failure`: a fresh run row is created and adopts the
     failed run's pending queue. The failed run row stays for postmortem.
+
+    Also resets run_aborted and stuck_in_processing items to pending so
+    they are retried by the new run (transient failures due to kill/timeout).
     """
+    _reset_retryable_failures(session, old_run_id)
     stmt = (
         update(ScrapeUrlItem)
         .where(
