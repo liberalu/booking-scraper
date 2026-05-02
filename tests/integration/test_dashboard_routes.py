@@ -422,7 +422,7 @@ def test_continue_run_works_for_any_failure_with_pending(
 
 
 @pytest.mark.integration
-def test_continue_run_rejects_discover_phase(
+def test_continue_run_works_for_discover_phase(
     client: TestClient, db_session: Session, _mock_spawn: list[dict]
 ) -> None:
     shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
@@ -431,8 +431,10 @@ def test_continue_run_rejects_discover_phase(
     )
 
     resp = client.post(f"/api/runs/{run.id}/continue")
-    assert resp.status_code == 400
-    assert _mock_spawn == []
+    assert resp.status_code == 200, resp.text
+    assert _mock_spawn == [
+        {"phase": "discover", "shop": "vaga", "strategy": "categories", "mode": "delta"}
+    ]
 
 
 @pytest.mark.integration

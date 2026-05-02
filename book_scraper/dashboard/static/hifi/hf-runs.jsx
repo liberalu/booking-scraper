@@ -1820,7 +1820,6 @@ function HFRunDetail({ nav, goto, params }) {
   const pendingCount = data.pending_count ?? urlData?.breakdown?.pending ?? 0;
   const canContinue = (
     runStatus === 'failed' &&
-    data.phase === 'scan' &&
     pendingCount > 0
   );
   const closeReasonTone = (

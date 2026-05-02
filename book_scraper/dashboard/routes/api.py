@@ -832,14 +832,14 @@ def api_rerun_run(
 def api_continue_run(
     run_id: int, session: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """Resume an operator-stopped scan run on the same `scrape_runs` row.
+    """Resume a failed run on the same `scrape_runs` row.
 
-    Flips a stopped scan back from 'failed' → 'running', then spawns a
-    fresh scrapy subprocess. The spider's `find_resumable_run` matches
-    Case A (running + has pending items) and reuses this same row, so
-    no new run id is created. Atomic against concurrent /continue calls
-    via row-level locking; rolls the row back to its prior terminal
-    state if the subprocess can't be spawned.
+    Flips the run from 'failed' → 'running', then spawns a fresh scrapy
+    subprocess. The spider's `find_resumable_run` matches Case A
+    (running + has pending items) and reuses this same row, so no new
+    run id is created. Works for both scan and discover phases.
+    Atomic against concurrent /continue calls via row-level locking;
+    rolls the row back to its prior terminal state if spawn fails.
     """
     run = (
         session.query(ScrapeRun)
@@ -855,13 +855,6 @@ def api_continue_run(
             status_code=400,
             detail=(
                 f"Only failed runs can be continued; status={run.status!r}"
-            ),
-        )
-    if run.phase != "scan":
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Continue is only supported for scan runs; phase={run.phase!r}"
             ),
         )
 
@@ -913,9 +906,18 @@ def api_continue_run(
     )
     session.commit()
 
+    cont_phase: str
+    cont_strategy: str
+    if run.phase.startswith("discover_"):
+        cont_phase = "discover"
+        cont_strategy = run.phase[len("discover_"):]
+    else:
+        cont_phase = run.phase
+        cont_strategy = ""
+
     try:
         _spawn_scrapy_in_container(
-            phase="scan", shop=shop_name, strategy="", mode="delta"
+            phase=cont_phase, shop=shop_name, strategy=cont_strategy, mode="delta"
         )
     except Exception:
         session.query(ScrapeRun).filter(ScrapeRun.id == run_id).update(
