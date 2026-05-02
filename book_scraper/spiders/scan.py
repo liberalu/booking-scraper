@@ -473,6 +473,9 @@ class ScanSpider(scrapy.Spider):
             price=data.get("price"),
             price_original=data.get("price_original"),
             in_stock=data.get("in_stock"),
+            planned_availability_date=data.get("planned_availability_date"),
+            rating=data.get("rating"),
+            review_count=data.get("review_count"),
         )
 
         # Mark URL as successfully scraped

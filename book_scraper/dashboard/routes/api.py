@@ -55,17 +55,23 @@ from book_scraper.dashboard.queries import (
 )
 from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import (
+    DiscoveredUrl,
     ScrapeFailure,
     ScrapeRun,
     ScrapeUrlItem,
     Shop,
     ShopBook,
+    ShopBookChange,
+    ValidationIssue,
 )
 from book_scraper.db.repo import (
+    create_cron_job,
+    delete_cron_job,
     emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
     toggle_cron_job,
+    update_cron_job,
 )
 
 router = APIRouter()
@@ -164,8 +170,84 @@ def _run_terminal_counts(
     return {run_id: count for run_id, count in rows}
 
 
+def _run_vi_counts(session: Session, run_ids: list[int]) -> dict[int, int]:
+    """Bulk-fetch validation issue counts for a batch of run IDs."""
+    if not run_ids:
+        return {}
+    rows = (
+        session.query(
+            ValidationIssue.scrape_run_id,
+            func.count(ValidationIssue.id),
+        )
+        .filter(ValidationIssue.scrape_run_id.in_(run_ids))
+        .group_by(ValidationIssue.scrape_run_id)
+        .all()
+    )
+    return {run_id: count for run_id, count in rows}
+
+
+def _run_real_item_counts(
+    session: Session, run_ids: list[int]
+) -> dict[int, dict[str, int]]:
+    """Bulk-fetch accurate added/updated counts from DB records.
+
+    Mirrors get_run_item_counts() but for a batch of run IDs.
+    - added:   shop_books whose created_run_id is in the batch
+    - updated: distinct shop_book_id in shop_book_changes per run
+    """
+    if not run_ids:
+        return {}
+    added_rows = (
+        session.query(ShopBook.created_run_id, func.count(ShopBook.id))
+        .filter(ShopBook.created_run_id.in_(run_ids))
+        .group_by(ShopBook.created_run_id)
+        .all()
+    )
+    updated_rows = (
+        session.query(
+            ShopBookChange.scrape_run_id,
+            func.count(func.distinct(ShopBookChange.shop_book_id)),
+        )
+        .filter(ShopBookChange.scrape_run_id.in_(run_ids))
+        .group_by(ShopBookChange.scrape_run_id)
+        .all()
+    )
+    added = {rid: cnt for rid, cnt in added_rows}
+    updated = {rid: cnt for rid, cnt in updated_rows}
+    return {
+        rid: {"items_added": added.get(rid, 0), "items_updated": updated.get(rid, 0)}
+        for rid in run_ids
+    }
+
+
+def _parse_phase(phase: str) -> tuple[str, str]:
+    """Split 'discover_sitemap' → ('discover', 'sitemap'), 'scan' → ('scan', 'delta')."""
+    if phase.startswith("discover_"):
+        return "discover", phase[len("discover_"):]
+    return "scan", "delta"
+
+
+def _cron_run_phase(job_phase: str, job_strategy: str | None) -> str:
+    """Compute the scrape_runs.phase value that corresponds to this cron job.
+
+    For discover jobs the DB phase includes the strategy
+    (e.g. discover_sitemap). For scan jobs the strategy is UI-only metadata
+    (delta/full) and the DB phase is always just 'scan'.
+    """
+    if job_phase == "scan":
+        return "scan"
+    # discover_* — only concatenate if strategy is a real discover sub-phase
+    if job_strategy and job_strategy in ("sitemap", "categories", "full_crawl"):
+        return f"discover_{job_strategy}"
+    return job_phase or "scan"
+
+
 def _run_dict(
-    run: ScrapeRun, terminal_count: int | None = None
+    run: ScrapeRun,
+    terminal_count: int | None = None,
+    vi_count: int = 0,
+    items_added: int | None = None,
+    items_updated: int | None = None,
 ) -> dict[str, Any]:
     started_h = 0.0
     if run.started_at:
@@ -173,18 +255,24 @@ def _run_dict(
         if start.tzinfo is None:
             start = start.replace(tzinfo=UTC)
         started_h = (datetime.now(UTC) - start).total_seconds() / 3600
+    phase_type, phase_mode = _parse_phase(run.phase)
+    _added = items_added if items_added is not None else run.items_added
+    _updated = items_updated if items_updated is not None else run.items_updated
     return {
         "id": run.id,
         "shop": run.shop.name,
         "phase": run.phase,
+        "phase_type": phase_type,
+        "phase_mode": phase_mode,
         "status": run.status,
         "progress": _progress(run, terminal_count),
-        "items": run.items_added + run.items_updated,
-        "items_added": run.items_added,
-        "items_updated": run.items_updated,
+        "items": _added + _updated,
+        "items_added": _added,
+        "items_updated": _updated,
         "errors": run.error_count,
         "errors_4xx": run.errors_4xx,
         "errors_5xx": run.errors_5xx,
+        "validation_issues": vi_count,
         "elapsed": _elapsed(run),
         "started_ago": _rel(run.started_at),
         "started": _rel(run.started_at),
@@ -195,8 +283,6 @@ def _run_dict(
         "type": "full",
         "by": "—",
         "startedH": round(started_h, 2),
-        # Why the run terminated. Populated for runs finalized after
-        # the close_reason column was added; legacy runs return null.
         "close_reason": run.close_reason,
     }
 
@@ -229,6 +315,9 @@ def _book_dict(sb: ShopBook) -> dict[str, Any]:
         "is_active": sb.is_active,
         "first_seen_at": sb.first_seen_at.isoformat() if sb.first_seen_at else None,
         "last_seen_at": sb.last_seen_at.isoformat() if sb.last_seen_at else None,
+        "planned_availability_date": str(sb.planned_availability_date) if sb.planned_availability_date else None,
+        "rating": float(sb.rating) if sb.rating is not None else None,
+        "review_count": sb.review_count,
     }
 
 
@@ -388,7 +477,8 @@ def api_runs(
         .scalar()
         or 0
     )
-    today_cutoff = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Use 24h window so the KPI matches what the "24h" filter shows
+    today_cutoff = datetime.now(UTC) - timedelta(hours=24)
     today_total = (
         session.query(func.count(ScrapeRun.id))
         .filter(ScrapeRun.started_at >= today_cutoff)
@@ -409,9 +499,21 @@ def api_runs(
     )
 
     pages = max(1, (total + per_page - 1) // per_page) if total else 1
-    terminal = _run_terminal_counts(session, [r.id for r in runs])
+    run_ids = [r.id for r in runs]
+    terminal = _run_terminal_counts(session, run_ids)
+    vi_counts = _run_vi_counts(session, run_ids)
+    real_counts = _run_real_item_counts(session, run_ids)
     return {
-        "runs": [_run_dict(r, terminal_count=terminal.get(r.id)) for r in runs],
+        "runs": [
+            _run_dict(
+                r,
+                terminal_count=terminal.get(r.id),
+                vi_count=vi_counts.get(r.id, 0),
+                items_added=real_counts.get(r.id, {}).get("items_added"),
+                items_updated=real_counts.get(r.id, {}).get("items_updated"),
+            )
+            for r in runs
+        ],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -428,9 +530,10 @@ def api_runs(
 
 class NewRunRequest(BaseModel):
     shop: str
-    phase: str = "scan"  # "scan" | "discover"
-    strategy: str = ""  # for discover: "sitemap" | "categories" | "full_crawl"
-    mode: str = "delta"  # for scan: "full" | "delta" | "sample"
+    phase: str = "scan"
+    strategy: str = ""
+    mode: str = "delta"
+    urls: str = ""  # specific URL(s) for single-item rescrape; bypasses mode
 
 
 def _preflight_checks(
@@ -484,6 +587,7 @@ def _spawn_scrapy_in_container(
     shop: str,
     strategy: str = "",
     mode: str = "delta",
+    urls: str = "",
 ) -> None:
     """Fire-and-forget a `scrapy crawl` inside the scraper container.
 
@@ -510,7 +614,9 @@ def _spawn_scrapy_in_container(
     if phase == "discover" and strategy:
         cmd.extend(["-a", f"strategy={strategy}"])
     if phase == "scan":
-        if mode == "full":
+        if urls:
+            cmd.extend(["-a", f"urls={urls}"])
+        elif mode == "full":
             cmd.extend(["-a", "rescrape=true"])
         elif mode == "sample":
             cmd.extend(["-a", "max_urls=10"])
@@ -552,7 +658,7 @@ def api_create_run(
         )
 
     _spawn_scrapy_in_container(
-        phase=req.phase, shop=req.shop, strategy=req.strategy, mode=req.mode
+        phase=req.phase, shop=req.shop, strategy=req.strategy, mode=req.mode, urls=req.urls
     )
     return {
         "status": "started",
@@ -1355,6 +1461,8 @@ def api_shop_books(
     type_filter: str = "",
     format_filter: str = "",
     has_isbn: bool = False,
+    url_unreachable: bool = False,
+    category: str = "",
     sort_by: str = "",
     sort_order: str = "desc",
     session: Session = Depends(get_db),
@@ -1377,6 +1485,8 @@ def api_shop_books(
         type_filter=type_filter if type_filter and type_filter != "all" else "",
         format_filter=format_filter if format_filter and format_filter != "all" else "",
         has_isbn=has_isbn,
+        url_unreachable=url_unreachable,
+        category=category.strip() if category.strip() else "",
         sort_by=sort_by,
         sort_order=sort_order,
     )
@@ -1400,6 +1510,16 @@ def api_shop_books(
         .scalar()
         or 0
     )
+    unreachable_books = (
+        session.query(func.count(ShopBook.id))
+        .join(
+            DiscoveredUrl,
+            (DiscoveredUrl.shop_book_id == ShopBook.id)
+            & (DiscoveredUrl.url_type == "unreachable"),
+        )
+        .scalar()
+        or 0
+    )
 
     pages = max(1, (total + per_page - 1) // per_page) if total else 1
     return {
@@ -1413,6 +1533,7 @@ def api_shop_books(
             "active": active_books,
             "missing_isbn": missing_isbn,
             "missing_price": missing_price,
+            "unreachable": unreachable_books,
         },
     }
 
@@ -1452,6 +1573,36 @@ def api_shop_book_detail(
         for c in changes
     ]
 
+    url_count = (
+        session.query(func.count(DiscoveredUrl.id))
+        .filter(DiscoveredUrl.shop_book_id == book_id)
+        .scalar()
+        or 0
+    )
+    run_ids: list[int] = [c.scrape_run_id for c in changes if c.scrape_run_id]
+    if sb.last_run_id and sb.last_run_id not in run_ids:
+        run_ids.insert(0, sb.last_run_id)
+    run_count = len(set(run_ids))
+    recent_runs: list[dict[str, Any]] = []
+    if run_ids:
+        runs_q = (
+            session.query(ScrapeRun)
+            .options(joinedload(ScrapeRun.shop))
+            .filter(ScrapeRun.id.in_(set(run_ids)))
+            .order_by(ScrapeRun.started_at.desc())
+            .limit(20)
+            .all()
+        )
+        t_map = _run_terminal_counts(session, [r.id for r in runs_q])
+        recent_runs = [_run_dict(r, terminal_count=t_map.get(r.id)) for r in runs_q]
+
+    # URL reachability — join by shop_book_id FK (set when the book was scraped)
+    linked_url = (
+        session.query(DiscoveredUrl)
+        .filter(DiscoveredUrl.shop_book_id == book_id)
+        .first()
+    )
+
     d = _book_dict(sb)
     d["issues"] = len(issues)
     d["issues_list"] = issues
@@ -1460,6 +1611,11 @@ def api_shop_book_detail(
     d["description"] = sb.description
     d["image_url"] = sb.image_url
     d["categories"] = sb.categories or []
+    d["url_count"] = url_count
+    d["run_count"] = run_count
+    d["runs"] = recent_runs
+    d["url_status"] = linked_url.url_type if linked_url else None
+    d["url_fail_count"] = linked_url.fail_count if linked_url else 0
     return d
 
 
@@ -1474,6 +1630,10 @@ def api_urls(
     url_type: str = "",
     search: str = "",
     is_book: str = "",
+    failing: bool = False,
+    has_book: bool = False,
+    sort_by: str = "discovered",
+    sort_order: str = "desc",
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     shop_id = None
@@ -1491,6 +1651,10 @@ def api_urls(
         url_type=url_type if url_type and url_type != "all" else "",
         search=search,
         is_book=is_book if is_book and is_book != "any" else "",
+        failing=failing,
+        has_book=has_book,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     stats = get_discovered_urls_stats(session, shop_id=shop_id)
     pages = max(1, (total + per_page - 1) // per_page) if total else 1
@@ -1518,6 +1682,34 @@ def api_url_detail(url_id: int, session: Session = Depends(get_db)) -> dict[str,
             "is_book_product": cls.is_book_product,
             "reasons": cls.reasons if hasattr(cls, "reasons") else [],
         }
+    d["last_http_status"] = url.last_http_status
+    d["url_type"] = url.url_type
+    d["last_checked_at"] = url.last_checked_at.isoformat() if url.last_checked_at else None
+    d["last_checked_ago"] = _rel(url.last_checked_at)
+
+    # Check history from scrape_url_items via discovered_url_id
+    items_q = (
+        session.query(ScrapeUrlItem, ScrapeRun)
+        .join(ScrapeRun, ScrapeUrlItem.run_id == ScrapeRun.id)
+        .filter(
+            ScrapeUrlItem.discovered_url_id == url_id,
+            ScrapeUrlItem.status.in_(["done", "failed"]),
+        )
+        .order_by(ScrapeRun.started_at.desc())
+        .limit(20)
+        .all()
+    )
+    d["check_history"] = [
+        {
+            "run_id": item.run_id,
+            "when": _rel(run.started_at),
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "http_status": item.http_status,
+            "status": "error" if not item.http_status or item.http_status >= 400 else "ok",
+            "done_at": item.done_at.isoformat() if item.done_at else None,
+        }
+        for item, run in items_q
+    ]
     return d
 
 
@@ -1580,11 +1772,100 @@ def api_shop_detail(
 # ─── Cron ────────────────────────────────────────────────────────────────────
 
 
+def _fmt_next(seconds: int | None) -> str:
+    if seconds is None:
+        return "—"
+    if seconds < 60:
+        return "in < 1m"
+    m = seconds // 60
+    if m < 60:
+        return f"in {m}m"
+    h, m = divmod(m, 60)
+    return f"in {h}h {m}m" if m else f"in {h}h"
+
+
+def _fmt_dur(seconds: float | None) -> str:
+    if seconds is None:
+        return "—"
+    s = int(seconds)
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h {m}m" if m else f"{h}h"
+    if m:
+        return f"{m}m {s}s" if s else f"{m}m"
+    return f"{s}s"
+
+
+def _cron_job_metrics(
+    session: Session,
+    shop_id: int,
+    run_phase: str,
+) -> dict[str, Any]:
+    """Return last_status, last_run_at, and avg_duration_s for a cron job."""
+    from datetime import timedelta
+
+    now = datetime.now(UTC)
+    last_run = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status.in_(["completed", "failed"]),
+        )
+        .order_by(ScrapeRun.finished_at.desc().nullslast())
+        .limit(1)
+        .one_or_none()
+    )
+    last_status = "ok" if (last_run and last_run.status == "completed") else (
+        "fail" if last_run else None
+    )
+
+    # Average duration from last 30 completed runs
+    recent = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status == "completed",
+            ScrapeRun.finished_at.isnot(None),
+        )
+        .order_by(ScrapeRun.finished_at.desc().nullslast())
+        .limit(30)
+        .all()
+    )
+    durations = [
+        (r.finished_at - r.started_at).total_seconds()
+        for r in recent
+        if r.finished_at and r.started_at
+    ]
+    avg_dur_s = sum(durations) / len(durations) if durations else None
+
+    return {
+        "last_status": last_status,
+        "avg_dur_s": avg_dur_s,
+    }
+
+
 @router.get("/cron")
 def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from croniter import croniter  # type: ignore[import-untyped]
+
     jobs = list_cron_jobs(session)
+    now = datetime.now(UTC)
     result = []
     for j in jobs:
+        run_phase = _cron_run_phase(j.phase, j.strategy)
+        # Next fire time via croniter
+        try:
+            cron = croniter(j.cron_expression, now)
+            next_dt: datetime = cron.get_next(datetime).replace(tzinfo=UTC)
+            next_in_s = int((next_dt - now).total_seconds())
+        except Exception:
+            next_dt = None
+            next_in_s = None
+
+        metrics = _cron_job_metrics(session, j.shop_id, run_phase)
         result.append(
             {
                 "id": j.id,
@@ -1597,10 +1878,181 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
                 "enabled": j.enabled,
                 "last": _rel(j.last_run_at),
                 "last_run_at": j.last_run_at.isoformat() if j.last_run_at else None,
-                "last_status": "ok",
+                "last_status": metrics["last_status"] or "ok",
+                "next": _fmt_next(next_in_s) if j.enabled else "—",
+                "next_run_at": next_dt.isoformat() if next_dt and j.enabled else None,
+                "avg_dur": _fmt_dur(metrics["avg_dur_s"]),
             }
         )
     return {"jobs": result}
+
+
+@router.get("/cron/{job_id}/detail")
+def api_cron_detail(
+    job_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    from zoneinfo import ZoneInfo
+
+    from croniter import croniter  # type: ignore[import-untyped]
+
+    job = get_cron_job(session, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    run_phase = _cron_run_phase(job.phase, job.strategy)
+    now = datetime.now(UTC)
+    tz = ZoneInfo("Europe/Vilnius")
+    today = now.astimezone(tz).date()
+
+    # Upcoming 5 fire times
+    upcoming: list[dict[str, Any]] = []
+    if job.enabled:
+        try:
+            cron = croniter(job.cron_expression, now)
+            for _ in range(5):
+                nxt = cron.get_next(datetime).replace(tzinfo=UTC)
+                nxt_local = nxt.astimezone(tz)
+                nxt_date = nxt_local.date()
+                delta_s = int((nxt - now).total_seconds())
+                if nxt_date == today:
+                    date_label = "today"
+                elif (nxt_date - today).days == 1:
+                    date_label = "tomorrow"
+                else:
+                    date_label = nxt_local.strftime("%-d %b")
+                upcoming.append(
+                    {
+                        "when": _fmt_next(delta_s),
+                        "at": nxt_local.strftime("%H:%M"),
+                        "date": date_label,
+                    }
+                )
+        except Exception:
+            pass
+
+    # Last 24 terminal runs for heatmap
+    last24_runs = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == job.shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status.in_(["completed", "failed"]),
+        )
+        .order_by(ScrapeRun.finished_at.desc().nullslast())
+        .limit(24)
+        .all()
+    )
+    last24 = [
+        "ok" if r.status == "completed" else "fail"
+        for r in reversed(last24_runs)
+    ]
+
+    # Stats: last 24h and last 30d
+    from datetime import timedelta
+
+    cutoff_24h = now - timedelta(hours=24)
+    cutoff_30d = now - timedelta(days=30)
+    runs_24h = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == job.shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status.in_(["completed", "failed"]),
+            ScrapeRun.finished_at >= cutoff_24h,
+        )
+        .all()
+    )
+    ok_24h = sum(1 for r in runs_24h if r.status == "completed")
+    fail_24h = sum(1 for r in runs_24h if r.status == "failed")
+
+    runs_30d = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == job.shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status.in_(["completed", "failed"]),
+            ScrapeRun.finished_at >= cutoff_30d,
+        )
+        .all()
+    )
+    total_30d = len(runs_30d)
+    ok_30d = sum(1 for r in runs_30d if r.status == "completed")
+    success_rate_30d = round(ok_30d / total_30d * 100, 1) if total_30d else None
+
+    durations = [
+        (r.finished_at - r.started_at).total_seconds()
+        for r in runs_30d
+        if r.status == "completed" and r.finished_at and r.started_at
+    ]
+    avg_dur_s = sum(durations) / len(durations) if durations else None
+
+    last_run = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == job.shop_id,
+            ScrapeRun.phase == run_phase,
+            ScrapeRun.status.in_(["completed", "failed"]),
+        )
+        .order_by(ScrapeRun.finished_at.desc().nullslast())
+        .limit(1)
+        .one_or_none()
+    )
+    last_status = None
+    if last_run:
+        last_status = "ok" if last_run.status == "completed" else "fail"
+
+    # Recent run history (last 20)
+    recent_runs = (
+        session.query(ScrapeRun)
+        .filter(
+            ScrapeRun.shop_id == job.shop_id,
+            ScrapeRun.phase == run_phase,
+        )
+        .order_by(ScrapeRun.started_at.desc())
+        .limit(20)
+        .all()
+    )
+    runs_out = []
+    for r in recent_runs:
+        dur_s = None
+        if r.finished_at and r.started_at:
+            dur_s = (r.finished_at - r.started_at).total_seconds()
+        runs_out.append(
+            {
+                "id": r.id,
+                "started": _rel(r.started_at),
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "dur": _fmt_dur(dur_s),
+                "dur_s": dur_s,
+                "items": r.items_added + r.items_updated,
+                "errors": r.error_count,
+                "status": r.status,
+            }
+        )
+
+    return {
+        "id": job.id,
+        "name": f"{job.shop.name}.{job.phase}.{job.strategy or 'default'}",
+        "shop": job.shop.name,
+        "phase": job.phase,
+        "strategy": job.strategy or "",
+        "cron": job.cron_expression,
+        "enabled": job.enabled,
+        "last_run_at": job.last_run_at.isoformat() if job.last_run_at else None,
+        "upcoming": upcoming,
+        "last24": last24,
+        "stats": {
+            "total_24h": len(runs_24h),
+            "ok_24h": ok_24h,
+            "fail_24h": fail_24h,
+            "success_rate_30d": success_rate_30d,
+            "avg_dur": _fmt_dur(avg_dur_s),
+            "avg_dur_s": avg_dur_s,
+            "last_status": last_status,
+            "last_run_ago": _rel(last_run.finished_at) if last_run else "—",
+        },
+        "runs": runs_out,
+    }
 
 
 @router.post("/cron/{job_id}/toggle")
@@ -1614,6 +2066,75 @@ def api_cron_toggle(
     toggle_cron_job(session, job_id)
     session.commit()
     return {"id": job_id, "enabled": new_enabled}
+
+
+class _CronJobBody(BaseModel):
+    shop: str
+    phase: str
+    strategy: str = ""
+    cron_expression: str
+
+
+@router.post("/cron")
+def api_cron_create(
+    body: _CronJobBody, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    shop = get_shop_by_name(session, body.shop)
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    if body.phase not in ("discover", "scan"):
+        raise HTTPException(status_code=422, detail="phase must be 'discover' or 'scan'")
+    strategy = body.strategy.strip() or None
+    job = create_cron_job(
+        session,
+        shop_id=shop.id,
+        phase=body.phase,
+        strategy=strategy,
+        args="",
+        cron_expression=body.cron_expression,
+    )
+    session.commit()
+    return {"id": job.id, "name": f"{shop.name}.{job.phase}.{job.strategy or 'default'}"}
+
+
+class _CronJobPatch(BaseModel):
+    cron_expression: str | None = None
+    phase: str | None = None
+    strategy: str | None = None
+
+
+@router.patch("/cron/{job_id}")
+def api_cron_update(
+    job_id: int, body: _CronJobPatch, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    job = get_cron_job(session, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    fields: dict[str, Any] = {}
+    if body.cron_expression is not None:
+        fields["cron_expression"] = body.cron_expression
+    if body.phase is not None:
+        if body.phase not in ("discover", "scan"):
+            raise HTTPException(status_code=422, detail="phase must be 'discover' or 'scan'")
+        fields["phase"] = body.phase
+    if body.strategy is not None:
+        fields["strategy"] = body.strategy.strip() or None
+    if fields:
+        update_cron_job(session, job_id, **fields)
+        session.commit()
+    return {"id": job_id}
+
+
+@router.delete("/cron/{job_id}")
+def api_cron_delete(
+    job_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    job = get_cron_job(session, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    delete_cron_job(session, job_id)
+    session.commit()
+    return {"id": job_id}
 
 
 # ─── Issues ──────────────────────────────────────────────────────────────────

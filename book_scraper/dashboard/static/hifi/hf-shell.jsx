@@ -9,12 +9,24 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
   };
   const openCmdK = () => window.HF_APP && window.HF_APP.openCmdK && window.HF_APP.openCmdK();
   const openNewRun = () => window.HF_APP && window.HF_APP.openNewRun && window.HF_APP.openNewRun();
+
+  const [runningCount, setRunningCount] = React.useState(0);
+  React.useEffect(() => {
+    const load = () => fetch('/api/runs?status=running&per_page=1')
+      .then(r => r.json())
+      .then(d => setRunningCount(d.kpis?.running_now || 0))
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 10000);
+    return () => clearInterval(id);
+  }, []);
+
   const navGroups = [
     { group: 'Operations', items: [
       ['overview', 'Overview', HF_ICONS.overview],
-      ['runs', 'Runs', HF_ICONS.runs, '3'],
+      ['runs', 'Runs', HF_ICONS.runs, runningCount > 0 ? String(runningCount) : null],
       ['cron', 'Schedules', HF_ICONS.cron],
-      ['issues', 'Issues', HF_ICONS.issues, '12'],
+      ['issues', 'Issues', HF_ICONS.issues],
     ]},
     { group: 'Catalog', items: [
       ['shop-books', 'Shop Books', HF_ICONS.books],

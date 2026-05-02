@@ -51,6 +51,9 @@ class DiscoverSpider(scrapy.Spider):
         )
 
         # Load strategy-specific config
+        _valid_strategies = {"sitemap", "categories", "full_crawl", "graphql"}
+        if strategy not in _valid_strategies:
+            raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
         strategy_conf = getattr(discover_conf, strategy, None)
         if strategy_conf is None:
             raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
@@ -134,13 +137,21 @@ class DiscoverSpider(scrapy.Spider):
                 callback=self.parse_sitemap,
                 errback=self.handle_start_error,
             )
-        if self.strategy == "categories":
-            url = self.strategy_conf.url.format(page=1)
+        if self.strategy in ("categories", "graphql"):
+            if self.strategy == "graphql":
+                from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+                url = build_graphql_page_url(
+                    self.conf.shop.base_url, self.strategy_conf, page=1
+                )
+            else:
+                url = self.strategy_conf.url.format(page=1)
             return scrapy.Request(
                 url,
                 callback=self.parse_categories,
                 errback=self.handle_start_error,
                 meta={"page": 1},
+                headers={"Accept": "application/json"} if self.strategy == "graphql" else {},
             )
         # full_crawl
         return scrapy.Request(
@@ -355,8 +366,21 @@ class DiscoverSpider(scrapy.Spider):
                     url=url, shop_name=self.shop_name, source="category"
                 )
 
-                # Yield product data when we have at least a title and price
+                # Yield product data when we have at least a title and price.
+                # Pass through any extra fields the parser provides so that
+                # GraphQL-based parsers (which return full metadata) populate
+                # complete ShopBookItem records during discovery.
                 if product.get("title") and product.get("price"):
+                    props: dict[str, object] = {}
+                    for key in (
+                        "pages",
+                        "cover_type",
+                        "duration",
+                        "narrator",
+                        "translator",
+                    ):
+                        if product.get(key) is not None:
+                            props[key] = product[key]
                     yield ShopBookItem(
                         url=url,
                         shop_name=self.shop_name,
@@ -364,17 +388,17 @@ class DiscoverSpider(scrapy.Spider):
                         author=product.get("author"),
                         price=product.get("price"),
                         price_original=product.get("price_original"),
-                        in_stock=True,
-                        type=None,
-                        sku=None,
-                        isbn=None,
-                        publisher=None,
-                        year=None,
-                        format=None,
-                        description=None,
+                        in_stock=product.get("in_stock", True),
+                        type=product.get("type"),
+                        sku=product.get("sku"),
+                        isbn=product.get("isbn"),
+                        publisher=product.get("publisher"),
+                        year=product.get("year"),
+                        format=product.get("format"),
+                        description=product.get("description"),
                         image_url=product.get("image_url"),
                         categories=product.get("categories", []),
-                        properties=None,
+                        properties=props or None,
                     )
             else:
                 self._urls_filtered += 1
@@ -385,7 +409,14 @@ class DiscoverSpider(scrapy.Spider):
         if self._max_pages and page > self._max_pages:
             self.logger.info("max_pages cap: stopping at page %d", self._max_pages)
             return
-        next_url = self.strategy_conf.url.format(page=page)
+        if self.strategy == "graphql":
+            from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+            next_url = build_graphql_page_url(
+                self.conf.shop.base_url, self.strategy_conf, page=page
+            )
+        else:
+            next_url = self.strategy_conf.url.format(page=page)
 
         # Dual-write: persist the next page to scrape_url_items so the run
         # can resume after a crash, THEN yield the Request so Scrapy fetches
@@ -402,6 +433,7 @@ class DiscoverSpider(scrapy.Spider):
                 "scrape_url_item_id": new_item_id,
                 "url_type": "category_page",
             },
+            headers={"Accept": "application/json"} if self.strategy == "graphql" else {},
         )
 
     def parse_full_crawl(

@@ -38,8 +38,8 @@ function HFCron({ nav, goto }) {
     ...j,
     state: j.enabled ? 'active' : 'disabled',
     lastStatus: j.last_status || 'ok',
-    next: '—',
-    avgDur: '—',
+    next: j.next || '—',
+    avgDur: j.avg_dur || '—',
   }));
 
   const filters = useHFFilters(jobs, {
@@ -78,7 +78,7 @@ function HFCron({ nav, goto }) {
           <HFEmptyState title="No schedules match" sub="Try clearing filters." onClear={filters.clearAll}/>
         ) : (
         <HFTable
-          onRowClick={(r) => goto('schedule-detail', { name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus })}
+          onRowClick={(r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus })}
           columns={[
             { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{v}</span> },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
@@ -136,7 +136,7 @@ function HFIssues({ nav, goto }) {
   React.useEffect(() => {
     let cancelled = false;
     const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
-    const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE) });
+    const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE), kind: 'validation' });
     if (runId) params.set('run_id', String(runId));
     fetch(`/api/issues?${params.toString()}`)
       .then(r => r.json())
@@ -455,109 +455,116 @@ function HFIssues({ nav, goto }) {
 function HFPrices({ nav, goto }) {
   const HF = getHF();
   const [page, setPage] = React.useState(1);
+  const [days, setDays] = React.useState(7);
+  const [shop, setShop] = React.useState('all');
+  const [dir, setDir]   = React.useState('all');
+  const [q, setQ]       = React.useState('');
   const PER_PAGE = 30;
   const [data, setData] = React.useState({ changes: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1 });
   const [loading, setLoading] = React.useState(true);
 
+  React.useEffect(() => { setPage(1); }, [days, shop, dir, q]);
+
   React.useEffect(() => {
     let cancelled = false;
-    fetch(`/api/prices?days=7&page=${page}&per_page=${PER_PAGE}`)
+    const params = new URLSearchParams({ days: String(days), page: String(page), per_page: String(PER_PAGE) });
+    if (shop !== 'all') params.set('shop', shop);
+    fetch(`/api/prices?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [page]);
+  }, [days, shop, page]);
 
-  const rows = data.changes.map(c => ({
+  const allRows = data.changes.map(c => ({
     id: c.shop_book_id,
     title: c.title,
-    prev: c.prev_price !== null ? `€${c.prev_price.toFixed(2)}` : '—',
-    new: c.new_price !== null ? `€${c.new_price.toFixed(2)}` : '—',
-    change: c.change !== null ? `${c.change >= 0 ? '+' : ''}€${Math.abs(c.change).toFixed(2)}` : '—',
+    prev: c.prev_price !== null ? `€${Number(c.prev_price).toFixed(2)}` : '—',
+    now: c.new_price !== null ? `€${Number(c.new_price).toFixed(2)}` : '—',
+    pct: c.prev_price && c.prev_price !== 0 ? ((c.change / c.prev_price) * 100) : 0,
+    absChg: c.change,
     when: c.scraped_ago,
-    pct: c.prev_price && c.prev_price !== 0 ? Math.round(c.change / c.prev_price * 100) : 0,
     shop: c.shop || '—',
-    book: c.title || '—',
-    old: c.prev_price !== null ? `€${c.prev_price.toFixed(2)}` : '—',
   }));
 
-  const deltas = [-1.10, -0.50, -0.20, 0, 0, 0.10, 0.20, 0.50, 1.00, 1.50, 2.00, 2.50, 3.00];
-
-  const filters = useHFFilters(rows, {
-    search: { fields: c => `${c.book} ${c.shop}` },
-    filters: [
-      { id:'shop', default:'all', match:(c,v) => c.shop === v },
-      { id:'dir',  default:'all', match:(c,v) => v==='drop' ? c.pct < 0 : v==='rise' ? c.pct > 0 : c.pct === 0 },
-      { id:'mag',  default:'any', match:(c,v) => v==='big' ? Math.abs(c.pct) >= 10 : Math.abs(c.pct) < 10 },
-    ],
+  const rows = allRows.filter(r => {
+    if (q.trim() && !r.title?.toLowerCase().includes(q.trim().toLowerCase())) return false;
+    if (dir === 'drop' && r.pct >= 0) return false;
+    if (dir === 'rise' && r.pct <= 0) return false;
+    return true;
   });
+
+  const drops = allRows.filter(r => r.pct < 0).length;
+  const rises = allRows.filter(r => r.pct > 0).length;
+  const biggestDrop = allRows.reduce((best, r) => r.pct < (best?.pct ?? 0) ? r : best, null);
+  const biggestRise = allRows.reduce((best, r) => r.pct > (best?.pct ?? 0) ? r : best, null);
+
+  // sparkline: % changes as bar heights
+  const pctVals = allRows.map(r => r.pct).filter(v => v !== 0);
 
   return (
     <HFShell {...nav} activePage="prices"
-      title="Prices" subtitle="Price records across all books and shops."
+      title="Prices" subtitle="Price movements across all scraped listings."
       breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Prices</span></>}
-      actions={<HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>}
+      actions={<>
+        <HFSegmented value={String(days)} onChange={v => setDays(Number(v))} options={[
+          {value:'7',label:'7d'},{value:'14',label:'14d'},{value:'30',label:'30d'},{value:'90',label:'90d'},
+        ]}/>
+      </>}
     >
       <HFKpiStrip items={[
-        { label:'Recent changes', value: (data.total || 0).toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>last 7 days</span>, tone:'ok' },
+        { label:'Changes', value:(data.total||0).toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>last {days}d</span> },
+        { label:'Price drops', value:String(drops), tone: drops>0?'err':undefined, delta:<span style={{color:'var(--hf-err-ink)'}}>{drops>0?'↓ cheaper':''}</span>,
+          onClick: ()=>setDir('drop') },
+        { label:'Price rises', value:String(rises), tone: rises>0?'ok':undefined, delta:<span style={{color:'var(--hf-ok-ink)'}}>{rises>0?'↑ pricier':''}</span>,
+          onClick: ()=>setDir('rise') },
+        ...(biggestDrop ? [{ label:'Biggest drop', value:`${Math.round(biggestDrop.pct)}%`, tone:'err',
+          delta:<span style={{color:'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120, display:'block'}}>{biggestDrop.title}</span>,
+          onClick: ()=>goto('shop-book-detail',{id:biggestDrop.id}) }] : []),
+        ...(biggestRise ? [{ label:'Biggest rise', value:`+${Math.round(biggestRise.pct)}%`, tone:'ok',
+          delta:<span style={{color:'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120, display:'block'}}>{biggestRise.title}</span>,
+          onClick: ()=>goto('shop-book-detail',{id:biggestRise.id}) }] : []),
       ]}/>
 
-      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
-        <HFCard title="Change distribution" sub="daily price deltas · last 7 days">
-          <div style={{padding:`var(--hf-card-p)`}}>
-            <HFBarChart data={deltas} h={140} colorFn={(v,i,h) => v < 0 ? h.err : v > 0 ? h.ok : h.ink4} label="Daily price deltas"/>
-            <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:8, fontVariantNumeric:'tabular-nums'}}>
-              <span>−€2</span><span>−€1</span><span>0</span><span>+€1</span><span>+€2</span><span>+€3</span>
-            </div>
-          </div>
-        </HFCard>
-        <HFCard title="Category averages" sub="active listings · today">
-          <div style={{padding:`6px 0`}}>
-            {[
-              ['Fiction',    12.40, -0.3],
-              ['Non-fiction',18.90, -0.8],
-              ['Children',    9.20, +1.2],
-              ['Tech / CS',  24.50, -1.4],
-              ['Academic',   32.10,  0.0],
-              ['Art',        28.70, +0.4],
-            ].map(([cat, avg, chg], i, arr) => (
-              <div key={cat} style={{padding:`8px var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1fr 80px 60px', alignItems:'center', borderBottom: i<arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none', fontSize:13}}>
-                <span style={{color:'var(--hf-ink)', fontWeight:500}}>{cat}</span>
-                <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink)', fontWeight:500, textAlign:'right', fontVariantNumeric:'tabular-nums'}}>€{avg.toFixed(2)}</span>
-                <span style={{fontFamily:'var(--hf-mono)', color: chg<0?'var(--hf-err-ink)':chg>0?'var(--hf-ok-ink)':'var(--hf-ink4)', textAlign:'right', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{chg>0?'+':''}{chg.toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-        </HFCard>
-      </div>
-
-      <HFCard title="Recent changes" sub="non-zero price movements · last 7 days">
+      <HFCard style={{marginBottom:'var(--hf-gap)'}}>
         <div style={{padding:`10px var(--hf-card-p)`, borderBottom:`1px solid ${'var(--hf-border-faint)'}`}}>
           <HFFilterBar right={<>
-            <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
-              {filters.filtered.length} of {rows.length}
+            <span style={{fontSize:12, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums'}}>
+              {rows.length} of {allRows.length}
             </span>
-            {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
+            {(dir!=='all' || q.trim()) && <HFButton size="sm" variant="subtle" onClick={()=>{setDir('all');setQ('');}}>Clear</HFButton>}
           </>}>
-            <HFSearch placeholder="Search book…" width={240} value={filters.q} onChange={filters.setQ}/>
-            <HFFilter label="Shop"      value={filters.vals.shop} options={['all','vaga','knygos']}     onChange={v=>filters.setVal('shop',v)}/>
-            <HFFilter label="Direction" value={filters.vals.dir}  options={['all','drop','rise']}       onChange={v=>filters.setVal('dir',v)}/>
-            <HFFilter label="Magnitude" value={filters.vals.mag}  options={['any','big','small']}       onChange={v=>filters.setVal('mag',v)} allLabel="any"/>
+            <HFSearch placeholder="Search book…" width={260} value={q} onChange={setQ}/>
+            <HFFilter label="Shop"      value={shop} options={['all','vaga','knygos']}   onChange={setShop}/>
+            <HFFilter label="Direction" value={dir}  options={['all','drop','rise']}     onChange={setDir}/>
           </HFFilterBar>
         </div>
-        {filters.filtered.length === 0 ? (
-          <HFEmptyState title="No price changes match" sub="Try clearing filters or broadening the search." onClear={filters.clearAll}/>
+        {loading && rows.length === 0 ? (
+          <div style={{padding:'40px 20px', textAlign:'center', color:'var(--hf-ink3)'}}>Loading…</div>
+        ) : rows.length === 0 ? (
+          <HFEmptyState title="No price changes" sub={`No price movements in the last ${days} days.`} onClear={null}/>
         ) : (
         <HFTable
+          onRowClick={r => goto('shop-book-detail', { id: r.id })}
           columns={[
-            { key:'book', label:'Book', w:'2fr', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
-            { key:'shop', label:'Shop', w:'0.7fr', sortable:true },
-            { key:'old', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true },
-            { key:'new', label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
-            { key:'pct', label:'Δ %', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => <span style={{color: v<0?'var(--hf-err-ink)':v>0?'var(--hf-ok-ink)':'var(--hf-ink3)', fontWeight:600, fontVariantNumeric:'tabular-nums'}}>{v>0?'+':''}{v}%</span> },
-            { key:'when', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
+            { key:'title', label:'Book', w:'2.5fr', sortable:true, cell:(v,r) => (
+              <span style={{display:'flex', flexDirection:'column', gap:2}}>
+                <span style={{color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
+                <span style={{fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)'}}>{r.shop}</span>
+              </span>
+            )},
+            { key:'prev', label:'Was', w:'0.7fr', mono:true, align:'right', muted:true, sortable:true },
+            { key:'now',  label:'Now', w:'0.7fr', mono:true, align:'right', sortable:true, cell:v => <span style={{fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> },
+            { key:'pct',  label:'Δ %', w:'0.65fr', mono:true, align:'right', sortable:true, sortVal:r=>r.pct, cell:v => {
+              const rounded = Math.round(v * 10) / 10;
+              return <span style={{color: v<0?'var(--hf-err-ink)':v>0?'var(--hf-ok-ink)':'var(--hf-ink3)', fontWeight:600, fontVariantNumeric:'tabular-nums'}}>
+                {v>0?'+':''}{rounded.toFixed(1)}%
+              </span>;
+            }},
+            { key:'when', label:'When', w:'0.9fr', mono:true, muted:true, sortable:true },
+            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
-          rows={filters.filtered}
+          rows={rows}
         />
         )}
       </HFCard>
@@ -565,40 +572,16 @@ function HFPrices({ nav, goto }) {
       {(data.total || 0) > 0 && (
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
-            Showing {((data.page - 1) * data.per_page + 1).toLocaleString()}–
-            {Math.min(data.page * data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()} change{data.total === 1 ? '' : 's'}
+            Showing {((data.page-1)*data.per_page+1).toLocaleString()}–
+            {Math.min(data.page*data.per_page, data.total).toLocaleString()} of {data.total.toLocaleString()}
           </span>
           {data.pages > 1 && (
-            <div style={{display:'flex', gap:6, alignItems:'center'}}>
-              <HFButton size="sm" variant="ghost"
-                aria-label="Previous page"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={data.page <= 1}>
-                <span aria-hidden="true" style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span>
-                Prev
+            <div style={{display:'flex', gap:6}}>
+              <HFButton size="sm" variant="ghost" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={data.page<=1}>
+                <span style={{display:'flex', transform:'rotate(180deg)'}}>{HF_ICONS.chevron}</span> Prev
               </HFButton>
-              {(() => {
-                const buttons = [];
-                const total = data.pages, cur = data.page;
-                const push = (n) => buttons.push(<HFButton key={n} size="sm" variant={n === cur ? 'accent' : 'default'} onClick={() => setPage(n)}>{n}</HFButton>);
-                const ell = (k) => buttons.push(<span key={k} style={{padding:'6px 4px', color:'var(--hf-ink4)'}}>…</span>);
-                if (total <= 7) { for (let i = 1; i <= total; i++) push(i); }
-                else {
-                  push(1);
-                  if (cur > 4) ell('l');
-                  const lo = Math.max(2, cur - 1), hi = Math.min(total - 1, cur + 1);
-                  for (let i = lo; i <= hi; i++) push(i);
-                  if (cur < total - 3) ell('r');
-                  push(total);
-                }
-                return buttons;
-              })()}
-              <HFButton size="sm" variant="ghost"
-                aria-label="Next page"
-                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
-                disabled={data.page >= data.pages}>
-                Next
-                <span aria-hidden="true" style={{display:'flex'}}>{HF_ICONS.chevron}</span>
+              <HFButton size="sm" variant="ghost" onClick={()=>setPage(p=>Math.min(data.pages,p+1))} disabled={data.page>=data.pages}>
+                Next <span style={{display:'flex'}}>{HF_ICONS.chevron}</span>
               </HFButton>
             </div>
           )}

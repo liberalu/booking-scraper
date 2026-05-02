@@ -30,6 +30,7 @@ _STRATEGY_URL_TYPE = {
     "sitemap": "sitemap",
     "categories": "category_page",
     "full_crawl": "crawl",
+    "graphql": "category_page",
 }
 
 
@@ -144,6 +145,20 @@ class DiscoverService:
                 if hasattr(discover_cfg, "full_crawl")
                 else discover_cfg["full_crawl"]["start_url"]
             )
+        if strategy == "graphql":
+            gql_cfg = (
+                discover_cfg.graphql
+                if hasattr(discover_cfg, "graphql")
+                else discover_cfg["graphql"]
+            )
+            from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+            base_url = (
+                shop_config.shop.base_url
+                if hasattr(shop_config, "shop")
+                else shop_config["shop"]["base_url"]
+            )
+            return build_graphql_page_url(base_url, gql_cfg, page=1)
         raise ValueError(f"Unknown strategy: {strategy}")
 
     def finish_discover(

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -114,6 +115,11 @@ class ShopBook(Base):
         Numeric(10, 2), nullable=True
     )
     in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    planned_availability_date: Mapped["date | None"] = mapped_column(
+        Date, nullable=True
+    )
+    rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)
+    review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Matching
     match_status: Mapped[str] = mapped_column(
@@ -309,6 +315,7 @@ url_type_enum = Enum(
     "unknown",
     "product",
     "non_product",
+    "unreachable",
     name="url_type",
     create_type=False,
 )
@@ -317,6 +324,7 @@ scrape_phase_enum = Enum(
     "discover_sitemap",
     "discover_categories",
     "discover_full_crawl",
+    "discover_graphql",
     "scan",
     name="scrape_phase",
     create_type=False,

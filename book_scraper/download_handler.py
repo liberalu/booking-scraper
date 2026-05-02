@@ -167,6 +167,10 @@ class HttpxMiddleware:  # pragma: no cover
                 "HTTPX_CLIENT_RESET_AFTER_REQUESTS", 80
             ),
         )
+        # Scrapy 2.14+ only passes `spider` to process_request if the argument
+        # is required (no default). Save the crawler to access spider via
+        # crawler.spider instead.
+        mw._crawler = crawler
         crawler.signals.connect(mw._close, signal=signals.spider_closed)
         crawler.signals.connect(mw.spider_opened, signal=signals.spider_opened)
         return mw
@@ -360,23 +364,51 @@ class HttpxMiddleware:  # pragma: no cover
 
             # dispatch_lock released — timing serialised, HTTP call can overlap.
 
-            # Rotate the httpx client periodically (TIME_WAIT pile-up
-            # + server-side cumulative tracking, see follow-up #10).
+            # Rotate the httpx client periodically and read per-shop timeouts.
+            # shop config read_timeout overrides the httpx client-level default
+            # (set from DOWNLOAD_TIMEOUT at startup); hard_timeout overrides the
+            # asyncio.wait_for ceiling. Without this, cold Magento FPC misses
+            # (~50-90s) are killed at the httpx client's 15s default.
+            #
+            # Scrapy 2.14+ only passes `spider` to process_request when the
+            # argument is required (no default). Use self._crawler.spider instead.
             reset_after: int | None = None
-            shop_conf = getattr(spider, "conf", None)
+            req_timeout: float | None = None
+            hard_timeout: float = HARD_REQUEST_TIMEOUT_S
+            active_spider = getattr(self, "_crawler", None)
+            active_spider = active_spider.spider if active_spider is not None else None
+            shop_conf = getattr(active_spider, "conf", None)
             if shop_conf is not None:
                 scraping = getattr(shop_conf, "scraping", None)
                 if scraping is not None:
                     reset_after = getattr(
                         scraping, "httpx_client_reset_after_requests", None
                     )
+                    rt = getattr(scraping, "read_timeout", None)
+                    if rt is not None:
+                        req_timeout = float(rt)
+                    ht = getattr(scraping, "hard_timeout", None)
+                    if ht is not None:
+                        hard_timeout = float(ht)
             await self._maybe_reset_client(reset_after)
+
+            get_kwargs: dict[str, Any] = {}
+            if req_timeout is not None:
+                get_kwargs["timeout"] = req_timeout
+            # Forward per-request Accept header override (e.g. application/json
+            # for GraphQL endpoints that reject text/html browser headers).
+            accept_raw = request.headers.get("Accept")
+            if accept_raw:
+                accept_str = (
+                    accept_raw.decode() if isinstance(accept_raw, bytes) else accept_raw
+                )
+                get_kwargs["headers"] = {"Accept": accept_str}
 
             status_code: int | None = None
             try:
                 response = await asyncio.wait_for(
-                    self.client.get(str(request.url)),
-                    timeout=HARD_REQUEST_TIMEOUT_S,
+                    self.client.get(str(request.url), **get_kwargs),
+                    timeout=hard_timeout,
                 )
                 status_code = response.status_code
                 # httpx auto-decompresses gzip, so remove Content-Encoding

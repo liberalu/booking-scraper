@@ -23,6 +23,9 @@ class ShopBookItem(scrapy.Item):
     price = scrapy.Field()
     price_original = scrapy.Field()
     in_stock = scrapy.Field()
+    planned_availability_date = scrapy.Field()
+    rating = scrapy.Field()
+    review_count = scrapy.Field()
 
 
 class PriceItem(scrapy.Item):

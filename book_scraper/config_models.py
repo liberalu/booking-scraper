@@ -77,11 +77,20 @@ class FullCrawlConfig(BaseModel):
     start_url: str
 
 
+class GraphQLConfig(BaseModel):
+    """Discovery via Magento 2 GraphQL API (for JS-rendered / PWA shops)."""
+
+    category_id: str
+    page_size: int = 100
+    max_age_hours: int = 168
+
+
 class DiscoverConfig(BaseModel):
     url_include_pattern: str | None = None
     sitemap: SitemapConfig | None = None
     categories: CategoriesConfig | None = None
     full_crawl: FullCrawlConfig | None = None
+    graphql: GraphQLConfig | None = None
 
 
 class ScanConfig(BaseModel):

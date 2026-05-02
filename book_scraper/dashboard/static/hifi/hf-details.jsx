@@ -5,6 +5,7 @@ function HFUrlDetail({ nav, goto, params }) {
   const urlId = params?.id;
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [rechecking, setRechecking] = React.useState(false);
 
   React.useEffect(() => {
     if (!urlId) return;
@@ -23,157 +24,149 @@ function HFUrlDetail({ nav, goto, params }) {
     );
   }
 
-  const urlPath = data.url;
+  const fullUrl = data.url;
   const shop = data.shop;
-  const status = data.fail_count >= 3 ? 'error' : 'ok';
-  const code = data.fail_count >= 3 ? 404 : 200;
-  const sTone = { ok: 'ok', warn: 'warn', error: 'err' };
-  const sInk = { ok: 'var(--hf-ok-ink)', warn: 'var(--hf-warn-ink)', error: 'var(--hf-err-ink)' };
+  const httpCode = data.last_http_status;
+  const isFailing = data.fail_count >= 3;
+  const statusTone = isFailing ? 'err' : 'ok';
+  const statusLabel = isFailing ? 'failing' : 'ok';
+  const checkHistory = data.check_history || [];
 
-  const history = [];
-  const runs = [];
+  const recheck = async () => {
+    if (rechecking) return;
+    setRechecking(true);
+    try {
+      const resp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop, phase: 'scan', mode: 'full', urls: fullUrl }),
+      });
+      if (resp.ok) goto('runs');
+    } finally { setRechecking(false); }
+  };
 
   return (
     <HFShell {...nav} activePage="urls"
       title={
         <span style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
-          <HFDot tone={sTone[status]} size={10} pulse={status==='error'}/>
-          <span style={{fontFamily:'var(--hf-mono)', fontSize:18, color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis'}}>
-            {shop}.lt<span style={{color:'var(--hf-ink3)'}}>{urlPath}</span>
-          </span>
-          <HFPill tone={sTone[status]}>{status}</HFPill>
-          <HFPill tone={code>=400?'err':code>=300?'warn':'ok'}>HTTP {code}</HFPill>
+          <HFDot tone={statusTone} size={10} pulse={isFailing}/>
+          <span style={{fontFamily:'var(--hf-mono)', fontSize:15, color:'var(--hf-ink)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis'}}>{fullUrl}</span>
+          <HFPill tone={statusTone}>{statusLabel}</HFPill>
+          {httpCode && <HFPill tone={httpCode>=400?'err':httpCode>=300?'warn':'ok'}>HTTP {httpCode}</HFPill>}
         </span>
       }
-      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>
+        {data.url_type} · fail_count={data.fail_count} · discovered {data.discovered_ago || '—'}
+      </span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="urls" goto={goto}>URLs</HFBreadcrumbLink>
         <span style={{color:'var(--hf-ink5)'}}>/</span>
-        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)', overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>{urlPath}</span>
+        <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)', overflow:'hidden', textOverflow:'ellipsis', maxWidth:320}}>#{urlId}</span>
       </>}
       actions={<>
-        <HFButton onClick={() => {
-          const fullUrl = data.url && (data.url.startsWith('http') ? data.url : `https://${shop}.lt${urlPath}`);
-          if (fullUrl) window.open(fullUrl, '_blank', 'noopener,noreferrer');
-        }}><span style={{display:'flex'}}>{HF_ICONS.external}</span> Open in browser</HFButton>
-        <HFButton variant="primary" onClick={async () => {
-          const resp = await fetch('/api/runs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ shop, phase: 'scan', mode: 'sample' }),
-          });
-          if (resp.ok) goto('runs');
-        }}><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Recheck now</HFButton>
+        <HFButton onClick={() => window.open(fullUrl, '_blank', 'noopener,noreferrer')}>
+          <span style={{display:'flex'}}>{HF_ICONS.external}</span> Open in browser
+        </HFButton>
+        <HFButton variant="primary" onClick={recheck} disabled={rechecking}>
+          <span style={{display:'flex'}}>{HF_ICONS.refresh}</span> {rechecking ? 'Queuing…' : 'Recheck now'}
+        </HFButton>
       </>}
     >
-      {/* Error banner */}
-      {status === 'error' && (
-        <HFCard style={{marginBottom:'var(--hf-gap)', borderColor:'var(--hf-err-border)', background:'var(--hf-err-soft)' || '#FEF2F2'}} padding={14}>
-          <div style={{display:'flex', gap:12, alignItems:'flex-start'}}>
-            <div style={{color:'var(--hf-err)', display:'flex', marginTop:1}}>{HF_ICONS.bang}</div>
-            <div style={{flex:1, minWidth:0}}>
-              <div style={{fontSize:13, fontWeight:600, color:'var(--hf-err-ink)', marginBottom:2}}>URL has been failing for 6 consecutive checks</div>
-              <div style={{fontSize:13, color:'var(--hf-ink2)', lineHeight:1.5}}>
-                Returns <span style={{fontFamily:'var(--hf-mono)', fontWeight:500}}>HTTP 404</span> since <span style={{fontFamily:'var(--hf-mono)'}}>2d ago</span>. Last successful response on <span style={{fontFamily:'var(--hf-mono)'}}>4d ago</span> was <span style={{fontFamily:'var(--hf-mono)'}}>HTTP 200</span>. This URL resolves to <span style={{color:'var(--hf-ink)', fontWeight:500}}>Sapiens (alias)</span> — consider removing the alias or updating the parser.
-              </div>
-            </div>
-            <div style={{display:'flex', gap:6, flexShrink:0}}>
-              <HFButton size="sm">Mark as broken</HFButton>
-              <HFButton size="sm" variant="accent">Remove URL</HFButton>
-            </div>
-          </div>
-        </HFCard>
-      )}
-
       <HFKpiStrip items={[
-        { label:'Status',       value:status, tone: sTone[status], delta:<span style={{color:sInk[status]}}>HTTP {code}</span> },
-        { label:'Last scraped', value: data.last_scraped_ago || '—', delta:<span style={{color:'var(--hf-ink3)'}}>last check</span> },
-        { label:'Fail count',   value: String(data.fail_count || 0), tone: data.fail_count >= 3 ? 'err' : 'ok', delta:<span style={{color:data.fail_count >= 3 ? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{data.fail_count >= 3 ? 'failing' : 'ok'}</span> },
+        { label:'HTTP status',  value: httpCode ? String(httpCode) : '—', tone: httpCode ? (httpCode>=400?'err':httpCode>=300?'warn':'ok') : undefined, delta:<span style={{color:'var(--hf-ink3)'}}>last check</span> },
+        { label:'Last checked', value: data.last_checked_ago || data.last_scraped_ago || '—', delta:<span style={{color:'var(--hf-ink3)'}}>scraped</span> },
+        { label:'Fail count',   value: String(data.fail_count || 0), tone: isFailing ? 'err' : 'ok', delta:<span style={{color: isFailing ? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{isFailing ? 'failing' : 'ok'}</span> },
+        { label:'Checks',       value: String(checkHistory.length), delta:<span style={{color:'var(--hf-ink3)'}}>recorded</span> },
       ]}/>
 
       <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
-        <HFCard title="Response code history" sub="check history not yet available">
-          <div style={{padding:`var(--hf-card-p)`}}>
-            <div style={{height:140, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:13}}>No history data yet</div>
-            <div style={{display:'flex', gap:14, marginTop:10, fontSize:11, color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)'}}>
-              <span><span style={{color:'var(--hf-accent)'}}>━</span> response time (ms)</span>
-              <span style={{marginLeft:'auto'}}>{history.length} checks</span>
-            </div>
+        {/* Response code history heatmap */}
+        <HFCard title="Response code history" sub={`last ${checkHistory.length} checks`}>
+          <div style={{padding:'var(--hf-card-p)'}}>
+            {checkHistory.length === 0 ? (
+              <div style={{height:60, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:13}}>No check history yet</div>
+            ) : (<>
+              <div style={{display:'flex', gap:3, flexWrap:'wrap'}}>
+                {[...checkHistory].reverse().map((c, i) => {
+                  const tone = !c.http_status || c.http_status >= 400 ? 'var(--hf-err)' : c.http_status >= 300 ? 'var(--hf-warn)' : 'var(--hf-ok)';
+                  return (
+                    <div key={i} title={`${c.when}: HTTP ${c.http_status || '?'}`}
+                      style={{width:22, height:22, borderRadius:3, background:tone, opacity:0.85, cursor:'default'}}/>
+                  );
+                })}
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:8}}>
+                <span>oldest</span>
+                <span style={{display:'flex', gap:10}}>
+                  <span><span style={{color:'var(--hf-ok)'}}>■</span> 2xx</span>
+                  <span><span style={{color:'var(--hf-warn)'}}>■</span> 3xx</span>
+                  <span><span style={{color:'var(--hf-err)'}}>■</span> 4xx/5xx</span>
+                </span>
+                <span>newest</span>
+              </div>
+            </>)}
           </div>
         </HFCard>
 
         <HFCard title="URL metadata">
           <div style={{padding:`4px 0`}}>
             {[
-              ['Full URL',      `https://${shop}.lt${urlPath}`, true],
-              ['Shop',          shop],
-              ['Fail count',    String(data.fail_count || 0), true],
-              ['Discovered',    data.discovered_ago || '—'],
-              ['Last scraped',  data.last_scraped_ago || '—'],
-            ].map(([k,v,mono], i, arr) => (
+              ['Full URL',     fullUrl,                         true],
+              ['Shop',         shop,                            false],
+              ['Type',         data.url_type || '—',           true],
+              ['HTTP status',  httpCode ? String(httpCode) : '—', true],
+              ['Fail count',   String(data.fail_count || 0),   true],
+              ['Discovered',   data.discovered_ago || '—',     false],
+              ['Last checked', data.last_checked_ago || data.last_scraped_ago || '—', false],
+            ].map(([k, v, mono], i, arr) => (
               <div key={k} style={{
-                display:'flex', padding:`8px var(--hf-card-p)`,
+                display:'flex', padding:`7px var(--hf-card-p)`,
                 borderBottom: i<arr.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
                 fontSize:13, gap:12, alignItems:'center',
               }}>
-                <span style={{color:'var(--hf-ink4)', minWidth:110}}>{k}</span>
+                <span style={{color:'var(--hf-ink4)', minWidth:100, flexShrink:0}}>{k}</span>
                 <span style={{
-                  color: v==='—'?'var(--hf-ink4)':'var(--hf-ink)', flex:1,
+                  color: v==='—'?'var(--hf-ink4)':'var(--hf-ink)', flex:1, minWidth:0,
                   fontFamily: mono ? 'var(--hf-mono)' : 'var(--hf-sans)',
-                  fontSize: mono ? 11.5 : 12.5,
+                  fontSize: mono ? 11 : 12.5,
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                 }}>{v}</span>
               </div>
             ))}
+            {data.book_id && (
+              <div style={{padding:`7px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', alignItems:'center', gap:12, fontSize:13}}>
+                <span style={{color:'var(--hf-ink4)', minWidth:100}}>Linked book</span>
+                <a onClick={(e)=>{e.preventDefault(); goto('shop-book-detail',{id:data.book_id});}} href="#"
+                   style={{color:'var(--hf-accent-ink)', fontWeight:500, textDecoration:'none', cursor:'pointer'}}>
+                  {data.book_title || `#${data.book_id}`}
+                </a>
+              </div>
+            )}
           </div>
         </HFCard>
       </div>
 
       {/* Check history table */}
-      <HFCard title="Check history" sub={`${history.length} most recent checks`} style={{marginBottom:'var(--hf-gap)'}}>
-        <HFTable
-          columns={[
-            { key:'t', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
-            { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => (
-              <span style={{display:'inline-flex', alignItems:'center', gap:7}}>
-                <HFDot tone={sTone[v]}/> <span style={{color: v==='error'?'var(--hf-err-ink)':'var(--hf-ink)'}}>{v}</span>
-              </span>
-            )},
-            { key:'code', label:'HTTP', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.code, cell:v => (
-              <span style={{color: v>=400?'var(--hf-err-ink)':v>=300?'var(--hf-warn-ink)':'var(--hf-ink2)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span>
-            )},
-            { key:'ms', label:'Response', w:'0.8fr', mono:true, align:'right', sortable:true, sortVal:r=>r.ms, cell:v => <span style={{color:'var(--hf-ink3)'}}>{v}ms</span> },
-            { key:'bar', label:'', w:'2fr', cell:(_, r) => (
-              <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
-                <span style={{flex:1, maxWidth:240, height:4, background:'var(--hf-subtle)', borderRadius:2, overflow:'hidden'}}>
-                  <span style={{display:'block', width:`${Math.min(100, r.ms/5)}%`, height:'100%', background: r.status==='error'?'var(--hf-err)':r.status==='warn'?'var(--hf-warn)':'var(--hf-ok)', borderRadius:2}}/>
-                </span>
-              </span>
-            )},
-          ]}
-          rows={history}
-        />
-      </HFCard>
-
-      {/* Runs that touched this URL */}
-      <HFCard title="Runs that visited this URL" sub={`${runs.length} recent · tap to open run`}>
-        <HFTable
-          onRowClick={(r) => goto('run-detail', { id: r.id })}
-          columns={[
-            { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
-            { key:'phase', label:'Phase', w:'0.8fr', mono:true, sortable:true },
-            { key:'started', label:'Started', w:'1fr', mono:true, muted:true, sortable:true },
-            { key:'dur', label:'Duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
-            { key:'outcome', label:'Outcome', w:'0.9fr', sortable:true, cell:v => (
-              <HFPill tone={v==='resolved'?'ok':v==='found'?'neutral':'warn'}>{v}</HFPill>
-            )},
-            { key:'code', label:'HTTP', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.code, cell:v => (
-              <span style={{color: v>=400?'var(--hf-err-ink)':v>=300?'var(--hf-warn-ink)':'var(--hf-ink2)', fontWeight:500}}>{v}</span>
-            )},
-            { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
-          ]}
-          rows={runs}
-        />
+      <HFCard title="Check history" sub={`${checkHistory.length} most recent checks`}>
+        {checkHistory.length === 0
+          ? <HFEmptyState title="No check history" sub="This URL has not been scraped yet." onClear={null}/>
+          : <HFTable
+              onRowClick={r => goto('run-detail', { id: r.run_id })}
+              columns={[
+                { key:'when', label:'When', w:'1fr', mono:true, muted:true, sortable:true },
+                { key:'status', label:'Status', w:'0.7fr', sortable:true, cell:v => (
+                  <span style={{display:'inline-flex', alignItems:'center', gap:7}}>
+                    <HFDot tone={v==='error'?'err':'ok'}/> <span style={{color:v==='error'?'var(--hf-err-ink)':'var(--hf-ink)'}}>{v}</span>
+                  </span>
+                )},
+                { key:'http_status', label:'HTTP', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.http_status||0, cell:v => v
+                  ? <span style={{color:v>=400?'var(--hf-err-ink)':v>=300?'var(--hf-warn-ink)':'var(--hf-ink2)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span>
+                  : <span style={{color:'var(--hf-ink4)'}}>—</span> },
+                { key:'run_id', label:'Run', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.run_id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
+                { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+              ]}
+              rows={checkHistory}
+            />}
       </HFCard>
     </HFShell>
   );

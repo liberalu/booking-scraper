@@ -40,18 +40,6 @@ function HFRuns({ nav, goto }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [q, shop, phase, status, when, page]);
 
-  // Repeated-failure banner — refresh every 30s.
-  const [repeatedFailures, setRepeatedFailures] = React.useState([]);
-  React.useEffect(() => {
-    let cancelled = false;
-    const load = () => fetch('/api/runs/repeated-failures')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled && d) setRepeatedFailures(d.items || []); })
-      .catch(() => {});
-    load();
-    const id = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
 
   // Schedule info — "Next run in Xh", "Last success Xh ago" badges.
   const [scheduleItems, setScheduleItems] = React.useState([]);
@@ -93,29 +81,9 @@ function HFRuns({ nav, goto }) {
       title="Runs" subtitle="Every scrape execution — manual and scheduled. Click a row to open details."
       breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Runs</span></>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export CSV</HFButton>
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> New run</HFButton>
       </>}
     >
-      {/* Repeated-failure banner — shows shops whose last N terminal
-          runs all failed with the same error_reason. */}
-      {repeatedFailures.length > 0 && (
-        <div style={{margin:`0 0 var(--hf-gap)`, padding:'12px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, color:'var(--hf-ink)'}}>
-          <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:6}}>
-            <span style={{color:'#ef4444', fontWeight:600}}>● Repeated failures detected</span>
-            <span style={{fontSize:12, color:'var(--hf-ink3)'}}>The last {repeatedFailures[0].count} runs for these shops failed with the same reason — likely systemic, not transient.</span>
-          </div>
-          <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
-            {repeatedFailures.map((rf, i) => (
-              <a key={i} href="#" onClick={e=>{e.preventDefault(); goto('run-detail',{id:rf.latest_run_id});}}
-                 style={{padding:'4px 10px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:'var(--hf-ink)', textDecoration:'none', fontFamily:'var(--hf-mono)', fontSize:13}}>
-                {rf.shop}/{rf.phase} <span style={{color:'var(--hf-ink3)'}}>·</span> {rf.error_reason}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Schedule badges — "Next run in Xh" + "Last success Xh ago" */}
       {scheduleItems.length > 0 && (
         <div style={{display:'flex', gap:8, marginBottom:'var(--hf-gap)', flexWrap:'wrap'}}>
@@ -136,7 +104,7 @@ function HFRuns({ nav, goto }) {
       <HFKpiStrip items={[
         { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:'var(--hf-ok-ink)'}}>● live</span>,
           onClick: () => { setStatus('running'); setWhen('any'); } },
-        { label:'Today',       value: String(data.kpis.today_total), delta:<span style={{color:'var(--hf-ink3)'}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span>,
+        { label:'Last 24h',    value: String(data.kpis.today_total), delta:<span style={{color:'var(--hf-ink3)'}}>{data.kpis.today_ok} ok · {data.kpis.today_failed} failed</span>,
           onClick: () => { setStatus('all'); setWhen('24h'); } },
         { label:'All-time',    value: String(data.kpis.all_time || 0), delta:<span style={{color:'var(--hf-ink3)'}}>total runs</span>,
           onClick: clearAll },
@@ -163,16 +131,17 @@ function HFRuns({ nav, goto }) {
       <HFCard>
         {loading && data.runs.length === 0 ? (
           <HFTableSkeleton rows={10} columns={[
-            { w: '0.55fr', skelW: 50, mono: true },
-            { w: '0.6fr', skelW: 60 },
-            { w: '1fr', skelW: 100 },
-            { w: '0.85fr', skelW: 80 },
-            { w: '1.3fr', skelW: 200 },
-            { w: '0.6fr', skelW: 50, mono: true, align: 'right' },
-            { w: '0.65fr', skelW: 60, mono: true, align: 'right' },
-            { w: '0.9fr', skelW: 80 },
-            { w: '0.9fr', skelW: 80, mono: true },
-            { w: '28px', skelW: 12, align: 'right' },
+            { w: '0.5fr',  skelW: 45,  mono: true },
+            { w: '0.6fr',  skelW: 55 },
+            { w: '1fr',    skelW: 90 },
+            { w: '0.8fr',  skelW: 70 },
+            { w: '1.1fr',  skelW: 140 },
+            { w: '0.5fr',  skelW: 40,  mono: true, align: 'right' },
+            { w: '0.55fr', skelW: 45,  mono: true, align: 'right' },
+            { w: '0.65fr', skelW: 50,  mono: true, align: 'right' },
+            { w: '0.6fr',  skelW: 50,  mono: true, align: 'right' },
+            { w: '0.85fr', skelW: 70 },
+            { w: '28px',   skelW: 12,  align: 'right' },
           ]}/>
         ) : filtered.length === 0 ? (
           <div style={{padding:'60px 20px', textAlign:'center', color:'var(--hf-ink3)'}}>
@@ -200,32 +169,43 @@ function HFRuns({ nav, goto }) {
         <HFTable
           onRowClick={(r) => goto('run-detail', { id: r.id })}
           columns={[
-            { key:'id', label:'Run', w:'0.55fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
+            { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell: v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
             { key:'shop', label:'Shop', w:'0.6fr', sortable:true, cell: v => <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span> },
-            { key:'phase', label:'Phase / Type', w:'1fr', sortable:true, sortVal:r=>r.phase+':'+r.type, cell: (v, r) => (
+            { key:'phase_type', label:'Phase', w:'1fr', sortable:true, sortVal:r=>r.phase_type+':'+r.phase_mode, cell: (v, r) => (
               <span style={{display:'flex', flexDirection:'column', gap:3, minWidth:0}}>
-                <span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>{v}</span>
-                <HFPill tone={typeTone[r.type]} style={{width:'fit-content', height:17, fontSize:11, padding:'0 6px', letterSpacing:0.2}}>{r.type}</HFPill>
+                <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink)', fontWeight:500, textTransform:'capitalize'}}>{v}</span>
+                <HFPill tone={v==='scan'?'accent':'neutral'} style={{width:'fit-content', height:17, fontSize:11, padding:'0 6px', letterSpacing:0.2}}>{(r.phase_mode||'').replace('_',' ')}</HFPill>
               </span>
             )},
-            { key:'status', label:'Status', w:'0.85fr', sortable:true, cell: (v, r) => (
+            { key:'status', label:'Status', w:'0.8fr', sortable:true, cell: (v, r) => (
               <span style={{display:'inline-flex', alignItems:'center', gap:7}}>
                 <HFDot tone={statusTone[v]} pulse={v==='running'}/>
                 <span style={{color: v==='failed'? 'var(--hf-err-ink)' : 'var(--hf-ink)', fontWeight: v==='running'? 500 : 400}}>{v}</span>
               </span>
             )},
-            { key:'progress', label:'Progress', w:'1.3fr', sortable:true, sortVal:r=>r.progress, cell: (v, r) => (
-              <span style={{display:'flex', alignItems:'center', gap:10, width:'100%'}}>
-                <span style={{flex:1, maxWidth:160, height:5, background:'var(--hf-subtle)', borderRadius:3, overflow:'hidden'}}>
+            { key:'progress', label:'Progress', w:'1.1fr', sortable:true, sortVal:r=>r.progress, cell: (v, r) => (
+              <span style={{display:'flex', alignItems:'center', gap:8, width:'100%'}}>
+                <span style={{flex:1, maxWidth:120, height:5, background:'var(--hf-subtle)', borderRadius:3, overflow:'hidden'}}>
                   <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? 'var(--hf-err)' : r.status==='running'? 'var(--hf-accent)' : r.status==='queued'? 'var(--hf-warn)' : 'var(--hf-ink4)', borderRadius:3}}/>
                 </span>
-                <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink3)', minWidth:32, fontVariantNumeric:'tabular-nums'}}>{v}%</span>
+                <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink3)', minWidth:28, fontVariantNumeric:'tabular-nums'}}>{v}%</span>
               </span>
             )},
-            { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell: v => v ? v.toLocaleString() : '—' },
-            { key:'elapsed', label:'Duration', w:'0.65fr', mono:true, muted:true, align:'right', sortable:true, sortVal:r=>r.elapsed },
-            { key:'started', label:'Started', w:'0.9fr', muted:true, sortable:true, sortVal:r=>r.startedH },
-            { key:'by', label:'Trigger', w:'0.9fr', mono:true, muted:true, sortable:true },
+            { key:'items_added',   label:'Added',    w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items_added,   cell: v => v ? <span style={{color:'var(--hf-ok-ink)', fontWeight:500}}>{v.toLocaleString()}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
+            { key:'items_updated', label:'Updated',  w:'0.55fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items_updated, cell: v => v ? <span style={{fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
+            { key:'errors', label:'Failures', w:'0.65fr', mono:true, align:'right', sortable:true, sortVal:r=>(r.errors||0)+(r.validation_issues||0), cell: (v, r) => {
+              const s = r.errors || 0, vi = r.validation_issues || 0;
+              if (!s && !vi) return <span style={{color:'var(--hf-ink4)'}}>—</span>;
+              return (
+                <span style={{fontVariantNumeric:'tabular-nums'}}>
+                  {s > 0 && <span style={{color:'var(--hf-err-ink)', fontWeight:500}}>{s}</span>}
+                  {s > 0 && vi > 0 && <span style={{color:'var(--hf-ink4)'}}>/</span>}
+                  {vi > 0 && <span style={{color:'var(--hf-warn-ink)'}}>{vi}</span>}
+                </span>
+              );
+            }},
+            { key:'elapsed', label:'Dur.', w:'0.6fr', mono:true, muted:true, align:'right', sortable:true, sortVal:r=>r.elapsed },
+            { key:'started', label:'Started', w:'0.85fr', muted:true, sortable:true, sortVal:r=>r.startedH },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={filtered}
@@ -1971,9 +1951,11 @@ function HFRunDetail({ nav, goto, params }) {
               ? `ETA ${liveData.eta_min === 0 ? '<1' : liveData.eta_min}m`
               : 'duration'}
           </span> },
-        { label:'Errors', value:errorCount.toLocaleString(),
+        { label:'Failures', value:errorCount.toLocaleString(),
+          ...(errorCount > 0 ? { onClick: () => { setTab('history'); setUrlStatus('failed'); } } : {}),
           delta: (() => {
             const a = data.errors_4xx ?? 0, b = data.errors_5xx ?? 0;
+            if (errorCount > 0) return <span style={{color:'var(--hf-accent-ink)'}}>view →</span>;
             if (a === 0 && b === 0) return <span style={{color:'var(--hf-ink3)'}}>failed URLs</span>;
             return <span style={{color:'var(--hf-ink3)'}}>{a} 4xx · {b} 5xx</span>;
           })() },

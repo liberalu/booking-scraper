@@ -203,60 +203,58 @@ function HFPricesPanel() {
 
 function HFScheduleDetail({ nav, goto, params }) {
   const HF = getHF();
-  const name = params?.name || 'vaga.scan.hourly';
-  const cron = params?.cron || '0 * * * *';
-  const shop = params?.shop || 'vaga';
-  const enabled = params?.enabled !== false;
-  const lastStatus = params?.lastStatus || 'ok';
+  const jobId = params?.id;
   const [tab, setTab] = React.useState('runs');
-  const [enabledState, setEnabledState] = React.useState(enabled);
+  const [detail, setDetail] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [toggling, setToggling] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
 
-  // Humanize cron
-  const cronHuman = cron === '0 * * * *' ? 'every hour · on the hour'
-                  : cron === '0 3 * * *' ? 'daily at 03:00'
-                  : cron === '0 5 * * *' ? 'daily at 05:00'
-                  : cron === '30 5 * * *' ? 'daily at 05:30'
-                  : cron === '0 4 * * *' ? 'daily at 04:00'
-                  : cron === '0 2 * * *' ? 'daily at 02:00'
-                  : cron === '0 0 * * 0' ? 'weekly on Sunday 00:00'
-                  : cron === '0 1 * * *' ? 'daily at 01:00' : 'custom schedule';
+  const reload = React.useCallback(() => {
+    if (!jobId) { setLoading(false); return; }
+    setLoading(true);
+    fetch(`/api/cron/${jobId}/detail`)
+      .then(r => r.json())
+      .then(d => { setDetail(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [jobId]);
 
-  // Next 5 scheduled runs (synthetic)
-  const upcoming = [
-    { when:'in 48m',  at:'14:00', date:'today' },
-    { when:'in 1h 48m', at:'15:00', date:'today' },
-    { when:'in 2h 48m', at:'16:00', date:'today' },
-    { when:'in 3h 48m', at:'17:00', date:'today' },
-    { when:'in 4h 48m', at:'18:00', date:'today' },
-  ];
+  React.useEffect(() => { reload(); }, [reload]);
 
-  // Last 24 runs — green/red cells for history heatmap
-  const last24 = [
-    'ok','ok','ok','ok','ok','fail','ok','ok','ok','ok','ok','ok',
-    'ok','ok','ok','ok','ok','ok','ok','fail','ok','ok','ok','ok',
-  ];
+  const toggleEnabled = async () => {
+    if (!jobId || toggling) return;
+    setToggling(true);
+    try {
+      await fetch(`/api/cron/${jobId}/toggle`, { method: 'POST' });
+      reload();
+    } finally {
+      setToggling(false);
+    }
+  };
 
-  // Recent run history
-  const runs = [
-    { id:4820, started:'12m ago',  dur:'14m 12s', items:1204, errors:2,  status:'completed' },
-    { id:4815, started:'1h 12m',   dur:'14m 48s', items:1198, errors:0,  status:'completed' },
-    { id:4810, started:'2h 12m',   dur:'13m 20s', items:1200, errors:0,  status:'completed' },
-    { id:4805, started:'3h 12m',   dur:'—',       items:0,    errors:12, status:'failed' },
-    { id:4800, started:'4h 12m',   dur:'15m 02s', items:1210, errors:0,  status:'completed' },
-    { id:4792, started:'5h 12m',   dur:'14m 18s', items:1205, errors:0,  status:'completed' },
-    { id:4785, started:'6h 12m',   dur:'14m 52s', items:1188, errors:0,  status:'completed' },
-    { id:4780, started:'7h 12m',   dur:'14m 10s', items:1201, errors:0,  status:'completed' },
-  ];
-  const statusTone = { completed:'neutral', failed:'err', running:'ok', queued:'warn' };
+  const runJobNow = async () => {
+    if (!detail) return;
+    try {
+      const body = { shop: detail.shop, phase: detail.phase, strategy: detail.strategy || '', mode: 'delta' };
+      const resp = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (resp.ok) goto('runs');
+    } catch (e) { console.error(e); }
+  };
 
-  const logs = [
-    { t:'14:12:04', lvl:'INFO',  msg:`schedule fired: ${name}` },
-    { t:'14:12:04', lvl:'INFO',  msg:'queuing run on worker-02 · concurrency 4/4' },
-    { t:'14:12:05', lvl:'INFO',  msg:'fetching seed URLs (47 sitemaps)' },
-    { t:'14:12:08', lvl:'INFO',  msg:'1,204 URLs enqueued for scrape phase' },
-    { t:'14:14:22', lvl:'WARN',  msg:'429 rate-limit from vaga.lt (host) · backing off 8s' },
-    { t:'14:26:16', lvl:'INFO',  msg:'run 4820 completed · items=1204 · errors=2 · dur=14m 12s' },
-  ];
+  const name = detail?.name || params?.name || '—';
+  const cron = detail?.cron || params?.cron || '';
+  const shop = detail?.shop || params?.shop || '—';
+  const enabledState = detail ? detail.enabled : (params?.enabled !== false);
+  const stats = detail?.stats || {};
+  const lastStatus = stats.last_status || params?.lastStatus || null;
+  const upcoming = detail?.upcoming || [];
+  const last24 = detail?.last24 || [];
+  const runs = detail?.runs || [];
+  const statusTone = { completed:'neutral', failed:'err', running:'ok', queued:'warn', stopping:'warn' };
+
+  const nextKpi = upcoming[0]
+    ? { value: upcoming[0].when, delta: <span style={{color:'var(--hf-ink3)'}}>{upcoming[0].at} · {upcoming[0].date}</span> }
+    : { value: '—', delta: <span style={{color:'var(--hf-ink3)'}}>disabled</span> };
 
   return (
     <HFShell {...nav} activePage="cron"
@@ -267,43 +265,42 @@ function HFScheduleDetail({ nav, goto, params }) {
           ? <HFPill tone={lastStatus==='fail'?'err':'ok'}>{lastStatus==='fail'?'failing':'active'}</HFPill>
           : <HFPill tone="neutral">disabled</HFPill>}
       </span>}
-      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>{cron} · {cronHuman} · shop={shop}</span>}
+      subtitle={<span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink3)'}}>{cron} · shop={shop}</span>}
       breadcrumb={<>
         <HFBreadcrumbLink page="cron" goto={goto}>Schedules</HFBreadcrumbLink>
         <span style={{color:'var(--hf-ink5)'}}>/</span>
         <span style={{color:'var(--hf-ink)', fontWeight:500, fontFamily:'var(--hf-mono)'}}>{name}</span>
       </>}
       actions={<>
-        <HFButton onClick={()=>setEnabledState(!enabledState)}>
+        <HFButton onClick={toggleEnabled} disabled={toggling}>
           <span style={{display:'flex'}}>{enabledState ? HF_ICONS.stop : HF_ICONS.play}</span>
           {enabledState ? 'Disable' : 'Enable'}
         </HFButton>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.settings}</span> Edit</HFButton>
-        <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> Run now</HFButton>
+        <HFButton onClick={() => setEditOpen(true)}>
+          <span style={{display:'flex'}}>{HF_ICONS.settings}</span> Edit
+        </HFButton>
+        <HFButton variant="primary" onClick={runJobNow}>
+          <span style={{display:'flex'}}>{HF_ICONS.play}</span> Run now
+        </HFButton>
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Next run',     value:enabledState ? '48m' : '—', tone: enabledState ? 'accent' : undefined, delta:<span style={{color:'var(--hf-ink3)'}}>{enabledState ? 'today 14:00' : 'disabled'}</span> },
-        { label:'Last 24h',     value:'24 runs', delta:<span style={{color:'var(--hf-ok-ink)'}}>22 ok · 2 failed</span> },
-        { label:'Success rate', value:'94.7%',   delta:<span style={{color:'var(--hf-ok-ink)'}}>30d</span>, tone:'ok' },
-        { label:'Avg duration', value:'14m 18s', delta:<span style={{color:'var(--hf-ink3)'}}>p95 16m 42s</span> },
-        { label:'Last run',     value:'12m ago', delta:<span style={{color: lastStatus==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{lastStatus==='fail' ? 'failed' : 'ok'}</span>, tone: lastStatus==='fail'? 'err' : 'ok' },
+        { label:'Next run',     value: enabledState ? nextKpi.value : '—', tone: enabledState ? 'accent' : undefined, delta: enabledState ? nextKpi.delta : <span style={{color:'var(--hf-ink3)'}}>disabled</span> },
+        { label:'Last 24h',     value: stats.total_24h != null ? `${stats.total_24h} runs` : '—', delta: stats.total_24h != null ? <span style={{color:'var(--hf-ok-ink)'}}>{stats.ok_24h} ok · {stats.fail_24h} failed</span> : null },
+        { label:'Success rate', value: stats.success_rate_30d != null ? `${stats.success_rate_30d}%` : '—', delta: <span style={{color:'var(--hf-ink3)'}}>30d</span>, tone: stats.success_rate_30d != null ? 'ok' : undefined },
+        { label:'Avg duration', value: stats.avg_dur || '—', delta: <span style={{color:'var(--hf-ink3)'}}>30d</span> },
+        { label:'Last run',     value: stats.last_run_ago || '—', delta: <span style={{color: lastStatus==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{lastStatus === 'fail' ? 'failed' : lastStatus === 'ok' ? 'ok' : '—'}</span>, tone: lastStatus==='fail'? 'err' : lastStatus==='ok'? 'ok' : undefined },
       ]}/>
 
       {/* Schedule card + upcoming runs */}
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
-        <HFCard title="Schedule" sub="when this job fires"
-                action={<HFButton size="sm">Edit cron</HFButton>}>
+        <HFCard title="Schedule" sub="when this job fires">
           <div style={{padding:'var(--hf-card-p)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
             {[
               ['Cron expression', cron, true],
-              ['Humanized',       cronHuman],
-              ['Timezone',        'Europe/Vilnius'],
-              ['Concurrency',     '4 workers'],
-              ['Retry policy',    'exp × 3 (max 3)'],
-              ['Timeout',         '30 minutes'],
-              ['Priority',        'normal'],
-              ['Owner',           'data-eng'],
+              ['Shop', shop],
+              ['Phase', detail?.phase || '—'],
+              ['Strategy', detail?.strategy || '—'],
             ].map(([k,v,mono]) => (
               <div key={k}>
                 <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600}}>{k}</div>
@@ -312,18 +309,24 @@ function HFScheduleDetail({ nav, goto, params }) {
             ))}
           </div>
           <div style={{padding:`12px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, background:'var(--hf-subtle)'}}>
-            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>Last 24h history</div>
-            <div style={{display:'flex', gap:3}}>
-              {last24.map((s, i) => (
-                <div key={i} title={`${24-i}h ago: ${s}`} style={{
-                  flex:1, height:22, borderRadius:2,
-                  background: s==='fail' ? 'var(--hf-err)' : 'var(--hf-ok)',
-                  opacity: s==='fail' ? 1 : 0.85,
-                }}/>
-              ))}
+            <div style={{fontSize:11, color:'var(--hf-ink4)', textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:8}}>
+              Last {last24.length} runs
             </div>
+            {last24.length === 0 ? (
+              <div style={{fontSize:13, color:'var(--hf-ink4)'}}>No runs yet.</div>
+            ) : (
+              <div style={{display:'flex', gap:3}}>
+                {last24.map((s, i) => (
+                  <div key={i} title={`run ${last24.length - i} ago: ${s}`} style={{
+                    flex:1, height:22, borderRadius:2,
+                    background: s==='fail' ? 'var(--hf-err)' : 'var(--hf-ok)',
+                    opacity: s==='fail' ? 1 : 0.85,
+                  }}/>
+                ))}
+              </div>
+            )}
             <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:6, fontVariantNumeric:'tabular-nums'}}>
-              <span>24h ago</span><span>12h</span><span>now</span>
+              <span>oldest</span><span>newest</span>
             </div>
           </div>
         </HFCard>
@@ -333,6 +336,10 @@ function HFScheduleDetail({ nav, goto, params }) {
             <div style={{padding:'28px 16px', textAlign:'center'}}>
               <div style={{color:'var(--hf-ink4)', marginBottom:6, display:'flex', justifyContent:'center'}}>{HF_ICONS.stop}</div>
               <div style={{fontSize:13, color:'var(--hf-ink3)'}}>No upcoming runs — job is disabled.</div>
+            </div>
+          ) : upcoming.length === 0 && !loading ? (
+            <div style={{padding:'28px 16px', textAlign:'center'}}>
+              <div style={{fontSize:13, color:'var(--hf-ink3)'}}>Could not compute schedule.</div>
             </div>
           ) : (
             <div style={{padding:'4px 0'}}>
@@ -353,7 +360,7 @@ function HFScheduleDetail({ nav, goto, params }) {
       <HFCard style={{marginBottom:'var(--hf-gap)'}}>
         <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
-            { id:'runs', label:'Run history', count:runs.length },
+            { id:'runs', label:'Run history', count: runs.length || undefined },
             { id:'logs', label:'Latest logs' },
           ]}/>
         </div>
@@ -361,40 +368,42 @@ function HFScheduleDetail({ nav, goto, params }) {
 
       {tab === 'runs' && (
         <HFCard>
-          <HFTable
-            onRowClick={r => goto('run-detail', { id:r.id })}
-            columns={[
-              { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
-              { key:'started', label:'Started', w:'0.9fr', mono:true, muted:true, sortable:true },
-              { key:'dur', label:'Duration', w:'0.8fr', mono:true, muted:true, align:'right', sortable:true },
-              { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v.toLocaleString()}</span> },
-              { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:'var(--hf-err-ink)', fontWeight:500}}>{v}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
-              { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => <HFPill tone={statusTone[v]}>{v}</HFPill> },
-              { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
-            ]}
-            rows={runs}
-          />
+          {runs.length === 0 ? (
+            <HFEmptyState title="No runs yet" sub="This job has not run yet." onClear={null}/>
+          ) : (
+            <HFTable
+              onRowClick={r => goto('run-detail', { id:r.id })}
+              columns={[
+                { key:'id', label:'Run', w:'0.5fr', mono:true, sortable:true, sortVal:r=>r.id, cell:v => <span style={{color:'var(--hf-accent-ink)', fontWeight:500}}>#{v}</span> },
+                { key:'started', label:'Started', w:'0.9fr', mono:true, muted:true, sortable:true },
+                { key:'dur', label:'Duration', w:'0.8fr', mono:true, muted:true, align:'right', sortable:true },
+                { key:'items', label:'Items', w:'0.6fr', mono:true, align:'right', sortable:true, sortVal:r=>r.items, cell:v => <span style={{color:'var(--hf-ink)', fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{(v||0).toLocaleString()}</span> },
+                { key:'errors', label:'Errors', w:'0.5fr', mono:true, align:'right', sortable:true, sortVal:r=>r.errors, cell:v => v ? <span style={{color:'var(--hf-err-ink)', fontWeight:500}}>{v}</span> : <span style={{color:'var(--hf-ink4)'}}>—</span> },
+                { key:'status', label:'Status', w:'0.8fr', sortable:true, cell:v => <HFPill tone={statusTone[v]||'neutral'}>{v}</HFPill> },
+                { key:'_', label:'', w:'28px', align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+              ]}
+              rows={runs}
+            />
+          )}
         </HFCard>
       )}
 
       {tab === 'logs' && (
-        <HFCard title="Latest logs" sub="from run #4820 · 12m ago"
-                action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.download}</span> Download log</HFButton>}>
-          <div style={{padding:14, background:'#0F1419', color:'#D9E0E6', fontFamily:'var(--hf-mono)', fontSize:12, lineHeight:1.7, borderTop:`1px solid ${'var(--hf-border-faint)'}`, borderRadius:`0 0 var(--hf-r3) var(--hf-r3)`}}>
-            {logs.map((l, i) => {
-              const lvlColor = l.lvl === 'WARN' ? '#F5B041' : l.lvl === 'ERROR' ? '#E74C3C' : '#58B3E0';
-              return (
-                <div key={i}>
-                  <span style={{color:'#6B7680'}}>{l.t}</span>
-                  {' '}
-                  <span style={{color:lvlColor, fontWeight:600}}>{l.lvl.padEnd(5)}</span>
-                  {' '}
-                  <span>{l.msg}</span>
-                </div>
-              );
-            })}
+        <HFCard title="Latest logs" sub="log streaming not yet available">
+          <div style={{padding:'32px 16px', textAlign:'center'}}>
+            <div style={{color:'var(--hf-ink4)', marginBottom:8, display:'flex', justifyContent:'center'}}>{HF_ICONS.books}</div>
+            <div style={{fontSize:13, color:'var(--hf-ink3)', fontWeight:500}}>Log streaming not yet available</div>
+            <div style={{fontSize:12, color:'var(--hf-ink4)', marginTop:4}}>Run events and detailed logs will appear here in a future release.</div>
           </div>
         </HFCard>
+      )}
+
+      {editOpen && (
+        <HFEditScheduleDialog
+          open={editOpen}
+          job={{ id: jobId, name, phase: detail?.phase, strategy: detail?.strategy, cron }}
+          onClose={(saved) => { setEditOpen(false); if (saved) reload(); }}
+        />
       )}
     </HFShell>
   );

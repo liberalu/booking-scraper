@@ -1,0 +1,37 @@
+[shop]
+name = "pegasas"
+base_url = "https://www.pegasas.lt"
+
+[scraping]
+download_delay = 1.0
+# pageSize=100 requests are served via Magento's full-page cache: cache
+# hits complete in ~0.1s, cold misses take up to 60s while Magento
+# runs the underlying MySQL query. The initial discovery run must
+# tolerate these cold misses. Subsequent runs are fast once the cache
+# is warm.
+concurrent_requests_per_domain = 1
+batch_size = 50
+batch_pause = 5
+max_retries = 2
+connect_timeout = 15
+read_timeout = 90
+hard_timeout = 120
+batch_timeout = 600
+
+[discover]
+# Product URLs look like: https://www.pegasas.lt/<slug>-<numeric-sku>
+url_include_pattern = "https://www\\.pegasas\\.lt/[^/]+-\\d+"
+
+[discover.graphql]
+# "Knygos" root category — covers all book types including e-books and audiobooks.
+# Total: ~640k products. pageSize=50 → ~12800 pages.
+# pageSize=100 with full field list causes server-side timeouts (>120s) on cold cache
+# misses. pageSize=50 keeps cold miss latency under ~50s (within read_timeout=90).
+category_id = "5051"
+page_size = 50
+max_age_hours = 168
+
+[scan]
+# Product pages are JS-rendered (Magento PWA / Venia). parse_product_page
+# returns is_book_product=False for the React app shell, so scan runs are
+# effectively a no-op. Full data comes from the graphql discover phase.

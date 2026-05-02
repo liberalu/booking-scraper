@@ -87,6 +87,7 @@ function App() {
   const [density, setDensity] = React.useState(localStorage.getItem('hf_density') || 'ultra');
   const [newRunOpen, setNewRunOpen]           = React.useState(false);
   const [newScheduleOpen, setNewScheduleOpen] = React.useState(false);
+  const [cronKey, setCronKey]                 = React.useState(0);
   const [addURLOpen, setAddURLOpen]           = React.useState(false);
   const [addShopOpen, setAddShopOpen]         = React.useState(false);
   const [addBookOpen, setAddBookOpen]         = React.useState(false);
@@ -160,7 +161,7 @@ function App() {
     'url-detail':       () => <HFUrlDetail nav={nav} goto={goto} params={params} />,
     'shops':            () => <HFShops nav={nav} goto={goto} />,
     'shop-detail':      () => <HFShopDetail nav={nav} goto={goto} params={params} />,
-    'cron':             () => <HFCron nav={nav} goto={goto} />,
+    'cron':             () => <HFCron key={cronKey} nav={nav} goto={goto} />,
     'schedule-detail':  () => <HFScheduleDetail nav={nav} goto={goto} params={params} />,
     'issues':           () => <HFIssues nav={nav} goto={goto} />,
     'issue-detail':     () => <HFIssueDetail nav={nav} goto={goto} params={params} />,
@@ -173,7 +174,7 @@ function App() {
     <>
       {renderer ? renderer() : <div style={{padding:40}}>Unknown page: {page}</div>}
       <HFNewRunDialog      open={newRunOpen}      onClose={() => setNewRunOpen(false)}      goto={goto}/>
-      <HFNewScheduleDialog open={newScheduleOpen} onClose={() => setNewScheduleOpen(false)}/>
+      <HFNewScheduleDialog open={newScheduleOpen} onClose={(created) => { setNewScheduleOpen(false); if (created) setCronKey(k => k + 1); }}/>
       <HFAddURLDialog      open={addURLOpen}      onClose={() => setAddURLOpen(false)}/>
       <HFAddShopDialog     open={addShopOpen}     onClose={() => setAddShopOpen(false)}     goto={goto}/>
       <HFAddBookDialog     open={addBookOpen}     onClose={() => setAddBookOpen(false)}/>

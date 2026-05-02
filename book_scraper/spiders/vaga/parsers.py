@@ -4,6 +4,8 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
+from bs4 import BeautifulSoup
+
 from book_scraper.isbn import is_valid_isbn
 
 _BOOK_CATEGORY_LABELS = (
@@ -327,6 +329,9 @@ def parse_product_page(html: str) -> dict[str, object]:
         "book_score": 0,
         "book_score_reasons": [],
         "type": "book",
+        "planned_availability_date": None,
+        "rating": None,
+        "review_count": None,
     }
     schema_types: set[str] = set()
 
@@ -464,6 +469,45 @@ def parse_product_page(html: str) -> dict[str, object]:
             data["format"] = cover
     elif "Puslapiai" in prop_map:
         data["format"] = "book"
+
+    # Parse planned_availability_date, rating, review_count using BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+
+    # planned_availability_date: "Planuojame turėti YYYY-MM-DD"
+    avail_span = soup.select_one(
+        ".form-group.isankstine .information-content span"
+    )
+    if avail_span is None:
+        # Fallback: any span containing the Lithuanian phrase
+        for span in soup.find_all("span"):
+            if "Planuojame turėti" in (span.get_text() or ""):
+                avail_span = span
+                break
+    if avail_span:
+        avail_text = avail_span.get_text(strip=True)
+        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", avail_text)
+        if date_match:
+            data["planned_availability_date"] = date_match.group(1)
+
+    # rating: count filled fa-star icons inside .rating-box .fa-stack spans
+    rating_box = soup.select_one(".rating-box")
+    if rating_box:
+        stacks = rating_box.select(".fa.fa-stack")
+        if stacks:
+            filled = sum(
+                1 for s in stacks if s.select_one("i.fa-star:not(.fa-star-o)")
+            )
+            # Only set rating when at least one star is filled (i.e. there are ratings)
+            if filled > 0:
+                data["rating"] = float(filled)
+
+    # review_count: leading integer from a.reviews_button text
+    reviews_btn = soup.select_one("a.reviews_button")
+    if reviews_btn:
+        reviews_text = reviews_btn.get_text(strip=True)
+        count_match = re.match(r"(\d+)", reviews_text)
+        if count_match:
+            data["review_count"] = int(count_match.group(1))
 
     data["schema_types"] = sorted(schema_types)
     classification = classify_book_product(data)

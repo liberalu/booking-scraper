@@ -534,35 +534,88 @@ function HFNewRunDialog({ open, onClose, goto }) {
 }
 
 // ══════════════════════════════ New Schedule dialog ══════════════════════════════
-function HFNewScheduleDialog({ open, onClose }) {
-  const HF = getHF();
-  const [name, setName] = React.useState('');
-  const [shop, setShop] = React.useState('vaga');
-  const [cron, setCron] = React.useState('0 */2 * * *');
-  const [preset, setPreset] = React.useState('2h');
+const CRON_PRESETS = [
+  { v:'15m',   lbl:'Every 15 min', cron:'*/15 * * * *' },
+  { v:'1h',    lbl:'Hourly',       cron:'0 * * * *' },
+  { v:'2h',    lbl:'Every 2 hrs',  cron:'0 */2 * * *' },
+  { v:'6h',    lbl:'Every 6 hrs',  cron:'0 */6 * * *' },
+  { v:'daily', lbl:'Daily 03:00',  cron:'0 3 * * *' },
+  { v:'custom',lbl:'Custom',       cron:'' },
+];
 
-  const presets = [
-    { v:'15m',   lbl:'Every 15 min', cron:'*/15 * * * *' },
-    { v:'1h',    lbl:'Hourly',       cron:'0 * * * *' },
-    { v:'2h',    lbl:'Every 2 hrs',  cron:'0 */2 * * *' },
-    { v:'6h',    lbl:'Every 6 hrs',  cron:'0 */6 * * *' },
-    { v:'daily', lbl:'Daily 03:00',  cron:'0 3 * * *' },
-    { v:'custom',lbl:'Custom',       cron:'' },
-  ];
+function HFCronFrequencyPicker({ value, onChange }) {
+  const [preset, setPreset] = React.useState('custom');
 
   const pickPreset = (v) => {
     setPreset(v);
-    const p = presets.find(x => x.v === v);
-    if (p && p.v !== 'custom') setCron(p.cron);
+    const p = CRON_PRESETS.find(x => x.v === v);
+    if (p && p.v !== 'custom') onChange(p.cron);
   };
 
+  const handleManual = (v) => { onChange(v); setPreset('custom'); };
+
   return (
-    <HFModal open={open} onClose={onClose} width={540}>
-      <HFModalHead title="New schedule" sub="Run a shop on a recurring cron" onClose={onClose} icon={HF_ICONS.cron}/>
+    <>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {CRON_PRESETS.map(p => (
+          <button key={p.v} onClick={() => pickPreset(p.v)} style={{
+            padding: '4px 9px', fontSize: 12, height: 26,
+            background: preset === p.v ? 'var(--hf-accent-soft)' : 'var(--hf-surface)',
+            border: `1px solid ${preset === p.v ? 'var(--hf-accent-border)' : 'var(--hf-border-strong)'}`,
+            color: preset === p.v ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
+            borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--hf-sans)', fontWeight: 500,
+          }}>{p.lbl}</button>
+        ))}
+      </div>
+      <HFInput value={value} onChange={handleManual} mono placeholder="0 */2 * * *"/>
+      <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 6, fontFamily: 'var(--hf-mono)' }}>
+        min · hr · day · mo · dow
+      </div>
+    </>
+  );
+}
+
+function HFNewScheduleDialog({ open, onClose }) {
+  const HF = getHF();
+  const [shop, setShop] = React.useState('vaga');
+  const [phase, setPhase] = React.useState('scan');
+  const [strategy, setStrategy] = React.useState('');
+  const [cron, setCron] = React.useState('0 */2 * * *');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    setStrategy(phase === 'discover' ? 'sitemap' : 'delta');
+  }, [phase]);
+
+  const handleCreate = async () => {
+    if (!cron.trim()) return;
+    setSaving(true); setError('');
+    try {
+      const resp = await fetch('/api/cron', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop, phase, strategy, cron_expression: cron }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        setError(d.detail || `Error ${resp.status}`);
+        return;
+      }
+      onClose(true);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canCreate = cron.trim().length > 0;
+
+  return (
+    <HFModal open={open} onClose={() => onClose(false)} width={540}>
+      <HFModalHead title="New schedule" sub="Run a shop on a recurring cron" onClose={() => onClose(false)} icon={HF_ICONS.cron}/>
       <HFModalBody>
-        <HFField label="Name" required>
-          <HFInput value={name} onChange={setName} placeholder="e.g. vaga-hourly" autoFocus/>
-        </HFField>
         <HFField label="Shop" required>
           <HFSelect value={shop} onChange={setShop} options={[
             { value:'vaga', label:'vaga.lt' },
@@ -571,34 +624,131 @@ function HFNewScheduleDialog({ open, onClose }) {
             { value:'humanitas', label:'humanitas.lt' },
           ]}/>
         </HFField>
-        <HFField label="Frequency">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {presets.map(p => (
-              <button key={p.v} onClick={() => pickPreset(p.v)} style={{
-                padding: '4px 9px', fontSize: 12, height: 26,
-                background: preset === p.v ? 'var(--hf-accent-soft)' : 'var(--hf-surface)',
-                border: `1px solid ${preset === p.v ? 'var(--hf-accent-border)' : 'var(--hf-border-strong)'}`,
-                color: preset === p.v ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
-                borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--hf-sans)', fontWeight: 500,
-              }}>{p.lbl}</button>
-            ))}
-          </div>
-          <HFInput value={cron} onChange={(v) => { setCron(v); setPreset('custom'); }} mono placeholder="0 */2 * * *"/>
-          <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 6, fontFamily: 'var(--hf-mono)' }}>
-            min · hr · day · mo · dow
-          </div>
-        </HFField>
-        <HFField label="Mode">
-          <HFSegmented value="delta" onChange={() => {}} options={[
-            { value:'full', label:'Full' },
-            { value:'delta', label:'Delta' },
-            { value:'failed', label:'Retry failed' },
+        <HFField label="Phase" required>
+          <HFSegmented value={phase} onChange={setPhase} options={[
+            { value:'scan',     label:'Scan' },
+            { value:'discover', label:'Discover' },
           ]}/>
         </HFField>
+        <HFField label="Mode" hint={phase === 'scan' ? {
+            delta: 'Resumable scan — only URLs not yet scraped',
+            full:  'Re-scrape every known URL',
+          }[strategy] : {
+            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
+            categories: 'Walk category listing pages — also extracts prices',
+            full_crawl: 'Follow every internal link — slowest, most thorough',
+          }[strategy]}>
+          {phase === 'scan' ? (
+            <HFSegmented value={strategy} onChange={setStrategy} options={[
+              { value:'delta', label:'Delta' },
+              { value:'full',  label:'Full' },
+            ]}/>
+          ) : (
+            <HFSegmented value={strategy} onChange={setStrategy} options={[
+              { value:'sitemap',    label:'Sitemap' },
+              { value:'categories', label:'Categories' },
+              { value:'full_crawl', label:'Full crawl' },
+            ]}/>
+          )}
+        </HFField>
+        <HFField label="Frequency" required>
+          <HFCronFrequencyPicker value={cron} onChange={setCron}/>
+        </HFField>
+        {error && <div style={{color:'var(--hf-err-ink)', fontSize:13, marginTop:4}}>{error}</div>}
       </HFModalBody>
       <HFModalFoot>
-        <HFButton onClick={onClose}>Cancel</HFButton>
-        <HFButton variant="primary" onClick={onClose} disabled={!name}>Create schedule</HFButton>
+        <HFButton onClick={() => onClose(false)}>Cancel</HFButton>
+        <HFButton variant="primary" onClick={handleCreate} disabled={!canCreate || saving}>
+          {saving ? 'Creating…' : 'Create schedule'}
+        </HFButton>
+      </HFModalFoot>
+    </HFModal>
+  );
+}
+
+function HFEditScheduleDialog({ open, job, onClose }) {
+  const HF = getHF();
+  const [phase, setPhase] = React.useState(job?.phase || 'scan');
+  const [strategy, setStrategy] = React.useState(job?.strategy || '');
+  const [cron, setCron] = React.useState(job?.cron || '');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (job) { setPhase(job.phase || 'scan'); setStrategy(job.strategy || ''); setCron(job.cron || ''); setError(''); }
+  }, [job]);
+
+  React.useEffect(() => {
+    if (phase === 'discover' && !['sitemap', 'categories', 'full_crawl'].includes(strategy)) {
+      setStrategy('sitemap');
+    } else if (phase === 'scan' && !['delta', 'full'].includes(strategy)) {
+      setStrategy('delta');
+    }
+  }, [phase]);
+
+  const handleSave = async () => {
+    if (!cron.trim() || !job?.id) return;
+    setSaving(true); setError('');
+    try {
+      const resp = await fetch(`/api/cron/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phase, strategy, cron_expression: cron }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        setError(d.detail || `Error ${resp.status}`);
+        return;
+      }
+      onClose(true);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <HFModal open={open} onClose={() => onClose(false)} width={540}>
+      <HFModalHead title="Edit schedule" sub={job?.name || ''} onClose={() => onClose(false)} icon={HF_ICONS.settings}/>
+      <HFModalBody>
+        <HFField label="Phase" required>
+          <HFSegmented value={phase} onChange={setPhase} options={[
+            { value:'scan',     label:'Scan' },
+            { value:'discover', label:'Discover' },
+          ]}/>
+        </HFField>
+        <HFField label="Mode" hint={phase === 'scan' ? {
+            delta: 'Resumable scan — only URLs not yet scraped',
+            full:  'Re-scrape every known URL',
+          }[strategy] : {
+            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
+            categories: 'Walk category listing pages — also extracts prices',
+            full_crawl: 'Follow every internal link — slowest, most thorough',
+          }[strategy]}>
+          {phase === 'scan' ? (
+            <HFSegmented value={strategy} onChange={setStrategy} options={[
+              { value:'delta', label:'Delta' },
+              { value:'full',  label:'Full' },
+            ]}/>
+          ) : (
+            <HFSegmented value={strategy} onChange={setStrategy} options={[
+              { value:'sitemap',    label:'Sitemap' },
+              { value:'categories', label:'Categories' },
+              { value:'full_crawl', label:'Full crawl' },
+            ]}/>
+          )}
+        </HFField>
+        <HFField label="Frequency" required>
+          <HFCronFrequencyPicker value={cron} onChange={setCron}/>
+        </HFField>
+        {error && <div style={{color:'var(--hf-err-ink)', fontSize:13, marginTop:4}}>{error}</div>}
+      </HFModalBody>
+      <HFModalFoot>
+        <HFButton onClick={() => onClose(false)}>Cancel</HFButton>
+        <HFButton variant="primary" onClick={handleSave} disabled={!cron.trim() || saving}>
+          {saving ? 'Saving…' : 'Save changes'}
+        </HFButton>
       </HFModalFoot>
     </HFModal>
   );
@@ -1283,7 +1433,7 @@ function HFToastHost() {
 Object.assign(window, {
   HFModal, HFModalHead, HFModalBody, HFModalFoot,
   HFField, HFInput, HFSelect, HFSegmented,
-  HFCommandK, HFNewRunDialog, HFNewScheduleDialog,
+  HFCommandK, HFNewRunDialog, HFNewScheduleDialog, HFEditScheduleDialog,
   HFAddURLDialog, HFAddShopDialog, HFAddBookDialog,
   HFParserPicker, HFSettings, HFAvatarMenu,
   HFRateSettingsDialog,

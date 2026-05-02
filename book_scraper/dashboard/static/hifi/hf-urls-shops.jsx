@@ -9,10 +9,16 @@ function HFUrls({ nav, goto }) {
   const [shop, setShop]         = React.useState('all');
   const [urlType, setUrlType]   = React.useState('all');
   const [isBook, setIsBook]     = React.useState('any');
+  const [failing, setFailing]   = React.useState(false);
+  const [hasBook, setHasBook]   = React.useState(false);
+  const [sortBy, setSortBy]     = React.useState('discovered');
+  const [sortOrder, setSortOrder] = React.useState('desc');
   const [page, setPage]         = React.useState(1);
   const PER_PAGE = 30;
 
-  React.useEffect(() => { setPage(1); }, [q, shop, urlType, isBook]);
+  React.useEffect(() => { setPage(1); }, [q, shop, urlType, isBook, failing, hasBook, sortBy, sortOrder]);
+
+  const clearAll = () => { setQ(''); setShop('all'); setUrlType('all'); setIsBook('any'); setFailing(false); setHasBook(false); };
 
   const [data, setData] = React.useState({
     urls: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
@@ -22,23 +28,24 @@ function HFUrls({ nav, goto }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({ page: String(page), per_page: String(PER_PAGE) });
+    const params = new URLSearchParams({ page: String(page), per_page: String(PER_PAGE), sort_by: sortBy, sort_order: sortOrder });
     if (q.trim()) params.set('search', q.trim());
     if (shop !== 'all') params.set('shop', shop);
     if (urlType !== 'all') params.set('url_type', urlType);
     if (isBook !== 'any') params.set('is_book', isBook);
+    if (failing) params.set('failing', 'true');
+    if (hasBook) params.set('has_book', 'true');
     fetch(`/api/urls?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [q, shop, urlType, isBook, page]);
+  }, [q, shop, urlType, isBook, failing, hasBook, sortBy, sortOrder, page]);
 
   const rows = data.urls;
   const urlStats = data.stats;
   const activeCount =
-    (q.trim()?1:0) + (shop!=='all'?1:0) + (urlType!=='all'?1:0) + (isBook!=='any'?1:0);
-  const clearAll = () => { setQ(''); setShop('all'); setUrlType('all'); setIsBook('any'); };
+    (q.trim()?1:0) + (shop!=='all'?1:0) + (urlType!=='all'?1:0) + (isBook!=='any'?1:0) + (failing?1:0) + (hasBook?1:0);
 
   return (
     <HFShell {...nav} activePage="urls"
@@ -50,10 +57,10 @@ function HFUrls({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total URLs',  value: urlStats.total.toLocaleString(), delta:<span style={{color:'var(--hf-ink3)'}}>all shops</span> },
-        { label:'In catalog',  value: urlStats.in_shop_books.toLocaleString(), delta:<span style={{color:'var(--hf-ok-ink)'}}>mapped</span>, tone:'ok' },
-        { label:'Not scraped', value: urlStats.not_in_shop_books.toLocaleString(), delta:<span style={{color:'var(--hf-warn-ink)'}}>pending</span>, tone:'warn' },
-        { label:'Failing',     value: urlStats.failed.toLocaleString(), delta:<span style={{color:'var(--hf-err-ink)'}}>3+ fails</span>, tone:'err' },
+        { label:'Total URLs',    value: urlStats.total.toLocaleString(),          delta:<span style={{color:'var(--hf-ink3)'}}>all shops</span>,                      onClick: clearAll },
+        { label:'In catalog',   value: urlStats.in_shop_books.toLocaleString(),  delta:<span style={{color:'var(--hf-ok-ink)'}}>matched books</span>,    tone:'ok',  onClick: () => { clearAll(); setHasBook(true); setSortBy('book'); setSortOrder('asc'); } },
+        { label:'Not in catalog',value: urlStats.not_in_shop_books.toLocaleString(), delta:<span style={{color:'var(--hf-warn-ink)'}}>unmatched</span>, tone:'warn', onClick: () => { clearAll(); setIsBook('not_book'); } },
+        { label:'Failing',       value: urlStats.failed.toLocaleString(),         delta:<span style={{color:'var(--hf-err-ink)'}}>3+ fails</span>,       tone:'err',  onClick: () => { clearAll(); setFailing(true); } },
       ]}/>
 
       <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
@@ -64,9 +71,11 @@ function HFUrls({ nav, goto }) {
           {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
         </>}>
           <HFSearch placeholder="Search URL, book, shop…" width={300} value={q} onChange={setQ}/>
-          <HFFilter label="Shop"    value={shop}    options={['all','vaga','knygos']}                                          onChange={setShop}/>
-          <HFFilter label="Type"    value={urlType} options={['all','product','category','sitemap','unknown']}                onChange={setUrlType}/>
-          <HFFilter label="Is book" value={isBook}  options={['any','book','not_book']}                                       onChange={setIsBook} allLabel="any"/>
+          <HFFilter label="Shop"    value={shop}    options={['all','vaga','knygos']}                      onChange={setShop}/>
+          <HFFilter label="Type"    value={urlType} options={['all','product','non_product','unknown','unreachable']}    onChange={v => { setUrlType(v); setFailing(false); }}/>
+          <HFFilter label="Is book" value={isBook}  options={['any','book','not_book']}                   onChange={setIsBook} allLabel="any"/>
+          {failing  && <HFPill tone="err"  style={{cursor:'pointer'}} onClick={() => setFailing(false)}>Failing only ×</HFPill>}
+          {hasBook  && <HFPill tone="ok"   style={{cursor:'pointer'}} onClick={() => setHasBook(false)}>Has book ×</HFPill>}
         </HFFilterBar>
       </HFCard>
 
@@ -92,12 +101,30 @@ function HFUrls({ nav, goto }) {
                 </span>
               );
             }},
-            { key:'url_type', label:'Type', w:'0.7fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
-            { key:'fail_count', label:'Status', w:'0.7fr', sortable:true, cell:(v,r) => {
-              const urlStatus = r.fail_count >= 3 ? 'error' : 'ok';
+            { key:'book_title', label:'Book', w:'1.2fr',
+              sortable:true,
+              sortVal: null,  // disable client sort — server handles it
+              onHeaderClick: () => {
+                if (sortBy === 'book') setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
+                else { setSortBy('book'); setSortOrder('asc'); setHasBook(true); }
+              },
+              cell:(v,r) => r.book_id
+                ? <span onClick={e=>{e.stopPropagation(); goto('shop-book-detail',{id:r.book_id});}}
+                    style={{color:'var(--hf-accent-ink)', fontWeight:500, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block', cursor:'pointer'}}>
+                    {v || `#${r.book_id}`}
+                  </span>
+                : <span style={{color:'var(--hf-ink4)', fontSize:12}}>—</span> },
+            { key:'url_type', label:'Type', w:'0.85fr', sortable:true, cell:v => {
+              if (v === 'product')     return <HFPill tone="accent">product</HFPill>;
+              if (v === 'non_product') return <HFPill tone="neutral">non-product</HFPill>;
+              if (v === 'unreachable') return <HFPill tone="err">unreachable</HFPill>;
+              return <HFPill tone="warn">unscanned</HFPill>;
+            }},
+            { key:'fail_count', label:'Status', w:'0.65fr', sortable:true, cell:(v) => {
+              const urlStatus = v >= 3 ? 'error' : 'ok';
               return <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={sTone[urlStatus]}/> <span>{urlStatus}</span></span>;
             }},
-            { key:'last_scraped_ago', label:'Last check', w:'0.9fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
+            { key:'last_scraped_ago', label:'Last check', w:'0.85fr', mono:true, muted:true, sortable:true, cell:v => v || '—' },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
           rows={rows}

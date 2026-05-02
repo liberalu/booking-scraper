@@ -488,6 +488,11 @@ class PostgresPipeline:
                 else None
             )
 
+            raw_rating = adapter.get("rating")
+            rating = Decimal(str(raw_rating)) if raw_rating is not None else None
+            review_count_raw = adapter.get("review_count")
+            review_count = int(review_count_raw) if review_count_raw is not None else None
+
             shop_book, created, old_price, changes = upsert_shop_book(
                 self.session,
                 shop_id=shop_id,
@@ -507,6 +512,9 @@ class PostgresPipeline:
                 price=price,
                 price_original=price_original,
                 in_stock=adapter.get("in_stock", True),
+                planned_availability_date=adapter.get("planned_availability_date"),
+                rating=rating,
+                review_count=review_count,
                 run_id=self._run_id,
             )
             if created:
