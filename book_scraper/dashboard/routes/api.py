@@ -746,6 +746,9 @@ def api_resume_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status == "paused":
         run.status = "running"
+        # Refresh heartbeat so the reaper doesn't immediately kill this
+        # run — a long pause leaves last_heartbeat hours stale.
+        run.last_heartbeat = datetime.now(UTC)
         emit_scrape_run_event(
             session,
             run_id,
