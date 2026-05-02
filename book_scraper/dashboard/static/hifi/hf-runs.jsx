@@ -2,7 +2,7 @@
 
 function HFRuns({ nav, goto }) {
   const HF = getHF();
-  const statusTone = { running:'ok', completed:'neutral', failed:'err', queued:'warn' };
+  const statusTone = { running:'ok', paused:'warn', stopping:'warn', completed:'neutral', failed:'err', queued:'warn' };
   const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
 
   // Filter state — backend handles the actual filtering and pagination.
@@ -186,7 +186,7 @@ function HFRuns({ nav, goto }) {
             { key:'progress', label:'Progress', w:'1.1fr', sortable:true, sortVal:r=>r.progress, cell: (v, r) => (
               <span style={{display:'flex', alignItems:'center', gap:8, width:'100%'}}>
                 <span style={{flex:1, maxWidth:120, height:5, background:'var(--hf-subtle)', borderRadius:3, overflow:'hidden'}}>
-                  <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? 'var(--hf-err)' : r.status==='running'? 'var(--hf-accent)' : r.status==='queued'? 'var(--hf-warn)' : 'var(--hf-ink4)', borderRadius:3}}/>
+                  <span style={{display:'block', width:`${v}%`, height:'100%', background: r.status==='failed'? 'var(--hf-err)' : r.status==='running'? 'var(--hf-accent)' : (r.status==='paused'||r.status==='stopping'||r.status==='queued')? 'var(--hf-warn)' : 'var(--hf-ink4)', borderRadius:3}}/>
                 </span>
                 <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink3)', minWidth:28, fontVariantNumeric:'tabular-nums'}}>{v}%</span>
               </span>
@@ -1967,6 +1967,27 @@ function HFRunDetail({ nav, goto, params }) {
             {validationIssueCount > 0 ? 'view →' : 'none'}
           </span> },
       ]}/>
+
+      {/* Paused callout — visible banner so it's impossible to miss */}
+      {runStatus === 'paused' && (
+        <div style={{
+          display:'flex', alignItems:'center', gap:12,
+          padding:'12px 16px',
+          background:'var(--hf-warn-bg)',
+          border:'1px solid var(--hf-warn)',
+          borderRadius:'var(--hf-radius)',
+          marginBottom:'var(--hf-gap)',
+        }}>
+          <span style={{fontSize:18, lineHeight:1}}>{HF_ICONS.pause}</span>
+          <span style={{flex:1}}>
+            <strong style={{color:'var(--hf-warn-ink)'}}>Run paused</strong>
+            <span style={{color:'var(--hf-ink3)', marginLeft:8, fontSize:13}}>Spider is idle but alive — heartbeat is still ticking. Resume to continue scraping.</span>
+          </span>
+          <HFButton variant="primary" disabled={actionPending} onClick={resumeRun}>
+            <span style={{display:'flex'}}>{HF_ICONS.play}</span> Resume
+          </HFButton>
+        </div>
+      )}
 
       {/* Section tabs — pivot between run health, URL history, and books */}
       <div style={{marginBottom: 'var(--hf-gap)'}}>
