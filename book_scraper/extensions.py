@@ -22,6 +22,14 @@ class StallDetector:  # pragma: no cover
         self._last_activity = time.monotonic()
         self._check_interval = 10.0
         self._task: Any = None
+        # Auto-resume bookkeeping: when a stall fires, _check_stall
+        # records the spawn params here, and `spider_closed` does the
+        # actual subprocess.Popen. Spawning earlier (inside _check_stall)
+        # races with the still-shutting-down spider — both spiders end
+        # up active for ~30s, both running concurrency=N, producing
+        # 2×N concurrent requests instead of N and exhausting the
+        # backend faster than a single spider would.
+        self._pending_auto_resume: dict[str, Any] | None = None
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "StallDetector":
@@ -55,6 +63,19 @@ class StallDetector:  # pragma: no cover
     def spider_closed(self) -> None:
         if self._task and self._task.active():
             self._task.cancel()
+        # If _check_stall queued an auto-resume, spawn it now — by this
+        # point the spider has fully drained and exited, so the new
+        # subprocess can't overlap with us.
+        if self._pending_auto_resume is not None:
+            params = self._pending_auto_resume
+            self._pending_auto_resume = None
+            self._spawn_resume_subprocess(
+                params["spider_name"],
+                params["shop"],
+                params["strategy"],
+                params["attempt"],
+                params["max_attempts"],
+            )
 
     def _check_stall(self) -> None:
         elapsed = time.monotonic() - self._last_activity
@@ -114,13 +135,17 @@ class StallDetector:  # pragma: no cover
         )
 
     def _maybe_auto_resume(self, spider: Any, run_id: int) -> None:
-        """If under the cap, spawn a fresh scrapy process to continue the run.
+        """Queue a deferred auto-resume; the actual spawn happens in
+        ``spider_closed`` once the current spider has fully drained.
 
-        The new process's ``prepare_discover`` finds this just-failed
-        run as resumable, creates a new run row that inherits the
-        pending queue (and resets retryable failures), and continues
-        crawling. The cap (``STALL_AUTO_RESUME_MAX``) limits runaway
-        loops when the underlying problem isn't going to fix itself.
+        Spawning earlier (here in `_check_stall`) leaves the dying
+        spider's downloader still draining in-flight httpx requests
+        for ~30s while a fresh spider boots up. Both run their own
+        concurrency budget against the same backend, so the per-host
+        rate is N×concurrency for the duration of the overlap and the
+        StallDetector gets retriggered on the new spider almost
+        immediately. By deferring to spider_closed we get clean
+        single-spider-at-a-time semantics.
         """
         max_attempts = self.crawler.settings.getint("STALL_AUTO_RESUME_MAX", 0)
         if max_attempts <= 0:
@@ -163,12 +188,19 @@ class StallDetector:  # pragma: no cover
             )
             return
 
-        # Compute the spider's spawn args. The discover spider's `name`
-        # is "discover" and its strategy lives on the instance.
-        spider_name = getattr(spider, "name", "discover") or "discover"
-        strategy = getattr(spider, "strategy", "") or ""
-        self._spawn_resume_subprocess(
-            spider_name, shop_name, strategy, depth + 1, max_attempts
+        # Stash params for spider_closed to consume.
+        self._pending_auto_resume = {
+            "spider_name": getattr(spider, "name", "discover") or "discover",
+            "shop": shop_name,
+            "strategy": getattr(spider, "strategy", "") or "",
+            "attempt": depth + 1,
+            "max_attempts": max_attempts,
+        }
+        logger.warning(
+            "Auto-resume queued for run %d (attempt %d/%d); will spawn on spider_closed",
+            run_id,
+            depth + 1,
+            max_attempts,
         )
 
     def _spawn_resume_subprocess(
@@ -179,16 +211,29 @@ class StallDetector:  # pragma: no cover
         attempt: int,
         max_attempts: int,
     ) -> None:
-        """Detach a `scrapy crawl …` subprocess after a short delay.
+        """Detach a `scrapy crawl …` subprocess after the current spider closes.
 
-        The 5-second sleep gives the current spider time to fully exit
-        (engine.close_spider runs deferred via the Twisted reactor)
-        before the new process's prepare_discover races us for the
-        same shop+phase row.
+        Belt-and-suspenders: also checks the DB for an already-running
+        run on the same shop+phase, in case spider_closed fired but a
+        manual operator started another run in parallel. Without the
+        check we'd produce two parallel spiders and double the load
+        on the target host.
         """
         import os
         import shlex
         import subprocess
+
+        # Belt-and-suspenders: don't spawn if the dashboard's preflight
+        # would currently say "already running". Catches the operator-
+        # races-with-StallDetector window.
+        if self._another_run_active(shop, spider_name, strategy):
+            logger.warning(
+                "Auto-resume: another %s/%s run is already active for %s; skipping spawn",
+                spider_name,
+                strategy or "—",
+                shop,
+            )
+            return
 
         cmd_parts = [
             "/app/.venv/bin/scrapy",
@@ -199,15 +244,14 @@ class StallDetector:  # pragma: no cover
         ]
         if spider_name == "discover" and strategy:
             cmd_parts.extend(["-a", f"strategy={strategy}"])
-        cmd = "sleep 5 && " + " ".join(shlex.quote(p) for p in cmd_parts)
+        cmd = " ".join(shlex.quote(p) for p in cmd_parts)
 
         env = os.environ.copy()
         env.setdefault("PYTHONPATH", "/app")
 
         try:
             subprocess.Popen(
-                cmd,
-                shell=True,
+                cmd_parts,
                 cwd="/app",
                 env=env,
                 stdout=subprocess.DEVNULL,
@@ -224,6 +268,42 @@ class StallDetector:  # pragma: no cover
             attempt,
             max_attempts,
         )
+
+    def _another_run_active(
+        self, shop: str, spider_name: str, strategy: str
+    ) -> bool:
+        """Is there already a running/stopping/paused run for this shop+phase?"""
+        from book_scraper.db.models import ScrapeRun, Shop
+        from book_scraper.db.session import get_session_factory
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if not database_url:
+            return False
+
+        if spider_name == "discover" and strategy:
+            phase = f"discover_{strategy}"
+        else:
+            phase = spider_name
+
+        try:
+            session = get_session_factory(database_url)()
+            try:
+                exists = (
+                    session.query(ScrapeRun.id)
+                    .join(Shop, Shop.id == ScrapeRun.shop_id)
+                    .filter(
+                        Shop.name == shop,
+                        ScrapeRun.phase == phase,
+                        ScrapeRun.status.in_(("running", "stopping", "paused")),
+                    )
+                    .first()
+                )
+                return exists is not None
+            finally:
+                session.close()
+        except Exception:
+            logger.exception("Auto-resume: active-run check failed; skipping spawn")
+            return True
 
 
 class HeartbeatExtension:  # pragma: no cover

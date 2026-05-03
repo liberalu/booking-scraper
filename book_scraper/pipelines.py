@@ -626,9 +626,13 @@ class PostgresPipeline:
                     # queue row (fresh sessions only see committed data).
                     self.session.commit()
 
-        # Commit every 100 items
+        # Commit every 10 items so the dashboard's `urls_processed`
+        # counter advances visibly during slow runs. Used to be every
+        # 100, which on pegasas's concurrency=2 + slow-cold-cache deep
+        # pages meant the counter sat at 0 for minutes — operators
+        # couldn't tell if the run was making progress.
         self._item_count += 1
-        if self._item_count % 100 == 0:
+        if self._item_count % 10 == 0:
             self.session.commit()
             # Update scrape_run progress if spider tracks it
             spider = self.spider
