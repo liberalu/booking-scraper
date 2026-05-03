@@ -2,7 +2,10 @@
 
 ## Project Overview
 
-Multi-shop Lithuanian book price scraper built with Scrapy. Stores data in PostgreSQL. First shop: vaga.lt.
+Multi-shop Lithuanian book price scraper built with Scrapy. Stores data in PostgreSQL. Onboarded shops:
+
+- **vaga.lt** — OpenCart, HTML scraping (`sitemap` / `categories` / `full_crawl` strategies).
+- **pegasas.lt** — Magento 2 PWA, scoped to the Lithuanian-language subtree (cats 5107/5125/6122). `graphql` strategy returns full metadata; `lupasearch` strategy is a fast supplementary index for daily price/stock rescans + new-arrivals detection (via `is_new`). Scan phase is a no-op (PWA pages have no parseable HTML — all data comes from discover).
 
 ## Key Commands
 
@@ -17,6 +20,8 @@ uv run scrapy crawl scan -a shop=vaga                              # Full produc
 uv run scrapy crawl scan -a shop=vaga -a rescrape=true             # Re-scrape all known product URLs
 uv run scrapy crawl scan -a shop=vaga -a max_urls=20               # Cap scan to 20 URLs (dev / smoke)
 uv run scrapy crawl discover -a shop=vaga -a strategy=categories -a max_pages=3  # Cap discovery to 3 category pages
+uv run scrapy crawl discover -a shop=pegasas -a strategy=graphql   # Pegasas: full LT metadata via Magento GraphQL (rich + slow)
+uv run scrapy crawl discover -a shop=pegasas -a strategy=lupasearch  # Pegasas: fast price/stock rescan + is_new detection
 uv run pytest -v                              # Run tests
 uv run pytest tests/unit/ -v                  # Unit tests only (no DB)
 uv run pytest tests/integration/ -v           # Integration tests only
@@ -43,11 +48,35 @@ uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after 
 
 ### Pipeline Phases
 
-1. **Discover** (`discover` spider) — find URLs via sitemap, categories, or full crawl. Category discovery also extracts prices.
+1. **Discover** (`discover` spider) — find URLs. Strategies: `sitemap`, `categories`, `full_crawl`, `graphql` (Magento), `lupasearch` (third-party search index, POST endpoint). GraphQL + LupaSearch can also yield full `ShopBookItem` data inline, so for Magento PWA shops the scan phase becomes a no-op.
 2. **Scan** (`scan` spider) — scrape full product pages for discovered URLs. Resumable after crashes.
 3. **Match** — not yet implemented (link shop_books to canonical books)
 
 Spiders are generic — shop is passed as argument: `scrapy crawl discover -a shop=vaga -a strategy=sitemap`
+
+### Run lifecycle & stall recovery
+
+`StallDetector` (`book_scraper/extensions.py`) closes the spider if no `response_received` or `item_scraped` signal lands for `STALL_TIMEOUT` seconds (default 180s). On stall:
+
+1. Run flipped to `failed` with `resumable_after_failure=True` + `close_reason=stall_timeout`.
+2. Auto-resume queued — fires on `spider_closed` signal, or via a force-exit timer at `STALL_FORCE_EXIT_S` (default 60s) if the natural close drains too slowly. Force-exit calls `os._exit` after spawning the new subprocess.
+3. New scrapy process inherits the queue via `inherit_pending_items`, which also resets retryable failures (`run_aborted` / `stuck_in_processing` / `subdivision_5xx`) to pending.
+4. Chain depth is tracked via `resumed_after_failure` events in `scrape_run_events`. Capped at `STALL_AUTO_RESUME_MAX` (default 10). When the cap hits, the run stays `failed` and waits for an operator click on Continue.
+
+Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider reschedules the failed range as N smaller pageSize requests (`subdivide_factor` in the shop config, default 5). The depth=1 sub-page carries `_sub=1` in its URL so it can't recurse. Each subdivision is logged as a `subdivided` row on `scrape_run_events` (renders as ⊟ in the dashboard's Timeline card).
+
+### Per-shop runtime settings
+
+Every shop's `[scraping]` section in its TOML is **documentation only**. The runtime values come from the `shop_settings` DB table, read in `HttpxMiddleware.spider_opened`. Editing the TOML doesn't change behaviour; updating the DB row does, no restart needed:
+
+```sql
+INSERT INTO shop_settings (shop_id, key, value, type)
+VALUES ((SELECT id FROM shops WHERE name='pegasas'),
+        'concurrent_requests_per_domain', '2', 'int')
+ON CONFLICT (shop_id, key) DO UPDATE SET value=EXCLUDED.value, type=EXCLUDED.type;
+```
+
+Keys consumed: `concurrent_requests_per_domain` (int), `download_delay` (float). See follow-up "Reconcile TOML scraping defaults with shop_settings table" — eventually the TOML should be a fallback when no DB row exists.
 
 ### Key Design Decisions
 
@@ -70,9 +99,11 @@ Spiders are generic — shop is passed as argument: `scrapy crawl discover -a sh
 
 1. Create `config/shops/<shop>.toml` with discovery strategies and scraping settings
 2. Create `book_scraper/spiders/<shop>/` directory
-3. Add `parsers.py` exporting `parse_sitemap_urls()`, `parse_category_page()`, `parse_product_page()`
+3. Add `parsers.py` exporting `parse_sitemap_urls()`, `parse_category_page()`, `parse_product_page()`. The `parse_category_page` contract returns `{"products": [...], "total": int | None}` — `total` enables upfront pagination on the first page (the spider enqueues all remaining pages from `total`, so `concurrent_requests_per_domain` actually engages instead of chaining one page at a time). Return `total=None` for HTML-scrape shops where the count isn't reliably surfaced; the spider falls back to per-page chained pagination.
 4. Add test fixtures and parser tests
 5. No new spider classes needed — generic spiders load parsers dynamically
+
+See the `📖 New Bookstore Onboarding Guide` Notion page for a full checklist + the pitfalls section captured during the pegasas onboarding (Magento `category_id` filter is membership-based and leaks across language siblings; EAN ≠ ISBN; e-book detection via category id since Magento has no `is_ebook`; etc.).
 
 ## Testing
 
@@ -94,6 +125,14 @@ After completing any task that changes code, suggest to the user:
 2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes.
 3. After schema migrations, trigger a short scan (`scrapy crawl scan -a shop=vaga -a urls=<one-url>`) to confirm the scraper container picked up the new models.
 
+### Don't `kill -9` scrapy processes inside the container
+
+If a runaway loop spawned multiple spiders, **don't** mass-`kill -9` them from inside the scraper container. The detached processes (started via `subprocess.Popen(start_new_session=True)` in `reconcile_runs.py` and `extensions.py`) leave open httpx + TCP sockets when SIGKILL'd, and Docker Desktop's macOS networking shim (vpnkit) can wedge — the daemon stops responding for 5–10 minutes. Escalation order instead:
+
+1. `docker compose stop scraper` (SIGTERM, graceful close).
+2. If that hangs, `docker kill scraper` (the daemon handles socket teardown cleanly when killing the container itself).
+3. If `docker` itself hangs, restart Docker Desktop from the macOS menu bar.
+
 ## Code Conventions
 
 - Python 3.12+, strict mypy
@@ -111,4 +150,6 @@ After completing any task that changes code, suggest to the user:
 - Dashboard redesign spec: `docs/superpowers/specs/2026-04-14-dashboard-redesign-design.md`
 - Dashboard redesign plan: `docs/superpowers/plans/2026-04-14-dashboard-redesign-plan.md`
 - vaga.lt strategy: Notion page "vaga.lt scraping strategy"
+- pegasas.lt strategy: Notion page "pegasas.lt scraping strategy"
 - Architecture: Notion page "Scraping Strategy & Architecture"
+- Onboarding checklist + pitfalls: Notion page "📖 New Bookstore Onboarding Guide"
