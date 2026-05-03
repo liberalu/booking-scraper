@@ -4,6 +4,8 @@ import pytest
 
 from book_scraper.config_models import (
     DefaultConfig,
+    GraphQLConfig,
+    LupaSearchConfig,
     ShopConfig,
 )
 
@@ -77,6 +79,72 @@ class TestShopConfig:
         }
         config = ShopConfig.model_validate(data)
         assert config.discover.url_include_pattern is not None
+
+
+class TestGraphQLConfig:
+    def test_requires_non_empty_category_ids(self):
+        with pytest.raises(ValueError):
+            GraphQLConfig.model_validate({"category_ids": []})
+
+    def test_accepts_single_category(self):
+        c = GraphQLConfig.model_validate({"category_ids": ["5051"]})
+        assert c.category_ids == ["5051"]
+        assert c.page_size == 100  # default
+
+    def test_accepts_multiple_categories(self):
+        c = GraphQLConfig.model_validate(
+            {"category_ids": ["5107", "7352"], "page_size": 50}
+        )
+        assert c.category_ids == ["5107", "7352"]
+        assert c.page_size == 50
+
+
+class TestLupaSearchConfig:
+    def test_requires_endpoint_and_categories(self):
+        c = LupaSearchConfig.model_validate(
+            {
+                "endpoint": "https://api.lupasearch.com/v1/query/abc",
+                "category_ids": ["5107"],
+            }
+        )
+        assert c.endpoint.endswith("/abc")
+        assert c.page_size == 42  # default
+
+    def test_rejects_empty_categories(self):
+        with pytest.raises(ValueError):
+            LupaSearchConfig.model_validate(
+                {
+                    "endpoint": "https://api.lupasearch.com/v1/query/abc",
+                    "category_ids": [],
+                }
+            )
+
+    def test_extra_filters_round_trip(self):
+        c = LupaSearchConfig.model_validate(
+            {
+                "endpoint": "https://api.lupasearch.com/v1/query/abc",
+                "category_ids": ["5107"],
+                "extra_filters": {"is_new": ["1"]},
+            }
+        )
+        assert c.extra_filters == {"is_new": ["1"]}
+
+
+class TestPegasasConfigLoads:
+    def test_pegasas_config_has_both_strategies(self):
+        from book_scraper.config import load_shop_config
+
+        config = load_shop_config("pegasas")
+        assert config.discover.graphql is not None
+        # LT-only subtree. 7352 and 5206 were dropped because their
+        # English-language children leak through the membership-based
+        # filter (~95% English by row count).
+        assert config.discover.graphql.category_ids == ["5107", "5125", "6122"]
+        assert config.discover.lupasearch is not None
+        assert config.discover.lupasearch.endpoint.startswith(
+            "https://api.lupasearch.com"
+        )
+        assert config.discover.lupasearch.category_ids == ["5107", "5125", "6122"]
 
 
 class TestDefaultConfig:

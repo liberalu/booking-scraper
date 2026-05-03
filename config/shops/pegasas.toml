@@ -4,12 +4,13 @@ base_url = "https://www.pegasas.lt"
 
 [scraping]
 download_delay = 1.0
-# pageSize=100 requests are served via Magento's full-page cache: cache
-# hits complete in ~0.1s, cold misses take up to 60s while Magento
-# runs the underlying MySQL query. The initial discovery run must
-# tolerate these cold misses. Subsequent runs are fast once the cache
-# is warm.
-concurrent_requests_per_domain = 1
+# Two concurrent in-flight requests. Magento's full-page cache serves
+# cache hits in ~0.1s; cold misses at pageSize=50 take 4–7s on
+# Lithuanian fiction (verified empirically). With concurrency=2 the
+# theoretical worst case is two simultaneous cold misses, well within
+# read_timeout=90. The previous concurrency=1 was needed when
+# pageSize=100 could trigger 60s+ MySQL queries.
+concurrent_requests_per_domain = 2
 batch_size = 50
 batch_pause = 5
 max_retries = 2
@@ -23,13 +24,34 @@ batch_timeout = 600
 url_include_pattern = "https://www\\.pegasas\\.lt/[^/]+-\\d+"
 
 [discover.graphql]
-# "Knygos" root category — covers all book types including e-books and audiobooks.
-# Total: ~640k products. pageSize=50 → ~12800 pages.
-# pageSize=100 with full field list causes server-side timeouts (>120s) on cold cache
-# misses. pageSize=50 keeps cold miss latency under ~50s (within read_timeout=90).
-category_id = "5051"
+# Lithuanian-language book subtree. The shop also carries ~600k
+# drop-shipped English imports — Magento's category_id filter is
+# membership-based, so 7352 (Negrožinė) and 5206 (Mokomoji) leak heavily
+# (they're parents of "anglų kalba" siblings). Empirically those
+# parents are ~95% English by row count, so we drop them here and rely
+# on the parser's `Leidinio kalba` filter to catch any English items
+# that sneak in via the kid/educational subtrees that remain.
+#   5107  Grožinė literatūra (Fiction LT) — clean
+#   5125  Vaikų ir jaunimo (Kids/YA) — clean parent
+#   6122  Elektroninės knygos (E-books)
+# Filter renders as `category_id: { in: [...] }`. Verified at pageSize=50:
+# response 4–7s with full payload (incl. product_page_attributes giving
+# 100% ISBN/year/pages coverage) — well within read_timeout=90.
+category_ids = ["5107", "5125", "6122"]
 page_size = 50
 max_age_hours = 168
+
+[discover.lupasearch]
+# Third-party search index over the same Magento catalogue. Cheap rescans
+# (no per-product GraphQL needed) and new-arrivals detection via the
+# `is_new` flag. Use the same LT category set so URL space matches the
+# graphql strategy. page_size=42 mirrors the site's own pagination.
+# Items in 8128 (English book root) are dropped by the parser as a
+# belt-and-suspenders to the category filter.
+endpoint = "https://api.lupasearch.com/v1/query/kum08qakjq3j"
+category_ids = ["5107", "5125", "6122"]
+page_size = 42
+max_age_hours = 24
 
 [scan]
 # Product pages are JS-rendered (Magento PWA / Venia). parse_product_page

@@ -78,11 +78,44 @@ class FullCrawlConfig(BaseModel):
 
 
 class GraphQLConfig(BaseModel):
-    """Discovery via Magento 2 GraphQL API (for JS-rendered / PWA shops)."""
+    """Discovery via Magento 2 GraphQL API (for JS-rendered / PWA shops).
 
-    category_id: str
+    `category_ids` is required and non-empty. The query emits a
+    `category_id: { in: [...] }` filter so a single discovery run can
+    sweep multiple categories — used by pegasas.lt to scope to the
+    Lithuanian-language subtree (~38–45k items) instead of the global
+    catalogue (~640k including English drop-shipping).
+
+    `subdivide_factor` / `subdivide_min_page_size` control adaptive
+    page-size shrinkage on backend failures: if a request at the
+    configured `page_size` returns a 5xx, the spider subdivides the
+    failed range into `subdivide_factor` smaller requests at
+    `page_size / subdivide_factor` (clamped to `subdivide_min_page_size`).
+    Magento's full-page cache misses on deep pages can OOM/503 under
+    concurrency=2 + pageSize=50, but pageSize=10 stays cheap.
+    """
+
+    category_ids: list[str] = Field(min_length=1)
     page_size: int = 100
     max_age_hours: int = 168
+    subdivide_factor: int = 5
+    subdivide_min_page_size: int = 5
+
+
+class LupaSearchConfig(BaseModel):
+    """Discovery via the LupaSearch JSON API (third-party search index).
+
+    POST endpoint with a flat product shape including price, stock,
+    `is_new`, `is_book`/`is_audio_book`/`is_ebook`, and per-item
+    `category_ids`. Lacks ISBN/year/pages — use this for cheap rescans
+    and new-arrivals detection, not as the primary metadata source.
+    """
+
+    endpoint: str
+    category_ids: list[str] = Field(min_length=1)
+    page_size: int = 42
+    max_age_hours: int = 168
+    extra_filters: dict[str, list[str]] | None = None
 
 
 class DiscoverConfig(BaseModel):
@@ -91,6 +124,7 @@ class DiscoverConfig(BaseModel):
     categories: CategoriesConfig | None = None
     full_crawl: FullCrawlConfig | None = None
     graphql: GraphQLConfig | None = None
+    lupasearch: LupaSearchConfig | None = None
 
 
 class ScanConfig(BaseModel):

@@ -1,0 +1,779 @@
+{
+  "data": {
+    "products": {
+      "total_count": 13602,
+      "items": [
+        {
+          "name": "Kakė Makė. Pasaulis aplink mane. Lipdukų knyga",
+          "sku": "000000000001115331",
+          "url_key": "kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331",
+          "image": {
+            "url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000001115331-b-b-d-f-bbdf38ea7bf0e574f06b33849db1c646c9154301_km_pasaulis_aplink_mane.jpg"
+          },
+          "stock_status": "OUT_OF_STOCK",
+          "is_book": true,
+          "is_audio_book": false,
+          "narrator": [],
+          "author": [
+            {
+              "author_label": "Nėra Autoriaus"
+            }
+          ],
+          "anotacija": "<p>Vaikams nuo 3 metų.</p><p><br></p><p>Nuo savo kambario iki jūros, nuo miesto iki miško – smalsuolė Kakė Makė keliauja ir susipažįsta su ją supančiu pasauliu. Koks jis įdomus ir įvairus! Keliauk su Kake Make, ieškok ir skaičiuok, klijuok lipdukus ir išsiaiškink: kokie daiktai priklauso namams, o ką gali surasti mieste? Kas auga sode ir ką gali sutikti miške?</p><p>Ši lipdukų knygelė – ne tik smagus užsiėmimas, bet ir turtina žodyną, lavina smulkiąją motoriką, rankų ir akių koordinaciją, pastabumą ir kruopštumą.&nbsp;</p><p><br></p><p><span style=\"font-weight: bold;\">„Kakė Makė. Pasaulis aplink mane. Lipdukų knyga“:</span></p><p>• lavina smulkiąją motoriką, rankų ir akių koordinaciją;</p><p>• turtina žodyną ir padeda suprasti, kokie daiktai kokiai aplinkai priklauso;</p><p>• pastabumą, kruopštumą ir dėmesio sutelkimą lavinančios užduotys;</p><p>• 6 atvartai su lipdukais, kuriuos vaikai turės suklijuoti pagal temas;</p><p>• moko skaičiuoti iki 5.&nbsp;</p><p><br></p><p><br></p><p><br></p>",
+          "categories": [
+            {
+              "id": 5051,
+              "name": "Knygos",
+              "breadcrumbs": null
+            },
+            {
+              "id": 5125,
+              "name": "Vaikų ir jaunimo literatūra",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 5128,
+              "name": "Spalvinimo ir lipdukų knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                },
+                {
+                  "category_name": "Knygos vaikams iki 6 metų"
+                }
+              ]
+            },
+            {
+              "id": 5855,
+              "name": "Knygos vaikams iki 6 metų",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                }
+              ]
+            },
+            {
+              "id": 6293,
+              "name": "Naujos knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 6296,
+              "name": "Vaikų knygų naujienos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Naujos knygos"
+                }
+              ]
+            },
+            {
+              "id": 9620,
+              "name": "Lietuvių autorių knygos vaikams iki 6 metų",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                },
+                {
+                  "category_name": "Knygos vaikams iki 6 metų"
+                }
+              ]
+            }
+          ],
+          "price_range": {
+            "minimum_price": {
+              "final_price": {
+                "value": 8.79,
+                "currency": "EUR"
+              },
+              "regular_price": {
+                "value": 10.99,
+                "currency": "EUR"
+              }
+            }
+          },
+          "product_page_attributes": [
+            {
+              "primary_attributes": [
+                {
+                  "label": "Leidykla",
+                  "value": "Alma littera "
+                },
+                {
+                  "label": "Vertėjas",
+                  "value": ""
+                },
+                {
+                  "label": "Leidimo metai",
+                  "value": "2026-05-25"
+                },
+                {
+                  "label": "Viršelio tipas",
+                  "value": "Minkštas"
+                },
+                {
+                  "label": "Puslapių skaičius",
+                  "value": ""
+                },
+                {
+                  "label": "Matmenys",
+                  "value": "25x20,5x0,1"
+                }
+              ],
+              "secondary_attributes": [
+                {
+                  "label": "Spalvingumas",
+                  "value": "Spalvotas"
+                },
+                {
+                  "label": "Pav. originalo kalba",
+                  "value": "Kakė Makė. Pasaulis aplink mane. Lipdukų knyga"
+                },
+                {
+                  "label": "Leidinio kalba",
+                  "value": "Lietuvių"
+                },
+                {
+                  "label": "Prekės kodas",
+                  "value": "000000000001115331"
+                },
+                {
+                  "label": "EAN kodas",
+                  "value": "9786090170915"
+                },
+                {
+                  "label": "ISBN kodas",
+                  "value": "9786090170915"
+                }
+              ]
+            }
+          ],
+          "structured_data": "{\"@context\":\"https://schema.org\",\"@type\":\"ItemPage\",\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"mainEntity\":{\"@type\":[\"Book\",\"Product\"],\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/#Product\",\"name\":\"Kak\\u0117 Mak\\u0117. Pasaulis aplink mane. Lipduk\\u0173 knyga\",\"description\":null,\"image\":\"https://www.pegasas.lt/media/catalog/product/\",\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"availability\":\"http://schema.org/OutOfStock\",\"itemCondition\":\"http://schema.org/NewCondition\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":\"true\"},\"priceValidUntil\":null},\"publisher\":{\"@type\":\"Organization\",\"name\":\"Alma littera \"},\"author\":[{\"@type\":\"Person\",\"name\":\"N\\u0117ra Autoriaus\",\"url\":\"https://www.pegasas.lt/c/nera-autoriaus/\"}],\"isbn\":\"9786090170915\"},\"breadcrumb\":{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos\",\"name\":\"Knygos\"}},{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura\",\"name\":\"Vaik\\u0173 ir jaunimo literat\\u016bra\"}},{\"@type\":\"ListItem\",\"position\":3,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu\",\"name\":\"Knygos vaikams iki 6 met\\u0173\"}},{\"@type\":\"ListItem\",\"position\":4,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu/spalvinimo-ir-lipduku-knygos\",\"name\":\"Spalvinimo ir lipduk\\u0173 knygos\"}}]}}"
+        },
+        {
+          "name": "Atostogos su velniu",
+          "sku": "000000000022737622",
+          "url_key": "atostogos-su-velniu-22737622",
+          "image": {
+            "url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000022737622-1-b-4-2-1b42d25abc9b465efb14d529f030416450a29403_9786094446078_atostogos_su_velniu.jpg"
+          },
+          "stock_status": "OUT_OF_STOCK",
+          "is_book": true,
+          "is_audio_book": false,
+          "narrator": [],
+          "author": [
+            {
+              "author_label": "Elizabeth O’Roark"
+            }
+          ],
+          "anotacija": "<p style=\"text-align: justify; \">Kibirkščiuojančiai žavi ir velniškai smagi istorija apie atostogas, kurios viską apverčia aukštyn kojom ir atneša meilę, pasibeldžiančią tada, kai mažiausiai tikiesi.</p><p style=\"text-align: justify; \">Niekšelis buvusio vaikino brolis, ramybės neduodanti jo šeimynėlė ir tropikų karštis – viskas, ko man reikėjo… KURGI NE.</p><p style=\"text-align: justify; \">Aš – Driu Vilson, mergina, kuri nutarė suteikti dar vieną šansą savo buvusiam vaikinui Džoeliui. Kelionė į Havajus su jo šeima žadėjo tobulas pramogas: šilumą, saulę, romantiką. Tačiau jau pirmą atostogų dieną paaiškėja, kad realybė toli gražu neprimena spalvingo atviruko&nbsp; – ypač kai aplink nuolat sukiojasi Džoelio brolis Džošua.</p><p style=\"text-align: justify; \">Gydytojas Džošua Beilis – rimtas, kandus ir nepakenčiamas niurgzlys, visada pasiruošęs man įgelti. Vyras, kuris sykį užsiminė, jog galėčiau pavogti jų šeimos sidabrinius įrankius. Jis ne tik neslepia savo priešiškumo, bet ir mėgsta priminti, kad niekada nebūsiu viena iš jų. Ir vis dėlto… kuo daugiau laiko praleidžiame kartu, tuo aiškiau matau, kad po niurzgos kauke slypi visai kitoks žmogus – atidus, protingas ir pavojingai patrauklus.&nbsp;</p><p style=\"text-align: justify; \">Neturėčiau jo geisti. Neturėčiau pamiršti, kodėl esu čia. Bet Havajų bangos, žvaigždėtos naktys ir ilgi pasivaikščiojimai pajūriu verčia suabejoti: galbūt savo jausmus turėčiau išsakyti ne tam broliui, dėl kurio čia atvykau... Tik ar įmanoma pasiduoti aistrai nesudaužant širdies?</p><p style=\"text-align: justify; \"><span style=\"font-weight: bold;\">Elizabeth O’Roark</span> – Vašingtone gyvenanti meilės romanų apie nepakenčiamus vyrus ir drąsias moteris, nelinkusias jiems nusileisti, autorė. Daugybę metų rašiusi medicininius tekstus, galiausiai ji atsidėjo tikrajam pašaukimui – kurti įtraukiančias, užsimiršti padedančias istorijas su charizmatiškais ir atpažįstamais veikėjais.&nbsp;</p><p style=\"text-align: justify; \">„Irzliųjų velnių“ serijoje susipina aistra, romantika ir kandus humoras. Ją skaitydami leipsite juokais, žavėsitės ir graudinsitės. Knyga neabejotinai patiks Christinos Lauren ir Emmos Chase gerbėjams.</p><p style=\"text-align: justify; \"><br></p>",
+          "categories": [
+            {
+              "id": 5051,
+              "name": "Knygos",
+              "breadcrumbs": null
+            },
+            {
+              "id": 5107,
+              "name": "Grožinė literatūra",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 5113,
+              "name": "Jausmų romanai",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Grožinė literatūra"
+                },
+                {
+                  "category_name": "Romantiškos istorijos"
+                }
+              ]
+            },
+            {
+              "id": 5853,
+              "name": "Romantiškos istorijos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Grožinė literatūra"
+                }
+              ]
+            },
+            {
+              "id": 6293,
+              "name": "Naujos knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 6294,
+              "name": "Grožinių knygų naujienos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Naujos knygos"
+                }
+              ]
+            }
+          ],
+          "price_range": {
+            "minimum_price": {
+              "final_price": {
+                "value": 22.71,
+                "currency": "EUR"
+              },
+              "regular_price": {
+                "value": 28.39,
+                "currency": "EUR"
+              }
+            }
+          },
+          "product_page_attributes": [
+            {
+              "primary_attributes": [
+                {
+                  "label": "Leidykla",
+                  "value": "Sofoklis "
+                },
+                {
+                  "label": "Vertėjas",
+                  "value": ""
+                },
+                {
+                  "label": "Leidimo metai",
+                  "value": "2026-04-28"
+                },
+                {
+                  "label": "Viršelio tipas",
+                  "value": "Kietas"
+                },
+                {
+                  "label": "Puslapių skaičius",
+                  "value": "320"
+                },
+                {
+                  "label": "Matmenys",
+                  "value": "21,6x14,4x0,23"
+                }
+              ],
+              "secondary_attributes": [
+                {
+                  "label": "Spalvingumas",
+                  "value": "Nespalvotas"
+                },
+                {
+                  "label": "Pav. originalo kalba",
+                  "value": ""
+                },
+                {
+                  "label": "Leidinio kalba",
+                  "value": "Lietuvių"
+                },
+                {
+                  "label": "Prekės kodas",
+                  "value": "000000000022737622"
+                },
+                {
+                  "label": "EAN kodas",
+                  "value": "9786094446078"
+                },
+                {
+                  "label": "ISBN kodas",
+                  "value": "9786094446078"
+                }
+              ]
+            }
+          ],
+          "structured_data": "{\"@context\":\"https://schema.org\",\"@type\":\"ItemPage\",\"@id\":\"https://www.pegasas.lt/atostogos-su-velniu-22737622/\",\"mainEntity\":{\"@type\":[\"Book\",\"Product\"],\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/#Product\",\"name\":\"Kak\\u0117 Mak\\u0117. Pasaulis aplink mane. Lipduk\\u0173 knyga\",\"description\":null,\"image\":\"https://www.pegasas.lt/media/catalog/product/\",\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"availability\":\"http://schema.org/OutOfStock\",\"itemCondition\":\"http://schema.org/NewCondition\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":\"true\"},\"priceValidUntil\":null},\"publisher\":{\"@type\":\"Organization\",\"name\":\"Alma littera \"},\"author\":[{\"@type\":\"Person\",\"name\":\"Elizabeth O\\u2019Roark\",\"url\":\"https://www.pegasas.lt/c/elizabeth-o-roark-1/\"}],\"numberOfPages\":\"320\",\"isbn\":\"9786094446078\"},\"breadcrumb\":{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos\",\"name\":\"Knygos\"}},{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/grozine-literatura\",\"name\":\"Gro\\u017ein\\u0117 literat\\u016bra\"}},{\"@type\":\"ListItem\",\"position\":3,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/grozine-literatura/romantiskos-istorijos\",\"name\":\"Romanti\\u0161kos istorijos\"}},{\"@type\":\"ListItem\",\"position\":4,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/grozine-literatura/romantiskos-istorijos/jausmu-romanai\",\"name\":\"Jausm\\u0173 romanai\"}}]}}"
+        },
+        {
+          "name": "Spider-man. Spalvinti smagu",
+          "sku": "000000000022737621",
+          "url_key": "spider-man-spalvinti-smagu-22737621",
+          "image": {
+            "url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000022737621-a-1-c-9-a1c9ebfa3b11b9bf647fc1780d76fd804cf3f631_9786090510490.jpg"
+          },
+          "stock_status": "IN_STOCK",
+          "is_book": true,
+          "is_audio_book": false,
+          "narrator": [],
+          "author": [
+            {
+              "author_label": "Nėra Autoriaus"
+            }
+          ],
+          "anotacija": "<p style=\"text-align: justify; \"><span style=\"font-weight: bold;\">DĖMESIO! Tai yra išankstinio užsakymo prekė. Prekę turėsime gegužės 12 d. Terminas gali keistis ir priklauso nuo leidėjo. Norėdami kitas užsakymo prekes gauti anksčiau, formuokite atskirus užsakymus.</span></p><p style=\"text-align: justify; \">Ryškiausiomis spalvomis papuošk šaunius Žmogaus-voro, jo galingųjų draugų ir aršiausių priešų paveikslėlius.&nbsp;</p>",
+          "categories": [
+            {
+              "id": 5051,
+              "name": "Knygos",
+              "breadcrumbs": null
+            },
+            {
+              "id": 5125,
+              "name": "Vaikų ir jaunimo literatūra",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 5128,
+              "name": "Spalvinimo ir lipdukų knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                },
+                {
+                  "category_name": "Knygos vaikams iki 6 metų"
+                }
+              ]
+            },
+            {
+              "id": 5855,
+              "name": "Knygos vaikams iki 6 metų",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                }
+              ]
+            },
+            {
+              "id": 6293,
+              "name": "Naujos knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 7212,
+              "name": "Netrukus pasirodys",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Naujos knygos"
+                }
+              ]
+            }
+          ],
+          "price_range": {
+            "minimum_price": {
+              "final_price": {
+                "value": 5.75,
+                "currency": "EUR"
+              },
+              "regular_price": {
+                "value": 6.39,
+                "currency": "EUR"
+              }
+            }
+          },
+          "product_page_attributes": [
+            {
+              "primary_attributes": [
+                {
+                  "label": "Leidykla",
+                  "value": "Kid press UAB "
+                },
+                {
+                  "label": "Vertėjas",
+                  "value": ""
+                },
+                {
+                  "label": "Leidimo metai",
+                  "value": "2026-04-28"
+                },
+                {
+                  "label": "Viršelio tipas",
+                  "value": "Minkštas"
+                },
+                {
+                  "label": "Puslapių skaičius",
+                  "value": "24"
+                },
+                {
+                  "label": "Matmenys",
+                  "value": "29x21x0,3"
+                }
+              ],
+              "secondary_attributes": [
+                {
+                  "label": "Spalvingumas",
+                  "value": "Spalvotas"
+                },
+                {
+                  "label": "Pav. originalo kalba",
+                  "value": ""
+                },
+                {
+                  "label": "Leidinio kalba",
+                  "value": "Lietuvių"
+                },
+                {
+                  "label": "Prekės kodas",
+                  "value": "000000000022737621"
+                },
+                {
+                  "label": "EAN kodas",
+                  "value": "9786090510490"
+                },
+                {
+                  "label": "ISBN kodas",
+                  "value": "9786090510490"
+                }
+              ]
+            }
+          ],
+          "structured_data": "{\"@context\":\"https://schema.org\",\"@type\":\"ItemPage\",\"@id\":\"https://www.pegasas.lt/spider-man-spalvinti-smagu-22737621/\",\"mainEntity\":{\"@type\":[\"Book\",\"Product\"],\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/#Product\",\"name\":\"Kak\\u0117 Mak\\u0117. Pasaulis aplink mane. Lipduk\\u0173 knyga\",\"description\":null,\"image\":\"https://www.pegasas.lt/media/catalog/product/\",\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"availability\":\"http://schema.org/OutOfStock\",\"itemCondition\":\"http://schema.org/NewCondition\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":\"true\"},\"priceValidUntil\":null},\"publisher\":{\"@type\":\"Organization\",\"name\":\"Alma littera \"},\"author\":[{\"@type\":\"Person\",\"name\":\"N\\u0117ra Autoriaus\",\"url\":\"https://www.pegasas.lt/c/nera-autoriaus/\"}],\"numberOfPages\":\"24\",\"isbn\":\"9786090510490\"},\"breadcrumb\":{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos\",\"name\":\"Knygos\"}},{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura\",\"name\":\"Vaik\\u0173 ir jaunimo literat\\u016bra\"}},{\"@type\":\"ListItem\",\"position\":3,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu\",\"name\":\"Knygos vaikams iki 6 met\\u0173\"}},{\"@type\":\"ListItem\",\"position\":4,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu/spalvinimo-ir-lipduku-knygos\",\"name\":\"Spalvinimo ir lipduk\\u0173 knygos\"}}]}}"
+        },
+        {
+          "name": "Minecraft Kūrybinės dirbtuvės. Užduotėlės su lipdukais",
+          "sku": "000000000022737620",
+          "url_key": "minecraft-kurybines-dirbtuves-uzduoteles-su-lipdukais-22737620",
+          "image": {
+            "url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000022737620-5-6-4-8-5648b33f905b9eb059e52d260fad95ca9cbe7889_9786090510346.jpg"
+          },
+          "stock_status": "IN_STOCK",
+          "is_book": true,
+          "is_audio_book": false,
+          "narrator": [],
+          "author": [
+            {
+              "author_label": "Nėra Autoriaus"
+            }
+          ],
+          "anotacija": "<p style=\"text-align: justify; \"><span style=\"font-weight: bold;\">DĖMESIO! Tai yra išankstinio užsakymo prekė. Prekę turėsime gegužės 12 d. Terminas gali keistis ir priklauso nuo leidėjo. Norėdami kitas užsakymo prekes gauti anksčiau, formuokite atskirus užsakymus.</span></p><p style=\"text-align: justify; \">Statyti Minecraft pasaulyje labai smagu! Parodysime, kaip pasistatyti dumblių ir kaulų miltų fermas, gilyn į urvus ar aukštyn į kalnus vežantį liftą, strėlių su lava spąstus bei fermą priešams, taip pat puikiausius mininamus bei mielus augalus vazonuose. Pagerinęs statybos įgūdžius statinius galėsi papuošti šauniais lipdukais!&nbsp;</p>",
+          "categories": [
+            {
+              "id": 5051,
+              "name": "Knygos",
+              "breadcrumbs": null
+            },
+            {
+              "id": 5125,
+              "name": "Vaikų ir jaunimo literatūra",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 5128,
+              "name": "Spalvinimo ir lipdukų knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                },
+                {
+                  "category_name": "Knygos vaikams iki 6 metų"
+                }
+              ]
+            },
+            {
+              "id": 5855,
+              "name": "Knygos vaikams iki 6 metų",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                }
+              ]
+            },
+            {
+              "id": 6293,
+              "name": "Naujos knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 7212,
+              "name": "Netrukus pasirodys",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Naujos knygos"
+                }
+              ]
+            }
+          ],
+          "price_range": {
+            "minimum_price": {
+              "final_price": {
+                "value": 5.75,
+                "currency": "EUR"
+              },
+              "regular_price": {
+                "value": 6.39,
+                "currency": "EUR"
+              }
+            }
+          },
+          "product_page_attributes": [
+            {
+              "primary_attributes": [
+                {
+                  "label": "Leidykla",
+                  "value": "Kid press UAB "
+                },
+                {
+                  "label": "Vertėjas",
+                  "value": ""
+                },
+                {
+                  "label": "Leidimo metai",
+                  "value": "2026-04-28"
+                },
+                {
+                  "label": "Viršelio tipas",
+                  "value": "Minkštas"
+                },
+                {
+                  "label": "Puslapių skaičius",
+                  "value": "24"
+                },
+                {
+                  "label": "Matmenys",
+                  "value": "29x21x0,3"
+                }
+              ],
+              "secondary_attributes": [
+                {
+                  "label": "Spalvingumas",
+                  "value": "Spalvotas"
+                },
+                {
+                  "label": "Pav. originalo kalba",
+                  "value": ""
+                },
+                {
+                  "label": "Leidinio kalba",
+                  "value": "Lietuvių"
+                },
+                {
+                  "label": "Prekės kodas",
+                  "value": "000000000022737620"
+                },
+                {
+                  "label": "EAN kodas",
+                  "value": "9786090510346"
+                },
+                {
+                  "label": "ISBN kodas",
+                  "value": "9786090510346"
+                }
+              ]
+            }
+          ],
+          "structured_data": "{\"@context\":\"https://schema.org\",\"@type\":\"ItemPage\",\"@id\":\"https://www.pegasas.lt/minecraft-kurybines-dirbtuves-uzduoteles-su-lipdukais-22737620/\",\"mainEntity\":{\"@type\":[\"Book\",\"Product\"],\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/#Product\",\"name\":\"Kak\\u0117 Mak\\u0117. Pasaulis aplink mane. Lipduk\\u0173 knyga\",\"description\":null,\"image\":\"https://www.pegasas.lt/media/catalog/product/\",\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"availability\":\"http://schema.org/OutOfStock\",\"itemCondition\":\"http://schema.org/NewCondition\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":\"true\"},\"priceValidUntil\":null},\"publisher\":{\"@type\":\"Organization\",\"name\":\"Alma littera \"},\"author\":[{\"@type\":\"Person\",\"name\":\"N\\u0117ra Autoriaus\",\"url\":\"https://www.pegasas.lt/c/nera-autoriaus/\"}],\"numberOfPages\":\"24\",\"isbn\":\"9786090510346\"},\"breadcrumb\":{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos\",\"name\":\"Knygos\"}},{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura\",\"name\":\"Vaik\\u0173 ir jaunimo literat\\u016bra\"}},{\"@type\":\"ListItem\",\"position\":3,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu\",\"name\":\"Knygos vaikams iki 6 met\\u0173\"}},{\"@type\":\"ListItem\",\"position\":4,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu/spalvinimo-ir-lipduku-knygos\",\"name\":\"Spalvinimo ir lipduk\\u0173 knygos\"}}]}}"
+        },
+        {
+          "name": "My Little Pony. Spalvinimas su lipdukais",
+          "sku": "000000000022737619",
+          "url_key": "my-little-pony-spalvinimas-su-lipdukais-22737619",
+          "image": {
+            "url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000022737619-3-a-d-8-3ad878e811f2c05169e02b88d6109e36b54ac0c3_9786090510308_ma__ieji_poniai_spalvinimas_su_lipdukais.jpg"
+          },
+          "stock_status": "IN_STOCK",
+          "is_book": true,
+          "is_audio_book": false,
+          "narrator": [],
+          "author": [
+            {
+              "author_label": "Nėra Autoriaus"
+            }
+          ],
+          "anotacija": "<p style=\"text-align: justify; \"><span style=\"font-weight: bold;\">DĖMESIO! Tai yra išankstinio užsakymo prekė. Prekę turėsime gegužės 12 d. Terminas gali keistis ir priklauso nuo leidėjo. Norėdami kitas užsakymo prekes gauti anksčiau, formuokite atskirus užsakymus.</span></p><p style=\"text-align: justify; \">Kartu su Žėrute bei jos draugėmis trauk į nuotykingus žygius, grožėkis augalėliais bei gyvūnėliais, spalvink poniukus ir klijuok lipdukus!&nbsp;</p>",
+          "categories": [
+            {
+              "id": 5051,
+              "name": "Knygos",
+              "breadcrumbs": null
+            },
+            {
+              "id": 5125,
+              "name": "Vaikų ir jaunimo literatūra",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 5128,
+              "name": "Spalvinimo ir lipdukų knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                },
+                {
+                  "category_name": "Knygos vaikams iki 6 metų"
+                }
+              ]
+            },
+            {
+              "id": 5855,
+              "name": "Knygos vaikams iki 6 metų",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Vaikų ir jaunimo literatūra"
+                }
+              ]
+            },
+            {
+              "id": 6293,
+              "name": "Naujos knygos",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                }
+              ]
+            },
+            {
+              "id": 7212,
+              "name": "Netrukus pasirodys",
+              "breadcrumbs": [
+                {
+                  "category_name": "Knygos"
+                },
+                {
+                  "category_name": "Naujos knygos"
+                }
+              ]
+            }
+          ],
+          "price_range": {
+            "minimum_price": {
+              "final_price": {
+                "value": 5.75,
+                "currency": "EUR"
+              },
+              "regular_price": {
+                "value": 6.39,
+                "currency": "EUR"
+              }
+            }
+          },
+          "product_page_attributes": [
+            {
+              "primary_attributes": [
+                {
+                  "label": "Leidykla",
+                  "value": "Kid press UAB "
+                },
+                {
+                  "label": "Vertėjas",
+                  "value": ""
+                },
+                {
+                  "label": "Leidimo metai",
+                  "value": "2026-04-28"
+                },
+                {
+                  "label": "Viršelio tipas",
+                  "value": "Minkštas"
+                },
+                {
+                  "label": "Puslapių skaičius",
+                  "value": "24"
+                },
+                {
+                  "label": "Matmenys",
+                  "value": "29x21x0,3"
+                }
+              ],
+              "secondary_attributes": [
+                {
+                  "label": "Spalvingumas",
+                  "value": "Spalvotas"
+                },
+                {
+                  "label": "Pav. originalo kalba",
+                  "value": ""
+                },
+                {
+                  "label": "Leidinio kalba",
+                  "value": "Lietuvių"
+                },
+                {
+                  "label": "Prekės kodas",
+                  "value": "000000000022737619"
+                },
+                {
+                  "label": "EAN kodas",
+                  "value": "9786090510308"
+                },
+                {
+                  "label": "ISBN kodas",
+                  "value": "9786090510308"
+                }
+              ]
+            }
+          ],
+          "structured_data": "{\"@context\":\"https://schema.org\",\"@type\":\"ItemPage\",\"@id\":\"https://www.pegasas.lt/my-little-pony-spalvinimas-su-lipdukais-22737619/\",\"mainEntity\":{\"@type\":[\"Book\",\"Product\"],\"@id\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/#Product\",\"name\":\"Kak\\u0117 Mak\\u0117. Pasaulis aplink mane. Lipduk\\u0173 knyga\",\"description\":null,\"image\":\"https://www.pegasas.lt/media/catalog/product/\",\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.pegasas.lt/kake-make-pasaulis-aplink-mane-lipduku-knyga-1115331/\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"availability\":\"http://schema.org/OutOfStock\",\"itemCondition\":\"http://schema.org/NewCondition\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":\"10.99\",\"priceCurrency\":\"EUR\",\"valueAddedTaxIncluded\":\"true\"},\"priceValidUntil\":null},\"publisher\":{\"@type\":\"Organization\",\"name\":\"Alma littera \"},\"author\":[{\"@type\":\"Person\",\"name\":\"N\\u0117ra Autoriaus\",\"url\":\"https://www.pegasas.lt/c/nera-autoriaus/\"}],\"numberOfPages\":\"24\",\"isbn\":\"9786090510308\"},\"breadcrumb\":{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos\",\"name\":\"Knygos\"}},{\"@type\":\"ListItem\",\"position\":2,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura\",\"name\":\"Vaik\\u0173 ir jaunimo literat\\u016bra\"}},{\"@type\":\"ListItem\",\"position\":3,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu\",\"name\":\"Knygos vaikams iki 6 met\\u0173\"}},{\"@type\":\"ListItem\",\"position\":4,\"item\":{\"@id\":\"https://www.pegasas.lt/knygos/vaiku-ir-jaunimo-literatura/maziesiems-iki-6-metu/spalvinimo-ir-lipduku-knygos\",\"name\":\"Spalvinimo ir lipduk\\u0173 knygos\"}}]}}"
+        }
+      ]
+    }
+  }
+}

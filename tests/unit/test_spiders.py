@@ -116,6 +116,283 @@ class TestDiscoverSpiderCategories:
         assert "page=2" in next_pages[0].url
 
 
+class TestDiscoverSpiderPropertiesMerge:
+    """Regression: parser-emitted properties must survive into ShopBookItem.
+
+    Earlier, parse_categories rebuilt `properties` from a fixed set of
+    top-level keys and dropped any dict the parser supplied directly
+    (Pegasas does this for is_new/discount_rate; LupaSearch does too).
+    """
+
+    def test_parser_properties_are_preserved(self):
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        products = [
+            {
+                "url": "https://vaga.lt/x-1",
+                "title": "X",
+                "price": "1.00",
+                "type": "book",
+                "properties": {"is_new": True, "discount_rate": 0.5},
+                "categories": [],
+            }
+        ]
+        items = list(spider._emit_products(products))
+        shop_books = [i for i in items if isinstance(i, ShopBookItem)]
+        assert len(shop_books) == 1
+        props = shop_books[0]["properties"]
+        assert props["is_new"] is True
+        assert props["discount_rate"] == 0.5
+
+    def test_top_level_keys_layered_under_parser_dict(self):
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        products = [
+            {
+                "url": "https://vaga.lt/x-1",
+                "title": "X",
+                "price": "1.00",
+                "type": "book",
+                "properties": {"pages": 100},
+                "pages": 999,  # top-level key — must NOT override parser dict
+                "cover_type": "Hard",
+                "categories": [],
+            }
+        ]
+        items = list(spider._emit_products(products))
+        shop_books = [i for i in items if isinstance(i, ShopBookItem)]
+        props = shop_books[0]["properties"]
+        assert props["pages"] == 100  # parser wins
+        assert props["cover_type"] == "Hard"  # gap filled by top-level
+
+
+class TestBuildRequestForUrlItem:
+    """The single helper used by start(), spider_idle(), and the
+    parse_categories next-page yield. Must produce a GET for HTML
+    strategies and a POST with JSON body for LupaSearch."""
+
+    def test_get_for_category_page(self):
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        req = spider._build_request_for_url_item(
+            "https://vaga.lt/knygos?page=2", "category_page", item_id=42, page=2
+        )
+        assert req.method == "GET"
+        assert req.body == b""
+        assert req.meta["scrape_url_item_id"] == 42
+        assert req.meta["page"] == 2
+
+    def test_post_for_lupasearch_page(self):
+        import json
+        spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
+        req = spider._build_request_for_url_item(
+            "https://api.lupasearch.com/v1/query/abc?offset=84&limit=42&category_ids=5107",
+            "lupasearch_page",
+            item_id=7,
+        )
+        assert req.method == "POST"
+        body = json.loads(req.body)
+        assert body["offset"] == 84
+        assert body["limit"] == 42
+        assert body["filters"]["category_ids"] == ["5107"]
+        # Headers come back as bytes from scrapy
+        ct = req.headers.get("Content-Type")
+        assert ct in (b"application/json", "application/json")
+
+    def test_graphql_strategy_sets_accept_json(self):
+        spider = DiscoverSpider(shop="pegasas", strategy="graphql")
+        req = spider._build_request_for_url_item(
+            "https://www.pegasas.lt/graphql?query=...", "category_page"
+        )
+        accept = req.headers.get("Accept")
+        assert accept in (b"application/json", "application/json")
+
+
+class TestParseLupasearchPage:
+    """Smoke test: parser plumbed through the spider, total drives stop."""
+
+    def test_yields_items_and_next_page(self):
+        from scrapy.http import TextResponse
+
+        spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
+        text = (FIXTURES / "pegasas_lupasearch_page1.json").read_text()
+        url = (
+            "https://api.lupasearch.com/v1/query/kum08qakjq3j"
+            "?offset=0&limit=42&category_ids=5107%2C7352%2C5125%2C5206%2C6122"
+        )
+        request = Request(url=url, meta={"page": 1, "url_type": "lupasearch_page"})
+        response = TextResponse(
+            url=url, body=text, encoding="utf-8", request=request
+        )
+        results = list(spider.parse_lupasearch_page(response))
+
+        discovered = [r for r in results if isinstance(r, DiscoveredUrlItem)]
+        shop_books = [r for r in results if isinstance(r, ShopBookItem)]
+        next_pages = [r for r in results if isinstance(r, Request)]
+
+        # Fixture has 10 items, all with pegasas.lt URLs (matching the
+        # default url_include_pattern) and is_book=1.
+        assert len(discovered) == 10
+        assert len(shop_books) == 10
+        # Total ~45.5k / limit 42 = ~1084 pages. Page 1 just emitted; the
+        # spider should enqueue every remaining page upfront so concurrency
+        # can engage instead of chaining serially.
+        assert len(next_pages) > 100
+        # First three should be at offsets 42, 84, 126 — sequential by limit.
+        offsets = [
+            int(r.url.split("offset=")[1].split("&")[0]) for r in next_pages
+        ]
+        assert offsets[:3] == [42, 84, 126]
+        assert all(r.method == "POST" for r in next_pages)
+
+    def test_stops_when_offset_exceeds_total(self):
+        from scrapy.http import TextResponse
+
+        spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
+        # Hand-craft a response with total=1 to force termination
+        body = (
+            '{"items":[{"url":"https://www.pegasas.lt/x-1/","name":"x","sku":"s",'
+            '"price":"1","is_book":1,"in_stock":1,"category_ids":[5107]}],'
+            '"total":1}'
+        )
+        url = (
+            "https://api.lupasearch.com/v1/query/kum08qakjq3j"
+            "?offset=0&limit=42&category_ids=5107"
+        )
+        request = Request(url=url, meta={"page": 1, "url_type": "lupasearch_page"})
+        response = TextResponse(
+            url=url, body=body, encoding="utf-8", request=request
+        )
+        results = list(spider.parse_lupasearch_page(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []
+
+    def test_page_2_does_not_re_paginate(self):
+        """Pages 2..N must NOT enqueue further pages — the queue is
+        already filled by the page-1 upfront pagination."""
+        from scrapy.http import TextResponse
+
+        spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
+        body = (
+            '{"items":[{"url":"https://www.pegasas.lt/x-1/","name":"x","sku":"s",'
+            '"price":"1","is_book":1,"in_stock":1,"category_ids":[5107]}],'
+            '"total":1000}'
+        )
+        url = (
+            "https://api.lupasearch.com/v1/query/kum08qakjq3j"
+            "?offset=42&limit=42&category_ids=5107"
+        )
+        request = Request(url=url, meta={"page": 2, "url_type": "lupasearch_page"})
+        response = TextResponse(
+            url=url, body=body, encoding="utf-8", request=request
+        )
+        results = list(spider.parse_lupasearch_page(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []
+
+
+class TestDiscoverSpiderSubdivision:
+    """5xx on a GraphQL page should trigger adaptive page-size shrinkage.
+
+    pegasas.lt's Magento backend transiently returns 503 on deep pages
+    when fetched at pageSize=50 under concurrency=2. Splitting the
+    failed range into N pageSize=10 requests gives the backend time
+    while letting pagination continue.
+    """
+
+    @staticmethod
+    def _gql_response(url: str, status: int, body: str = ""):
+        from scrapy.http import HtmlResponse
+
+        request = Request(url=url, meta={})
+        return HtmlResponse(
+            url=url, body=body.encode(), status=status, request=request
+        )
+
+    def test_5xx_yields_subpages_and_continues(self):
+        """A 503 on page=18 (size 50) should yield 5 sub-pages at size 10
+        AND the next normal page (19, size 50)."""
+        from book_scraper.spiders.graphql_urls import (
+            build_graphql_page_url,
+            parse_graphql_page_url,
+        )
+
+        spider = DiscoverSpider(shop="pegasas", strategy="graphql")
+        # Use the real builder so the URL matches what production sends.
+        url = build_graphql_page_url(
+            spider.conf.shop.base_url, spider.strategy_conf, page=18
+        )
+        response = self._gql_response(url, status=503, body="Service Unavailable")
+
+        results = list(spider.parse_categories(response))
+        # All yields are Requests (no items, no DiscoveredUrlItem here).
+        requests = [r for r in results if isinstance(r, Request)]
+        assert len(requests) == 6  # 5 sub-pages + 1 next normal page
+
+        # Sub-pages: depth=1, pageSize=10, pages 86..90
+        sub_infos = [parse_graphql_page_url(r.url) for r in requests[:5]]
+        assert all(s["subdivision_depth"] == 1 for s in sub_infos)
+        assert all(s["page_size"] == 10 for s in sub_infos)
+        assert [s["page"] for s in sub_infos] == [86, 87, 88, 89, 90]
+
+        # Next normal page: depth=0, pageSize=50, page 19
+        normal = parse_graphql_page_url(requests[5].url)
+        assert normal == {"page": 19, "page_size": 50, "subdivision_depth": 0}
+
+    def test_5xx_on_already_subdivided_does_not_recurse(self):
+        """A failing depth=1 sub-page must NOT yield more sub-pages,
+        and must NOT enqueue the next normal page (parent already did).
+        """
+        from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+        spider = DiscoverSpider(shop="pegasas", strategy="graphql")
+        url = build_graphql_page_url(
+            spider.conf.shop.base_url,
+            spider.strategy_conf,
+            page=87,
+            page_size_override=10,
+            subdivision_depth=1,
+        )
+        response = self._gql_response(url, status=503)
+        results = list(spider.parse_categories(response))
+        assert results == []  # nothing yielded — we drop this micro-range
+
+    def test_successful_subpage_does_not_paginate(self):
+        """A 200 on a depth=1 sub-page should emit products but NOT
+        enqueue another page (parent owns pagination)."""
+        import json
+
+        from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+        spider = DiscoverSpider(shop="pegasas", strategy="graphql")
+        url = build_graphql_page_url(
+            spider.conf.shop.base_url,
+            spider.strategy_conf,
+            page=86,
+            page_size_override=10,
+            subdivision_depth=1,
+        )
+        body = json.dumps({
+            "data": {"products": {"items": [{
+                "name": "Knyga", "sku": "1", "url_key": "k-1",
+                "stock_status": "IN_STOCK", "is_book": True,
+                "price_range": {"minimum_price": {
+                    "final_price": {"value": 5.0},
+                    "regular_price": {"value": 5.0},
+                }},
+                "product_page_attributes": [{
+                    "primary_attributes": [],
+                    "secondary_attributes": [
+                        {"label": "Leidinio kalba", "value": "Lietuvių"},
+                    ],
+                }],
+            }]}}
+        })
+        response = self._gql_response(url, status=200, body=body)
+        results = list(spider.parse_categories(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []  # no pagination from sub-pages
+        items = [r for r in results if isinstance(r, ShopBookItem)]
+        assert len(items) == 1
+
+
 class TestDiscoverSpiderUrlFilter:
     def test_no_filter_passes_all(self):
         spider = DiscoverSpider(shop="vaga", strategy="sitemap")

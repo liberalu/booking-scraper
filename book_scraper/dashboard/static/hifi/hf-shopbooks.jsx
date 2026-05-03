@@ -221,7 +221,7 @@ function HFShopBooks({ nav, goto }) {
         </>}>
           <HFSearch placeholder="Title, author, ISBN…" width={260} value={q} onChange={setQ}/>
           <HFSearch placeholder="Category…" width={160} value={category} onChange={setCategory}/>
-          <HFFilter label="Shop"    value={shop}     options={['all','vaga','knygos']}               onChange={setShop}/>
+          <HFFilter label="Shop"    value={shop}     options={['all','vaga','pegasas','knygos']}     onChange={setShop}/>
           <HFFilter label="Active"  value={active}   options={['all','true','false']}                onChange={setActive}/>
           <HFFilter label="Type"    value={bookType} options={['all','book','non_book','audio','ebook']} onChange={setBookType}/>
           <HFFilter label="Missing" value={missing}  options={['any','author','isbn','year','publisher','format','price']} onChange={setMissing} allLabel="any"/>

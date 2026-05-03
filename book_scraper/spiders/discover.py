@@ -42,6 +42,15 @@ class DiscoverSpider(scrapy.Spider):
         self.allowed_domains = [
             self.conf.shop.base_url.replace("https://", "").replace("http://", "")
         ]
+        # LupaSearch is a third-party search index (e.g. api.lupasearch.com)
+        # — allow its host so the offsite middleware doesn't drop requests.
+        ls_conf = getattr(self.conf.discover, "lupasearch", None)
+        if ls_conf is not None:
+            from urllib.parse import urlparse
+
+            host = urlparse(ls_conf.endpoint).netloc
+            if host and host not in self.allowed_domains:
+                self.allowed_domains.append(host)
 
         # Load URL filter pattern
         discover_conf = self.conf.discover
@@ -51,7 +60,13 @@ class DiscoverSpider(scrapy.Spider):
         )
 
         # Load strategy-specific config
-        _valid_strategies = {"sitemap", "categories", "full_crawl", "graphql"}
+        _valid_strategies = {
+            "sitemap",
+            "categories",
+            "full_crawl",
+            "graphql",
+            "lupasearch",
+        }
         if strategy not in _valid_strategies:
             raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
         strategy_conf = getattr(discover_conf, strategy, None)
@@ -114,15 +129,11 @@ class DiscoverSpider(scrapy.Spider):
             session.close()
 
         for item in url_items:
-            yield scrapy.Request(
+            yield self._build_request_for_url_item(
                 item["url"],
-                callback=self.dispatch,
-                errback=self.handle_start_error,
-                meta={
-                    "scrape_url_item_id": item["id"],
-                    "url_type": item["url_type"],
-                    "page": 1 if item["url_type"] == "category_page" else None,
-                },
+                item["url_type"],
+                item_id=item["id"],
+                page=1 if item["url_type"] == "category_page" else None,
             )
 
     def _legacy_seed_request(self) -> scrapy.Request:
@@ -153,11 +164,79 @@ class DiscoverSpider(scrapy.Spider):
                 meta={"page": 1},
                 headers={"Accept": "application/json"} if self.strategy == "graphql" else {},
             )
+        if self.strategy == "lupasearch":
+            from book_scraper.spiders.lupasearch_urls import (
+                build_lupasearch_post_request_kwargs,
+                build_lupasearch_seed_url,
+            )
+
+            seed_url = build_lupasearch_seed_url(self.strategy_conf)
+            kwargs = build_lupasearch_post_request_kwargs(seed_url)
+            return scrapy.Request(
+                seed_url,
+                callback=self.parse_lupasearch_page,
+                errback=self.handle_start_error,
+                meta={"page": 1},
+                **kwargs,
+            )
         # full_crawl
         return scrapy.Request(
             self.strategy_conf.start_url,
             callback=self.parse_full_crawl,
             errback=self.handle_start_error,
+        )
+
+    def _build_request_for_url_item(
+        self,
+        url: str,
+        url_type: str,
+        *,
+        item_id: int | None = None,
+        page: int | None = None,
+    ) -> scrapy.Request:
+        """Reconstruct a scrapy.Request for a queued URL.
+
+        The DB-backed queue stores URLs and url_types only — no method,
+        body, or headers — so any non-GET strategy (currently just
+        LupaSearch's POST) needs its outbound request rebuilt from the
+        URL alone. For LupaSearch the seed URL carries offset/limit/
+        category_ids in its query string; the helper below decodes those
+        back into the JSON body the API expects.
+
+        Used by start(), spider_idle(), and parse_categories' next-page
+        yield so the same reconstruction logic applies regardless of
+        which entry path is currently scheduling the request.
+        """
+        meta: dict[str, Any] = {"url_type": url_type}
+        if item_id is not None:
+            meta["scrape_url_item_id"] = item_id
+        if page is not None:
+            meta["page"] = page
+
+        if url_type == "lupasearch_page":
+            from book_scraper.spiders.lupasearch_urls import (
+                build_lupasearch_post_request_kwargs,
+            )
+
+            kwargs = build_lupasearch_post_request_kwargs(url)
+            return scrapy.Request(
+                url,
+                callback=self.dispatch,
+                errback=self.handle_start_error,
+                meta=meta,
+                **kwargs,
+            )
+
+        headers: dict[str, str] = {}
+        if url_type == "category_page" and self.strategy == "graphql":
+            headers["Accept"] = "application/json"
+
+        return scrapy.Request(
+            url,
+            callback=self.dispatch,
+            errback=self.handle_start_error,
+            meta=meta,
+            headers=headers,
         )
 
     def dispatch(self, response: scrapy.http.Response) -> Generator[Any, None, None]:
@@ -168,6 +247,8 @@ class DiscoverSpider(scrapy.Spider):
                 yield from self.parse_sitemap(response)
             elif url_type == "category_page":
                 yield from self.parse_categories(response)
+            elif url_type == "lupasearch_page":
+                yield from self.parse_lupasearch_page(response)
             else:
                 # "crawl" or "product" — both handled by full_crawl parser,
                 # which already branches on whether the URL is a product page.
@@ -210,14 +291,10 @@ class DiscoverSpider(scrapy.Spider):
         engine = self.crawler.engine
         assert engine is not None
         for item in new_items:
-            req = scrapy.Request(
+            req = self._build_request_for_url_item(
                 item["url"],
-                callback=self.dispatch,
-                errback=self.handle_start_error,
-                meta={
-                    "scrape_url_item_id": item["id"],
-                    "url_type": item["url_type"],
-                },
+                item["url_type"],
+                item_id=item["id"],
             )
             engine.crawl(req)
         raise DontCloseSpider
@@ -331,18 +408,99 @@ class DiscoverSpider(scrapy.Spider):
             else:
                 self._urls_filtered += 1
 
+    def _emit_products(
+        self, products: list[dict[str, Any]]
+    ) -> Generator[DiscoveredUrlItem | ShopBookItem, None, None]:
+        """Yield DiscoveredUrlItem + ShopBookItem rows from a parser result.
+
+        Shared between `parse_categories` (HTML/GraphQL) and
+        `parse_lupasearch_page` (LupaSearch JSON) so both sources go
+        through one place — including the properties merge that
+        preserves parser-emitted dicts.
+        """
+        base_url: str = self.conf.shop.base_url
+        for product in products:
+            url = product.get("url")
+            if url and not url.startswith("http"):
+                url = base_url + url
+            if not url:
+                continue
+
+            if not self._url_passes_filter(url):
+                self._urls_filtered += 1
+                continue
+
+            self._urls_processed += 1
+            yield DiscoveredUrlItem(
+                url=url, shop_name=self.shop_name, source="category"
+            )
+
+            # Yield product data when we have at least a title and price.
+            if not (product.get("title") and product.get("price")):
+                continue
+
+            # Merge parser-emitted properties with top-level extras.
+            # Parser dicts win when both supply the same key (parsers
+            # know more than the generic fallback below).
+            props: dict[str, object] = {}
+            parser_props = product.get("properties")
+            if isinstance(parser_props, dict):
+                props.update(parser_props)
+            for key in ("pages", "cover_type", "duration", "narrator", "translator"):
+                if product.get(key) is not None and key not in props:
+                    props[key] = product[key]
+
+            yield ShopBookItem(
+                url=url,
+                shop_name=self.shop_name,
+                title=product["title"],
+                author=product.get("author"),
+                price=product.get("price"),
+                price_original=product.get("price_original"),
+                in_stock=product.get("in_stock", True),
+                type=product.get("type"),
+                sku=product.get("sku"),
+                isbn=product.get("isbn"),
+                publisher=product.get("publisher"),
+                year=product.get("year"),
+                format=product.get("format"),
+                description=product.get("description"),
+                image_url=product.get("image_url"),
+                categories=product.get("categories", []),
+                properties=props or None,
+            )
+
     def parse_categories(
         self, response: scrapy.http.Response
     ) -> Generator[DiscoveredUrlItem | ShopBookItem | scrapy.Request, None, None]:
-        products: list[dict[str, str | None]] = self.parsers.parse_category_page(
-            response.text
-        )
+        # Adaptive subdivision: if the backend returned 5xx, don't try to
+        # parse — instead reschedule the same range as N smaller-pageSize
+        # requests. Concurrency=2 + cold full-page-cache on Magento can
+        # produce transient 503s on deeper pages; pageSize/5 is light
+        # enough to slip through.
+        if (
+            self.strategy == "graphql"
+            and 500 <= response.status < 600
+        ):
+            yield from self._subdivide_failed_graphql_page(response)
+            return
+
+        result: dict[str, Any] = self.parsers.parse_category_page(response.text)
+        # Backwards compat: shops that haven't migrated to the
+        # {products, total} contract may still return a bare list.
+        if isinstance(result, list):
+            products: list[dict[str, Any]] = result
+            total: int | None = None
+        else:
+            products = list(result.get("products") or [])
+            total = result.get("total")
+
         if not products:
             # If we hit an empty response on page 1, the upstream URL
             # pattern is probably broken — warn so the next run isn't
             # another silent "completed with 0 URLs" outcome.
-            page = response.meta.get("page", 0)
-            if page == 1:
+            page_meta = response.meta.get("page", 0)
+            if page_meta == 1:
                 self._report_validation(
                     "discover_empty_first_page",
                     "url",
@@ -352,89 +510,231 @@ class DiscoverSpider(scrapy.Spider):
                 self._zero_yield_suppressed = True
             return  # No more pages
 
-        base_url: str = self.conf.shop.base_url
-        for product in products:
-            url = product["url"]
-            if url and not url.startswith("http"):
-                url = base_url + url
+        yield from self._emit_products(products)
 
-            if not url:
-                continue
-            if self._url_passes_filter(url):
-                self._urls_processed += 1
-                yield DiscoveredUrlItem(
-                    url=url, shop_name=self.shop_name, source="category"
-                )
+        # Sub-pages (subdivision_depth>=1) are subordinate retries: they
+        # cover a slice of a previously-failed normal page, so we MUST
+        # NOT paginate from them — the parent failed-page handler is
+        # responsible for enqueueing the next normal page.
+        is_subpage = False
+        if self.strategy == "graphql":
+            from book_scraper.spiders.graphql_urls import parse_graphql_page_url
 
-                # Yield product data when we have at least a title and price.
-                # Pass through any extra fields the parser provides so that
-                # GraphQL-based parsers (which return full metadata) populate
-                # complete ShopBookItem records during discovery.
-                if product.get("title") and product.get("price"):
-                    props: dict[str, object] = {}
-                    for key in (
-                        "pages",
-                        "cover_type",
-                        "duration",
-                        "narrator",
-                        "translator",
-                    ):
-                        if product.get(key) is not None:
-                            props[key] = product[key]
-                    yield ShopBookItem(
-                        url=url,
-                        shop_name=self.shop_name,
-                        title=product["title"],
-                        author=product.get("author"),
-                        price=product.get("price"),
-                        price_original=product.get("price_original"),
-                        in_stock=product.get("in_stock", True),
-                        type=product.get("type"),
-                        sku=product.get("sku"),
-                        isbn=product.get("isbn"),
-                        publisher=product.get("publisher"),
-                        year=product.get("year"),
-                        format=product.get("format"),
-                        description=product.get("description"),
-                        image_url=product.get("image_url"),
-                        categories=product.get("categories", []),
-                        properties=props or None,
-                    )
-            else:
-                self._urls_filtered += 1
+            is_subpage = parse_graphql_page_url(response.url)["subdivision_depth"] >= 1
+        if is_subpage:
+            return
 
-        # Paginate. Respect max_pages when the user set a cap so dev
-        # runs don't always exhaust the whole catalog.
-        page = (response.meta.get("page") or 1) + 1
-        if self._max_pages and page > self._max_pages:
-            self.logger.info("max_pages cap: stopping at page %d", self._max_pages)
+        current_page = response.meta.get("page") or 1
+
+        # Upfront pagination: when the parser exposes a real total, the
+        # first page enqueues every remaining page at once so Scrapy can
+        # actually run them in parallel under concurrent_requests_per_domain.
+        # Without this, pages chain serially (page+1 yielded only after
+        # page parses) and concurrency never engages on discover.
+        if current_page == 1 and total is not None and total > 0:
+            yield from self._enqueue_remaining_pages(total)
+            return
+
+        # Fallback for shops without a total (e.g. vaga's HTML scrape):
+        # chain page+1 each time, exactly as before.
+        if total is not None:
+            # Upfront mode: every page is already in the queue; nothing
+            # to do once we've emitted products.
+            return
+
+        next_page = current_page + 1
+        if self._max_pages and next_page > self._max_pages:
+            self.logger.info(
+                "max_pages cap: stopping at page %d", self._max_pages
+            )
             return
         if self.strategy == "graphql":
             from book_scraper.spiders.graphql_urls import build_graphql_page_url
 
             next_url = build_graphql_page_url(
-                self.conf.shop.base_url, self.strategy_conf, page=page
+                self.conf.shop.base_url, self.strategy_conf, page=next_page
             )
         else:
-            next_url = self.strategy_conf.url.format(page=page)
+            next_url = self.strategy_conf.url.format(page=next_page)
 
-        # Dual-write: persist the next page to scrape_url_items so the run
-        # can resume after a crash, THEN yield the Request so Scrapy fetches
-        # it immediately. When we have no run (unit tests), skip the insert
-        # and just yield — dispatch routes back to parse_categories.
         new_item_id = self._enqueue_url(next_url, "category_page")
-        cb = self.dispatch if new_item_id is not None else self.parse_categories
-        yield scrapy.Request(
-            next_url,
-            callback=cb,
-            errback=self.handle_start_error,
-            meta={
-                "page": page,
-                "scrape_url_item_id": new_item_id,
-                "url_type": "category_page",
-            },
-            headers={"Accept": "application/json"} if self.strategy == "graphql" else {},
+        yield self._build_request_for_url_item(
+            next_url, "category_page", item_id=new_item_id, page=next_page
         )
+
+    def _enqueue_remaining_pages(
+        self, total: int
+    ) -> Generator[scrapy.Request, None, None]:
+        """Enqueue pages 2..N upfront so concurrency can engage.
+
+        Called from the first-page parser once we know `total`. The
+        DB-backed queue's unique constraint on (run_id, url) and
+        `insert_scrape_url_item`'s idempotent semantics mean it's safe
+        even if the failure handler later tries to enqueue the same
+        page+1 — the second insert returns the existing row, and
+        Scrapy's dupefilter drops the duplicate fetch.
+        """
+        page_size = self.strategy_conf.page_size
+        last_page = (total + page_size - 1) // page_size  # ceil
+        # Honour --max-pages caps in dev runs.
+        if self._max_pages:
+            last_page = min(last_page, self._max_pages)
+        for page in range(2, last_page + 1):
+            if self.strategy == "graphql":
+                from book_scraper.spiders.graphql_urls import build_graphql_page_url
+
+                next_url = build_graphql_page_url(
+                    self.conf.shop.base_url, self.strategy_conf, page=page
+                )
+            else:
+                # Non-graphql shops only reach this branch when their
+                # parser returns a non-None total — currently no caller
+                # does, so fall back to the conf URL template.
+                next_url = self.strategy_conf.url.format(page=page)
+            new_item_id = self._enqueue_url(next_url, "category_page")
+            yield self._build_request_for_url_item(
+                next_url, "category_page", item_id=new_item_id, page=page
+            )
+
+    def _subdivide_failed_graphql_page(
+        self, response: scrapy.http.Response
+    ) -> Generator[scrapy.Request, None, None]:
+        """Reschedule a 5xx-failed GraphQL page as N smaller-pageSize requests.
+
+        Magento's full-page cache misses on deep pages can produce
+        transient 503s when fetched at pageSize=50 under concurrency
+        pressure. Splitting that range into N pageSize=10 requests
+        gives the backend time to materialise lighter result sets,
+        and lets us continue pagination instead of stalling on one bad
+        page. If the failing request is *already* a sub-divided retry
+        (`_sub=1` in the URL), we don't recurse further — log + skip
+        + still enqueue the next normal page so pagination survives.
+        """
+        from book_scraper.spiders.graphql_urls import (
+            build_graphql_page_url,
+            parse_graphql_page_url,
+        )
+
+        url_meta = parse_graphql_page_url(response.url)
+        page = url_meta["page"] or response.meta.get("page", 1)
+        page_size = url_meta["page_size"] or self.strategy_conf.page_size
+        depth = url_meta["subdivision_depth"]
+
+        self._report_validation(
+            "discover_backend_5xx",
+            "url",
+            response.url,
+            f"HTTP {response.status} on page {page} (size {page_size}, depth {depth})",
+        )
+
+        if depth >= 1:
+            # Already a subdivided retry — give up on this micro-range.
+            self.logger.warning(
+                "Subdivided page %d (size %d) also returned %d; skipping",
+                page,
+                page_size,
+                response.status,
+            )
+        else:
+            factor = max(2, int(self.strategy_conf.subdivide_factor))
+            min_size = max(1, int(self.strategy_conf.subdivide_min_page_size))
+            sub_size = max(min_size, page_size // factor)
+            # Items covered by the failed page: [(page-1)*page_size, page*page_size).
+            # In sub-page coordinates that's pages (page-1)*ratio+1 .. page*ratio.
+            ratio = page_size // sub_size
+            if ratio < 1:
+                ratio = 1
+            first_sub = (page - 1) * ratio + 1
+            self.logger.info(
+                "Subdividing failed page %d (size %d) into %d × pageSize=%d",
+                page,
+                page_size,
+                ratio,
+                sub_size,
+            )
+            for i in range(ratio):
+                sub_page = first_sub + i
+                sub_url = build_graphql_page_url(
+                    self.conf.shop.base_url,
+                    self.strategy_conf,
+                    page=sub_page,
+                    page_size_override=sub_size,
+                    subdivision_depth=1,
+                )
+                new_id = self._enqueue_url(sub_url, "category_page")
+                yield self._build_request_for_url_item(
+                    sub_url, "category_page", item_id=new_id, page=sub_page
+                )
+
+        # Continue normal pagination — but only for depth==0. When a
+        # sub-page (depth>=1) fails, the parent failed-page handler
+        # already enqueued the next normal page, so we'd double-enqueue.
+        if depth >= 1:
+            return
+        normal_page = page + 1
+        if self._max_pages and normal_page > self._max_pages:
+            return
+        next_url = build_graphql_page_url(
+            self.conf.shop.base_url, self.strategy_conf, page=normal_page
+        )
+        next_id = self._enqueue_url(next_url, "category_page")
+        yield self._build_request_for_url_item(
+            next_url, "category_page", item_id=next_id, page=normal_page
+        )
+
+    def parse_lupasearch_page(
+        self, response: scrapy.http.Response
+    ) -> Generator[DiscoveredUrlItem | ShopBookItem | scrapy.Request, None, None]:
+        """Parse a LupaSearch JSON response and schedule remaining pages.
+
+        On the first page we enqueue *every* remaining page upfront, so
+        concurrent_requests_per_domain actually engages. Subsequent
+        pages just emit products — the queue already has the rest.
+        """
+        from book_scraper.spiders.lupasearch_urls import (
+            advance_lupasearch_url,
+            parse_lupasearch_url_offsets,
+        )
+
+        result: dict[str, Any] = self.parsers.parse_lupasearch_response(response.text)
+        products: list[dict[str, Any]] = result.get("products") or []
+        total = int(result.get("total") or 0)
+
+        if not products:
+            page = response.meta.get("page", 0)
+            if page == 1:
+                self._report_validation(
+                    "discover_empty_first_page",
+                    "url",
+                    response.url,
+                    f"page 1 returned 0 products (len={len(response.text)})",
+                )
+                self._zero_yield_suppressed = True
+            return
+
+        yield from self._emit_products(products)
+
+        offset, limit = parse_lupasearch_url_offsets(response.url)
+        current_page = response.meta.get("page") or 1
+
+        # Upfront pagination on first page only.
+        if current_page == 1 and total > 0 and limit > 0:
+            next_offset = offset + limit
+            page = 2
+            while next_offset < total:
+                if self._max_pages and page > self._max_pages:
+                    return
+                next_url = advance_lupasearch_url(response.url, next_offset)
+                new_item_id = self._enqueue_url(next_url, "lupasearch_page")
+                yield self._build_request_for_url_item(
+                    next_url, "lupasearch_page", item_id=new_item_id, page=page
+                )
+                next_offset += limit
+                page += 1
+            return
+
+        # Pages 2..N: queue is already full; nothing more to do.
+        return
 
     def parse_full_crawl(
         self, response: scrapy.http.Response

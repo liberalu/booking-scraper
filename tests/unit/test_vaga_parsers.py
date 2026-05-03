@@ -24,13 +24,17 @@ def test_parse_sitemap_urls():
 
 def test_parse_category_page():
     html = (FIXTURES / "vaga_category_page.html").read_text()
-    products = parse_category_page(html)
+    result = parse_category_page(html)
+    products = result["products"]
     assert len(products) > 0
     first = products[0]
     assert "url" in first
     assert "title" in first
     assert "price" in first
     assert first["url"].startswith("https://vaga.lt/")
+    # vaga's HTML doesn't carry a count signal — total stays None,
+    # which makes the spider fall back to per-page pagination.
+    assert result["total"] is None
 
 
 def test_parse_product_page():
@@ -74,7 +78,7 @@ def test_parse_category_page_unescapes_html_entities_in_title():
       <span class="price coupon">10,00€</span>
     </div>
     """
-    products = parse_category_page(html_doc)
+    products = parse_category_page(html_doc)["products"]
     assert products[0]["title"] == "Scythe & Sparrow"
 
 
@@ -90,7 +94,7 @@ def test_parse_category_page_extracts_author():
       <span class="price coupon">5,00€</span>
     </div>
     """
-    products = parse_category_page(html_doc)
+    products = parse_category_page(html_doc)["products"]
     assert products[0]["author"] == "Paulo Coelho"
     assert products[1]["author"] is None
 

@@ -31,6 +31,7 @@ _STRATEGY_URL_TYPE = {
     "categories": "category_page",
     "full_crawl": "crawl",
     "graphql": "category_page",
+    "lupasearch": "lupasearch_page",
 }
 
 
@@ -159,6 +160,17 @@ class DiscoverService:
                 else shop_config["shop"]["base_url"]
             )
             return build_graphql_page_url(base_url, gql_cfg, page=1)
+        if strategy == "lupasearch":
+            ls_cfg = (
+                discover_cfg.lupasearch
+                if hasattr(discover_cfg, "lupasearch")
+                else discover_cfg["lupasearch"]
+            )
+            from book_scraper.spiders.lupasearch_urls import (
+                build_lupasearch_seed_url,
+            )
+
+            return build_lupasearch_seed_url(ls_cfg)
         raise ValueError(f"Unknown strategy: {strategy}")
 
     def finish_discover(

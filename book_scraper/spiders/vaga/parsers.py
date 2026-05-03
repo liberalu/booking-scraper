@@ -246,14 +246,18 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
     return [loc.text for loc in root.findall(".//s:loc", ns) if loc.text is not None]
 
 
-def parse_category_page(html: str) -> list[dict[str, str | None]]:
+def parse_category_page(html: str) -> dict[str, object]:
     """Parse product cards from a vaga.lt category page.
 
-    Returns list of dicts with keys: url, title, price, price_original, image_url.
-    Prices are in Lithuanian format: '16,32€' -> '16.32'.
-    URLs have query parameters stripped (e.g. '?limit=100' removed).
+    Returns ``{"products": [...], "total": None}``. vaga.lt's category
+    HTML doesn't expose a reliable total-count signal, so the spider
+    falls back to per-page chained pagination — same behaviour as
+    before the contract change. Each product dict keeps its previous
+    keys (url, title, author, price, price_original, image_url).
+    Prices are in Lithuanian format: '16,32€' -> '16.32'. URLs have
+    query parameters stripped (e.g. '?limit=100' removed).
     """
-    products = []
+    products: list[dict[str, str | None]] = []
     segments = re.split(r'class="product-item-container product-\d+"', html)[1:]
     for seg in segments:
         name_match = re.search(r'<p class="name"><a href="([^"]+)">([^<]+)', seg)
@@ -295,7 +299,7 @@ def parse_category_page(html: str) -> list[dict[str, str | None]]:
                 "image_url": image_url,
             }
         )
-    return products
+    return {"products": products, "total": None}
 
 
 def parse_product_page(html: str) -> dict[str, object]:

@@ -126,7 +126,12 @@ def backfill(
 
         updated = 0
         for body in pages:
-            products = parsers.parse_category_page(body)
+            # parse_category_page returns {"products", "total"} — backwards
+            # compat: legacy parsers may still return a bare list.
+            parsed = parsers.parse_category_page(body)
+            products = (
+                parsed.get("products", []) if isinstance(parsed, dict) else parsed
+            )
             for product in products:
                 url = product.get("url")
                 author = product.get("author")

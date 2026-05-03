@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
@@ -461,37 +461,61 @@ def upsert_discovered_url(
     provided, and adopt a resolved `shop_book_id` when one is supplied.
     The raw `url` on an existing row is left alone — the normalized
     URL is the canonical identifier.
+
+    Implemented as an atomic ``INSERT … ON CONFLICT DO UPDATE`` so two
+    items in the same pipeline batch (e.g. a book that appears under
+    multiple categories in one GraphQL page response) don't race on
+    the SELECT-then-INSERT path. The previous version triggered an
+    ``IntegrityError`` whenever a duplicate snuck in, which then
+    poisoned the SQLAlchemy session with ``PendingRollbackError`` for
+    every subsequent item — the spider would go silent, stall, and
+    die without finishing.
     """
     normalized = normalize_url(url)
     now = datetime.now(UTC)
-    stmt = select(DiscoveredUrl).where(
-        DiscoveredUrl.shop_id == shop_id,
-        DiscoveredUrl.normalized_url == normalized,
-    )
-    existing = session.execute(stmt).scalar_one_or_none()
-    if existing is not None:
-        existing.last_seen_at = now
-        if run_id is not None:
-            existing.last_seen_run_id = run_id
-        if shop_book_id is not None and existing.shop_book_id != shop_book_id:
-            existing.shop_book_id = shop_book_id
-        if shop_book_id is not None and existing.url_type == "unknown":
-            existing.url_type = "product"
-        session.flush()
-        return existing
-    record = DiscoveredUrl(
+    initial_url_type = "product" if shop_book_id is not None else "unknown"
+
+    insert_stmt = pg_insert(DiscoveredUrl).values(
         shop_id=shop_id,
         url=url,
         normalized_url=normalized,
         source=source,
-        url_type="product" if shop_book_id is not None else "unknown",
+        url_type=initial_url_type,
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
         shop_book_id=shop_book_id,
     )
-    session.add(record)
+    # On conflict, refresh last_seen_at + last_seen_run_id, adopt a
+    # resolved shop_book_id if one came in, and promote url_type from
+    # 'unknown' → 'product' once we know it's a real product page.
+    update_set: dict[str, Any] = {"last_seen_at": now}
+    if run_id is not None:
+        update_set["last_seen_run_id"] = run_id
+    if shop_book_id is not None:
+        update_set["shop_book_id"] = shop_book_id
+        # Promote url_type from 'unknown' to 'product' but never demote
+        # 'non_product' / 'unreachable' — those are operator decisions.
+        update_set["url_type"] = func.coalesce(
+            case(
+                (DiscoveredUrl.url_type == "unknown", "product"),
+                else_=DiscoveredUrl.url_type,
+            ),
+            "product",
+        )
+    upsert_stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["shop_id", "normalized_url"],
+        set_=update_set,
+    ).returning(DiscoveredUrl.id)
+    new_id = session.execute(upsert_stmt).scalar_one()
     session.flush()
+    record = session.get(DiscoveredUrl, new_id)
+    assert record is not None
+    # The ORM may have a stale cached row from before the upsert (when
+    # the same URL was upserted earlier in the session). Refresh so
+    # callers see last_seen_at / last_seen_run_id / shop_book_id values
+    # that reflect the just-applied UPDATE.
+    session.refresh(record)
     return record
 
 

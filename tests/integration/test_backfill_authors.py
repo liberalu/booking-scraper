@@ -73,7 +73,7 @@ class TestBackfillAuthors:
         # Sample some URLs and authors from the fixture to seed shop_books.
         from book_scraper.spiders.vaga.parsers import parse_category_page
 
-        products = parse_category_page(FIXTURE.read_text())
+        products = parse_category_page(FIXTURE.read_text())["products"]
         with_author = [p for p in products if p.get("author") and p.get("url")][:3]
         assert with_author, "fixture should contain authored products"
 
@@ -119,7 +119,7 @@ class TestBackfillAuthors:
 
         from book_scraper.spiders.vaga.parsers import parse_category_page
 
-        products = parse_category_page(FIXTURE.read_text())
+        products = parse_category_page(FIXTURE.read_text())["products"]
         first = next(p for p in products if p.get("author") and p.get("url"))
         url = (
             first["url"]

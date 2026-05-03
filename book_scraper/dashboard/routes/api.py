@@ -1731,6 +1731,27 @@ def api_url_detail(url_id: int, session: Session = Depends(get_db)) -> dict[str,
 # ─── Shops ───────────────────────────────────────────────────────────────────
 
 
+def _configured_discover_strategies(shop_name: str) -> list[str]:
+    """Return the discover strategy names that this shop has wired up.
+
+    Used by the dashboard's run/schedule dialogs to render only the
+    options that will actually work — pegasas, for example, exposes
+    `graphql` + `lupasearch` but not `sitemap`/`categories`.
+    """
+    try:
+        from book_scraper.config import load_shop_config
+
+        cfg = load_shop_config(shop_name)
+    except Exception:
+        return []
+    available: list[str] = []
+    # Order matches the dialog: cheap-and-fast first, slowest last.
+    for name in ("sitemap", "categories", "graphql", "lupasearch", "full_crawl"):
+        if getattr(cfg.discover, name, None) is not None:
+            available.append(name)
+    return available
+
+
 @router.get("/shops")
 def api_shops(session: Session = Depends(get_db)) -> dict[str, Any]:
     shops = get_all_shops(session)
@@ -1750,6 +1771,7 @@ def api_shops(session: Session = Depends(get_db)) -> dict[str, Any]:
                 "prices": stats["prices"],
                 "last_run_ago": _rel(last.started_at if last else None),
                 "last_run_status": last.status if last else "—",
+                "discover_strategies": _configured_discover_strategies(s.name),
             }
         )
     return {"shops": result}
@@ -1781,6 +1803,7 @@ def api_shop_detail(
             _run_dict(r, terminal_count=terminal.get(r.id)) for r in runs
         ],
         "rate_settings": rate_settings,
+        "discover_strategies": _configured_discover_strategies(shop.name),
     }
 
 

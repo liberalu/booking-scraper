@@ -17,6 +17,29 @@ const _HF_FOCUSABLE_SEL = [
 
 const _hfModalCtx = React.createContext(null);
 
+// ══════════════════════════════ Discover strategy catalog ══════════════════════════════
+// Single source of truth for strategy button labels + hint copy. The backend
+// (/api/shops) tells us which keys are configured for each shop; we filter
+// this catalog by that list when rendering the segmented picker.
+const HF_DISCOVER_STRATEGIES = {
+  sitemap:    { label: 'Sitemap',    hint: 'Read /sitemap.xml — fastest, only URL discovery' },
+  categories: { label: 'Categories', hint: 'Walk category listing pages — also extracts prices' },
+  graphql:    { label: 'GraphQL',    hint: 'Magento GraphQL — full metadata (ISBN, year, pages) in one pass' },
+  lupasearch: { label: 'LupaSearch', hint: 'Fast price + stock + new-arrival pass (no ISBN/year/pages)' },
+  full_crawl: { label: 'Full crawl', hint: 'Follow every internal link — slowest, most thorough' },
+};
+
+// Build segmented options from the strategy keys a shop has configured.
+function _hfStrategyOptions(keys) {
+  const list = Array.isArray(keys) && keys.length ? keys : Object.keys(HF_DISCOVER_STRATEGIES);
+  return list
+    .filter(k => HF_DISCOVER_STRATEGIES[k])
+    .map(k => ({ value: k, label: HF_DISCOVER_STRATEGIES[k].label }));
+}
+function _hfStrategyHint(key) {
+  return HF_DISCOVER_STRATEGIES[key]?.hint || '';
+}
+
 // ══════════════════════════════ Base Modal ══════════════════════════════
 function HFModal({ open, onClose, width = 560, children, align = 'center', label }) {
   const HF = getHF();
@@ -444,6 +467,15 @@ function HFNewRunDialog({ open, onClose, goto }) {
 
   const selShop = shops.find(s => s.name === shop);
   const urlCount = selShop ? (selShop.discovered_urls || 0) : 0;
+  const shopStrategies = selShop?.discover_strategies || [];
+
+  // Snap strategy to the first one the selected shop actually exposes
+  // whenever the shop or phase changes — otherwise switching from vaga
+  // to pegasas leaves "sitemap" selected (which pegasas doesn't have).
+  React.useEffect(() => {
+    if (phase !== 'discover' || !shopStrategies.length) return;
+    if (!shopStrategies.includes(strategy)) setStrategy(shopStrategies[0]);
+  }, [phase, shop, shopStrategies.join(',')]);
 
   const submit = async () => {
     setSubmitting(true);
@@ -501,16 +533,15 @@ function HFNewRunDialog({ open, onClose, goto }) {
           </HFField>
         )}
         {phase === 'discover' && (
-          <HFField label="Strategy" hint={{
-            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
-            categories: 'Walk category listing pages — also extracts prices',
-            full_crawl: 'Follow every internal link — slowest, most thorough',
-          }[strategy]}>
-            <HFSegmented value={strategy} onChange={setStrategy} options={[
-              { value:'sitemap',    label:'Sitemap' },
-              { value:'categories', label:'Categories' },
-              { value:'full_crawl', label:'Full crawl' },
-            ]}/>
+          <HFField label="Strategy" hint={_hfStrategyHint(strategy)}>
+            {shopStrategies.length ? (
+              <HFSegmented value={strategy} onChange={setStrategy}
+                options={_hfStrategyOptions(shopStrategies)}/>
+            ) : (
+              <div style={{ fontSize:13, color:'var(--hf-ink3)' }}>
+                No discover strategies configured for {shop || 'this shop'}.
+              </div>
+            )}
           </HFField>
         )}
         {error && (
@@ -577,16 +608,41 @@ function HFCronFrequencyPicker({ value, onChange }) {
 
 function HFNewScheduleDialog({ open, onClose }) {
   const HF = getHF();
-  const [shop, setShop] = React.useState('vaga');
+  const [shop, setShop] = React.useState('');
   const [phase, setPhase] = React.useState('scan');
   const [strategy, setStrategy] = React.useState('');
   const [cron, setCron] = React.useState('0 */2 * * *');
+  const [shops, setShops] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
+  // Load shops + their per-shop strategies. Replaces the old hardcoded
+  // dropdown (which silently omitted pegasas).
   React.useEffect(() => {
-    setStrategy(phase === 'discover' ? 'sitemap' : 'delta');
-  }, [phase]);
+    if (!open) return;
+    setError('');
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => {
+        const list = d.shops || [];
+        setShops(list);
+        setShop(prev => prev || (list[0] && list[0].name) || '');
+      })
+      .catch(() => setError('Could not load shops'));
+  }, [open]);
+
+  const selShop = shops.find(s => s.name === shop);
+  const shopStrategies = selShop?.discover_strategies || [];
+
+  // Snap to a valid default whenever phase/shop changes.
+  React.useEffect(() => {
+    if (phase === 'scan') {
+      if (!['delta', 'full'].includes(strategy)) setStrategy('delta');
+      return;
+    }
+    if (!shopStrategies.length) { setStrategy(''); return; }
+    if (!shopStrategies.includes(strategy)) setStrategy(shopStrategies[0]);
+  }, [phase, shop, shopStrategies.join(',')]);
 
   const handleCreate = async () => {
     if (!cron.trim()) return;
@@ -617,12 +673,10 @@ function HFNewScheduleDialog({ open, onClose }) {
       <HFModalHead title="New schedule" sub="Run a shop on a recurring cron" onClose={() => onClose(false)} icon={HF_ICONS.cron}/>
       <HFModalBody>
         <HFField label="Shop" required>
-          <HFSelect value={shop} onChange={setShop} options={[
-            { value:'vaga', label:'vaga.lt' },
-            { value:'knygos', label:'knygos.lt' },
-            { value:'patogupirkti', label:'patogupirkti.lt' },
-            { value:'humanitas', label:'humanitas.lt' },
-          ]}/>
+          <HFSelect value={shop} onChange={setShop} options={shops.map(s => ({
+            value: s.name,
+            label: `${s.name}.lt`,
+          }))}/>
         </HFField>
         <HFField label="Phase" required>
           <HFSegmented value={phase} onChange={setPhase} options={[
@@ -633,22 +687,21 @@ function HFNewScheduleDialog({ open, onClose }) {
         <HFField label="Mode" hint={phase === 'scan' ? {
             delta: 'Resumable scan — only URLs not yet scraped',
             full:  'Re-scrape every known URL',
-          }[strategy] : {
-            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
-            categories: 'Walk category listing pages — also extracts prices',
-            full_crawl: 'Follow every internal link — slowest, most thorough',
-          }[strategy]}>
+          }[strategy] : _hfStrategyHint(strategy)}>
           {phase === 'scan' ? (
             <HFSegmented value={strategy} onChange={setStrategy} options={[
               { value:'delta', label:'Delta' },
               { value:'full',  label:'Full' },
             ]}/>
           ) : (
-            <HFSegmented value={strategy} onChange={setStrategy} options={[
-              { value:'sitemap',    label:'Sitemap' },
-              { value:'categories', label:'Categories' },
-              { value:'full_crawl', label:'Full crawl' },
-            ]}/>
+            shopStrategies.length ? (
+              <HFSegmented value={strategy} onChange={setStrategy}
+                options={_hfStrategyOptions(shopStrategies)}/>
+            ) : (
+              <div style={{ fontSize:13, color:'var(--hf-ink3)' }}>
+                No discover strategies configured for {shop || 'this shop'}.
+              </div>
+            )
           )}
         </HFField>
         <HFField label="Frequency" required>
@@ -671,6 +724,7 @@ function HFEditScheduleDialog({ open, job, onClose }) {
   const [phase, setPhase] = React.useState(job?.phase || 'scan');
   const [strategy, setStrategy] = React.useState(job?.strategy || '');
   const [cron, setCron] = React.useState(job?.cron || '');
+  const [shopStrategies, setShopStrategies] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -678,13 +732,24 @@ function HFEditScheduleDialog({ open, job, onClose }) {
     if (job) { setPhase(job.phase || 'scan'); setStrategy(job.strategy || ''); setCron(job.cron || ''); setError(''); }
   }, [job]);
 
+  // Look up the job's shop so we know which discover strategies are
+  // configured (vaga: sitemap/categories/full_crawl; pegasas: graphql/lupasearch).
   React.useEffect(() => {
-    if (phase === 'discover' && !['sitemap', 'categories', 'full_crawl'].includes(strategy)) {
-      setStrategy('sitemap');
-    } else if (phase === 'scan' && !['delta', 'full'].includes(strategy)) {
-      setStrategy('delta');
+    if (!open || !job?.shop) { setShopStrategies([]); return; }
+    fetch(`/api/shops/${encodeURIComponent(job.shop)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setShopStrategies(d?.discover_strategies || []))
+      .catch(() => setShopStrategies([]));
+  }, [open, job?.shop]);
+
+  React.useEffect(() => {
+    if (phase === 'scan') {
+      if (!['delta', 'full'].includes(strategy)) setStrategy('delta');
+      return;
     }
-  }, [phase]);
+    if (!shopStrategies.length) return;
+    if (!shopStrategies.includes(strategy)) setStrategy(shopStrategies[0]);
+  }, [phase, shopStrategies.join(',')]);
 
   const handleSave = async () => {
     if (!cron.trim() || !job?.id) return;
@@ -721,22 +786,21 @@ function HFEditScheduleDialog({ open, job, onClose }) {
         <HFField label="Mode" hint={phase === 'scan' ? {
             delta: 'Resumable scan — only URLs not yet scraped',
             full:  'Re-scrape every known URL',
-          }[strategy] : {
-            sitemap:    'Read /sitemap.xml — fastest, only URL discovery',
-            categories: 'Walk category listing pages — also extracts prices',
-            full_crawl: 'Follow every internal link — slowest, most thorough',
-          }[strategy]}>
+          }[strategy] : _hfStrategyHint(strategy)}>
           {phase === 'scan' ? (
             <HFSegmented value={strategy} onChange={setStrategy} options={[
               { value:'delta', label:'Delta' },
               { value:'full',  label:'Full' },
             ]}/>
           ) : (
-            <HFSegmented value={strategy} onChange={setStrategy} options={[
-              { value:'sitemap',    label:'Sitemap' },
-              { value:'categories', label:'Categories' },
-              { value:'full_crawl', label:'Full crawl' },
-            ]}/>
+            shopStrategies.length ? (
+              <HFSegmented value={strategy} onChange={setStrategy}
+                options={_hfStrategyOptions(shopStrategies)}/>
+            ) : (
+              <div style={{ fontSize:13, color:'var(--hf-ink3)' }}>
+                No discover strategies configured for this shop.
+              </div>
+            )
           )}
         </HFField>
         <HFField label="Frequency" required>

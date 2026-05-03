@@ -325,6 +325,7 @@ scrape_phase_enum = Enum(
     "discover_categories",
     "discover_full_crawl",
     "discover_graphql",
+    "discover_lupasearch",
     "scan",
     name="scrape_phase",
     create_type=False,

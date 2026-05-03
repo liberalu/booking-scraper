@@ -76,6 +76,80 @@ def test_prepare_discover_resumes_running_run_with_pending_items(db_session):
     assert second.run_id == first.run_id  # resumed, not new
 
 
+def _lupasearch_config(
+    endpoint="https://api.lupasearch.com/v1/query/abc",
+    category_ids=("5107", "7352"),
+    page_size=42,
+):
+    return SimpleNamespace(
+        shop=SimpleNamespace(base_url="https://www.pegasas.lt"),
+        discover=SimpleNamespace(
+            lupasearch=SimpleNamespace(
+                endpoint=endpoint,
+                category_ids=list(category_ids),
+                page_size=page_size,
+                extra_filters=None,
+            )
+        ),
+    )
+
+
+def test_prepare_discover_lupasearch_seeds_synthetic_url(db_session):
+    """The synthetic URL must carry offset/limit/category_ids so that
+    the spider can rebuild the POST body during start() and after a
+    resume — neither of which has access to anything beyond the URL."""
+    upsert_shop(db_session, "pegasas", "https://www.pegasas.lt")
+    db_session.commit()
+
+    service = DiscoverService(db_session)
+    plan = service.prepare_discover(
+        "pegasas",
+        "https://www.pegasas.lt",
+        "lupasearch",
+        _lupasearch_config(),
+    )
+
+    items = db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).all()
+    assert len(items) == 1
+    seed = items[0]
+    assert seed.url_type == "lupasearch_page"
+    assert seed.status == "pending"
+    assert seed.url.startswith("https://api.lupasearch.com/v1/query/abc?")
+    assert "offset=0" in seed.url
+    assert "limit=42" in seed.url
+    assert "category_ids=5107%2C7352" in seed.url
+
+
+def test_lupasearch_seed_round_trips_to_post_body(db_session):
+    """Verify the URL stored in the queue rebuilds into the same POST
+    body the spider would have sent for the original request — this is
+    the contract the resume path depends on."""
+    import json
+
+    from book_scraper.spiders.lupasearch_urls import (
+        build_lupasearch_post_request_kwargs,
+    )
+
+    upsert_shop(db_session, "pegasas", "https://www.pegasas.lt")
+    db_session.commit()
+
+    service = DiscoverService(db_session)
+    plan = service.prepare_discover(
+        "pegasas",
+        "https://www.pegasas.lt",
+        "lupasearch",
+        _lupasearch_config(category_ids=("5107", "7352", "5125")),
+    )
+
+    seed = db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).one()
+    kwargs = build_lupasearch_post_request_kwargs(seed.url)
+    body = json.loads(kwargs["body"])
+    assert kwargs["method"] == "POST"
+    assert body["offset"] == 0
+    assert body["limit"] == 42
+    assert body["filters"]["category_ids"] == ["5107", "7352", "5125"]
+
+
 def test_finish_discover_keeps_staging_rows(db_session):
     """scrape_url_items used to be deleted on discover finish; they're now
     kept as the source of truth for per-URL run history (see commit
