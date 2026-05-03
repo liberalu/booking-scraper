@@ -688,7 +688,46 @@ def try_acquire_scan_lock(session: Session, shop_id: int, phase: str) -> bool:
     return bool(result)
 
 
-_RETRYABLE_FAILURE_REASONS = frozenset({"run_aborted", "stuck_in_processing"})
+_RETRYABLE_FAILURE_REASONS = frozenset(
+    {"run_aborted", "stuck_in_processing", "subdivision_5xx"}
+)
+
+
+def count_auto_resume_chain_depth(session: Session, run_id: int) -> int:
+    """Count how many auto-resumes precede this run.
+
+    A run that adopted a previous failed-resumable run's queue emits a
+    `resumed_after_failure` event with `previous_run_id` in its
+    payload. Walking back through that chain tells us how many resume
+    cycles have already happened — the StallDetector uses this to cap
+    runaway loops when the underlying network problem isn't going to
+    fix itself.
+
+    Returns 0 for a fresh run (no `resumed_after_failure` event) and
+    increments by 1 for each ancestor in the chain.
+    """
+    depth = 0
+    current = run_id
+    seen: set[int] = set()
+    while current not in seen:
+        seen.add(current)
+        evt = (
+            session.query(ScrapeRunEvent)
+            .filter(
+                ScrapeRunEvent.run_id == current,
+                ScrapeRunEvent.event_type == "resumed_after_failure",
+            )
+            .order_by(ScrapeRunEvent.id.desc())
+            .first()
+        )
+        if evt is None:
+            return depth
+        depth += 1
+        prev = (evt.payload or {}).get("previous_run_id")
+        if prev is None:
+            return depth
+        current = int(prev)
+    return depth
 
 
 def _reset_retryable_failures(session: Session, run_id: int) -> int:

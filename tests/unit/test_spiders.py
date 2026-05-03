@@ -339,6 +339,9 @@ class TestDiscoverSpiderSubdivision:
     def test_5xx_on_already_subdivided_does_not_recurse(self):
         """A failing depth=1 sub-page must NOT yield more sub-pages,
         and must NOT enqueue the next normal page (parent already did).
+        It also tags the response so dispatch's finally marks the
+        URL as `failed/subdivision_5xx` instead of silently `done`,
+        so Continue/auto-resume can pick it up.
         """
         from book_scraper.spiders.graphql_urls import build_graphql_page_url
 
@@ -353,6 +356,8 @@ class TestDiscoverSpiderSubdivision:
         response = self._gql_response(url, status=503)
         results = list(spider.parse_categories(response))
         assert results == []  # nothing yielded — we drop this micro-range
+        # Marker for dispatch.finally to flip status=failed.
+        assert response.meta.get("subdivision_5xx_failed") is True
 
     def test_successful_subpage_does_not_paginate(self):
         """A 200 on a depth=1 sub-page should emit products but NOT

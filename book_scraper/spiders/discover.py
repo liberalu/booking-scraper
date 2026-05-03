@@ -260,7 +260,24 @@ class DiscoverSpider(scrapy.Spider):
                 factory = get_session_factory(database_url)
                 session = factory()
                 try:
-                    mark_scrape_url_item_done(session, item_id)
+                    # Sub-page subdivision retries: a depth=1 page that
+                    # itself returned 5xx is a real failure — the
+                    # subdivision handler can't recurse further, so we
+                    # mark the URL as failed (retryable reason) so the
+                    # next Continue/auto-resume cycle picks it up.
+                    if response.meta.get("subdivision_5xx_failed"):
+                        from book_scraper.db.repo import (
+                            mark_scrape_url_item_failed,
+                        )
+
+                        mark_scrape_url_item_failed(
+                            session,
+                            item_id,
+                            http_status=response.status,
+                            error_reason="subdivision_5xx",
+                        )
+                    else:
+                        mark_scrape_url_item_done(session, item_id)
                     session.commit()
                 finally:
                     session.close()
@@ -628,9 +645,16 @@ class DiscoverSpider(scrapy.Spider):
         )
 
         if depth >= 1:
-            # Already a subdivided retry — give up on this micro-range.
+            # Already a subdivided retry — don't recurse further. Tag
+            # the response so dispatch's finally marks the URL as
+            # `failed` with reason `subdivision_5xx` (a retryable
+            # reason) instead of silently `done`. The next Continue
+            # or auto-resume picks it up and tries the same range
+            # again, hopefully with the backend recovered.
+            response.meta["subdivision_5xx_failed"] = True
             self.logger.warning(
-                "Subdivided page %d (size %d) also returned %d; skipping",
+                "Subdivided page %d (size %d) also returned %d; "
+                "marking as retryable failure",
                 page,
                 page_size,
                 response.status,

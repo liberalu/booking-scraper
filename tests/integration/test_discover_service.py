@@ -150,6 +150,53 @@ def test_lupasearch_seed_round_trips_to_post_body(db_session):
     assert body["filters"]["category_ids"] == ["5107", "7352", "5125"]
 
 
+def test_count_auto_resume_chain_depth(db_session):
+    """The chain depth helper backs the StallDetector's auto-resume cap.
+
+    A run that adopted a previous failed-resumable run's queue emits a
+    `resumed_after_failure` event with `previous_run_id` in its
+    payload. Walking that chain back gives the count the cap compares
+    against.
+    """
+    from book_scraper.db import scrape_run_events as run_event_types
+    from book_scraper.db.repo import (
+        count_auto_resume_chain_depth,
+        create_scrape_run,
+        emit_scrape_run_event,
+    )
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+
+    run_a = create_scrape_run(db_session, shop.id, "discover_sitemap")
+    run_b = create_scrape_run(db_session, shop.id, "discover_sitemap")
+    run_c = create_scrape_run(db_session, shop.id, "discover_sitemap")
+    db_session.commit()
+
+    # Fresh run — no resumed_after_failure event.
+    assert count_auto_resume_chain_depth(db_session, run_a.id) == 0
+
+    # B was resumed from A.
+    emit_scrape_run_event(
+        db_session,
+        run_b.id,
+        run_event_types.RESUMED_AFTER_FAILURE,
+        payload={"previous_run_id": run_a.id},
+    )
+    db_session.commit()
+    assert count_auto_resume_chain_depth(db_session, run_b.id) == 1
+
+    # C was resumed from B → chain depth 2.
+    emit_scrape_run_event(
+        db_session,
+        run_c.id,
+        run_event_types.RESUMED_AFTER_FAILURE,
+        payload={"previous_run_id": run_b.id},
+    )
+    db_session.commit()
+    assert count_auto_resume_chain_depth(db_session, run_c.id) == 2
+
+
 def test_finish_discover_keeps_staging_rows(db_session):
     """scrape_url_items used to be deleted on discover finish; they're now
     kept as the source of truth for per-URL run history (see commit

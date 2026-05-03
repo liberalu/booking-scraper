@@ -37,6 +37,16 @@ DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
 # tight a window — runs got killed at 50%+ done with 130+ pending.
 STALL_TIMEOUT = 180  # pragma: no cover
 
+# When StallDetector kills a run, automatically spawn a fresh scrapy
+# process up to N times in a row. The spawned spider's
+# `prepare_discover` finds the failed-resumable run and inherits its
+# pending queue (with retryable failures reset to pending), so the
+# crawl makes forward progress without operator intervention. Set to 0
+# to disable. Counts via the `resumed_after_failure` event chain on
+# scrape_run_events so a run that got resumed from outside (via the
+# dashboard's Continue button) also counts toward the cap.
+STALL_AUTO_RESUME_MAX = 10  # pragma: no cover
+
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
     "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover

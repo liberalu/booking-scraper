@@ -79,6 +79,11 @@ class StallDetector:  # pragma: no cover
             run_id = getattr(spider, "_run_id", None)
             if run_id is not None:
                 self._finalize_run_failed(run_id, "stall_timeout")
+                # Auto-resume on stall: the underlying queue still has
+                # pending URLs that the next process can pick up. Spawn
+                # a detached scrapy process now so the crawl makes
+                # progress without operator intervention.
+                self._maybe_auto_resume(spider, run_id)
 
             engine.close_spider(spider, "stall_timeout")
             return
@@ -106,6 +111,118 @@ class StallDetector:  # pragma: no cover
         database_url = self.crawler.settings.get("DATABASE_URL")
         finalize_run_failsafe(
             database_url, run_id, "failed", reason, resumable_after_failure=True
+        )
+
+    def _maybe_auto_resume(self, spider: Any, run_id: int) -> None:
+        """If under the cap, spawn a fresh scrapy process to continue the run.
+
+        The new process's ``prepare_discover`` finds this just-failed
+        run as resumable, creates a new run row that inherits the
+        pending queue (and resets retryable failures), and continues
+        crawling. The cap (``STALL_AUTO_RESUME_MAX``) limits runaway
+        loops when the underlying problem isn't going to fix itself.
+        """
+        max_attempts = self.crawler.settings.getint("STALL_AUTO_RESUME_MAX", 0)
+        if max_attempts <= 0:
+            return
+
+        shop_name = getattr(spider, "shop_name", None)
+        if not shop_name:
+            logger.warning(
+                "Auto-resume: spider has no shop_name on run %d; skipping", run_id
+            )
+            return
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if not database_url:
+            return
+
+        from book_scraper.db.repo import count_auto_resume_chain_depth
+        from book_scraper.db.session import get_session_factory
+
+        try:
+            session = get_session_factory(database_url)()
+            try:
+                depth = count_auto_resume_chain_depth(session, run_id)
+            finally:
+                session.close()
+        except Exception:
+            logger.exception(
+                "Auto-resume: chain-depth lookup failed for run %d", run_id
+            )
+            return
+
+        if depth >= max_attempts:
+            logger.warning(
+                "Auto-resume cap reached for run %d (depth=%d, max=%d); "
+                "leaving run failed. Operator can hit Continue on the "
+                "dashboard to override.",
+                run_id,
+                depth,
+                max_attempts,
+            )
+            return
+
+        # Compute the spider's spawn args. The discover spider's `name`
+        # is "discover" and its strategy lives on the instance.
+        spider_name = getattr(spider, "name", "discover") or "discover"
+        strategy = getattr(spider, "strategy", "") or ""
+        self._spawn_resume_subprocess(
+            spider_name, shop_name, strategy, depth + 1, max_attempts
+        )
+
+    def _spawn_resume_subprocess(
+        self,
+        spider_name: str,
+        shop: str,
+        strategy: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> None:
+        """Detach a `scrapy crawl …` subprocess after a short delay.
+
+        The 5-second sleep gives the current spider time to fully exit
+        (engine.close_spider runs deferred via the Twisted reactor)
+        before the new process's prepare_discover races us for the
+        same shop+phase row.
+        """
+        import os
+        import shlex
+        import subprocess
+
+        cmd_parts = [
+            "/app/.venv/bin/scrapy",
+            "crawl",
+            spider_name,
+            "-a",
+            f"shop={shop}",
+        ]
+        if spider_name == "discover" and strategy:
+            cmd_parts.extend(["-a", f"strategy={strategy}"])
+        cmd = "sleep 5 && " + " ".join(shlex.quote(p) for p in cmd_parts)
+
+        env = os.environ.copy()
+        env.setdefault("PYTHONPATH", "/app")
+
+        try:
+            subprocess.Popen(
+                cmd,
+                shell=True,
+                cwd="/app",
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            logger.exception("Auto-resume: failed to spawn %s", cmd)
+            return
+
+        logger.warning(
+            "Auto-resuming after stall: spawned %s (attempt %d/%d)",
+            cmd,
+            attempt,
+            max_attempts,
         )
 
 
