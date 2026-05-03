@@ -613,6 +613,62 @@ class DiscoverSpider(scrapy.Spider):
                 next_url, "category_page", item_id=new_item_id, page=page
             )
 
+    def _emit_subdivided_event(
+        self,
+        *,
+        outcome: str,
+        page: int,
+        page_size: int,
+        depth: int,
+        http_status: int,
+        sub_count: int,
+        sub_size: int | None,
+    ) -> None:
+        """Append a `subdivided` row to scrape_run_events.
+
+        Surfaces each subdivision (and each depth=1 micro-range
+        failure) on the run's Timeline card so operators can see when
+        the spider had to adapt to a struggling backend, instead of
+        the run going silent until the next stall.
+        """
+        if self._run_id is None:
+            return
+        database_url = (
+            self.settings.get("DATABASE_URL") if hasattr(self, "settings") else None
+        )
+        if not database_url:
+            return
+        try:
+            from book_scraper.db import scrape_run_events as run_event_types
+            from book_scraper.db.repo import emit_scrape_run_event
+
+            session = get_session_factory(database_url)()
+            try:
+                emit_scrape_run_event(
+                    session,
+                    self._run_id,
+                    run_event_types.SUBDIVIDED,
+                    payload={
+                        "outcome": outcome,
+                        "page": page,
+                        "page_size": page_size,
+                        "depth": depth,
+                        "http_status": http_status,
+                        "sub_count": sub_count,
+                        "sub_size": sub_size,
+                    },
+                    actor=run_event_types.ACTOR_SYSTEM,
+                )
+                session.commit()
+            finally:
+                session.close()
+        except Exception:
+            self.logger.exception(
+                "Failed to emit subdivided event for page %d (depth %d)",
+                page,
+                depth,
+            )
+
     def _subdivide_failed_graphql_page(
         self, response: scrapy.http.Response
     ) -> Generator[scrapy.Request, None, None]:
@@ -659,6 +715,15 @@ class DiscoverSpider(scrapy.Spider):
                 page_size,
                 response.status,
             )
+            self._emit_subdivided_event(
+                outcome="micro_range_failed",
+                page=page,
+                page_size=page_size,
+                depth=depth,
+                http_status=response.status,
+                sub_count=0,
+                sub_size=None,
+            )
         else:
             factor = max(2, int(self.strategy_conf.subdivide_factor))
             min_size = max(1, int(self.strategy_conf.subdivide_min_page_size))
@@ -689,6 +754,15 @@ class DiscoverSpider(scrapy.Spider):
                 yield self._build_request_for_url_item(
                     sub_url, "category_page", item_id=new_id, page=sub_page
                 )
+            self._emit_subdivided_event(
+                outcome="subdivided",
+                page=page,
+                page_size=page_size,
+                depth=depth,
+                http_status=response.status,
+                sub_count=ratio,
+                sub_size=sub_size,
+            )
 
         # Continue normal pagination — but only for depth==0. When a
         # sub-page (depth>=1) fails, the parent failed-page handler

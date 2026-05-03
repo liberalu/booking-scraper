@@ -331,6 +331,7 @@ const RUN_EVENT_META = {
   rerun:                 { glyph: '⟲',  label: 'Re-run triggered' },
   continued:             { glyph: '▶',  label: 'Continued' },
   resumed_after_failure: { glyph: '⤴',  label: 'Picked up earlier run' },
+  subdivided:            { glyph: '⊟',  label: 'Subdivided heavy page' },
   completed:             { glyph: '✓',  label: 'Finished' },
   failed:                { glyph: '✗',  label: 'Failed' },
 };
@@ -402,6 +403,24 @@ function _eventSummary(eventType, payload) {
       return p.pending_count != null ? `${_nfmt(p.pending_count)} URL${p.pending_count === 1 ? '' : 's'} still pending` : '';
     case 'resumed_after_failure':
       return p.previous_run_id ? `from run #${p.previous_run_id}` : '';
+    case 'subdivided': {
+      // Emitted when a 5xx forces the spider to retry a heavy
+      // pageSize=N request as N smaller sub-requests, OR when a
+      // depth=1 sub-request itself 5xx'd and was marked retryable.
+      const where = p.page != null ? `page ${p.page}` : '';
+      const size = p.page_size != null ? `size ${p.page_size}` : '';
+      const status = p.http_status != null ? `HTTP ${p.http_status}` : '';
+      const left = [where, size, status].filter(Boolean).join(' · ');
+      if (p.outcome === 'micro_range_failed') {
+        return left
+          ? `${left} → micro-range failed (depth ${p.depth}, retryable)`
+          : 'micro-range failed (retryable)';
+      }
+      const into = p.sub_count != null && p.sub_size != null
+        ? ` → ${p.sub_count} × pageSize=${p.sub_size}`
+        : '';
+      return left ? `${left}${into}` : `subdivided${into}`;
+    }
     case 'paused':
     case 'resumed':
     case 'stop_requested':
