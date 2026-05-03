@@ -47,6 +47,16 @@ STALL_TIMEOUT = 180  # pragma: no cover
 # dashboard's Continue button) also counts toward the cap.
 STALL_AUTO_RESUME_MAX = 10  # pragma: no cover
 
+# After a stall fires, ``engine.close_spider()`` waits for the
+# pipeline backlog to drain. With slow Postgres writes that can take
+# many minutes — the auto-resume spawn (which runs in spider_closed)
+# is blocked the whole time, leaving the queue stalled. If the spider
+# hasn't actually closed within this many seconds of the stall, force
+# the spawn now and `os._exit` the dying process. The new subprocess
+# still passes the "another run already active?" precheck because the
+# old run row is already `failed` by then.
+STALL_FORCE_EXIT_S = 60  # pragma: no cover
+
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
     "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover

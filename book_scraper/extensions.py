@@ -107,6 +107,22 @@ class StallDetector:  # pragma: no cover
                 self._maybe_auto_resume(spider, run_id)
 
             engine.close_spider(spider, "stall_timeout")
+
+            # Force-exit fallback: engine.close_spider drains the
+            # pipeline before firing spider_closed. With a backed-up
+            # PostgresPipeline that drain has been observed to take
+            # 6+ minutes, blocking the auto-resume the whole time.
+            # Schedule an os._exit fallback so we don't leave the
+            # queue paused.
+            force_exit_s = self.crawler.settings.getfloat(
+                "STALL_FORCE_EXIT_S", 0
+            )
+            if force_exit_s and force_exit_s > 0:
+                from twisted.internet import reactor
+
+                reactor.callLater(  # type: ignore[attr-defined]
+                    force_exit_s, self._force_exit_after_stall
+                )
             return
 
         from twisted.internet import reactor
@@ -268,6 +284,39 @@ class StallDetector:  # pragma: no cover
             attempt,
             max_attempts,
         )
+
+    def _force_exit_after_stall(self) -> None:
+        """If spider_closed hasn't fired by now, spawn the resume + os._exit.
+
+        Scheduled via reactor.callLater(STALL_FORCE_EXIT_S) right after
+        engine.close_spider is called. If the natural close path beat
+        us to it, ``self._pending_auto_resume`` was already consumed
+        by ``spider_closed`` and we have nothing to do. Otherwise the
+        engine is still draining (typically a slow PostgresPipeline);
+        fire the spawn ourselves and force-exit so the next spider
+        can pick up the queue without waiting on this process.
+        """
+        if self._pending_auto_resume is None:
+            return  # spider_closed already handled it; nothing to do
+        params = self._pending_auto_resume
+        self._pending_auto_resume = None
+        logger.warning(
+            "Force-exit fallback: spider_closed didn't fire within "
+            "STALL_FORCE_EXIT_S; spawning resume + os._exit"
+        )
+        self._spawn_resume_subprocess(
+            params["spider_name"],
+            params["shop"],
+            params["strategy"],
+            params["attempt"],
+            params["max_attempts"],
+        )
+        # Hard exit. atexit/finalisation skipped on purpose — the
+        # dying spider can't make further useful progress and is
+        # blocking the new spider's spawn from taking effect.
+        import os
+
+        os._exit(1)
 
     def _another_run_active(
         self, shop: str, spider_name: str, strategy: str
