@@ -252,6 +252,47 @@ class TestParseCategoryPageGraphQL:
         # EAN preserved separately so downstream tools still have the GTIN.
         assert (product["properties"] or {}).get("ean") == "4010070394080"
 
+    def test_structured_data_fallback_does_not_smuggle_ean_as_isbn(self) -> None:
+        """Magento puts the EAN-13 GTIN in the Schema.org `isbn` slot of
+        `structured_data`, even for non-book products. The fallback path
+        that reads from structured_data when product_page_attributes is
+        empty must run that value through `_coerce_isbn` too — otherwise
+        sticker-kit GTINs like `4770833862422` slip past the attribute
+        filter and trigger downstream `invalid_isbn` validation noise.
+        """
+        sd = json.dumps({
+            "@type": "ItemPage",
+            "mainEntity": {
+                "@type": ["Book", "Product"],
+                "isbn": "4770833862422",  # non-book GTIN
+                "publisher": {"name": "Some publisher"},
+                "numberOfPages": 12,
+                "datePublished": "2024-01-01",
+            },
+        })
+        text = json.dumps({
+            "data": {"products": {"items": [{
+                "name": "Sticker kit",
+                "sku": "1",
+                "url_key": "k-1",
+                "stock_status": "IN_STOCK",
+                "is_book": True,
+                "categories": [{"id": 5125, "name": "Vaikų"}],
+                "price_range": {"minimum_price": {
+                    "final_price": {"value": 5.0},
+                    "regular_price": {"value": 5.0},
+                }},
+                "product_page_attributes": [],  # empty → fallback fires
+                "structured_data": sd,
+            }]}}
+        })
+        product = parse_category_page(text)["products"][0]
+        assert product["isbn"] is None
+        # Other fallback fields still populate.
+        assert product["publisher"] == "Some publisher"
+        assert (product["properties"] or {}).get("pages") == 12
+        assert product["year"] == 2024
+
     def test_real_isbn_in_ean_field_picked_up(self) -> None:
         """Some books have the ISBN-13 in `EAN kodas` only (because EAN
         and ISBN-13 are the same number for books). Accept it when the

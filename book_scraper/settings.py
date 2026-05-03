@@ -29,7 +29,13 @@ DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
 }  # pragma: no cover
 
 # Auto-close spider if stalled (no responses for N seconds)  # pragma: no cover
-STALL_TIMEOUT = 60  # pragma: no cover
+# Bumped from 60 → 180 because pegasas's full LT crawl with upfront
+# pagination + concurrency=2 has stretches where all in-flight
+# requests are slow cold-cache misses (4–7s each, sometimes 30s+ on
+# very deep pages). The pipeline keeps draining items in those
+# stretches, but `response_received` doesn't fire, and 60s is too
+# tight a window — runs got killed at 50%+ done with 130+ pending.
+STALL_TIMEOUT = 180  # pragma: no cover
 
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover

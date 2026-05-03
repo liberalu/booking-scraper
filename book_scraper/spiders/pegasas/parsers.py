@@ -324,7 +324,12 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
         original_title = _clean(labels.get(_LABEL_ORIGINAL_TITLE))
         color = _clean(labels.get(_LABEL_COLOR))
 
-    # Fallback via structured_data JSON-LD
+    # Fallback via structured_data JSON-LD. The ISBN field there is
+    # populated even on non-book products (Magento puts the EAN-13 in
+    # the Schema.org `isbn` slot), so we run it through `_coerce_isbn`
+    # too — without that, sticker-kit GTINs like `4770833862422` slip
+    # past the labels-level filter via this fallback path and get
+    # stored as ISBN, then fail downstream `invalid_isbn` validation.
     if (isbn is None or publisher is None or pages is None or year is None) and (
         sd_raw := item.get("structured_data")
     ):
@@ -332,7 +337,7 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
             sd = json.loads(sd_raw)
             main = sd.get("mainEntity", {})
             if isbn is None:
-                isbn = main.get("isbn") or None
+                isbn = _coerce_isbn(main.get("isbn"))
             if publisher is None:
                 pub = main.get("publisher", {})
                 if isinstance(pub, dict):
