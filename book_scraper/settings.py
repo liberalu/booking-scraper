@@ -28,13 +28,11 @@ DEFAULT_REQUEST_HEADERS = {  # pragma: no cover
     "Connection": "close",  # pragma: no cover
 }  # pragma: no cover
 
-# Auto-close spider if stalled (no responses for N seconds)  # pragma: no cover
-# Bumped from 60 → 180 because pegasas's full LT crawl with upfront
-# pagination + concurrency=2 has stretches where all in-flight
-# requests are slow cold-cache misses (4–7s each, sometimes 30s+ on
-# very deep pages). The pipeline keeps draining items in those
-# stretches, but `response_received` doesn't fire, and 60s is too
-# tight a window — runs got killed at 50%+ done with 130+ pending.
+# Auto-close spider if stalled (no responses for N seconds AND no
+# in-flight requests). StallDetector now checks both conditions:  # pragma: no cover
+# timer expired + downloader idle. With that fix, 180s is a generous
+# safety net; a request that genuinely hangs forever (no response, no
+# TCP error) will still be caught once the downloader drains.
 STALL_TIMEOUT = 180  # pragma: no cover
 
 # When StallDetector kills a run, automatically spawn a fresh scrapy

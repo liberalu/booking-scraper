@@ -12,8 +12,12 @@ logger = logging.getLogger(__name__)  # pragma: no cover
 class StallDetector:  # pragma: no cover
     """Close the spider if no responses arrive for STALL_TIMEOUT seconds.
 
-    Checks every 10 seconds. If the last response was more than
-    STALL_TIMEOUT seconds ago, forces a graceful shutdown.
+    Checks every 10 seconds. Two conditions must both hold before the kill
+    fires: (1) no ``response_received`` or ``item_scraped`` signal for
+    longer than STALL_TIMEOUT seconds, AND (2) the downloader has no
+    in-flight requests. Condition (2) prevents false kills on slow
+    cold-cache backends (e.g. Pegasas Magento) where a request can take
+    60–150 s without producing a signal.
     """
 
     def __init__(self, crawler: Crawler, stall_timeout: float):
@@ -80,6 +84,32 @@ class StallDetector:  # pragma: no cover
     def _check_stall(self) -> None:
         elapsed = time.monotonic() - self._last_activity
         if elapsed > self.stall_timeout:
+            # Before declaring a stall, verify the downloader is actually
+            # idle. Cold-cache backends (e.g. Pegasas Magento) can hold
+            # requests open for 60–150s with no response_received signal
+            # landing — that's slow but not stalled. Only fire the kill
+            # when both the timer has expired AND there are no in-flight
+            # requests.
+            engine = self.crawler.engine
+            if engine is not None:
+                in_flight = sum(
+                    len(slot.active)
+                    for slot in engine.downloader.slots.values()
+                )
+                if in_flight > 0:
+                    logger.debug(
+                        "Activity timer expired but %d request(s) still in"
+                        " flight — resetting stall timer",
+                        in_flight,
+                    )
+                    self._last_activity = time.monotonic()
+                    from twisted.internet import reactor
+
+                    self._task = reactor.callLater(  # type: ignore[attr-defined]
+                        self._check_interval, self._check_stall
+                    )
+                    return
+
             logger.warning(
                 "Spider stalled for %.0fs — forcing shutdown",
                 elapsed,
@@ -88,7 +118,6 @@ class StallDetector:  # pragma: no cover
             if spider is None:
                 logger.warning("Skipping stall shutdown because no spider is active")
                 return
-            engine = self.crawler.engine
             if engine is None:
                 logger.warning("Skipping stall shutdown because no engine is active")
                 return
