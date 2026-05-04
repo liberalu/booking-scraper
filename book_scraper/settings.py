@@ -64,6 +64,33 @@ EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover
 }  # pragma: no cover
 
+# Extend RETRY_EXCEPTIONS with httpx-side errors so transient network
+# blips on the HttpxMiddleware path get retried just like Twisted-side
+# errors would. Without these additions, a cold-cache Magento timeout
+# raises httpx.TimeoutException, which RetryMiddleware doesn't recognise,
+# so the failure goes straight to errback with retry_count=0.
+RETRY_EXCEPTIONS = [  # pragma: no cover
+    # Scrapy's defaults — copied verbatim so we don't drop any.
+    "twisted.internet.defer.TimeoutError",
+    "twisted.internet.error.TimeoutError",
+    "twisted.internet.error.DNSLookupError",
+    "twisted.internet.error.ConnectionRefusedError",
+    "twisted.internet.error.ConnectionDone",
+    "twisted.internet.error.ConnectError",
+    "twisted.internet.error.ConnectionLost",
+    "twisted.internet.error.TCPTimedOutError",
+    "twisted.web.client.ResponseFailed",
+    OSError,
+    "scrapy.core.downloader.handlers.http11.TunnelError",
+    # httpx-side additions: HttpxMiddleware raises these from
+    # asyncio.wait_for / httpx.AsyncClient on transient failures.
+    "httpx.TimeoutException",
+    "httpx.ConnectError",
+    "httpx.ReadError",
+    "httpx.RemoteProtocolError",
+    "asyncio.TimeoutError",
+]
+
 # Per-run heartbeat tick interval (seconds). Independent of request
 # flow; the dashboard uses staleness to detect crashed scrapers.
 HEARTBEAT_INTERVAL_S = 5.0  # pragma: no cover
