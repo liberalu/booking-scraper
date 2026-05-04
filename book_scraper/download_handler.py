@@ -422,24 +422,43 @@ class HttpxMiddleware:  # pragma: no cover
                         hard_timeout = float(ht)
             await self._maybe_reset_client(reset_after)
 
-            get_kwargs: dict[str, Any] = {}
+            req_kwargs: dict[str, Any] = {}
             if req_timeout is not None:
-                get_kwargs["timeout"] = req_timeout
-            # Forward per-request Accept header override (e.g. application/json
-            # for GraphQL endpoints that reject text/html browser headers).
-            accept_raw = request.headers.get("Accept")
-            if accept_raw:
-                accept_str = (
-                    accept_raw.decode() if isinstance(accept_raw, bytes) else accept_raw
+                req_kwargs["timeout"] = req_timeout
+            # Forward per-request headers (Accept for GraphQL JSON endpoints,
+            # Content-Type + Origin/Referer for LupaSearch POSTs that reject
+            # naked text/html browser headers).
+            forwarded_headers: dict[str, str] = {}
+            for header_name in ("Accept", "Content-Type", "Origin", "Referer"):
+                raw = request.headers.get(header_name)
+                if raw is None:
+                    continue
+                forwarded_headers[header_name] = (
+                    raw.decode() if isinstance(raw, bytes) else raw
                 )
-                get_kwargs["headers"] = {"Accept": accept_str}
+            if forwarded_headers:
+                req_kwargs["headers"] = forwarded_headers
 
+            method = (request.method or "GET").upper()
             status_code: int | None = None
             try:
-                response = await asyncio.wait_for(
-                    self.client.get(str(request.url), **get_kwargs),
-                    timeout=hard_timeout,
-                )
+                if method == "POST":
+                    # POST endpoints (e.g. LupaSearch) carry their filter
+                    # payload in the body — sending GET silently strips it
+                    # and the endpoint returns the unfiltered catalog.
+                    response = await asyncio.wait_for(
+                        self.client.post(
+                            str(request.url),
+                            content=request.body or b"",
+                            **req_kwargs,
+                        ),
+                        timeout=hard_timeout,
+                    )
+                else:
+                    response = await asyncio.wait_for(
+                        self.client.get(str(request.url), **req_kwargs),
+                        timeout=hard_timeout,
+                    )
                 status_code = response.status_code
                 # httpx auto-decompresses gzip, so remove Content-Encoding
                 # to prevent Scrapy's HttpCompressionMiddleware from

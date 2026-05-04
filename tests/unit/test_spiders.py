@@ -287,6 +287,36 @@ class TestParseLupasearchPage:
         next_pages = [r for r in results if isinstance(r, Request)]
         assert next_pages == []
 
+    def test_resumed_page_n_does_not_re_paginate_without_meta(self):
+        """Regression for the run-312..317 explosion: when a previously-
+        enqueued lupasearch_page item is re-dispatched after resume, its
+        request has no ``meta["page"]`` (start() only sets it for
+        category_page items). The parser must NOT mistake offset>0 for
+        page=1 and re-enqueue every page past it. Without this guard,
+        each resume re-fired the upfront pagination and the queue
+        ballooned to tens of thousands of bogus rows."""
+        from scrapy.http import TextResponse
+
+        spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
+        body = (
+            '{"items":[{"url":"https://www.pegasas.lt/x-1/","name":"x","sku":"s",'
+            '"price":"1","is_book":1,"in_stock":1,"category_ids":[5107]}],'
+            '"total":1000}'
+        )
+        url = (
+            "https://api.lupasearch.com/v1/query/kum08qakjq3j"
+            "?offset=420&limit=42&category_ids=5107"
+        )
+        # No page in meta — mirrors what start() builds for resumed
+        # lupasearch_page items.
+        request = Request(url=url, meta={"url_type": "lupasearch_page"})
+        response = TextResponse(
+            url=url, body=body, encoding="utf-8", request=request
+        )
+        results = list(spider.parse_lupasearch_page(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []
+
 
 class TestDiscoverSpiderSubdivision:
     """5xx on a GraphQL page should trigger adaptive page-size shrinkage.

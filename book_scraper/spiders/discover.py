@@ -835,11 +835,15 @@ class DiscoverSpider(scrapy.Spider):
         yield from self._emit_products(products)
 
         offset, limit = parse_lupasearch_url_offsets(response.url)
-        current_page = response.meta.get("page") or 1
 
-        # Upfront pagination on first page only.
-        if current_page == 1 and total > 0 and limit > 0:
-            next_offset = offset + limit
+        # Upfront pagination fires only on the literal first page (offset
+        # 0). Deriving from the URL offset rather than `meta["page"]`
+        # makes resume safe: a previously-failed page=N request that
+        # gets re-dispatched on a fresh run has no `page` meta, but its
+        # URL still carries offset=N*limit, so we don't mistake it for
+        # page 1 and re-enqueue everything past it.
+        if offset == 0 and total > 0 and limit > 0:
+            next_offset = limit
             page = 2
             while next_offset < total:
                 if self._max_pages and page > self._max_pages:
@@ -853,7 +857,8 @@ class DiscoverSpider(scrapy.Spider):
                 page += 1
             return
 
-        # Pages 2..N: queue is already full; nothing more to do.
+        # offset > 0: the queue was already filled by the first-page
+        # upfront pagination; nothing more to do.
         return
 
     def parse_full_crawl(

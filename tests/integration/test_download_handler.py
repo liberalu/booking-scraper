@@ -164,3 +164,77 @@ def test_spider_opened_db_overrides_toml_per_key(db_session: Session) -> None:
         assert mw._max_concurrency == 8  # TOML (no DB row) wins over global
     finally:
         asyncio.run(mw._close())
+
+
+@pytest.mark.integration
+def test_process_request_uses_post_when_request_method_post() -> None:
+    """Regression for runs 310..317: HttpxMiddleware used to always call
+    client.get() regardless of request.method. LupaSearch is a POST
+    endpoint with the filter payload in the body — sending GET stripped
+    the filter and returned the unfiltered catalog (707k items vs 13k
+    LT-only), inflating the queue by ~50x.
+
+    This test exercises the dispatch path with a Request(method='POST',
+    body=b'...') and asserts the middleware called client.post with the
+    body forwarded."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from scrapy import Request
+
+    mw = _make_middleware()
+    fake_response = MagicMock()
+    fake_response.url = "https://api.example.com/q"
+    fake_response.status_code = 200
+    fake_response.headers = {}
+    fake_response.content = b'{"total": 13603, "items": []}'
+    fake_response.encoding = "utf-8"
+    mw.client.post = AsyncMock(return_value=fake_response)
+    mw.client.get = AsyncMock()  # should NOT be called
+
+    body = b'{"filters":{"category_ids":["5107"]}}'
+    request = Request(
+        "https://api.example.com/q?offset=0",
+        method="POST",
+        body=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+
+    try:
+        result = asyncio.run(mw.process_request(request))
+        assert result.status == 200
+        mw.client.post.assert_called_once()
+        # Body must be forwarded so the endpoint sees the filter.
+        post_kwargs = mw.client.post.call_args.kwargs
+        assert post_kwargs["content"] == body
+        # GET path must NOT have been taken.
+        mw.client.get.assert_not_called()
+    finally:
+        asyncio.run(mw._close())
+
+
+@pytest.mark.integration
+def test_process_request_still_uses_get_for_default_method() -> None:
+    """Ensure the POST branch didn't accidentally break the GET path."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from scrapy import Request
+
+    mw = _make_middleware()
+    fake_response = MagicMock()
+    fake_response.url = "https://example.com/page"
+    fake_response.status_code = 200
+    fake_response.headers = {}
+    fake_response.content = b"<html/>"
+    fake_response.encoding = "utf-8"
+    mw.client.get = AsyncMock(return_value=fake_response)
+    mw.client.post = AsyncMock()  # should NOT be called
+
+    request = Request("https://example.com/page")  # default method GET
+
+    try:
+        result = asyncio.run(mw.process_request(request))
+        assert result.status == 200
+        mw.client.get.assert_called_once()
+        mw.client.post.assert_not_called()
+    finally:
+        asyncio.run(mw._close())
