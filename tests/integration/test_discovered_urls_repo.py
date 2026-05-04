@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from book_scraper.db.models import DiscoveredUrl, ScrapeRun, Shop, ShopBook
 from book_scraper.db.repo import (
     get_pending_scan_urls,
+    get_stable_discovered_urls,
     link_discovered_url_to_shop_book,
     update_discovered_url_status,
     upsert_discovered_url,
@@ -109,6 +112,68 @@ def test_get_pending_scan_urls_filters_high_fail_count(db_session):
     pending = get_pending_scan_urls(db_session, shop_id=shop.id)
     urls = [u.url for u in pending]
     assert "https://test.lt/dead" not in urls
+
+
+def test_get_stable_discovered_urls_returns_classified_recent(db_session):
+    """Returns URLs classified product/non_product/unreachable with a
+    recent last_checked_at; excludes 'unknown' and stale rows."""
+    shop = Shop(name="test_shop", base_url="https://test.lt")
+    db_session.add(shop)
+    db_session.flush()
+
+    # product, fresh — included
+    p = upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/product", source="sitemap"
+    )
+    update_discovered_url_status(
+        db_session, url_id=p.id, http_status=200, url_type="product"
+    )
+    # non_product, fresh — included
+    np = upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/about", source="sitemap"
+    )
+    update_discovered_url_status(
+        db_session, url_id=np.id, http_status=200, url_type="non_product"
+    )
+    # unreachable, fresh — included (3 failures auto-promotes)
+    un = upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/dead", source="sitemap"
+    )
+    for _ in range(3):
+        update_discovered_url_status(
+            db_session, url_id=un.id, http_status=404, increment_fail=True
+        )
+    # unknown, fresh — excluded (not yet classified)
+    upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/pending", source="sitemap"
+    )
+    # product, never checked — excluded (last_checked_at is NULL)
+    upsert_discovered_url(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/never-checked",
+        source="sitemap",
+        shop_book_id=None,
+    )
+    # product, stale (>7d) — excluded
+    stale = upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/stale", source="sitemap"
+    )
+    update_discovered_url_status(
+        db_session, url_id=stale.id, http_status=200, url_type="product"
+    )
+    db_session.refresh(stale)
+    stale.last_checked_at = datetime.now(UTC) - timedelta(days=10)
+    db_session.flush()
+
+    result = get_stable_discovered_urls(db_session, shop_id=shop.id)
+    assert "https://test.lt/product" in result
+    assert result["https://test.lt/product"] == "product"
+    assert result["https://test.lt/about"] == "non_product"
+    assert result["https://test.lt/dead"] == "unreachable"
+    assert "https://test.lt/pending" not in result
+    assert "https://test.lt/never-checked" not in result
+    assert "https://test.lt/stale" not in result
 
 
 def _make_shop(db_session, name: str = "test_shop") -> Shop:

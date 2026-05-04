@@ -8,6 +8,7 @@ from scrapy import signals
 from book_scraper.config import load_shop_config
 from book_scraper.db.repo import (
     get_pending_scrape_url_items,
+    get_stable_discovered_urls,
     insert_scrape_url_item,
     mark_scrape_url_item_done,
     reset_processing_scrape_url_items,
@@ -16,6 +17,7 @@ from book_scraper.db.session import get_session_factory
 from book_scraper.items import DiscoveredUrlItem, ShopBookItem
 from book_scraper.services.discover import DiscoverService
 from book_scraper.spiders.registry import load_parsers
+from book_scraper.url_utils import normalize_url
 
 
 class DiscoverSpider(scrapy.Spider):
@@ -81,6 +83,10 @@ class DiscoverSpider(scrapy.Spider):
         # URLs discovered this run, used for change detection on the
         # sitemap strategy (sitemap is comprehensive per shop).
         self._sitemap_urls: set[str] = set()
+        # full_crawl-only: normalized URL → url_type for already-classified
+        # discovered_urls rows. Loaded once at spider start; consulted in
+        # parse_full_crawl to skip enqueueing scan jobs for stable URLs.
+        self._stable_urls: dict[str, str] = {}
         # Set when handle_start_error or parse_categories already reported a
         # more specific zero-yield cause — avoids duplicate noise from the
         # generic closed() check.
@@ -124,6 +130,14 @@ class DiscoverSpider(scrapy.Spider):
 
             reset_processing_scrape_url_items(session, plan.run_id)
             url_items = get_pending_scrape_url_items(session, plan.run_id)
+            if self.strategy == "full_crawl":
+                # Snapshot URLs already classified recently so the spider
+                # can skip queueing scan jobs for them mid-crawl. Loaded
+                # once here — full_crawl is rare and manual, the brief
+                # staleness during a long run is acceptable.
+                self._stable_urls = get_stable_discovered_urls(
+                    session, plan.shop_id
+                )
             session.commit()
         finally:
             session.close()
@@ -277,7 +291,15 @@ class DiscoverSpider(scrapy.Spider):
                             error_reason="subdivision_5xx",
                         )
                     else:
-                        mark_scrape_url_item_done(session, item_id)
+                        # full_crawl sets final_url_type after parsing so
+                        # the queue row reflects what the page actually
+                        # turned out to be (product / non_product), not
+                        # the placeholder "unknown" we inserted with.
+                        mark_scrape_url_item_done(
+                            session,
+                            item_id,
+                            url_type=response.meta.get("final_url_type"),
+                        )
                     session.commit()
                 finally:
                     session.close()
@@ -841,14 +863,19 @@ class DiscoverSpider(scrapy.Spider):
         base_url: str = self.conf.shop.base_url
         seen: set[str] = getattr(self, "_seen_urls", set())
         self._seen_urls = seen
-        if self._max_pages and len(seen) >= self._max_pages:
-            return
 
-        # If the current page matches the product URL pattern, extract product data
+        # Classify the current page from its parse result. The final type
+        # is read by `dispatch` after this generator exhausts and passed
+        # to `mark_scrape_url_item_done` so the queue row reflects what
+        # the page actually was, not what we guessed pre-fetch. Run this
+        # BEFORE the max_pages early-return: the response is already
+        # fetched so we should always label it correctly, even when the
+        # outgoing-link budget is exhausted.
         current_url = response.url.split("?")[0]
         if self._url_passes_filter(current_url):
             data = self.parsers.parse_product_page(response.text)
-            if data.get("title"):
+            if data.get("is_book_product") or data.get("title"):
+                response.meta["final_url_type"] = "product"
                 props: dict[str, object] = {}
                 for key in (
                     "pages",
@@ -878,6 +905,17 @@ class DiscoverSpider(scrapy.Spider):
                     price_original=data.get("price_original"),
                     in_stock=data.get("in_stock"),
                 )
+            else:
+                response.meta["final_url_type"] = "non_product"
+        else:
+            # URL was followed only as a crawl frontier (filter excluded it).
+            response.meta["final_url_type"] = "non_product"
+
+        # Stop walking outgoing links once the per-host follow budget is hit.
+        # Already-fetched responses still get classified above; we just don't
+        # enqueue any more new URLs.
+        if self._max_pages and len(seen) >= self._max_pages:
+            return
 
         for link in response.css("a::attr(href)").getall():
             if not link.startswith("http"):
@@ -889,6 +927,19 @@ class DiscoverSpider(scrapy.Spider):
                 continue
             seen.add(link)
 
+            # Cross-run dedup: if discovered_urls already classified this
+            # URL recently (product/non_product/unreachable), skip the
+            # scan-job insert but still follow the link so we discover any
+            # new outgoing URLs from it.
+            normalized = normalize_url(link)
+            if normalized in self._stable_urls:
+                yield scrapy.Request(
+                    link,
+                    callback=self.parse_full_crawl,
+                    dont_filter=False,
+                )
+                continue
+
             is_product = self._url_passes_filter(link)
             if is_product:
                 self._urls_processed += 1
@@ -896,11 +947,9 @@ class DiscoverSpider(scrapy.Spider):
                     url=link, shop_name=self.shop_name, source="full_crawl"
                 )
 
-            # Dual-write: categorize by URL shape so dispatch can route on
-            # resume. Product pages re-enter parse_full_crawl too (which
-            # extracts product data when the URL matches the filter).
-            url_type = "product" if is_product else "crawl"
-            new_item_id = self._enqueue_url(link, url_type)
+            # Insert as "unknown" — the real type is set after the page is
+            # fetched and parsed (see `final_url_type` above + dispatch).
+            new_item_id = self._enqueue_url(link, "unknown")
             yield scrapy.Request(
                 link,
                 callback=self.dispatch
@@ -909,7 +958,7 @@ class DiscoverSpider(scrapy.Spider):
                 dont_filter=False,
                 meta={
                     "scrape_url_item_id": new_item_id,
-                    "url_type": url_type,
+                    "url_type": "unknown",
                 },
             )
 

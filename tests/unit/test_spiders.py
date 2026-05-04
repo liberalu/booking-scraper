@@ -414,6 +414,92 @@ class TestDiscoverSpiderFullCrawl:
         assert len(requests) == 1
         assert requests[0].url == "https://vaga.lt"
 
+    def test_parse_full_crawl_marks_product_when_book_data_found(self):
+        """A real product page → final_url_type = 'product'."""
+        spider = DiscoverSpider(shop="vaga", strategy="full_crawl")
+        html = (FIXTURES / "vaga_product_page.html").read_text()
+        response = _fake_response("https://vaga.lt/some-book", html)
+        list(spider.parse_full_crawl(response))
+        assert response.meta["final_url_type"] == "product"
+
+    def test_parse_full_crawl_marks_non_product_when_no_book_data(self):
+        """A page without product structured data → final_url_type = 'non_product'."""
+        spider = DiscoverSpider(shop="vaga", strategy="full_crawl")
+        html = "<html><body><a href='/x'>x</a></body></html>"
+        response = _fake_response("https://vaga.lt/login", html)
+        list(spider.parse_full_crawl(response))
+        assert response.meta["final_url_type"] == "non_product"
+
+    def test_parse_full_crawl_enqueues_outgoing_links_as_unknown(self):
+        """Outgoing-link Requests must be tagged url_type='unknown',
+        not 'product'/'crawl' — the queue row's real type is set after
+        the page is fetched and parsed."""
+        spider = DiscoverSpider(shop="vaga", strategy="full_crawl")
+        html = (
+            "<html><body>"
+            "<a href='https://vaga.lt/page-a'>a</a>"
+            "<a href='https://vaga.lt/page-b'>b</a>"
+            "</body></html>"
+        )
+        response = _fake_response("https://vaga.lt/", html)
+        results = list(spider.parse_full_crawl(response))
+        link_requests = [
+            r for r in results
+            if isinstance(r, Request)
+            and r.url in ("https://vaga.lt/page-a", "https://vaga.lt/page-b")
+        ]
+        assert len(link_requests) == 2
+        for r in link_requests:
+            assert r.meta["url_type"] == "unknown"
+
+    def test_parse_full_crawl_classifies_response_even_at_max_pages(self):
+        """The seen-URL budget caps outgoing-link enqueueing, but already-
+        fetched responses must still be classified — otherwise their queue
+        rows stay 'unknown' forever."""
+        spider = DiscoverSpider(shop="vaga", strategy="full_crawl", max_pages=1)
+        # Pre-fill seen so the budget is exhausted on entry.
+        spider._seen_urls = {"https://vaga.lt/already-seen"}
+        html = (FIXTURES / "vaga_product_page.html").read_text()
+        response = _fake_response("https://vaga.lt/some-book", html)
+        results = list(spider.parse_full_crawl(response))
+        # Page itself was classified...
+        assert response.meta["final_url_type"] == "product"
+        # ...but no outgoing links were followed/enqueued (cap reached).
+        assert not any(isinstance(r, Request) for r in results)
+
+    def test_parse_full_crawl_skips_enqueue_for_stable_urls(self):
+        """Pre-classified URLs in _stable_urls: still followed (Request
+        yielded) but no DiscoveredUrlItem and no scrape_url_item enqueue."""
+        spider = DiscoverSpider(shop="vaga", strategy="full_crawl")
+        # Track _enqueue_url calls
+        calls: list[tuple[str, str]] = []
+        spider._enqueue_url = lambda url, url_type: (  # type: ignore[method-assign]
+            calls.append((url, url_type)) or None
+        )
+        # Mark page-a as already-classified, leave page-b as new.
+        from book_scraper.url_utils import normalize_url
+        spider._stable_urls = {normalize_url("https://vaga.lt/page-a"): "product"}
+
+        html = (
+            "<html><body>"
+            "<a href='https://vaga.lt/page-a'>a</a>"
+            "<a href='https://vaga.lt/page-b'>b</a>"
+            "</body></html>"
+        )
+        response = _fake_response("https://vaga.lt/", html)
+        results = list(spider.parse_full_crawl(response))
+
+        # page-a: skipped enqueue but still issued as a Request
+        page_a_reqs = [r for r in results if isinstance(r, Request) and r.url == "https://vaga.lt/page-a"]
+        assert len(page_a_reqs) == 1
+        # page-b: enqueued as 'unknown'
+        page_b_reqs = [r for r in results if isinstance(r, Request) and r.url == "https://vaga.lt/page-b"]
+        assert len(page_b_reqs) == 1
+        assert page_b_reqs[0].meta["url_type"] == "unknown"
+
+        # _enqueue_url called once, only for page-b
+        assert calls == [("https://vaga.lt/page-b", "unknown")]
+
 
 class TestScanSpider:
     def test_requires_shop_arg(self):

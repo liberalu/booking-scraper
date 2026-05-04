@@ -668,6 +668,31 @@ def get_pending_scan_urls(
     return list(session.execute(stmt).scalars().all())
 
 
+def get_stable_discovered_urls(
+    session: Session,
+    shop_id: int,
+    retry_after_days: int = 7,
+) -> dict[str, str]:
+    """Return URLs already classified and recently checked.
+
+    Used by `discover_full_crawl` to skip enqueueing scan jobs for URLs
+    whose `url_type` is already known (`product`, `non_product`,
+    `unreachable`) and were checked within `retry_after_days`. The crawler
+    still follows these URLs to find new outgoing links — only the
+    `scrape_url_items` insert is skipped.
+
+    Keys are `normalized_url`; values are `url_type`.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=retry_after_days)
+    stmt = select(DiscoveredUrl.normalized_url, DiscoveredUrl.url_type).where(
+        DiscoveredUrl.shop_id == shop_id,
+        DiscoveredUrl.url_type.in_(("product", "non_product", "unreachable")),
+        DiscoveredUrl.last_checked_at.is_not(None),
+        DiscoveredUrl.last_checked_at >= cutoff,
+    )
+    return {row.normalized_url: row.url_type for row in session.execute(stmt)}
+
+
 # --- Scrape Runs ---
 
 
