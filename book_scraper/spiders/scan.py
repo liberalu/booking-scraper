@@ -356,6 +356,10 @@ class ScanSpider(scrapy.Spider):
         # URL so tracking columns + items reflect the canonical product page.
         original_url = response.meta.get("original_url")
         url = original_url or response.url.split("?")[0]
+        # RetryMiddleware bumps `retry_times` on each retry; surface it
+        # in the queue row so postmortem queries can see how often
+        # transient backend pressure was papered over by retries.
+        retry_count = int(response.meta.get("retry_times", 0))
         if 400 <= response.status < 500:
             self._errors_4xx += 1
             self._error_count += 1
@@ -373,6 +377,7 @@ class ScanSpider(scrapy.Spider):
                 dispatched_at=dispatched_at,
                 request_delay_s=request_delay_s,
                 delay_source=delay_source,
+                retry_count=retry_count,
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -394,6 +399,7 @@ class ScanSpider(scrapy.Spider):
                 dispatched_at=dispatched_at,
                 request_delay_s=request_delay_s,
                 delay_source=delay_source,
+                retry_count=retry_count,
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -421,6 +427,7 @@ class ScanSpider(scrapy.Spider):
                 dispatched_at=dispatched_at,
                 request_delay_s=request_delay_s,
                 delay_source=delay_source,
+                retry_count=retry_count,
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -475,6 +482,7 @@ class ScanSpider(scrapy.Spider):
                 url_type="non_product",
                 request_delay_s=request_delay_s,
                 delay_source=delay_source,
+                retry_count=retry_count,
             )
             self._queue_url_status_update(
                 discovered_url_id,
@@ -528,6 +536,7 @@ class ScanSpider(scrapy.Spider):
             url_type="product",
             request_delay_s=request_delay_s,
             delay_source=delay_source,
+            retry_count=retry_count,
         )
         self._queue_url_status_update(
             discovered_url_id,
@@ -554,6 +563,7 @@ class ScanSpider(scrapy.Spider):
         # columns reference the product page, not the GraphQL endpoint.
         original_url = request.meta.get("original_url")
         url = original_url or str(request.url).split("?")[0]
+        retry_count = int(request.meta.get("retry_times", 0))
 
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None
@@ -582,6 +592,7 @@ class ScanSpider(scrapy.Spider):
             dispatched_at=dispatched_at,
             request_delay_s=request_delay_s,
             delay_source=delay_source,
+            retry_count=retry_count,
         )
         self._queue_url_status_update(
             discovered_url_id,
@@ -652,6 +663,7 @@ class ScanSpider(scrapy.Spider):
                     response_bytes=response_bytes,
                     error_reason=error_reason,
                     url_type=url_type,
+                    retry_count=retry_count,
                 )
                 session.commit()
             except Exception:

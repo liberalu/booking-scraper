@@ -1774,6 +1774,7 @@ def mark_scrape_url_item_response(
     response_bytes: int | None = None,
     error_reason: str | None = None,
     url_type: str | None = None,
+    retry_count: int | None = None,
 ) -> None:
     """Immediate per-response write — owns terminal state for an item.
 
@@ -1781,6 +1782,11 @@ def mark_scrape_url_item_response(
     response_bytes in a single UPDATE. PR 3 of the migration: failure
     detail (`error_reason`) is no longer written to the queue row; the
     `scrape_failures` event log carries it.
+
+    `retry_count` (when provided) reflects the value of
+    `request.meta["retry_times"]` after RetryMiddleware reissued the
+    request. 0 means the response landed on the first attempt; values
+    above 0 mean transient backend pressure was papered over by retries.
     """
     item = session.get(ScrapeUrlItem, item_id)
     if item is None:
@@ -1805,6 +1811,8 @@ def mark_scrape_url_item_response(
         item.response_bytes = response_bytes
     if url_type is not None:
         item.url_type = url_type
+    if retry_count is not None:
+        item.retry_count = retry_count
     session.flush()
     if not success:
         record_scrape_failure(
