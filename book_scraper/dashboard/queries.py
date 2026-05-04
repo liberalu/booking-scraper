@@ -3,7 +3,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import case, func, select, text
+from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.shop_book_filters import (
