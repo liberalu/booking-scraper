@@ -43,7 +43,11 @@ STALL_TIMEOUT = 180  # pragma: no cover
 # to disable. Counts via the `resumed_after_failure` event chain on
 # scrape_run_events so a run that got resumed from outside (via the
 # dashboard's Continue button) also counts toward the cap.
-STALL_AUTO_RESUME_MAX = 10  # pragma: no cover
+# Capped at 3: any stall storm beyond that is a real problem worth
+# surfacing to the operator (Continue button on the dashboard) rather
+# than silently retrying. Higher values just produced N rows of failed
+# runs in a row when the underlying cause was persistent.
+STALL_AUTO_RESUME_MAX = 3  # pragma: no cover
 
 # After a stall fires, ``engine.close_spider()`` waits for the
 # pipeline backlog to drain. With slow Postgres writes that can take
