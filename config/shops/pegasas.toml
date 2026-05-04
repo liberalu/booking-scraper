@@ -54,6 +54,19 @@ page_size = 42
 max_age_hours = 24
 
 [scan]
-# Product pages are JS-rendered (Magento PWA / Venia). parse_product_page
-# returns is_book_product=False for the React app shell, so scan runs are
-# effectively a no-op. Full data comes from the graphql discover phase.
+# Product pages are JS-rendered (Magento PWA / Venia). The scan spider
+# applies parsers.rewrite_scan_url, which extracts the trailing numeric
+# SKU from each URL and rewrites the request to a single-SKU Magento
+# GraphQL query (Accept: application/json). The single-SKU path is
+# indexed and fast (~200–500 ms each), even cold-cache. parse_product_page
+# parses the JSON response via the same _graphql_item_to_product helper
+# used by the category-page parser.
+#
+# Recommended pipeline:
+#   * Daily: discover_lupasearch (~3 min) for prices/stock + new-arrival
+#     detection via `is_new`.
+#   * Weekly: scan (~25 min) for full ISBN/year/pages enrichment of any
+#     SKU that's new or whose price/stock changed.
+# discover_graphql remains available for ad-hoc deep-cat scans but is no
+# longer the primary harvest mechanism — the deep-paginated full-LT crawl
+# stalled too often on Magento full-page-cache cold misses.

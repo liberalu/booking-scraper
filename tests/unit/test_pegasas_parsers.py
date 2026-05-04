@@ -17,6 +17,7 @@ from book_scraper.spiders.pegasas.parsers import (
     parse_lupasearch_response,
     parse_product_page,
     parse_sitemap_urls,
+    rewrite_scan_url,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -488,7 +489,81 @@ class TestStubs:
     def test_sitemap_returns_empty(self) -> None:
         assert parse_sitemap_urls("<x/>") == []
 
-    def test_product_page_returns_non_product_stub(self) -> None:
+    def test_product_page_returns_non_product_stub_for_html(self) -> None:
+        # Non-JSON body falls back to the React-shell stub.
         result = parse_product_page("<html></html>")
         assert result["is_book_product"] is False
         assert result["type"] == "non_book"
+        assert result["book_score_reasons"][0]["key"] == "pwa_shell_no_data"
+
+
+class TestParseProductPageGraphQL:
+    """parse_product_page now expects per-SKU GraphQL JSON (after
+    rewrite_scan_url has swapped the URL). Uses a synthetic single-SKU
+    response built from the first item of the category fixture so the
+    test stays in lockstep with real Magento payload shapes."""
+
+    @pytest.fixture
+    def single_sku_text(self, graphql_text: str) -> str:
+        category = json.loads(graphql_text)
+        first_item = category["data"]["products"]["items"][0]
+        return json.dumps(
+            {"data": {"products": {"items": [first_item]}}}
+        )
+
+    def test_returns_book_product_with_full_metadata(
+        self, single_sku_text: str
+    ) -> None:
+        result = parse_product_page(single_sku_text)
+        assert result["is_book_product"] is True
+        assert result["title"]
+        assert result["sku"]
+        assert result["type"] in ("book", "audio", "ebook")
+        assert result["book_score"] == 100
+
+    def test_empty_items_marks_non_product(self) -> None:
+        result = parse_product_page(
+            json.dumps({"data": {"products": {"items": []}}})
+        )
+        assert result["is_book_product"] is False
+        assert result["book_score_reasons"][0]["key"] == "graphql_no_match"
+
+    def test_invalid_json_falls_back_to_stub(self) -> None:
+        result = parse_product_page("not json")
+        assert result["is_book_product"] is False
+        assert result["book_score_reasons"][0]["key"] == "pwa_shell_no_data"
+
+
+class TestRewriteScanUrl:
+    def test_extracts_and_pads_sku_to_18_chars(self) -> None:
+        result = rewrite_scan_url(
+            "https://www.pegasas.lt/some-book-title-1115331"
+        )
+        assert result is not None
+        assert "000000000001115331" in result["url"]
+        assert result["url"].startswith("https://www.pegasas.lt/graphql?query=")
+
+    def test_includes_accept_json_header(self) -> None:
+        result = rewrite_scan_url(
+            "https://www.pegasas.lt/some-book-1234567"
+        )
+        assert result is not None
+        assert result["headers"] == {"Accept": "application/json"}
+
+    def test_handles_e_book_slug(self) -> None:
+        result = rewrite_scan_url(
+            "https://www.pegasas.lt/title-e-knyga-11004377"
+        )
+        assert result is not None
+        assert "000000000011004377" in result["url"]
+
+    def test_strips_trailing_slash_before_extracting(self) -> None:
+        result = rewrite_scan_url(
+            "https://www.pegasas.lt/title-1115331/"
+        )
+        assert result is not None
+        assert "000000000001115331" in result["url"]
+
+    def test_returns_none_for_url_without_numeric_suffix(self) -> None:
+        assert rewrite_scan_url("https://www.pegasas.lt/about-us") is None
+        assert rewrite_scan_url("https://www.pegasas.lt/") is None

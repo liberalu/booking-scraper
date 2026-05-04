@@ -20,8 +20,17 @@ import html as html_module
 import json
 import re
 from typing import Any
+from urllib.parse import urlencode, urlparse
+
+from book_scraper.spiders.graphql_urls import _PRODUCT_FIELDS
 
 _BASE_URL = "https://www.pegasas.lt"
+
+# Trailing numeric suffix on the URL slug is the unpadded SKU. Magento
+# expects the SKU as a zero-padded 18-character string in the GraphQL
+# filter, so `1115331` → `000000000001115331`.
+_SKU_FROM_SLUG_RE = re.compile(r"-(\d+)/?$")
+_MAGENTO_SKU_WIDTH = 18
 
 # Magento `product_page_attributes` field labels. Lithuanian text — these
 # are stable Magento attribute labels, not user-editable.
@@ -528,18 +537,13 @@ def _lupasearch_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Product page (React app shell — no parseable data)
+# Product page (per-SKU GraphQL JSON via rewrite_scan_url)
 # ---------------------------------------------------------------------------
 
 
-def parse_product_page(html: str) -> dict[str, object]:
-    """pegasas.lt product pages are JS-rendered (Magento PWA / Venia).
-
-    The HTML response is always the React app shell with no product data.
-    Return is_book_product=False so the scan spider marks URLs as
-    non_product and moves on. Full data comes from the discover phase
-    (GraphQL or LupaSearch).
-    """
+def _empty_product_page_result(reason_key: str) -> dict[str, object]:
+    """Default non-product shape used for both PWA-shell HTML responses
+    and GraphQL responses with empty `items[]`."""
     return {
         "title": None,
         "description": None,
@@ -562,9 +566,96 @@ def parse_product_page(html: str) -> dict[str, object]:
         "schema_types": [],
         "is_book_product": False,
         "book_score": 0,
-        "book_score_reasons": [{"key": "pwa_shell_no_data", "points": 0}],
+        "book_score_reasons": [{"key": reason_key, "points": 0}],
         "type": "non_book",
         "planned_availability_date": None,
         "rating": None,
         "review_count": None,
+    }
+
+
+def parse_product_page(text: str) -> dict[str, object]:
+    """Parse a per-SKU Magento GraphQL JSON response.
+
+    The scan spider hits this with the body of the GraphQL endpoint after
+    `rewrite_scan_url` swapped the product page URL for a single-SKU
+    GraphQL query. Falls back to a non-product result when the body
+    isn't JSON (e.g. the legacy PWA-shell HTML, returned for ad-hoc
+    direct fetches that bypassed `rewrite_scan_url`).
+    """
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return _empty_product_page_result("pwa_shell_no_data")
+
+    items = (data.get("data", {}).get("products", {}) or {}).get("items") or []
+    if not items:
+        return _empty_product_page_result("graphql_no_match")
+    product = _graphql_item_to_product(items[0])
+    if product is None:
+        # Language gate fired (non-LT) — record as non-product so the
+        # row is closed cleanly without a noisy validation error.
+        return _empty_product_page_result("graphql_non_lt_filtered")
+
+    properties = product.get("properties") or {}
+    return {
+        "title": product.get("title"),
+        "description": product.get("description"),
+        "price": product.get("price"),
+        "price_original": product.get("price_original"),
+        "in_stock": product.get("in_stock"),
+        "isbn": product.get("isbn"),
+        "sku": product.get("sku"),
+        "publisher": product.get("publisher"),
+        "image_url": product.get("image_url"),
+        "categories": product.get("categories", []),
+        "year": product.get("year"),
+        "pages": properties.get("pages"),
+        "author": product.get("author"),
+        "cover_type": properties.get("cover_type"),
+        "format": product.get("format"),
+        "duration": properties.get("duration"),
+        "narrator": properties.get("narrator"),
+        "translator": properties.get("translator"),
+        "schema_types": [],
+        "is_book_product": product.get("type") in ("book", "audio", "ebook"),
+        "book_score": 100,
+        "book_score_reasons": [{"key": "graphql_sku_match", "points": 100}],
+        "type": product.get("type"),
+        "planned_availability_date": None,
+        "rating": None,
+        "review_count": None,
+    }
+
+
+def rewrite_scan_url(url: str) -> dict[str, Any] | None:
+    """Rewrite a product URL to a single-SKU GraphQL request.
+
+    The PWA serves React-shell HTML for product pages — no parseable data.
+    The Magento GraphQL endpoint, however, returns full product metadata
+    in 200–500 ms when filtered to a single SKU. The trailing numeric
+    suffix on the slug is the unpadded SKU; we pad to 18 chars per
+    Magento's storage format.
+
+    Returns ``{"url": str, "headers": {...}}`` to swap into the request,
+    or ``None`` when the URL has no extractable SKU (the spider then
+    leaves the request untouched and the response will land in the
+    PWA-shell fallback path).
+    """
+    parsed = urlparse(url)
+    match = _SKU_FROM_SLUG_RE.search(parsed.path.rstrip("/"))
+    if not match:
+        return None
+    sku_padded = match.group(1).rjust(_MAGENTO_SKU_WIDTH, "0")
+    query = (
+        "{products("
+        f'filter:{{sku:{{eq:"{sku_padded}"}}}},'
+        "pageSize:1,currentPage:1"
+        f"){{items{{{_PRODUCT_FIELDS}}}}}}}"
+    )
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    rewritten = base + "/graphql?" + urlencode([("query", query)])
+    return {
+        "url": rewritten,
+        "headers": {"Accept": "application/json"},
     }

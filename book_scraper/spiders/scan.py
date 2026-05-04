@@ -132,10 +132,8 @@ class ScanSpider(scrapy.Spider):
         engine = self.crawler.engine
         assert engine is not None
         for item in new_items:
-            req = scrapy.Request(
+            req = self._build_scan_request(
                 item["url"],
-                callback=self.parse_product,
-                errback=self.handle_error,
                 meta={
                     "discovered_url_id": item["discovered_url_id"],
                     "scrape_url_item_id": item["id"],
@@ -210,10 +208,8 @@ class ScanSpider(scrapy.Spider):
                 self._run_id,
             )
             for url in self._single_urls:
-                yield scrapy.Request(
+                yield self._build_scan_request(
                     url,
-                    callback=self.parse_product,
-                    errback=self.handle_error,
                     meta={
                         "discovered_url_id": url_id_map.get(url),
                         "scrape_url_item_id": url_item_id_map.get(url),
@@ -303,10 +299,8 @@ class ScanSpider(scrapy.Spider):
                             )
                             return
                         break
-                yield scrapy.Request(
+                yield self._build_scan_request(
                     item["url"],
-                    callback=self.parse_product,
-                    errback=self.handle_error,
                     meta={
                         "discovered_url_id": item["discovered_url_id"],
                         "scrape_url_item_id": item["id"],
@@ -315,6 +309,36 @@ class ScanSpider(scrapy.Spider):
                 )
         finally:
             session.close()
+
+    def _build_scan_request(
+        self, url: str, meta: dict[str, Any]
+    ) -> scrapy.Request:
+        """Build a scan request, honouring the parser's `rewrite_scan_url` hook.
+
+        Pegasas's PWA serves React shells with no parseable data, so its
+        parser swaps the product URL for a single-SKU GraphQL request.
+        For shops without the hook (vaga), the URL passes through.
+        Stashes the original URL in ``meta["original_url"]`` so
+        downstream tracking (scrape_url_items, ShopBookItem.url, redirect
+        detection) can still reference the canonical product page.
+        """
+        rewrite = getattr(self.parsers, "rewrite_scan_url", None)
+        request_url = url
+        request_headers: dict[str, str] | None = None
+        meta = dict(meta)
+        meta["original_url"] = url
+        if rewrite is not None:
+            rewritten = rewrite(url)
+            if rewritten:
+                request_url = rewritten["url"]
+                request_headers = rewritten.get("headers") or None
+        return scrapy.Request(
+            request_url,
+            callback=self.parse_product,
+            errback=self.handle_error,
+            meta=meta,
+            headers=request_headers,
+        )
 
     def parse_product(
         self, response: scrapy.http.Response
@@ -327,7 +351,11 @@ class ScanSpider(scrapy.Spider):
         received_at = time.time()
         response_bytes = len(response.body) if response.body is not None else 0
 
-        url = response.url.split("?")[0]
+        # When `rewrite_scan_url` swapped the URL (e.g. pegasas → /graphql),
+        # the response.url is the GraphQL endpoint. Use the stashed original
+        # URL so tracking columns + items reflect the canonical product page.
+        original_url = response.meta.get("original_url")
+        url = original_url or response.url.split("?")[0]
         if 400 <= response.status < 500:
             self._errors_4xx += 1
             self._error_count += 1
@@ -375,7 +403,7 @@ class ScanSpider(scrapy.Spider):
             return
 
         # HTTP-level checks
-        url = response.url.split("?")[0]
+        # (url already resolved above to original_url when rewrite was applied)
         # Anti-bot wall check fires before any content-quality signal:
         # a 200 OK challenge page would otherwise trip empty_response /
         # redirect_to_homepage as warnings while still being parsed for
@@ -407,19 +435,26 @@ class ScanSpider(scrapy.Spider):
                 url,
                 f"len={len(response.text)}",
             )
-        request_url = response.request.url.split("?")[0] if response.request else url
-        final_url = url
-        if final_url != request_url:
-            # Check if redirected to homepage or category
-            base = self.conf.shop.base_url.rstrip("/")
-            path = final_url.replace(base, "")
-            if path in ("", "/") or path.count("/") == 1:
-                self._report_validation(
-                    "redirect_to_homepage",
-                    "url",
-                    request_url,
-                    f"redirected to {final_url}",
-                )
+        # Skip redirect-to-homepage detection when rewrite_scan_url was
+        # applied: the response.url is the GraphQL endpoint by design,
+        # not a redirected product page, so the check would fire
+        # spuriously on every pegasas request.
+        if original_url is None:
+            request_url = (
+                response.request.url.split("?")[0] if response.request else url
+            )
+            final_url = url
+            if final_url != request_url:
+                # Check if redirected to homepage or category
+                base = self.conf.shop.base_url.rstrip("/")
+                path = final_url.replace(base, "")
+                if path in ("", "/") or path.count("/") == 1:
+                    self._report_validation(
+                        "redirect_to_homepage",
+                        "url",
+                        request_url,
+                        f"redirected to {final_url}",
+                    )
 
         data = self.parsers.parse_product_page(response.text)
 
@@ -458,7 +493,7 @@ class ScanSpider(scrapy.Spider):
                 props[key] = data[key]
 
         item = ShopBookItem(
-            url=response.url.split("?")[0],
+            url=url,
             shop_name=self.shop_name,
             type=data.get("type"),
             title=data["title"],
@@ -515,7 +550,10 @@ class ScanSpider(scrapy.Spider):
         request_delay_s = request.meta.get("request_delay_s")
         delay_source = request.meta.get("delay_source")
         received_at = time.time()
-        url = str(request.url).split("?")[0]
+        # Use original URL when rewrite_scan_url was applied so tracking
+        # columns reference the product page, not the GraphQL endpoint.
+        original_url = request.meta.get("original_url")
+        url = original_url or str(request.url).split("?")[0]
 
         status = getattr(failure.value, "response", None)
         http_status = status.status if status else None

@@ -653,3 +653,68 @@ class TestScanSpider:
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
         assert shop_book_items == []
         assert spider._url_status_updates[-1]["url_type"] == "non_product"
+
+    def test_build_scan_request_passes_through_when_no_rewrite(self):
+        """Vaga's parser doesn't expose rewrite_scan_url, so the URL must
+        pass through untouched. original_url is still stashed in meta as
+        a no-op (downstream code falls back to response.url when unset)."""
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        req = spider._build_scan_request(
+            "https://vaga.lt/some-book", meta={"discovered_url_id": 1}
+        )
+        assert req.url == "https://vaga.lt/some-book"
+        assert req.meta["original_url"] == "https://vaga.lt/some-book"
+        # No special header injected.
+        assert req.headers.get("Accept") in (None, b"")
+
+    def test_build_scan_request_rewrites_pegasas_to_graphql(self):
+        """Pegasas's parser exposes rewrite_scan_url, which swaps the
+        product page URL for a single-SKU GraphQL request and adds the
+        Accept: application/json header. The original product URL is
+        preserved in meta for downstream tracking."""
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="pegasas")
+        req = spider._build_scan_request(
+            "https://www.pegasas.lt/test-book-1115331",
+            meta={"discovered_url_id": 1},
+        )
+        assert req.url.startswith("https://www.pegasas.lt/graphql?query=")
+        assert "000000000001115331" in req.url
+        assert req.meta["original_url"] == (
+            "https://www.pegasas.lt/test-book-1115331"
+        )
+        assert req.headers.get("Accept") == b"application/json"
+
+    def test_parse_product_uses_original_url_when_rewrite_applied(self):
+        """When rewrite_scan_url stashed an original_url, parse_product
+        must use it for the ShopBookItem URL — not the GraphQL endpoint
+        the response.url actually points at."""
+        import json as _json
+
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="pegasas")
+        # Synthetic single-SKU GraphQL response.
+        category = _json.loads(
+            (FIXTURES / "pegasas_graphql_category.json").read_text()
+        )
+        first = category["data"]["products"]["items"][0]
+        body = _json.dumps({"data": {"products": {"items": [first]}}})
+        response = _fake_response(
+            "https://www.pegasas.lt/graphql?query=...",
+            body,
+            cls=TextResponse,
+            meta={
+                "discovered_url_id": 1,
+                "original_url": "https://www.pegasas.lt/the-canonical-product-1115331",
+            },
+        )
+        items = list(spider.parse_product(response))
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert len(shop_book_items) == 1
+        assert shop_book_items[0]["url"] == (
+            "https://www.pegasas.lt/the-canonical-product-1115331"
+        )
