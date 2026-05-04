@@ -67,16 +67,23 @@ Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider res
 
 ### Per-shop runtime settings
 
-Every shop's `[scraping]` section in its TOML is **documentation only**. The runtime values come from the `shop_settings` DB table, read in `HttpxMiddleware.spider_opened`. Editing the TOML doesn't change behaviour; updating the DB row does, no restart needed:
+Precedence chain at runtime, highest to lowest:
+
+1. **`shop_settings` DB row** — operator override applied without a redeploy.
+2. **`config/shops/<shop>.toml` `[scraping]` block** — per-shop config; restart required.
+3. **Scrapy globals from `book_scraper/settings.py`** — final fallback.
+
+`HttpxMiddleware.spider_opened` walks the chain key-by-key: a DB row for `download_delay` wins for that key, but `concurrent_requests_per_domain` still falls through to TOML when no DB row exists.
+
+Keys consumed: `concurrent_requests_per_domain` (int), `download_delay` (float).
 
 ```sql
+-- Live override during an incident (no restart needed):
 INSERT INTO shop_settings (shop_id, key, value, type)
 VALUES ((SELECT id FROM shops WHERE name='pegasas'),
         'concurrent_requests_per_domain', '2', 'int')
 ON CONFLICT (shop_id, key) DO UPDATE SET value=EXCLUDED.value, type=EXCLUDED.type;
 ```
-
-Keys consumed: `concurrent_requests_per_domain` (int), `download_delay` (float). See follow-up "Reconcile TOML scraping defaults with shop_settings table" — eventually the TOML should be a fallback when no DB row exists.
 
 ### Key Design Decisions
 

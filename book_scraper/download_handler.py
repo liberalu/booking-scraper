@@ -176,35 +176,65 @@ class HttpxMiddleware:  # pragma: no cover
         return mw
 
     def spider_opened(self, spider: Any) -> None:
-        """Read per-shop rate settings from DB and apply them before any requests."""
+        """Apply per-shop rate settings before any requests dispatch.
+
+        Precedence (highest first): ``shop_settings`` DB row → TOML
+        ``[scraping]`` block in ``config/shops/<shop>.toml`` → Scrapy
+        globals from ``settings.py`` (already baked into ``self``).
+        TOML defaults to its model values (1.0s delay, concurrency=1)
+        when the section is omitted, so the chain is always
+        well-defined.
+        """
         shop_name = getattr(spider, "shop_name", None)
-        if not shop_name or not self.database_url:
+        if not shop_name:
             return
+
+        # Step 1: TOML defaults (per-shop config). Loaded fresh here so a
+        # `config/shops/<shop>.toml` edit takes effect on the next run
+        # without requiring spider code to pre-populate it.
+        toml_download_delay: float = self._download_delay
+        toml_concurrency: int = self._max_concurrency
         try:
-            if self._session_factory is None:
-                from book_scraper.db.session import get_session_factory
+            from book_scraper.config import load_shop_config
 
-                self._session_factory = get_session_factory(self.database_url)
-            from book_scraper.db.models import Shop, ShopSettings
-
-            session = self._session_factory()
-            try:
-                rows = (
-                    session.query(ShopSettings)
-                    .join(Shop, Shop.id == ShopSettings.shop_id)
-                    .filter(Shop.name == shop_name)
-                    .all()
-                )
-            finally:
-                session.close()
-            if not rows:
-                return
-            raw = {r.key: (r.value, r.type) for r in rows}
+            shop_conf = load_shop_config(shop_name)
+            toml_download_delay = float(shop_conf.scraping.download_delay)
+            toml_concurrency = int(shop_conf.scraping.concurrent_requests_per_domain)
         except Exception:
             logger.exception(
-                "spider_opened: failed to read rate settings for %s", shop_name
+                "spider_opened: failed to read TOML config for %s; "
+                "falling back to Scrapy globals",
+                shop_name,
             )
-            return
+
+        # Step 2: shop_settings DB rows (highest precedence). Operator
+        # overrides applied without redeploying.
+        raw: dict[str, tuple[str, str]] = {}
+        if self.database_url:
+            try:
+                if self._session_factory is None:
+                    from book_scraper.db.session import get_session_factory
+
+                    self._session_factory = get_session_factory(self.database_url)
+                from book_scraper.db.models import Shop, ShopSettings
+
+                session = self._session_factory()
+                try:
+                    rows = (
+                        session.query(ShopSettings)
+                        .join(Shop, Shop.id == ShopSettings.shop_id)
+                        .filter(Shop.name == shop_name)
+                        .all()
+                    )
+                    raw = {r.key: (r.value, r.type) for r in rows}
+                finally:
+                    session.close()
+            except Exception:
+                logger.exception(
+                    "spider_opened: failed to read shop_settings for %s; "
+                    "using TOML/global defaults",
+                    shop_name,
+                )
 
         def _cast(key: str, default: float | int) -> float | int:
             entry = raw.get(key)
@@ -217,11 +247,11 @@ class HttpxMiddleware:  # pragma: no cover
                 return default
 
         download_delay = max(
-            0.1, min(60.0, float(_cast("download_delay", self._download_delay)))
+            0.1, min(60.0, float(_cast("download_delay", toml_download_delay)))
         )
         concurrency = max(
             1,
-            min(16, int(_cast("concurrent_requests_per_domain", self._max_concurrency))),
+            min(16, int(_cast("concurrent_requests_per_domain", toml_concurrency))),
         )
         self._download_delay = download_delay
         self._autothrottle_start = download_delay

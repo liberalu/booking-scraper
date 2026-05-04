@@ -104,7 +104,11 @@ def test_spider_opened_clamps_values(db_session: Session) -> None:
 
 
 @pytest.mark.integration
-def test_spider_opened_no_settings_is_noop(db_session: Session) -> None:
+def test_spider_opened_unknown_shop_falls_back_to_scrapy_globals(
+    db_session: Session,
+) -> None:
+    """Shop has no TOML and no DB rows: middleware keeps the Scrapy
+    globals it was instantiated with."""
     mw = _make_middleware()
     mw._session_factory = lambda: db_session
 
@@ -115,5 +119,48 @@ def test_spider_opened_no_settings_is_noop(db_session: Session) -> None:
         mw.spider_opened(_UnknownShop())
         assert mw._download_delay == 2.0
         assert mw._max_concurrency == 1
+    finally:
+        asyncio.run(mw._close())
+
+
+@pytest.mark.integration
+def test_spider_opened_uses_toml_when_no_db_rows(db_session: Session) -> None:
+    """Precedence chain: DB → TOML → Scrapy globals. With no DB rows
+    for vaga, the TOML [scraping] values must be applied. vaga.toml
+    sets download_delay=0.2 and concurrent_requests_per_domain=8 —
+    both differ from the Scrapy globals (2.0 / 1) so a regression
+    falling back to globals would be visible."""
+    _ensure_vaga(db_session)
+    # No _seed_settings call — DB is empty for vaga.
+
+    mw = _make_middleware()
+    mw._session_factory = lambda: db_session
+    try:
+        mw.spider_opened(_MockSpider())
+        # TOML values, not the Scrapy globals (2.0 / 1).
+        assert mw._download_delay == 0.2
+        assert mw._max_concurrency == 8
+    finally:
+        asyncio.run(mw._close())
+
+
+@pytest.mark.integration
+def test_spider_opened_db_overrides_toml_per_key(db_session: Session) -> None:
+    """DB takes precedence over TOML key-by-key: a DB row for
+    download_delay overrides the TOML value, but concurrent_requests
+    (no DB row) still picks up TOML's setting."""
+    shop = _ensure_vaga(db_session)
+    _seed_settings(
+        db_session,
+        shop.id,
+        [("download_delay", "1.5", "float")],
+    )
+
+    mw = _make_middleware()
+    mw._session_factory = lambda: db_session
+    try:
+        mw.spider_opened(_MockSpider())
+        assert mw._download_delay == 1.5  # DB wins
+        assert mw._max_concurrency == 8  # TOML (no DB row) wins over global
     finally:
         asyncio.run(mw._close())
