@@ -497,6 +497,108 @@ class TestStubs:
         assert result["book_score_reasons"][0]["key"] == "pwa_shell_no_data"
 
 
+class TestFormatFromCoverType:
+    """The pegasas parser maps Lithuanian cover-type labels to the same
+    `format` values vaga uses, so the same physical book has the same
+    `format` value regardless of which shop it came from.
+
+    Without this mapping, a printed book on pegasas had `format=null`
+    while the same book on vaga had `format='hardcover'` — visible
+    inconsistency on the dashboard's shop-book detail view."""
+
+    def test_kietas_maps_to_hardcover(self) -> None:
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type("Kietas") == "hardcover"
+        assert format_from_cover_type("Kieti viršeliai") == "hardcover"
+
+    def test_minkstas_maps_to_paperback(self) -> None:
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type("Minkštas") == "paperback"
+
+    def test_other_cover_types_lowercased(self) -> None:
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type("Kita") == "kita"
+        assert format_from_cover_type("Aplankas") == "aplankas"
+        assert format_from_cover_type("Dėžutė") == "dėžutė"
+
+    def test_empty_or_none_returns_none(self) -> None:
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type(None) is None
+        assert format_from_cover_type("") is None
+
+
+class TestProductFormatFromGraphQL:
+    """Integration: the format field on the product dict reflects
+    cover-type for printed books, audio/ebook for the rest."""
+
+    def _product(self, **overrides: object) -> dict[str, object]:
+        from book_scraper.spiders.pegasas.parsers import _graphql_item_to_product
+
+        item: dict[str, object] = {
+            "name": "Test",
+            "sku": "000000000001234567",
+            "url_key": "test-1234567",
+            "image": {"url": ""},
+            "price_range": {
+                "minimum_price": {
+                    "final_price": {"value": 1.0, "currency": "EUR"},
+                    "regular_price": {"value": 1.0, "currency": "EUR"},
+                }
+            },
+            "stock_status": "IN_STOCK",
+            "is_book": True,
+            "is_audio_book": False,
+            "anotacija": "",
+            "categories": [{"id": 5107, "name": "Grožinė", "breadcrumbs": None}],
+            "product_page_attributes": [
+                {
+                    "primary_attributes": [
+                        {"label": "Viršelio tipas", "value": "Kietas"},
+                    ],
+                    "secondary_attributes": [],
+                }
+            ],
+            "structured_data": "",
+        }
+        for k, v in overrides.items():
+            item[k] = v
+        return _graphql_item_to_product(item)  # type: ignore[return-value]
+
+    def test_book_with_kietas_cover_is_hardcover(self) -> None:
+        product = self._product()
+        assert product is not None
+        assert product["format"] == "hardcover"
+        assert product["type"] == "book"
+
+    def test_book_with_minkstas_cover_is_paperback(self) -> None:
+        product = self._product(
+            product_page_attributes=[
+                {
+                    "primary_attributes": [
+                        {"label": "Viršelio tipas", "value": "Minkštas"}
+                    ],
+                    "secondary_attributes": [],
+                }
+            ]
+        )
+        assert product is not None
+        assert product["format"] == "paperback"
+
+    def test_book_with_no_cover_type_falls_back_to_book(self) -> None:
+        product = self._product(product_page_attributes=[])
+        assert product is not None
+        assert product["format"] == "book"
+
+    def test_audio_book_overrides_cover_type(self) -> None:
+        product = self._product(is_audio_book=True)
+        assert product is not None
+        assert product["format"] == "audiobook"
+
+
 class TestParseProductPageGraphQL:
     """parse_product_page now expects per-SKU GraphQL JSON (after
     rewrite_scan_url has swapped the URL). Uses a synthetic single-SKU

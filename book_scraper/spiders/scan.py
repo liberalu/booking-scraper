@@ -310,9 +310,7 @@ class ScanSpider(scrapy.Spider):
         finally:
             session.close()
 
-    def _build_scan_request(
-        self, url: str, meta: dict[str, Any]
-    ) -> scrapy.Request:
+    def _build_scan_request(self, url: str, meta: dict[str, Any]) -> scrapy.Request:
         """Build a scan request, honouring the parser's `rewrite_scan_url` hook.
 
         Pegasas's PWA serves React shells with no parseable data, so its
@@ -360,34 +358,15 @@ class ScanSpider(scrapy.Spider):
         # in the queue row so postmortem queries can see how often
         # transient backend pressure was papered over by retries.
         retry_count = int(response.meta.get("retry_times", 0))
-        if 400 <= response.status < 500:
-            self._errors_4xx += 1
+        if 400 <= response.status < 600:
+            if response.status < 500:
+                self._errors_4xx += 1
+            else:
+                self._errors_5xx += 1
             self._error_count += 1
             # Transport errors are recorded only in scrape_failures (PR 1
             # of the migration; PR 3 stops the validation_issues
             # double-write — single source of truth for failure events).
-            self._mark_response(
-                scrape_url_item_id,
-                response_url=url,
-                success=False,
-                http_status=response.status,
-                received_at=received_at,
-                response_bytes=response_bytes,
-                error_reason=f"http_{response.status}",
-                dispatched_at=dispatched_at,
-                request_delay_s=request_delay_s,
-                delay_source=delay_source,
-                retry_count=retry_count,
-            )
-            self._queue_url_status_update(
-                discovered_url_id,
-                http_status=response.status,
-                increment_fail=True,
-            )
-            return
-        if 500 <= response.status < 600:
-            self._errors_5xx += 1
-            self._error_count += 1
             self._mark_response(
                 scrape_url_item_id,
                 response_url=url,

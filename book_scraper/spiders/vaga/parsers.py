@@ -6,7 +6,9 @@ import xml.etree.ElementTree as ET
 
 from bs4 import BeautifulSoup
 
+from book_scraper.book_types import BookType
 from book_scraper.isbn import is_valid_isbn
+from book_scraper.spiders.cover_type import format_from_cover_type
 
 _BOOK_CATEGORY_LABELS = (
     "negrožinė literatūra",
@@ -111,41 +113,21 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
     )
     title_is_non_book = title_looks_like_game_or_toy(title)
 
+    signals: tuple[tuple[str, bool, int], ...] = (
+        ("book_categories", has_book_category, 3),
+        ("valid_isbn", valid_isbn, 3),
+        ("author_present", has_author, 2),
+        ("book_metadata", has_book_metadata, 2),
+        ("game_toy_title", title_is_non_book, -3),
+        ("non_book_categories", has_non_book_category, -4),
+    )
     score = 0
-    if has_book_category:
-        score += 3
-        reasons.append({"key": "book_categories", "points": 3})
-    else:
-        reasons.append({"key": "book_categories", "points": 0})
-    if valid_isbn:
-        score += 3
-        reasons.append({"key": "valid_isbn", "points": 3})
-    else:
-        reasons.append({"key": "valid_isbn", "points": 0})
-    if has_author:
-        score += 2
-        reasons.append({"key": "author_present", "points": 2})
-    else:
-        reasons.append({"key": "author_present", "points": 0})
-    if has_book_metadata:
-        score += 2
-        reasons.append({"key": "book_metadata", "points": 2})
-    else:
-        reasons.append({"key": "book_metadata", "points": 0})
-    if title_is_non_book:
-        score -= 3
-        reasons.append({"key": "game_toy_title", "points": -3})
-    else:
-        reasons.append({"key": "game_toy_title", "points": 0})
-    if has_non_book_category:
-        score -= 4
-        reasons.append({"key": "non_book_categories", "points": -4})
-    else:
-        reasons.append({"key": "non_book_categories", "points": 0})
+    for key, fired, points in signals:
+        awarded = points if fired else 0
+        score += awarded
+        reasons.append({"key": key, "points": awarded})
 
-    if has_non_book_category and not (
-        has_book_category or valid_isbn or has_author
-    ):
+    if has_non_book_category and not (has_book_category or valid_isbn or has_author):
         reasons.append({"key": "blocked_non_book_category", "points": 0})
         return {
             "score": score,
@@ -153,9 +135,7 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
             "reasons": reasons,
             "has_primary_book_signal": False,
         }
-    if title_is_non_book and not (
-        has_book_category or valid_isbn or has_book_metadata
-    ):
+    if title_is_non_book and not (has_book_category or valid_isbn or has_book_metadata):
         reasons.append({"key": "blocked_game_toy_title", "points": 0})
         return {
             "score": score,
@@ -179,7 +159,7 @@ def is_book_product_page(data: dict[str, object]) -> bool:
     return bool(classify_book_product(data)["is_book_product"])
 
 
-def infer_shop_book_type(data: dict[str, object]) -> str:
+def infer_shop_book_type(data: dict[str, object]) -> BookType:
     format_value = data.get("format")
     normalized_format = (
         _normalize_text(format_value) if isinstance(format_value, str) else ""
@@ -464,13 +444,7 @@ def parse_product_page(html: str) -> dict[str, object]:
     if has_real_duration:
         data["format"] = "audiobook"
     elif "Viršelis" in prop_map:
-        cover = prop_map["Viršelis"].lower()
-        if "kiet" in cover:
-            data["format"] = "hardcover"
-        elif "minkšt" in cover:
-            data["format"] = "paperback"
-        else:
-            data["format"] = cover
+        data["format"] = format_from_cover_type(prop_map["Viršelis"])
     elif "Puslapiai" in prop_map:
         data["format"] = "book"
 
@@ -478,9 +452,7 @@ def parse_product_page(html: str) -> dict[str, object]:
     soup = BeautifulSoup(html, "html.parser")
 
     # planned_availability_date: "Planuojame turėti YYYY-MM-DD"
-    avail_span = soup.select_one(
-        ".form-group.isankstine .information-content span"
-    )
+    avail_span = soup.select_one(".form-group.isankstine .information-content span")
     if avail_span is None:
         # Fallback: any span containing the Lithuanian phrase
         for span in soup.find_all("span"):
@@ -498,9 +470,7 @@ def parse_product_page(html: str) -> dict[str, object]:
     if rating_box:
         stacks = rating_box.select(".fa.fa-stack")
         if stacks:
-            filled = sum(
-                1 for s in stacks if s.select_one("i.fa-star:not(.fa-star-o)")
-            )
+            filled = sum(1 for s in stacks if s.select_one("i.fa-star:not(.fa-star-o)"))
             # Only set rating when at least one star is filled (i.e. there are ratings)
             if filled > 0:
                 data["rating"] = float(filled)

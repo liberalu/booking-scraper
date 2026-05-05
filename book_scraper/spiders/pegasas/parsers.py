@@ -22,6 +22,8 @@ import re
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
+from book_scraper.book_types import BookType
+from book_scraper.spiders.cover_type import format_from_cover_type
 from book_scraper.spiders.graphql_urls import _PRODUCT_FIELDS
 
 _BASE_URL = "https://www.pegasas.lt"
@@ -71,7 +73,7 @@ _EBOOK_CATEGORY_IDS: frozenset[int] = frozenset({6122})
 
 def derive_book_type(
     is_book: object, is_audio_book: object, is_ebook: object = None
-) -> str:
+) -> BookType:
     """Map Magento/LupaSearch boolean-ish flags to our `type` field."""
     if bool(is_audio_book):
         return "audio"
@@ -80,6 +82,16 @@ def derive_book_type(
     if bool(is_book):
         return "book"
     return "non_book"
+
+
+def _fmt_from_book_type(book_type: BookType, cover_type: str | None) -> str | None:
+    if book_type == "audio":
+        return "audiobook"
+    if book_type == "ebook":
+        return "ebook"
+    if book_type == "book":
+        return format_from_cover_type(cover_type) or "book"
+    return None
 
 
 def _strip_html(text: str | None) -> str | None:
@@ -230,10 +242,7 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
     regular = price_info.get("regular_price") or {}
     price = str(final["value"]) if final.get("value") is not None else None
     price_original: str | None = None
-    if (
-        regular.get("value") is not None
-        and regular.get("value") != final.get("value")
-    ):
+    if regular.get("value") is not None and regular.get("value") != final.get("value"):
         price_original = str(regular["value"])
 
     # Author
@@ -381,12 +390,7 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
     if ean:
         properties["ean"] = ean
 
-    # Format
-    fmt: str | None = None
-    if book_type == "audio":
-        fmt = "audiobook"
-    elif book_type == "ebook":
-        fmt = "ebook"
+    fmt = _fmt_from_book_type(book_type, cover_type)
 
     return {
         "url": canonical_url,
@@ -487,11 +491,7 @@ def _lupasearch_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
     book_type = derive_book_type(
         item.get("is_book"), item.get("is_audio_book"), item.get("is_ebook")
     )
-    fmt: str | None = None
-    if book_type == "audio":
-        fmt = "audiobook"
-    elif book_type == "ebook":
-        fmt = "ebook"
+    fmt = _fmt_from_book_type(book_type, cover_type)
 
     # Categories — numeric ids; stringify for downstream consistency
     cat_ids = item.get("category_ids") or []
