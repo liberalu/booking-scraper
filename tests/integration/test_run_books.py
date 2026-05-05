@@ -82,7 +82,7 @@ def test_created_run_id_not_overwritten_on_rescrape(
     )
     assert created is False
     assert sb.created_run_id == run_a.id  # immutable
-    assert sb.last_run_id == run_b.id     # updated
+    assert sb.last_run_id == run_b.id  # updated
 
 
 @pytest.mark.integration

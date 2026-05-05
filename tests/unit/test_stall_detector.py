@@ -17,7 +17,7 @@ from book_scraper.extensions import StallDetector
 def crawler() -> MagicMock:
     c = MagicMock()
     c.settings.getfloat.return_value = 0  # STALL_FORCE_EXIT_S off by default
-    c.settings.getint.return_value = 0   # STALL_AUTO_RESUME_MAX off
+    c.settings.getint.return_value = 0  # STALL_AUTO_RESUME_MAX off
     c.settings.get.return_value = "postgresql://localhost/test"
     c.spider = MagicMock(_run_id=None)
     return c

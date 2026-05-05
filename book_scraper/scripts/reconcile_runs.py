@@ -41,7 +41,7 @@ def _spawn_restart(shop: str, phase: str) -> None:
     """Spawn a detached scrapy process inside the current container."""
     if phase.startswith("discover_"):
         crawl_phase = "discover"
-        strategy = phase[len("discover_"):]
+        strategy = phase[len("discover_") :]
     else:
         crawl_phase = phase
         strategy = ""

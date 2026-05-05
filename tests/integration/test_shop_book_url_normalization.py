@@ -65,9 +65,7 @@ def test_trailing_slash_variant_does_not_create_duplicate(
 
 
 @pytest.mark.integration
-def test_url_stored_without_trailing_slash(
-    db_session: Session, shop_id: int
-) -> None:
+def test_url_stored_without_trailing_slash(db_session: Session, shop_id: int) -> None:
     """The persisted URL is the canonical form (no trailing slash) even
     when the caller passed the trailing-slash variant first."""
     sb, _, _, _ = upsert_shop_book(
@@ -81,9 +79,7 @@ def test_url_stored_without_trailing_slash(
 
 
 @pytest.mark.integration
-def test_tracking_params_stripped_for_dedup(
-    db_session: Session, shop_id: int
-) -> None:
+def test_tracking_params_stripped_for_dedup(db_session: Session, shop_id: int) -> None:
     """``normalize_url`` also drops tracking params (utm_*, fbclid, …).
     A second call with a tracking-tagged variant of the same URL must
     map to the original row."""
@@ -146,9 +142,7 @@ def test_sku_match_keeps_row_when_url_changes(
 
 
 @pytest.mark.integration
-def test_no_sku_falls_back_to_url_match(
-    db_session: Session, shop_id: int
-) -> None:
+def test_no_sku_falls_back_to_url_match(db_session: Session, shop_id: int) -> None:
     """Vaga's HTML scrape sometimes returns no SKU. In that case the
     upsert must fall back to URL-based matching — preserving the
     original behavior for SKU-less books."""

@@ -1,9 +1,10 @@
 import asyncio
 import re
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -22,7 +23,7 @@ _SPA_SCRIPT_RE = re.compile(
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastAPI):
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     task = asyncio.create_task(reaper_loop())
     try:
         yield
@@ -36,7 +37,9 @@ app = FastAPI(title="Book Scraper Dashboard", lifespan=_lifespan)
 
 
 @app.middleware("http")
-async def _no_cache_jsx(request, call_next):
+async def _no_cache_jsx(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response = await call_next(request)
     if request.url.path.endswith(".jsx"):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"

@@ -117,7 +117,7 @@ def test_advisory_lock_blocks_concurrent_acquire(engine):
     because pg_try_advisory_xact_lock is reentrant within a single
     transaction — we need genuinely separate xacts to observe the lock.
     """
-    SessionLocal = sessionmaker(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)  # noqa: N806
     s1 = SessionLocal()
     s2 = SessionLocal()
     try:
@@ -146,7 +146,7 @@ def test_advisory_lock_blocks_concurrent_acquire(engine):
 def test_prepare_scan_returns_lock_not_acquired_when_locked(engine):
     """prepare_scan_create_run yields lock_not_acquired when another
     transaction holds the advisory lock for the same shop+phase."""
-    SessionLocal = sessionmaker(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)  # noqa: N806
     holder = SessionLocal()
     contender = SessionLocal()
     try:
@@ -285,7 +285,7 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
     assert db_session.query(ScrapeUrlItem).filter_by(run_id=plan.run_id).count() == 2
 
 
-# ────────────────────────────── #2 + #10 — queue inheritance ──────────────────────────────
+# ─────────────────────── #2 + #10 — queue inheritance ───────────────────────
 
 
 def test_inherit_pending_items_repoints_run_id(db_session):
@@ -404,7 +404,7 @@ def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
     assert first_run.resumable_after_failure is True
 
 
-# ────────────────────────────── #2 — abort_processing idempotency ──────────────────────────────
+# ─────────────────────── #2 — abort_processing idempotency ───────────────────────
 
 
 def test_abort_processing_skips_already_done_items(db_session):
@@ -508,8 +508,12 @@ def test_sweep_reaps_stuck_rows_on_running_run(db_session):
     )
     run = create_scrape_run(db_session, shop.id, "scan")
     # run defaults to status='running' — leave it that way.
-    fresh = insert_scrape_url_item(db_session, run.id, shop.id, du_fresh.id, du_fresh.url)
-    stuck = insert_scrape_url_item(db_session, run.id, shop.id, du_stuck.id, du_stuck.url)
+    fresh = insert_scrape_url_item(
+        db_session, run.id, shop.id, du_fresh.id, du_fresh.url
+    )
+    stuck = insert_scrape_url_item(
+        db_session, run.id, shop.id, du_stuck.id, du_stuck.url
+    )
 
     now = datetime.now(UTC)
     fresh.status = "processing"

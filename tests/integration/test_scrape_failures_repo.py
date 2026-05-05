@@ -228,9 +228,7 @@ def test_abort_processing_writes_one_event_per_item(
     assert aborted == 3
     failures = (
         db_session.query(ScrapeFailure)
-        .filter(
-            ScrapeFailure.scrape_url_item_id.in_([i.id for i in items])
-        )
+        .filter(ScrapeFailure.scrape_url_item_id.in_([i.id for i in items]))
         .all()
     )
     assert len(failures) == 3

@@ -181,6 +181,7 @@ class TestBuildRequestForUrlItem:
 
     def test_post_for_lupasearch_page(self):
         import json
+
         spider = DiscoverSpider(shop="pegasas", strategy="lupasearch")
         req = spider._build_request_for_url_item(
             "https://api.lupasearch.com/v1/query/abc?offset=84&limit=42&category_ids=5107",
@@ -218,9 +219,7 @@ class TestParseLupasearchPage:
             "?offset=0&limit=42&category_ids=5107%2C7352%2C5125%2C5206%2C6122"
         )
         request = Request(url=url, meta={"page": 1, "url_type": "lupasearch_page"})
-        response = TextResponse(
-            url=url, body=text, encoding="utf-8", request=request
-        )
+        response = TextResponse(url=url, body=text, encoding="utf-8", request=request)
         results = list(spider.parse_lupasearch_page(response))
 
         discovered = [r for r in results if isinstance(r, DiscoveredUrlItem)]
@@ -236,9 +235,7 @@ class TestParseLupasearchPage:
         # can engage instead of chaining serially.
         assert len(next_pages) > 100
         # First three should be at offsets 42, 84, 126 — sequential by limit.
-        offsets = [
-            int(r.url.split("offset=")[1].split("&")[0]) for r in next_pages
-        ]
+        offsets = [int(r.url.split("offset=")[1].split("&")[0]) for r in next_pages]
         assert offsets[:3] == [42, 84, 126]
         assert all(r.method == "POST" for r in next_pages)
 
@@ -257,9 +254,7 @@ class TestParseLupasearchPage:
             "?offset=0&limit=42&category_ids=5107"
         )
         request = Request(url=url, meta={"page": 1, "url_type": "lupasearch_page"})
-        response = TextResponse(
-            url=url, body=body, encoding="utf-8", request=request
-        )
+        response = TextResponse(url=url, body=body, encoding="utf-8", request=request)
         results = list(spider.parse_lupasearch_page(response))
         next_pages = [r for r in results if isinstance(r, Request)]
         assert next_pages == []
@@ -280,9 +275,7 @@ class TestParseLupasearchPage:
             "?offset=42&limit=42&category_ids=5107"
         )
         request = Request(url=url, meta={"page": 2, "url_type": "lupasearch_page"})
-        response = TextResponse(
-            url=url, body=body, encoding="utf-8", request=request
-        )
+        response = TextResponse(url=url, body=body, encoding="utf-8", request=request)
         results = list(spider.parse_lupasearch_page(response))
         next_pages = [r for r in results if isinstance(r, Request)]
         assert next_pages == []
@@ -310,9 +303,7 @@ class TestParseLupasearchPage:
         # No page in meta — mirrors what start() builds for resumed
         # lupasearch_page items.
         request = Request(url=url, meta={"url_type": "lupasearch_page"})
-        response = TextResponse(
-            url=url, body=body, encoding="utf-8", request=request
-        )
+        response = TextResponse(url=url, body=body, encoding="utf-8", request=request)
         results = list(spider.parse_lupasearch_page(response))
         next_pages = [r for r in results if isinstance(r, Request)]
         assert next_pages == []
@@ -332,9 +323,7 @@ class TestDiscoverSpiderSubdivision:
         from scrapy.http import HtmlResponse
 
         request = Request(url=url, meta={})
-        return HtmlResponse(
-            url=url, body=body.encode(), status=status, request=request
-        )
+        return HtmlResponse(url=url, body=body.encode(), status=status, request=request)
 
     def test_5xx_yields_subpages_and_continues(self):
         """A 503 on page=18 (size 50) should yield 5 sub-pages at size 10
@@ -404,22 +393,40 @@ class TestDiscoverSpiderSubdivision:
             page_size_override=10,
             subdivision_depth=1,
         )
-        body = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Knyga", "sku": "1", "url_key": "k-1",
-                "stock_status": "IN_STOCK", "is_book": True,
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 5.0},
-                    "regular_price": {"value": 5.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                    ],
-                }],
-            }]}}
-        })
+        body = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Knyga",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 5.0},
+                                        "regular_price": {"value": 5.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         response = self._gql_response(url, status=200, body=body)
         results = list(spider.parse_categories(response))
         next_pages = [r for r in results if isinstance(r, Request)]
@@ -474,7 +481,8 @@ class TestDiscoverSpiderFullCrawl:
         response = _fake_response("https://vaga.lt/", html)
         results = list(spider.parse_full_crawl(response))
         link_requests = [
-            r for r in results
+            r
+            for r in results
             if isinstance(r, Request)
             and r.url in ("https://vaga.lt/page-a", "https://vaga.lt/page-b")
         ]
@@ -508,6 +516,7 @@ class TestDiscoverSpiderFullCrawl:
         )
         # Mark page-a as already-classified, leave page-b as new.
         from book_scraper.url_utils import normalize_url
+
         spider._stable_urls = {normalize_url("https://vaga.lt/page-a"): "product"}
 
         html = (
@@ -520,10 +529,18 @@ class TestDiscoverSpiderFullCrawl:
         results = list(spider.parse_full_crawl(response))
 
         # page-a: skipped enqueue but still issued as a Request
-        page_a_reqs = [r for r in results if isinstance(r, Request) and r.url == "https://vaga.lt/page-a"]
+        page_a_reqs = [
+            r
+            for r in results
+            if isinstance(r, Request) and r.url == "https://vaga.lt/page-a"
+        ]
         assert len(page_a_reqs) == 1
         # page-b: enqueued as 'unknown'
-        page_b_reqs = [r for r in results if isinstance(r, Request) and r.url == "https://vaga.lt/page-b"]
+        page_b_reqs = [
+            r
+            for r in results
+            if isinstance(r, Request) and r.url == "https://vaga.lt/page-b"
+        ]
         assert len(page_b_reqs) == 1
         assert page_b_reqs[0].meta["url_type"] == "unknown"
 
@@ -607,7 +624,7 @@ class TestScanSpider:
         # Real-shape Cloudflare challenge body fragment.
         cf = (
             "<html><head><title>Just a moment...</title></head>"
-            "<body><div class=\"cf-browser-verification\">x</div></body></html>"
+            '<body><div class="cf-browser-verification">x</div></body></html>'
         )
         assert _is_anti_bot_response(cf) is True
         # Akamai
@@ -621,7 +638,12 @@ class TestScanSpider:
         from book_scraper.spiders.scan import _is_anti_bot_response
 
         assert _is_anti_bot_response("") is False
-        assert _is_anti_bot_response("<html><body>Just a regular product page</body></html>") is False
+        assert (
+            _is_anti_bot_response(
+                "<html><body>Just a regular product page</body></html>"
+            )
+            is False
+        )
         # Substring check is case-insensitive: "challenge-platform" must match
         # the pattern, but a benign mention of the word "challenge" alone shouldn't
         # — assert that "platform" alone doesn't trigger.
@@ -635,7 +657,7 @@ class TestScanSpider:
         # Cloudflare challenge body — no ld+json, no real product data.
         html = (
             "<html><head><title>Just a moment...</title></head>"
-            "<body><div class=\"cf-browser-verification\">"
+            '<body><div class="cf-browser-verification">'
             "<p>Checking your browser before accessing vaga.lt</p></div>"
             "</body></html>"
         )
@@ -713,9 +735,7 @@ class TestScanSpider:
         )
         assert req.url.startswith("https://www.pegasas.lt/graphql?query=")
         assert "000000000001115331" in req.url
-        assert req.meta["original_url"] == (
-            "https://www.pegasas.lt/test-book-1115331"
-        )
+        assert req.meta["original_url"] == ("https://www.pegasas.lt/test-book-1115331")
         assert req.headers.get("Accept") == b"application/json"
 
     def test_parse_product_uses_original_url_when_rewrite_applied(self):
@@ -728,9 +748,7 @@ class TestScanSpider:
 
         spider = ScanSpider(shop="pegasas")
         # Synthetic single-SKU GraphQL response.
-        category = _json.loads(
-            (FIXTURES / "pegasas_graphql_category.json").read_text()
-        )
+        category = _json.loads((FIXTURES / "pegasas_graphql_category.json").read_text())
         first = category["data"]["products"]["items"][0]
         body = _json.dumps({"data": {"products": {"items": [first]}}})
         response = _fake_response(

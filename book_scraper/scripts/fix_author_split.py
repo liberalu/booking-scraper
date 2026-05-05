@@ -80,6 +80,7 @@ def main() -> int:
         )
     finally:
         report.close()
+    return 0
 
 
 if __name__ == "__main__":

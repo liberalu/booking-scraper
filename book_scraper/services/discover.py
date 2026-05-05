@@ -11,8 +11,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from book_scraper.db.models import ScrapeUrlItem
 from book_scraper.db import scrape_run_events as run_event_types
+from book_scraper.db.models import ScrapeUrlItem
 from book_scraper.db.repo import (
     create_scrape_run,
     emit_scrape_run_event,
@@ -96,9 +96,7 @@ class DiscoverService:
             )
             inherit_pending_items(self.session, resumable.id, run.id)
             self.session.commit()
-            return DiscoverPlan(
-                run_id=run.id, shop_id=shop.id, urls_total=pending
-            )
+            return DiscoverPlan(run_id=run.id, shop_id=shop.id, urls_total=pending)
 
         mark_stale_runs_failed(self.session, shop.id, phase)
 
@@ -128,24 +126,26 @@ class DiscoverService:
             else shop_config["discover"]
         )
         if strategy == "sitemap":
-            return (
+            url: str = (
                 discover_cfg.sitemap.url
                 if hasattr(discover_cfg, "sitemap")
                 else discover_cfg["sitemap"]["url"]
             )
+            return url
         if strategy == "categories":
-            tmpl = (
+            tmpl: str = (
                 discover_cfg.categories.url
                 if hasattr(discover_cfg, "categories")
                 else discover_cfg["categories"]["url"]
             )
             return tmpl.format(page=1)
         if strategy == "full_crawl":
-            return (
+            start_url: str = (
                 discover_cfg.full_crawl.start_url
                 if hasattr(discover_cfg, "full_crawl")
                 else discover_cfg["full_crawl"]["start_url"]
             )
+            return start_url
         if strategy == "graphql":
             gql_cfg = (
                 discover_cfg.graphql

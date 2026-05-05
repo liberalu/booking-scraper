@@ -21,7 +21,6 @@ from book_scraper.items import ShopBookItem
 from book_scraper.services.scan import ScanService
 from book_scraper.spiders.registry import load_parsers
 
-
 # Anti-bot challenge / wall fingerprints. A 200 OK response whose body
 # matches one of these is treated as a failed fetch (`error_reason =
 # 'anti_bot_detected'`, severity=critical) instead of a "successful"
@@ -276,7 +275,7 @@ class ScanSpider(scrapy.Spider):
                 plan.urls_skipped,
             )
 
-            for item in url_items:
+            for url_item in url_items:
                 # Pause/resume: poll status before each dispatch.
                 # If 'paused', sleep in 5s increments until resumed or
                 # stopped. 'stopping' exits the loop immediately.
@@ -300,10 +299,10 @@ class ScanSpider(scrapy.Spider):
                             return
                         break
                 yield self._build_scan_request(
-                    item["url"],
+                    url_item["url"],
                     meta={
-                        "discovered_url_id": item["discovered_url_id"],
-                        "scrape_url_item_id": item["id"],
+                        "discovered_url_id": url_item["discovered_url_id"],
+                        "scrape_url_item_id": url_item["id"],
                         "scheduled_at": time.monotonic(),
                     },
                 )

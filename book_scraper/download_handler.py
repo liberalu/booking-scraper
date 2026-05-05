@@ -109,7 +109,8 @@ class HttpxMiddleware:  # pragma: no cover
         # Old clients are retired here rather than immediately closed so
         # in-flight requests (concurrent > 1) can finish normally.
         # The list is drained at spider_closed.
-        self._retired_clients: list["httpx.AsyncClient"] = []
+        self._retired_clients: list[httpx.AsyncClient] = []
+        self._crawler: Crawler | None = None
 
     def _make_client(self) -> "httpx.AsyncClient":
         return httpx.AsyncClient(
@@ -262,7 +263,7 @@ class HttpxMiddleware:  # pragma: no cover
         self._host_last_dispatch.clear()
         self._host_current_delay.clear()
         logger.info(
-            "HttpxMiddleware: rate settings for %s — download_delay=%.2fs concurrent=%d",
+            "HttpxMiddleware: rate for %s — download_delay=%.2fs concurrent=%d",
             shop_name,
             self._download_delay,
             self._max_concurrency,

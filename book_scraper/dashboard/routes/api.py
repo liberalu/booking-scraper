@@ -63,7 +63,6 @@ from book_scraper.db.models import (
     ShopBook,
     ShopBookAttribute,
     ShopBookChange,
-    UrlClassification,
     ValidationIssue,
 )
 from book_scraper.db.repo import (
@@ -143,15 +142,11 @@ def _progress(run: ScrapeRun, terminal_count: int | None = None) -> int:
         return 100
     if not (run.urls_total and run.urls_total > 0):
         return 0
-    processed = (
-        terminal_count if terminal_count is not None else run.urls_processed
-    )
+    processed = terminal_count if terminal_count is not None else run.urls_processed
     return min(99, int(processed / run.urls_total * 100))
 
 
-def _run_terminal_counts(
-    session: Session, run_ids: list[int]
-) -> dict[int, int]:
+def _run_terminal_counts(session: Session, run_ids: list[int]) -> dict[int, int]:
     """Bulk-fetch `done + failed` counts for a batch of runs."""
     if not run_ids:
         return {}
@@ -223,9 +218,9 @@ def _run_real_item_counts(
 
 
 def _parse_phase(phase: str) -> tuple[str, str]:
-    """Split 'discover_sitemap' → ('discover', 'sitemap'), 'scan' → ('scan', 'delta')."""
+    """Split 'discover_sitemap' → ('discover', 'sitemap'); 'scan' → ('scan', 'delta')."""  # noqa: E501
     if phase.startswith("discover_"):
-        return "discover", phase[len("discover_"):]
+        return "discover", phase[len("discover_") :]
     return "scan", "delta"
 
 
@@ -318,7 +313,9 @@ def _book_dict(sb: ShopBook) -> dict[str, Any]:
         "is_active": sb.is_active,
         "first_seen_at": sb.first_seen_at.isoformat() if sb.first_seen_at else None,
         "last_seen_at": sb.last_seen_at.isoformat() if sb.last_seen_at else None,
-        "planned_availability_date": str(sb.planned_availability_date) if sb.planned_availability_date else None,
+        "planned_availability_date": str(sb.planned_availability_date)
+        if sb.planned_availability_date
+        else None,
         "rating": float(sb.rating) if sb.rating is not None else None,
         "review_count": sb.review_count,
     }
@@ -465,7 +462,7 @@ def api_runs(
         like = f"%{token}%"
         clauses = [Shop.name.ilike(like), phase_text.ilike(like)]
         if token.isdigit():
-            clauses.append(ScrapeRun.id == int(token))
+            clauses.append(ScrapeRun.id == int(token))  # type: ignore[arg-type]
         query = query.filter(or_(*clauses))
 
     total = query.count()
@@ -661,7 +658,11 @@ def api_create_run(
         )
 
     _spawn_scrapy_in_container(
-        phase=req.phase, shop=req.shop, strategy=req.strategy, mode=req.mode, urls=req.urls
+        phase=req.phase,
+        shop=req.shop,
+        strategy=req.strategy,
+        mode=req.mode,
+        urls=req.urls,
     )
     return {
         "status": "started",
@@ -673,9 +674,7 @@ def api_create_run(
 
 
 @router.post("/runs/{run_id}/stop")
-def api_stop_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_stop_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Request a clean stop of an active run.
 
     DB-mediated: flips `status` from 'running' to 'stopping' under a
@@ -705,9 +704,7 @@ def api_stop_run(
 
 
 @router.post("/runs/{run_id}/pause")
-def api_pause_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_pause_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Request a graceful pause of a running scan.
 
     DB-mediated: flips `status` from 'running' to 'paused'. The spider
@@ -735,9 +732,7 @@ def api_pause_run(
 
 
 @router.post("/runs/{run_id}/resume")
-def api_resume_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_resume_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Resume a paused run.
 
     Flips `status` from 'paused' back to 'running'. The spider's pause
@@ -764,9 +759,7 @@ def api_resume_run(
 
 
 @router.post("/runs/{run_id}/rerun")
-def api_rerun_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_rerun_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Re-fire a failed run.
 
     Flags the failed run `resumable_after_failure=True` so Track A's
@@ -832,9 +825,7 @@ def api_rerun_run(
 
 
 @router.post("/runs/{run_id}/continue")
-def api_continue_run(
-    run_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_continue_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     """Resume a failed run on the same `scrape_runs` row.
 
     Flips the run from 'failed' → 'running', then spawns a fresh scrapy
@@ -856,9 +847,7 @@ def api_continue_run(
     if run.status != "failed":
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Only failed runs can be continued; status={run.status!r}"
-            ),
+            detail=(f"Only failed runs can be continued; status={run.status!r}"),
         )
 
     pending_count = (
@@ -913,7 +902,7 @@ def api_continue_run(
     cont_strategy: str
     if run.phase.startswith("discover_"):
         cont_phase = "discover"
-        cont_strategy = run.phase[len("discover_"):]
+        cont_strategy = run.phase[len("discover_") :]
     else:
         cont_phase = run.phase
         cont_strategy = ""
@@ -1015,17 +1004,13 @@ def api_retry_run_failures(
             latest_failure.c.scrape_url_item_id == ScrapeUrlItem.id,
         ).filter(latest_failure.c.rn == 1)
         if error_reason_is_null:
-            candidate_q = candidate_q.filter(
-                latest_failure.c.error_reason.is_(None)
-            )
+            candidate_q = candidate_q.filter(latest_failure.c.error_reason.is_(None))
         elif error_reason:
             candidate_q = candidate_q.filter(
                 latest_failure.c.error_reason == error_reason
             )
         if http_status_is_null:
-            candidate_q = candidate_q.filter(
-                latest_failure.c.http_status.is_(None)
-            )
+            candidate_q = candidate_q.filter(latest_failure.c.http_status.is_(None))
         elif http_status is not None:
             candidate_q = candidate_q.filter(
                 latest_failure.c.http_status == http_status
@@ -1044,9 +1029,7 @@ def api_retry_run_failures(
     if is_terminal:
         # Validate spawn prerequisites BEFORE we touch any rows so we
         # don't end up with pending rows for a run that can't be revived.
-        shop_name = (
-            session.query(Shop.name).filter(Shop.id == run.shop_id).scalar()
-        )
+        shop_name = session.query(Shop.name).filter(Shop.id == run.shop_id).scalar()
         if shop_name is None:
             raise HTTPException(status_code=404, detail="Shop not found")
         shop, existing = _preflight_checks(session, shop_name, run.phase)
@@ -1059,9 +1042,7 @@ def api_retry_run_failures(
                 ),
             )
 
-    session.query(ScrapeUrlItem).filter(
-        ScrapeUrlItem.id.in_(candidate_ids)
-    ).update(
+    session.query(ScrapeUrlItem).filter(ScrapeUrlItem.id.in_(candidate_ids)).update(
         {
             "status": "pending",
             # PR 3: error_reason column dropped. http_status is the
@@ -1174,10 +1155,7 @@ def api_acknowledge_run_failures(
         update_filter.append(ScrapeFailure.http_status == http_status)
 
     matches = (
-        session.query(func.count(ScrapeFailure.id))
-        .filter(*update_filter)
-        .scalar()
-        or 0
+        session.query(func.count(ScrapeFailure.id)).filter(*update_filter).scalar() or 0
     )
     if matches == 0:
         raise HTTPException(
@@ -1194,7 +1172,8 @@ def api_acknowledge_run_failures(
         update_values["acknowledged_note"] = note
 
     session.query(ScrapeFailure).filter(*update_filter).update(
-        update_values, synchronize_session=False
+        update_values,  # type: ignore[arg-type]
+        synchronize_session=False,
     )
     session.commit()
 
@@ -1389,9 +1368,7 @@ def api_run_urls(
         for it, title, shop_book_id, latest_error_reason in items:
             duration_ms: int | None = None
             if it.claimed_at and it.done_at:
-                duration_ms = int(
-                    (it.done_at - it.claimed_at).total_seconds() * 1000
-                )
+                duration_ms = int((it.done_at - it.claimed_at).total_seconds() * 1000)
             # error_reason now sourced from the latest scrape_failures
             # event (PR 3). Surface it only on currently-failed rows so a
             # retried-and-succeeded URL doesn't show its old failure.
@@ -1507,15 +1484,11 @@ def api_shop_books(
         or 0
     )
     missing_isbn = (
-        session.query(func.count(ShopBook.id))
-        .filter(ShopBook.isbn.is_(None))
-        .scalar()
+        session.query(func.count(ShopBook.id)).filter(ShopBook.isbn.is_(None)).scalar()
         or 0
     )
     missing_price = (
-        session.query(func.count(ShopBook.id))
-        .filter(ShopBook.price.is_(None))
-        .scalar()
+        session.query(func.count(ShopBook.id)).filter(ShopBook.price.is_(None)).scalar()
         or 0
     )
     unreachable_books = (
@@ -1638,13 +1611,19 @@ def api_shop_book_detail(
     d["runs"] = recent_runs
     d["url_status"] = linked_url.url_type if linked_url else None
     d["url_fail_count"] = linked_url.fail_count if linked_url else 0
-    d["classification"] = {
-        "book_score": cls.book_score,
-        "is_book_product": cls.is_book_product,
-        "reasons": cls.reasons or [],
-        "classified_at": cls.classified_at.isoformat() if cls.classified_at else None,
-        "classified_ago": _rel(cls.classified_at),
-    } if cls else None
+    d["classification"] = (
+        {
+            "book_score": cls.book_score,
+            "is_book_product": cls.is_book_product,
+            "reasons": cls.reasons or [],
+            "classified_at": cls.classified_at.isoformat()
+            if cls.classified_at
+            else None,
+            "classified_ago": _rel(cls.classified_at),
+        }
+        if cls
+        else None
+    )
     return d
 
 
@@ -1713,7 +1692,9 @@ def api_url_detail(url_id: int, session: Session = Depends(get_db)) -> dict[str,
         }
     d["last_http_status"] = url.last_http_status
     d["url_type"] = url.url_type
-    d["last_checked_at"] = url.last_checked_at.isoformat() if url.last_checked_at else None
+    d["last_checked_at"] = (
+        url.last_checked_at.isoformat() if url.last_checked_at else None
+    )
     d["last_checked_ago"] = _rel(url.last_checked_at)
 
     # Check history from scrape_url_items via discovered_url_id
@@ -1734,7 +1715,9 @@ def api_url_detail(url_id: int, session: Session = Depends(get_db)) -> dict[str,
             "when": _rel(run.started_at),
             "started_at": run.started_at.isoformat() if run.started_at else None,
             "http_status": item.http_status,
-            "status": "error" if not item.http_status or item.http_status >= 400 else "ok",
+            "status": "error"
+            if not item.http_status or item.http_status >= 400
+            else "ok",
             "done_at": item.done_at.isoformat() if item.done_at else None,
         }
         for item, run in items_q
@@ -1813,9 +1796,7 @@ def api_shop_detail(
         "last_run_ago": _rel(last_run.started_at if last_run else None),
         "last_run_status": last_run.status if last_run else "—",
         "field_stats": field_stats,
-        "recent_runs": [
-            _run_dict(r, terminal_count=terminal.get(r.id)) for r in runs
-        ],
+        "recent_runs": [_run_dict(r, terminal_count=terminal.get(r.id)) for r in runs],
         "rate_settings": rate_settings,
         "discover_strategies": _configured_discover_strategies(shop.name),
     }
@@ -1855,9 +1836,6 @@ def _cron_job_metrics(
     run_phase: str,
 ) -> dict[str, Any]:
     """Return last_status, last_run_at, and avg_duration_s for a cron job."""
-    from datetime import timedelta
-
-    now = datetime.now(UTC)
     last_run = (
         session.query(ScrapeRun)
         .filter(
@@ -1869,8 +1847,10 @@ def _cron_job_metrics(
         .limit(1)
         .one_or_none()
     )
-    last_status = "ok" if (last_run and last_run.status == "completed") else (
-        "fail" if last_run else None
+    last_status = (
+        "ok"
+        if (last_run and last_run.status == "completed")
+        else ("fail" if last_run else None)
     )
 
     # Average duration from last 30 completed runs
@@ -1909,9 +1889,11 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
     for j in jobs:
         run_phase = _cron_run_phase(j.phase, j.strategy)
         # Next fire time via croniter
+        next_dt: datetime | None
+        next_in_s: int | None
         try:
             cron = croniter(j.cron_expression, now)
-            next_dt: datetime = cron.get_next(datetime).replace(tzinfo=UTC)
+            next_dt = cron.get_next(datetime).replace(tzinfo=UTC)
             next_in_s = int((next_dt - now).total_seconds())
         except Exception:
             next_dt = None
@@ -1940,12 +1922,10 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.get("/cron/{job_id}/detail")
-def api_cron_detail(
-    job_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_cron_detail(job_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     from zoneinfo import ZoneInfo
 
-    from croniter import croniter  # type: ignore[import-untyped]
+    from croniter import croniter
 
     job = get_cron_job(session, job_id)
     if not job:
@@ -1995,8 +1975,7 @@ def api_cron_detail(
         .all()
     )
     last24 = [
-        "ok" if r.status == "completed" else "fail"
-        for r in reversed(last24_runs)
+        "ok" if r.status == "completed" else "fail" for r in reversed(last24_runs)
     ]
 
     # Stats: last 24h and last 30d
@@ -2108,9 +2087,7 @@ def api_cron_detail(
 
 
 @router.post("/cron/{job_id}/toggle")
-def api_cron_toggle(
-    job_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_cron_toggle(job_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     job = get_cron_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2135,7 +2112,9 @@ def api_cron_create(
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
     if body.phase not in ("discover", "scan"):
-        raise HTTPException(status_code=422, detail="phase must be 'discover' or 'scan'")
+        raise HTTPException(
+            status_code=422, detail="phase must be 'discover' or 'scan'"
+        )
     strategy = body.strategy.strip() or None
     job = create_cron_job(
         session,
@@ -2146,7 +2125,10 @@ def api_cron_create(
         cron_expression=body.cron_expression,
     )
     session.commit()
-    return {"id": job.id, "name": f"{shop.name}.{job.phase}.{job.strategy or 'default'}"}
+    return {
+        "id": job.id,
+        "name": f"{shop.name}.{job.phase}.{job.strategy or 'default'}",
+    }
 
 
 class _CronJobPatch(BaseModel):
@@ -2167,7 +2149,9 @@ def api_cron_update(
         fields["cron_expression"] = body.cron_expression
     if body.phase is not None:
         if body.phase not in ("discover", "scan"):
-            raise HTTPException(status_code=422, detail="phase must be 'discover' or 'scan'")
+            raise HTTPException(
+                status_code=422, detail="phase must be 'discover' or 'scan'"
+            )
         fields["phase"] = body.phase
     if body.strategy is not None:
         fields["strategy"] = body.strategy.strip() or None
@@ -2178,9 +2162,7 @@ def api_cron_update(
 
 
 @router.delete("/cron/{job_id}")
-def api_cron_delete(
-    job_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_cron_delete(job_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     job = get_cron_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2318,7 +2300,9 @@ def api_issue_detail(
         "shop_book_title": shop_book.title if shop_book else None,
         "shop_name": shop.name if shop else None,
         "lifecycle_state": issue.lifecycle_state,
-        "acknowledged_at": issue.acknowledged_at.isoformat() if issue.acknowledged_at else None,
+        "acknowledged_at": issue.acknowledged_at.isoformat()
+        if issue.acknowledged_at
+        else None,
         "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
         "added_at": run.started_at.isoformat() if run.started_at else None,
         "added_ago": _rel(run.started_at),

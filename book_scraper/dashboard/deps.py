@@ -24,8 +24,8 @@ def get_db() -> Generator[Session, None, None]:
 
 def get_docker_client() -> Any:
     try:
-        import docker  # type: ignore[import-untyped]
+        import docker
 
-        return docker.from_env()
+        return docker.from_env()  # type: ignore[attr-defined]
     except Exception:
         return None

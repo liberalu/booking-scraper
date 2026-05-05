@@ -134,13 +134,13 @@ def _sync_shop_book_authors(
         if aid not in desired_ids:
             session.delete(row)
     for aid, pos in desired:
-        row = existing.get(aid)
-        if row is None:
+        match = existing.get(aid)
+        if match is None:
             session.add(
                 ShopBookAuthor(shop_book_id=shop_book_id, author_id=aid, position=pos)
             )
-        elif row.position != pos:
-            row.position = pos
+        elif match.position != pos:
+            match.position = pos
 
 
 def touch_shop_book_field_updates(
@@ -594,7 +594,8 @@ def link_discovered_url_to_shop_book(
     return record
 
 
-# Failures before a URL is considered unreachable (mirrors get_pending_scan_urls default).
+# Failures before a URL is considered unreachable
+# (mirrors get_pending_scan_urls default).
 _UNREACHABLE_THRESHOLD = 3
 
 
@@ -619,9 +620,9 @@ def update_discovered_url_status(
         # Skip if already unreachable or classified as non_product (those
         # pages return 404/non-2xx by design from the scraper's perspective
         # but aren't "unreachable" in the user-facing sense).
-        if (
-            record.fail_count >= _UNREACHABLE_THRESHOLD
-            and record.url_type not in ("non_product", "unreachable")
+        if record.fail_count >= _UNREACHABLE_THRESHOLD and record.url_type not in (
+            "non_product",
+            "unreachable",
         ):
             record.url_type = "unreachable"
             # Inactivate the linked shop_book — it was scraped from this URL
@@ -650,7 +651,7 @@ def upsert_url_classification(
     discovered_url_id: int,
     book_score: int,
     is_book_product: bool,
-    reasons: list[str],
+    reasons: list[dict[str, object]],
 ) -> None:
     """Upsert the book classification for a discovered URL.
 
@@ -1418,7 +1419,7 @@ def bulk_insert_validation_issues(
         return
 
     if shop_id is not None:
-        urls = {issue["url"] for issue in issues if issue.get("url")}
+        urls: set[str] = {str(issue["url"]) for issue in issues if issue.get("url")}
         shop_book_by_url: dict[str, int] = {}
         du_by_url: dict[str, int] = {}
         if urls:
@@ -1523,7 +1524,7 @@ def _assign_lifecycle_states(
         ).all()
         seen_du = {(r.discovered_url_id, r.field, r.issue) for r in rows}
     if url_keys:
-        rows = session.execute(
+        url_rows = session.execute(
             select(
                 ValidationIssue.url,
                 ValidationIssue.field,
@@ -1537,7 +1538,7 @@ def _assign_lifecycle_states(
             )
             .distinct()
         ).all()
-        seen_url = {(r.url, r.field, r.issue) for r in rows}
+        seen_url = {(r.url, r.field, r.issue) for r in url_rows}
 
     for issue in issues:
         field = str(issue.get("field") or "")
@@ -2080,5 +2081,3 @@ def mark_cron_job_ran_if_matches(
         job.last_run_at = now
     if jobs:
         session.flush()
-
-

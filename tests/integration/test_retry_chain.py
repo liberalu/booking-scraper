@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from scrapy import Request
 from scrapy.downloadermiddlewares.retry import RetryMiddleware
 from scrapy.http import HtmlResponse
@@ -97,9 +96,7 @@ def test_503_synthesized_by_httpx_triggers_retry_middleware() -> None:
 def test_dont_retry_meta_skips_retry() -> None:
     """Sanity: when meta.dont_retry=True, RetryMiddleware must not retry.
     Confirms RetryMiddleware behaviour is not silently broken."""
-    request = Request(
-        "https://example.com/q?x=1", meta={"dont_retry": True}
-    )
+    request = Request("https://example.com/q?x=1", meta={"dont_retry": True})
     response = HtmlResponse(
         url="https://example.com/q?x=1", status=503, request=request
     )
@@ -113,9 +110,7 @@ def test_retry_exhausts_after_max_retry_times() -> None:
     """RETRY_TIMES=2 means 1 original + 2 retries. The 3rd 503 must
     flow through to the spider as the original response (None from
     _retry signals 'give up')."""
-    request = Request(
-        "https://example.com/q?x=1", meta={"retry_times": 2}
-    )
+    request = Request("https://example.com/q?x=1", meta={"retry_times": 2})
     response = HtmlResponse(
         url="https://example.com/q?x=1", status=503, request=request
     )

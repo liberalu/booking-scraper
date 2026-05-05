@@ -82,9 +82,7 @@ class TestParseCategoryPageGraphQL:
         has_pages = any(
             (p.get("properties") or {}).get("pages") is not None for p in products
         )
-        has_cover = any(
-            (p.get("properties") or {}).get("cover_type") for p in products
-        )
+        has_cover = any((p.get("properties") or {}).get("cover_type") for p in products)
         assert has_pages, "expected at least one product with pages"
         assert has_cover, "expected at least one product with cover_type"
 
@@ -111,48 +109,81 @@ class TestParseCategoryPageGraphQL:
         under the same parent categories — only the language attribute
         is reliable enough to scope to LT-only.
         """
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Mike at Wrykyn",
-                "sku": "000000000002164476",
-                "url_key": "mike-at-wrykyn-2164476",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 2.75},
-                    "regular_price": {"value": 27.49},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Anglų"},
-                        {"label": "ISBN kodas", "value": "9781841591773"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Mike at Wrykyn",
+                                "sku": "000000000002164476",
+                                "url_key": "mike-at-wrykyn-2164476",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 2.75},
+                                        "regular_price": {"value": 27.49},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Anglų",
+                                            },
+                                            {
+                                                "label": "ISBN kodas",
+                                                "value": "9781841591773",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         assert parse_category_page(text)["products"] == []
 
     def test_lithuanian_language_kept(self) -> None:
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Lietuviška knyga",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Lietuviška knyga",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         assert len(parse_category_page(text)["products"]) == 1
 
     def test_ebook_detected_via_category_id(self) -> None:
@@ -160,30 +191,45 @@ class TestParseCategoryPageGraphQL:
         ("Elektroninės knygos"). Without this fix every e-book shows
         up as type='book' (e.g. shop-book/26841 "Miesto dykuma. E.knyga").
         """
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Miesto dykuma. E.knyga",
-                "sku": "000000000011004377",
-                "url_key": "miesto-dykuma-e-knyga-11004377",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "is_audio_book": False,
-                "categories": [
-                    {"id": 6122, "name": "Elektroninės knygos"},
-                    {"id": 6137, "name": "Negrožinė literatūra"},
-                ],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 5.0},
-                    "regular_price": {"value": 5.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Miesto dykuma. E.knyga",
+                                "sku": "000000000011004377",
+                                "url_key": "miesto-dykuma-e-knyga-11004377",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "is_audio_book": False,
+                                "categories": [
+                                    {"id": 6122, "name": "Elektroninės knygos"},
+                                    {"id": 6137, "name": "Negrožinė literatūra"},
+                                ],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 5.0},
+                                        "regular_price": {"value": 5.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         assert product["type"] == "ebook"
         assert product["format"] == "ebook"
@@ -192,30 +238,53 @@ class TestParseCategoryPageGraphQL:
         """`Matmenys`, `Pav. originalo kalba`, `Spalvingumas` should
         flow into `properties` — they're rendered on product pages
         and worth keeping for downstream display."""
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Test",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "categories": [{"id": 5107, "name": "Grožinė literatūra"}],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [
-                        {"label": "Matmenys", "value": "21x14,5x4"},
-                    ],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                        {"label": "Pav. originalo kalba", "value": "Original Title"},
-                        {"label": "Spalvingumas", "value": "Spalvotas"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Test",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [
+                                    {"id": 5107, "name": "Grožinė literatūra"}
+                                ],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [
+                                            {"label": "Matmenys", "value": "21x14,5x4"},
+                                        ],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                            {
+                                                "label": "Pav. originalo kalba",
+                                                "value": "Original Title",
+                                            },
+                                            {
+                                                "label": "Spalvingumas",
+                                                "value": "Spalvotas",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         props = product["properties"] or {}
         assert props["dimensions"] == "21x14,5x4"
@@ -226,28 +295,46 @@ class TestParseCategoryPageGraphQL:
         """pegasas's `EAN kodas` field carries non-book GTIN-13 codes
         (sticker kits, puzzles, etc., often `40100706...`). These must
         NOT be stored as ISBN — only 978/979 prefixes are valid."""
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Lipdukų rinkinys",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "categories": [{"id": 5125, "name": "Vaikų"}],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                        {"label": "ISBN kodas", "value": ""},
-                        {"label": "EAN kodas", "value": "4010070394080"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Lipdukų rinkinys",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [{"id": 5125, "name": "Vaikų"}],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                            {"label": "ISBN kodas", "value": ""},
+                                            {
+                                                "label": "EAN kodas",
+                                                "value": "4010070394080",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         assert product["isbn"] is None
         # EAN preserved separately so downstream tools still have the GTIN.
@@ -261,32 +348,44 @@ class TestParseCategoryPageGraphQL:
         sticker-kit GTINs like `4770833862422` slip past the attribute
         filter and trigger downstream `invalid_isbn` validation noise.
         """
-        sd = json.dumps({
-            "@type": "ItemPage",
-            "mainEntity": {
-                "@type": ["Book", "Product"],
-                "isbn": "4770833862422",  # non-book GTIN
-                "publisher": {"name": "Some publisher"},
-                "numberOfPages": 12,
-                "datePublished": "2024-01-01",
-            },
-        })
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Sticker kit",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "categories": [{"id": 5125, "name": "Vaikų"}],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 5.0},
-                    "regular_price": {"value": 5.0},
-                }},
-                "product_page_attributes": [],  # empty → fallback fires
-                "structured_data": sd,
-            }]}}
-        })
+        sd = json.dumps(
+            {
+                "@type": "ItemPage",
+                "mainEntity": {
+                    "@type": ["Book", "Product"],
+                    "isbn": "4770833862422",  # non-book GTIN
+                    "publisher": {"name": "Some publisher"},
+                    "numberOfPages": 12,
+                    "datePublished": "2024-01-01",
+                },
+            }
+        )
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Sticker kit",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [{"id": 5125, "name": "Vaikų"}],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 5.0},
+                                        "regular_price": {"value": 5.0},
+                                    }
+                                },
+                                "product_page_attributes": [],  # empty → fallback fires
+                                "structured_data": sd,
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         assert product["isbn"] is None
         # Other fallback fields still populate.
@@ -298,28 +397,46 @@ class TestParseCategoryPageGraphQL:
         """Some books have the ISBN-13 in `EAN kodas` only (because EAN
         and ISBN-13 are the same number for books). Accept it when the
         prefix is 978/979."""
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Knyga",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "categories": [{"id": 5107, "name": "Grožinė"}],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [],
-                    "secondary_attributes": [
-                        {"label": "Leidinio kalba", "value": "Lietuvių"},
-                        {"label": "ISBN kodas", "value": ""},
-                        {"label": "EAN kodas", "value": "9786094795145"},
-                    ],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Knyga",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [{"id": 5107, "name": "Grožinė"}],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {
+                                                "label": "Leidinio kalba",
+                                                "value": "Lietuvių",
+                                            },
+                                            {"label": "ISBN kodas", "value": ""},
+                                            {
+                                                "label": "EAN kodas",
+                                                "value": "9786094795145",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         assert product["isbn"] == "9786094795145"
 
@@ -327,26 +444,40 @@ class TestParseCategoryPageGraphQL:
         """Magento returns empty strings for translator on shops where
         the field isn't applicable (e.g. Lithuanian-original works).
         Drop empty strings instead of storing them."""
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "Test",
-                "sku": "1",
-                "url_key": "k-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "categories": [{"id": 5107, "name": "Grožinė literatūra"}],
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [{
-                    "primary_attributes": [
-                        {"label": "Vertėjas", "value": ""},
-                    ],
-                    "secondary_attributes": [],
-                }],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Test",
+                                "sku": "1",
+                                "url_key": "k-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [
+                                    {"id": 5107, "name": "Grožinė literatūra"}
+                                ],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [
+                                            {"label": "Vertėjas", "value": ""},
+                                        ],
+                                        "secondary_attributes": [],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         product = parse_category_page(text)["products"][0]
         props = product["properties"] or {}
         assert "translator" not in props
@@ -358,20 +489,30 @@ class TestParseCategoryPageGraphQL:
         them outright would lose legitimate LT books, so we only filter
         when language is *populated* and clearly non-LT.
         """
-        text = json.dumps({
-            "data": {"products": {"items": [{
-                "name": "No-lang item",
-                "sku": "1",
-                "url_key": "n-1",
-                "stock_status": "IN_STOCK",
-                "is_book": True,
-                "price_range": {"minimum_price": {
-                    "final_price": {"value": 10.0},
-                    "regular_price": {"value": 10.0},
-                }},
-                "product_page_attributes": [],
-            }]}}
-        })
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "No-lang item",
+                                "sku": "1",
+                                "url_key": "n-1",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 10.0},
+                                        "regular_price": {"value": 10.0},
+                                    }
+                                },
+                                "product_page_attributes": [],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         assert len(parse_category_page(text)["products"]) == 1
 
 
@@ -401,9 +542,7 @@ class TestParseLupasearchResponse:
             # `properties.pages` must not be invented either
             assert (p.get("properties") or {}).get("pages") is None
 
-    def test_price_original_only_when_different(
-        self, lupasearch_text: str
-    ) -> None:
+    def test_price_original_only_when_different(self, lupasearch_text: str) -> None:
         result = parse_lupasearch_response(lupasearch_text)
         # All fixture items are discounted, so price_original must be set.
         with_orig = sum(1 for p in result["products"] if p["price_original"])
@@ -419,7 +558,8 @@ class TestParseLupasearchResponse:
     def test_is_new_is_round_tripped(self, lupasearch_text: str) -> None:
         result = parse_lupasearch_response(lupasearch_text)
         flagged = [
-            p for p in result["products"]
+            p
+            for p in result["products"]
             if (p.get("properties") or {}).get("is_new") is True
         ]
         # The fixture was captured with the default "in_stock desc, sku desc"
@@ -609,9 +749,7 @@ class TestParseProductPageGraphQL:
     def single_sku_text(self, graphql_text: str) -> str:
         category = json.loads(graphql_text)
         first_item = category["data"]["products"]["items"][0]
-        return json.dumps(
-            {"data": {"products": {"items": [first_item]}}}
-        )
+        return json.dumps({"data": {"products": {"items": [first_item]}}})
 
     def test_returns_book_product_with_full_metadata(
         self, single_sku_text: str
@@ -624,9 +762,7 @@ class TestParseProductPageGraphQL:
         assert result["book_score"] == 100
 
     def test_empty_items_marks_non_product(self) -> None:
-        result = parse_product_page(
-            json.dumps({"data": {"products": {"items": []}}})
-        )
+        result = parse_product_page(json.dumps({"data": {"products": {"items": []}}}))
         assert result["is_book_product"] is False
         assert result["book_score_reasons"][0]["key"] == "graphql_no_match"
 
@@ -638,31 +774,23 @@ class TestParseProductPageGraphQL:
 
 class TestRewriteScanUrl:
     def test_extracts_and_pads_sku_to_18_chars(self) -> None:
-        result = rewrite_scan_url(
-            "https://www.pegasas.lt/some-book-title-1115331"
-        )
+        result = rewrite_scan_url("https://www.pegasas.lt/some-book-title-1115331")
         assert result is not None
         assert "000000000001115331" in result["url"]
         assert result["url"].startswith("https://www.pegasas.lt/graphql?query=")
 
     def test_includes_accept_json_header(self) -> None:
-        result = rewrite_scan_url(
-            "https://www.pegasas.lt/some-book-1234567"
-        )
+        result = rewrite_scan_url("https://www.pegasas.lt/some-book-1234567")
         assert result is not None
         assert result["headers"] == {"Accept": "application/json"}
 
     def test_handles_e_book_slug(self) -> None:
-        result = rewrite_scan_url(
-            "https://www.pegasas.lt/title-e-knyga-11004377"
-        )
+        result = rewrite_scan_url("https://www.pegasas.lt/title-e-knyga-11004377")
         assert result is not None
         assert "000000000011004377" in result["url"]
 
     def test_strips_trailing_slash_before_extracting(self) -> None:
-        result = rewrite_scan_url(
-            "https://www.pegasas.lt/title-1115331/"
-        )
+        result = rewrite_scan_url("https://www.pegasas.lt/title-1115331/")
         assert result is not None
         assert "000000000001115331" in result["url"]
 

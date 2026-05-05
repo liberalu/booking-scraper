@@ -22,7 +22,7 @@ def _config(
 
 
 def test_prepare_discover_sitemap_seeds_one_item(db_session):
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 
     service = DiscoverService(db_session)
@@ -40,7 +40,7 @@ def test_prepare_discover_sitemap_seeds_one_item(db_session):
 
 
 def test_prepare_discover_categories_seeds_page_one(db_session):
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 
     service = DiscoverService(db_session)
@@ -53,7 +53,7 @@ def test_prepare_discover_categories_seeds_page_one(db_session):
 
 
 def test_prepare_discover_full_crawl_seeds_start_url(db_session):
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 
     service = DiscoverService(db_session)
@@ -66,7 +66,7 @@ def test_prepare_discover_full_crawl_seeds_start_url(db_session):
 
 
 def test_prepare_discover_resumes_running_run_with_pending_items(db_session):
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    upsert_shop(db_session, "vaga", "https://vaga.lt")
     db_session.commit()
 
     service = DiscoverService(db_session)

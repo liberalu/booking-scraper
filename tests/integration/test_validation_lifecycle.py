@@ -89,5 +89,3 @@ def test_acknowledged_reappears_as_new(db_session):
         db_session.query(ValidationIssue).order_by(ValidationIssue.id.desc()).first()
     )
     assert newest.lifecycle_state == "new"
-
-

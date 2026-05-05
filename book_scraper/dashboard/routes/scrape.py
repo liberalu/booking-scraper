@@ -18,6 +18,7 @@ import shlex
 import subprocess
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -26,11 +27,11 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from book_scraper.dashboard.deps import get_db
 from book_scraper.dashboard.queries import get_shop_books_page, get_shop_by_name
-from book_scraper.db.models import DiscoveredUrl
 from book_scraper.dashboard.shop_book_filters import (
     get_shop_book_field_filter_params,
     parse_shop_book_field_filters,
 )
+from book_scraper.db.models import DiscoveredUrl
 
 router = APIRouter()
 
@@ -61,7 +62,7 @@ def set_subprocess_runner(
 def _collect_shop_books(
     session: Session,
     shop_id: int | None,
-    **filter_kwargs: str | bool,
+    **filter_kwargs: Any,
 ) -> list[tuple[str, str]]:
     """Return every (shop_name, url) pair matching the filters.
 
@@ -77,7 +78,7 @@ def _collect_shop_books(
             page=page,
             per_page=per_page,
             shop_id=shop_id,
-            **filter_kwargs,  # type: ignore[arg-type]
+            **filter_kwargs,
         )
         if not shop_books:
             break
@@ -249,9 +250,15 @@ def scrape_single_url(
         raise HTTPException(status_code=404, detail="Shop not found for URL")
 
     cmd = [
-        "uv", "run", "scrapy", "crawl", "scan",
-        "-a", f"shop={shop.name}",
-        "-a", f"urls={row.url}",
+        "uv",
+        "run",
+        "scrapy",
+        "crawl",
+        "scan",
+        "-a",
+        f"shop={shop.name}",
+        "-a",
+        f"urls={row.url}",
     ]
     _subprocess_runner(cmd)
     return RedirectResponse(url=f"/urls/{url_id}?scraped=1", status_code=303)
@@ -265,9 +272,8 @@ def scrape_unknown_urls(
     shop_obj = get_shop_by_name(session, shop) if shop else None
     shop_id = shop_obj.id if shop_obj else None
 
-    query = (
-        session.query(DiscoveredUrl.url, DiscoveredUrl.shop_id)
-        .filter(DiscoveredUrl.url_type == "unknown")
+    query = session.query(DiscoveredUrl.url, DiscoveredUrl.shop_id).filter(
+        DiscoveredUrl.url_type == "unknown"
     )
     if shop_id:
         query = query.filter(DiscoveredUrl.shop_id == shop_id)
@@ -281,10 +287,10 @@ def scrape_unknown_urls(
 
     # Resolve shop names: load shops referenced by the unknown URLs.
     from book_scraper.db.models import Shop
+
     shop_ids = {r.shop_id for r in rows}
     shops_map = {
-        s.id: s.name
-        for s in session.query(Shop).filter(Shop.id.in_(shop_ids)).all()
+        s.id: s.name for s in session.query(Shop).filter(Shop.id.in_(shop_ids)).all()
     }
 
     by_shop: dict[str, list[str]] = defaultdict(list)
@@ -295,9 +301,15 @@ def scrape_unknown_urls(
 
     for shop_name, urls_list in by_shop.items():
         cmd = [
-            "uv", "run", "scrapy", "crawl", "scan",
-            "-a", f"shop={shop_name}",
-            "-a", f"urls={','.join(urls_list)}",
+            "uv",
+            "run",
+            "scrapy",
+            "crawl",
+            "scan",
+            "-a",
+            f"shop={shop_name}",
+            "-a",
+            f"urls={','.join(urls_list)}",
         ]
         _subprocess_runner(cmd)
 

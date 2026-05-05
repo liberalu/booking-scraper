@@ -25,6 +25,7 @@ from urllib.parse import urlencode, urlparse
 from book_scraper.book_types import BOOK_LIKE_TYPES, BookType
 from book_scraper.spiders.cover_type import format_from_cover_type
 from book_scraper.spiders.graphql_urls import _PRODUCT_FIELDS
+from book_scraper.spiders.parser_types import CategoryPageResult, ProductPageResult
 
 _BASE_URL = "https://www.pegasas.lt"
 
@@ -197,7 +198,7 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def parse_category_page(text: str) -> dict[str, Any]:
+def parse_category_page(text: str) -> CategoryPageResult:
     """Parse the Magento GraphQL products-in-category JSON response.
 
     Returns ``{"products": [...], "total": int | None}``. The total
@@ -417,7 +418,7 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def parse_lupasearch_response(text: str) -> dict[str, Any]:
+def parse_lupasearch_response(text: str) -> CategoryPageResult:
     """Parse the LupaSearch query API response.
 
     Returns ``{"products": [...], "total": int}``. The product dict shape
@@ -541,7 +542,7 @@ def _lupasearch_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def _empty_product_page_result(reason_key: str) -> dict[str, object]:
+def _empty_product_page_result(reason_key: str) -> ProductPageResult:
     """Default non-product shape used for both PWA-shell HTML responses
     and GraphQL responses with empty `items[]`."""
     return {
@@ -574,7 +575,7 @@ def _empty_product_page_result(reason_key: str) -> dict[str, object]:
     }
 
 
-def parse_product_page(text: str) -> dict[str, object]:
+def parse_product_page(text: str) -> ProductPageResult:
     """Parse a per-SKU Magento GraphQL JSON response.
 
     The scan spider hits this with the body of the GraphQL endpoint after
@@ -621,7 +622,7 @@ def parse_product_page(text: str) -> dict[str, object]:
         "is_book_product": product.get("type") in BOOK_LIKE_TYPES,
         "book_score": 100,
         "book_score_reasons": [{"key": "graphql_sku_match", "points": 100}],
-        "type": product.get("type"),
+        "type": product.get("type") or "non_book",
         "planned_availability_date": None,
         "rating": None,
         "review_count": None,

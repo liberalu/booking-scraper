@@ -4,12 +4,20 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from typing import Any, NamedTuple, cast
 
 from bs4 import BeautifulSoup
 
 from book_scraper.book_types import BookType
 from book_scraper.isbn import is_valid_isbn
 from book_scraper.spiders.cover_type import format_from_cover_type
+from book_scraper.spiders.parser_types import CategoryPageResult, ProductPageResult
+
+
+class _Signal(NamedTuple):
+    key: str
+    fired: bool
+    points: int
 
 
 @dataclass(frozen=True)
@@ -18,6 +26,7 @@ class BookClassification:
     is_book_product: bool
     reasons: list[dict[str, object]]
     has_primary_book_signal: bool
+
 
 _BOOK_CATEGORY_LABELS = (
     "negrožinė literatūra",
@@ -103,7 +112,8 @@ def classify_book_product(data: dict[str, object]) -> BookClassification:
     has_non_book_category = has_non_book_category or _categories_contain_labels(
         categories, _NON_BOOK_CATEGORY_LABELS
     )
-    isbn = data.get("isbn") if isinstance(data.get("isbn"), str) else None
+    raw_isbn = data.get("isbn")
+    isbn = raw_isbn if isinstance(raw_isbn, str) else None
     valid_isbn = is_valid_isbn(isbn)
     author = data.get("author")
     has_author = isinstance(author, str) and bool(author.strip())
@@ -122,19 +132,19 @@ def classify_book_product(data: dict[str, object]) -> BookClassification:
     )
     title_is_non_book = title_looks_like_game_or_toy(title)
 
-    signals: tuple[tuple[str, bool, int], ...] = (
-        ("book_categories", has_book_category, 3),
-        ("valid_isbn", valid_isbn, 3),
-        ("author_present", has_author, 2),
-        ("book_metadata", has_book_metadata, 2),
-        ("game_toy_title", title_is_non_book, -3),
-        ("non_book_categories", has_non_book_category, -4),
+    signals = (
+        _Signal("book_categories", has_book_category, 3),
+        _Signal("valid_isbn", valid_isbn, 3),
+        _Signal("author_present", has_author, 2),
+        _Signal("book_metadata", has_book_metadata, 2),
+        _Signal("game_toy_title", title_is_non_book, -3),
+        _Signal("non_book_categories", has_non_book_category, -4),
     )
     score = 0
-    for key, fired, points in signals:
-        awarded = points if fired else 0
+    for signal in signals:
+        awarded = signal.points if signal.fired else 0
         score += awarded
-        reasons.append({"key": key, "points": awarded})
+        reasons.append({"key": signal.key, "points": awarded})
 
     if has_non_book_category and not (has_book_category or valid_isbn or has_author):
         reasons.append({"key": "blocked_non_book_category", "points": 0})
@@ -235,7 +245,7 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
     return [loc.text for loc in root.findall(".//s:loc", ns) if loc.text is not None]
 
 
-def parse_category_page(html: str) -> dict[str, object]:
+def parse_category_page(html: str) -> CategoryPageResult:
     """Parse product cards from a vaga.lt category page.
 
     Returns ``{"products": [...], "total": None}``. vaga.lt's category
@@ -246,7 +256,7 @@ def parse_category_page(html: str) -> dict[str, object]:
     Prices are in Lithuanian format: '16,32€' -> '16.32'. URLs have
     query parameters stripped (e.g. '?limit=100' removed).
     """
-    products: list[dict[str, str | None]] = []
+    products: list[dict[str, Any]] = []
     segments = re.split(r'class="product-item-container product-\d+"', html)[1:]
     for seg in segments:
         name_match = re.search(r'<p class="name"><a href="([^"]+)">([^<]+)', seg)
@@ -291,7 +301,7 @@ def parse_category_page(html: str) -> dict[str, object]:
     return {"products": products, "total": None}
 
 
-def parse_product_page(html: str) -> dict[str, object]:
+def parse_product_page(html: str) -> ProductPageResult:
     """Parse a vaga.lt product page using JSON-LD and HTML property spans.
 
     Returns dict with keys: title, description, price, price_original,
@@ -498,4 +508,4 @@ def parse_product_page(html: str) -> dict[str, object]:
     data["book_score"] = classification.score
     data["book_score_reasons"] = classification.reasons
     data["type"] = infer_shop_book_type(data)
-    return data
+    return cast(ProductPageResult, data)

@@ -221,8 +221,14 @@ def test_parse_product_page_marks_board_game_as_non_book():
     assert data["title"] == 'Stalo žaidimas "Teleloto"'
     assert data["is_book_product"] is False
     assert data["book_score"] == -7
-    assert any(r["key"] == "game_toy_title" and r["points"] == -3 for r in data["book_score_reasons"])
-    assert any(r["key"] == "non_book_categories" and r["points"] == -4 for r in data["book_score_reasons"])
+    assert any(
+        r["key"] == "game_toy_title" and r["points"] == -3
+        for r in data["book_score_reasons"]
+    )
+    assert any(
+        r["key"] == "non_book_categories" and r["points"] == -4
+        for r in data["book_score_reasons"]
+    )
     assert data["type"] == "non_book"
 
 
@@ -262,8 +268,12 @@ def test_classify_book_product_returns_score_and_reasons():
     result = classify_book_product(data)
     assert result.is_book_product is False
     assert result.score == -7
-    assert any(r["key"] == "game_toy_title" and r["points"] == -3 for r in result.reasons)
-    assert any(r["key"] == "non_book_categories" and r["points"] == -4 for r in result.reasons)
+    assert any(
+        r["key"] == "game_toy_title" and r["points"] == -3 for r in result.reasons
+    )
+    assert any(
+        r["key"] == "non_book_categories" and r["points"] == -4 for r in result.reasons
+    )
 
 
 @pytest.mark.parametrize(
@@ -294,7 +304,9 @@ def test_top_level_book_categories_get_positive_score(category):
     result = classify_book_product(data)
     assert result.is_book_product is True
     assert result.score == 3
-    assert any(r["key"] == "book_categories" and r["points"] == 3 for r in result.reasons)
+    assert any(
+        r["key"] == "book_categories" and r["points"] == 3 for r in result.reasons
+    )
 
 
 def test_infer_shop_book_type_prefers_audio_and_non_book():
@@ -337,4 +349,6 @@ def test_top_level_non_book_categories_get_negative_score(category):
     result = classify_book_product(data)
     assert result.is_book_product is False
     assert result.score == -4
-    assert any(r["key"] == "non_book_categories" and r["points"] == -4 for r in result.reasons)
+    assert any(
+        r["key"] == "non_book_categories" and r["points"] == -4 for r in result.reasons
+    )

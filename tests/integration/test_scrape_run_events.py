@@ -88,9 +88,7 @@ def test_finish_scrape_run_emits_completed(db_session):
 def test_finish_scrape_run_emits_failed(db_session):
     shop = _make_shop(db_session, "ev_failed")
     run = create_scrape_run(db_session, shop.id, "scan")
-    finish_scrape_run(
-        db_session, run.id, "failed", reason="stopped_by_operator"
-    )
+    finish_scrape_run(db_session, run.id, "failed", reason="stopped_by_operator")
     types = [e.event_type for e in _events_of(db_session, run.id)]
     assert types == [run_event_types.STARTED, run_event_types.FAILED]
     failed = _events_of(db_session, run.id)[-1]

@@ -93,8 +93,7 @@ class StallDetector:  # pragma: no cover
             engine = self.crawler.engine
             if engine is not None:
                 in_flight = sum(
-                    len(slot.active)
-                    for slot in engine.downloader.slots.values()
+                    len(slot.active) for slot in engine.downloader.slots.values()
                 )
                 if in_flight > 0:
                     logger.debug(
@@ -143,9 +142,7 @@ class StallDetector:  # pragma: no cover
             # 6+ minutes, blocking the auto-resume the whole time.
             # Schedule an os._exit fallback so we don't leave the
             # queue paused.
-            force_exit_s = self.crawler.settings.getfloat(
-                "STALL_FORCE_EXIT_S", 0
-            )
+            force_exit_s = self.crawler.settings.getfloat("STALL_FORCE_EXIT_S", 0)
             if force_exit_s and force_exit_s > 0:
                 from twisted.internet import reactor
 
@@ -242,7 +239,7 @@ class StallDetector:  # pragma: no cover
             "max_attempts": max_attempts,
         }
         logger.warning(
-            "Auto-resume queued for run %d (attempt %d/%d); will spawn on spider_closed",
+            "Auto-resume queued for run %d (attempt %d/%d); spawn on spider_closed",
             run_id,
             depth + 1,
             max_attempts,
@@ -273,7 +270,7 @@ class StallDetector:  # pragma: no cover
         # races-with-StallDetector window.
         if self._another_run_active(shop, spider_name, strategy):
             logger.warning(
-                "Auto-resume: another %s/%s run is already active for %s; skipping spawn",
+                "Auto-resume: another %s/%s run already active for %s; skipping spawn",
                 spider_name,
                 strategy or "—",
                 shop,
@@ -347,9 +344,7 @@ class StallDetector:  # pragma: no cover
 
         os._exit(1)
 
-    def _another_run_active(
-        self, shop: str, spider_name: str, strategy: str
-    ) -> bool:
+    def _another_run_active(self, shop: str, spider_name: str, strategy: str) -> bool:
         """Is there already a running/stopping/paused run for this shop+phase?"""
         from book_scraper.db.models import ScrapeRun, Shop
         from book_scraper.db.session import get_session_factory
@@ -436,9 +431,7 @@ class HeartbeatExtension:  # pragma: no cover
         """Begin ticking. The first ticks may run before the spider's
         ``start()`` has assigned ``_run_id``; they are silent no-ops
         until run_id appears."""
-        logger.info(
-            "HeartbeatExtension started (interval=%.1fs)", self.interval
-        )
+        logger.info("HeartbeatExtension started (interval=%.1fs)", self.interval)
         self._schedule_next()
 
     # Back-compat: kept so existing unit tests still exercise the
@@ -506,7 +499,7 @@ class HeartbeatExtension:  # pragma: no cover
             return
         from twisted.internet.threads import deferToThread
 
-        d = deferToThread(self._write_heartbeat, run_id)
+        d = deferToThread(self._write_heartbeat, run_id)  # type: ignore[no-untyped-call]
         d.addCallbacks(self._on_tick_done, self._on_tick_failed)
 
     def _on_tick_done(self, status: str | None) -> None:
@@ -527,7 +520,8 @@ class HeartbeatExtension:  # pragma: no cover
         # blip must not silently kill the heartbeat.
         logger.error(
             "Heartbeat write failed: %s",
-            failure.getErrorMessage() if hasattr(failure, "getErrorMessage")
+            failure.getErrorMessage()
+            if hasattr(failure, "getErrorMessage")
             else failure,
         )
         self._schedule_next()

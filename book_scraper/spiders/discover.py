@@ -135,9 +135,7 @@ class DiscoverSpider(scrapy.Spider):
                 # can skip queueing scan jobs for them mid-crawl. Loaded
                 # once here — full_crawl is rare and manual, the brief
                 # staleness during a long run is acceptable.
-                self._stable_urls = get_stable_discovered_urls(
-                    session, plan.shop_id
-                )
+                self._stable_urls = get_stable_discovered_urls(session, plan.shop_id)
             session.commit()
         finally:
             session.close()
@@ -176,7 +174,9 @@ class DiscoverSpider(scrapy.Spider):
                 callback=self.parse_categories,
                 errback=self.handle_start_error,
                 meta={"page": 1},
-                headers={"Accept": "application/json"} if self.strategy == "graphql" else {},
+                headers={"Accept": "application/json"}
+                if self.strategy == "graphql"
+                else {},
             )
         if self.strategy == "lupasearch":
             from book_scraper.spiders.lupasearch_urls import (
@@ -517,10 +517,7 @@ class DiscoverSpider(scrapy.Spider):
         # requests. Concurrency=2 + cold full-page-cache on Magento can
         # produce transient 503s on deeper pages; pageSize/5 is light
         # enough to slip through.
-        if (
-            self.strategy == "graphql"
-            and 500 <= response.status < 600
-        ):
+        if self.strategy == "graphql" and 500 <= response.status < 600:
             yield from self._subdivide_failed_graphql_page(response)
             return
 
@@ -583,9 +580,7 @@ class DiscoverSpider(scrapy.Spider):
 
         next_page = current_page + 1
         if self._max_pages and next_page > self._max_pages:
-            self.logger.info(
-                "max_pages cap: stopping at page %d", self._max_pages
-            )
+            self.logger.info("max_pages cap: stopping at page %d", self._max_pages)
             return
         if self.strategy == "graphql":
             from book_scraper.spiders.graphql_urls import build_graphql_page_url

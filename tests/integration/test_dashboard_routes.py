@@ -125,9 +125,7 @@ def test_url_detail_api_404(client: TestClient) -> None:
 
 
 @pytest.mark.integration
-def test_url_detail_api_returns_url(
-    client: TestClient, db_session: Session
-) -> None:
+def test_url_detail_api_returns_url(client: TestClient, db_session: Session) -> None:
     """An existing DiscoveredUrl is returned by the API."""
     from book_scraper.db.repo import upsert_discovered_url, upsert_shop
 
@@ -300,9 +298,7 @@ def test_not_listed_redirects_to_shop_detail(client: TestClient) -> None:
 
 
 @pytest.mark.integration
-def test_update_rate_settings_persists(
-    client: TestClient, db_session: Session
-) -> None:
+def test_update_rate_settings_persists(client: TestClient, db_session: Session) -> None:
     from book_scraper.db.models import ShopSettings
 
     response = client.post(
@@ -315,11 +311,7 @@ def test_update_rate_settings_persists(
     shop = db_session.query(Shop).filter(Shop.name == "vaga").first()
     assert shop is not None
     db_session.expire(shop)
-    rows = (
-        db_session.query(ShopSettings)
-        .filter(ShopSettings.shop_id == shop.id)
-        .all()
-    )
+    rows = db_session.query(ShopSettings).filter(ShopSettings.shop_id == shop.id).all()
     settings = {r.key: r.value for r in rows}
     assert settings.get("download_delay") == "1.5"
     assert settings.get("concurrent_requests_per_domain") == "2"
@@ -403,9 +395,7 @@ def _mock_spawn(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     def _fake(
         *, phase: str, shop: str, strategy: str = "", mode: str = "delta"
     ) -> None:
-        calls.append(
-            {"phase": phase, "shop": shop, "strategy": strategy, "mode": mode}
-        )
+        calls.append({"phase": phase, "shop": shop, "strategy": strategy, "mode": mode})
 
     monkeypatch.setattr(
         "book_scraper.dashboard.routes.api._spawn_scrapy_in_container", _fake
@@ -434,9 +424,7 @@ def test_continue_run_happy_path(
 
     pending_after = (
         db_session.query(ScrapeUrlItem)
-        .filter(
-            ScrapeUrlItem.run_id == run.id, ScrapeUrlItem.status == "pending"
-        )
+        .filter(ScrapeUrlItem.run_id == run.id, ScrapeUrlItem.status == "pending")
         .count()
     )
     assert pending_after == 3
@@ -474,9 +462,7 @@ def test_continue_run_works_for_discover_phase(
     client: TestClient, db_session: Session, _mock_spawn: list[dict]
 ) -> None:
     shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
-    run = _make_stopped_scan_run(
-        db_session, shop.id, phase="discover_categories"
-    )
+    run = _make_stopped_scan_run(db_session, shop.id, phase="discover_categories")
 
     resp = client.post(f"/api/runs/{run.id}/continue")
     assert resp.status_code == 200, resp.text
@@ -1069,9 +1055,7 @@ def test_failure_groups_hides_acknowledged_by_default(
     db_session.query(ScrapeFailure).filter(
         ScrapeFailure.run_id == run.id,
         ScrapeFailure.error_reason == "http_404",
-    ).update(
-        {"lifecycle_state": "already_seen"}, synchronize_session=False
-    )
+    ).update({"lifecycle_state": "already_seen"}, synchronize_session=False)
     db_session.commit()
 
     resp = client.get(f"/api/runs/{run.id}/live")
@@ -1092,7 +1076,8 @@ def _retry_run_status(run: ScrapeRun, db_session: Session, status: str) -> None:
     run.status = status
     if status in ("failed", "completed"):
         run.close_reason = "test"
-        from datetime import UTC, datetime as _dt
+        from datetime import UTC
+        from datetime import datetime as _dt
 
         run.finished_at = _dt.now(UTC)
     db_session.commit()
@@ -1162,9 +1147,7 @@ def test_retry_run_terminal_respawns(
     assert refreshed.finished_at is None
     pending = (
         db_session.query(ScrapeUrlItem)
-        .filter(
-            ScrapeUrlItem.run_id == run.id, ScrapeUrlItem.status == "pending"
-        )
+        .filter(ScrapeUrlItem.run_id == run.id, ScrapeUrlItem.status == "pending")
         .count()
     )
     assert pending == 5

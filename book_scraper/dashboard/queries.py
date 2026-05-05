@@ -81,8 +81,9 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         " instead of the book's ISBN."
     ),
     "invalid_year": (
-        "Publication year is outside the plausible range (before 1400 or in the future)."
-        " Parser may be selecting a wrong numeric element."
+        "Publication year is outside the plausible range "
+        "(before 1400 or in the future). "
+        "Parser may be selecting a wrong numeric element."
     ),
     "year_pages_swap": (
         "Year and page-count appear to be swapped — e.g. year=312 and pages=2024."
@@ -120,18 +121,16 @@ ISSUE_SEVERITY: dict[str, str] = {
 # Per-status reasons (`http_404`, `http_503`, ...) classify via the
 # range, so we don't need to enumerate every status code.
 SCRAPE_FAILURE_SEVERITY: dict[str, str] = {
-    "request_error":     "critical",
+    "request_error": "critical",
     "anti_bot_detected": "critical",
-    "schema_drift":      "critical",
-    "rate_limited":      "warning",
+    "schema_drift": "critical",
+    "rate_limited": "warning",
     "robots_disallowed": "warning",
-    "soft_404":          "warning",
+    "soft_404": "warning",
 }
 
 
-def severity_for_failure(
-    error_reason: str | None, http_status: int | None
-) -> str:
+def severity_for_failure(error_reason: str | None, http_status: int | None) -> str:
     """Classify a scrape failure's severity. http_status range wins
     when set so per-status reasons (`http_503`) resolve via the bucket
     without backfilling the data.
@@ -243,7 +242,7 @@ def mark_stale_runs(session: Session) -> int:
     return marked
 
 
-def get_overview_stats(session: Session) -> dict:
+def get_overview_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
         session.query(func.count(ShopBook.id))
@@ -286,9 +285,11 @@ def get_schedule_info(session: Session) -> list[dict[str, Any]]:
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     for job in jobs:
+        next_dt: datetime | None
+        next_in_s: int | None
         try:
             cron = croniter(job.cron_expression, now)
-            next_dt: datetime = cron.get_next(datetime).replace(tzinfo=UTC)
+            next_dt = cron.get_next(datetime).replace(tzinfo=UTC)
             next_in_s = int((next_dt - now).total_seconds())
         except Exception:
             next_dt = None
@@ -456,7 +457,7 @@ def get_run_detail(session: Session, run_id: int) -> ScrapeRun | None:
     return session.get(ScrapeRun, run_id)
 
 
-def get_scrape_run_events(session: Session, run_id: int) -> list[dict]:
+def get_scrape_run_events(session: Session, run_id: int) -> list[dict[str, Any]]:
     """Lifecycle events for a run, oldest first."""
     rows = (
         session.query(ScrapeRunEvent)
@@ -557,9 +558,9 @@ def get_run_books_updated(
     subq = (
         session.query(
             ShopBookChange.shop_book_id,
-            func.string_agg(
-                func.distinct(ShopBookChange.field), ", "
-            ).label("changed_fields"),
+            func.string_agg(func.distinct(ShopBookChange.field), ", ").label(
+                "changed_fields"
+            ),
         )
         .filter(ShopBookChange.scrape_run_id == run_id)
         .group_by(ShopBookChange.shop_book_id)
@@ -758,8 +759,7 @@ def get_run_recent_failures(
         session.query(ScrapeUrlItem, latest.c.error_reason)
         .outerjoin(
             latest,
-            (latest.c.scrape_url_item_id == ScrapeUrlItem.id)
-            & (latest.c.rn == 1),
+            (latest.c.scrape_url_item_id == ScrapeUrlItem.id) & (latest.c.rn == 1),
         )
         .filter(
             ScrapeUrlItem.run_id == run_id,
@@ -926,9 +926,7 @@ def get_run_failure_groups(
             )
         )
         if not include_acked:
-            examples_q = examples_q.filter(
-                latest.c.lifecycle_state != "already_seen"
-            )
+            examples_q = examples_q.filter(latest.c.lifecycle_state != "already_seen")
         examples = [
             {
                 "url": url,
@@ -996,8 +994,7 @@ def get_run_recent_activity(
         session.query(ScrapeUrlItem, latest.c.error_reason)
         .outerjoin(
             latest,
-            (latest.c.scrape_url_item_id == ScrapeUrlItem.id)
-            & (latest.c.rn == 1),
+            (latest.c.scrape_url_item_id == ScrapeUrlItem.id) & (latest.c.rn == 1),
         )
         .filter(
             ScrapeUrlItem.run_id == run_id,
@@ -1059,9 +1056,7 @@ def get_run_url_items(
     error_reason_is_null: bool = False,
     http_status: int | None = None,
     http_status_is_null: bool = False,
-) -> tuple[
-    list[tuple[ScrapeUrlItem, str | None, int | None, str | None]], int
-]:
+) -> tuple[list[tuple[ScrapeUrlItem, str | None, int | None, str | None]], int]:
     """Live URL queue for a run, paginated. Returns
     ((item, title, shop_book_id, latest_error_reason), total).
 
@@ -1134,9 +1129,7 @@ def get_run_url_items(
         if error_reason_is_null:
             query = query.filter(latest_failure.c.error_reason.is_(None))
         elif error_reason:
-            query = query.filter(
-                latest_failure.c.error_reason == error_reason
-            )
+            query = query.filter(latest_failure.c.error_reason == error_reason)
         if http_status_is_null:
             query = query.filter(latest_failure.c.http_status.is_(None))
         elif http_status is not None:
@@ -1190,8 +1183,7 @@ def get_run_url_items(
         .all()
     )
     return [
-        (it, title, sb_id, latest_reason)
-        for it, title, sb_id, latest_reason in rows
+        (it, title, sb_id, latest_reason) for it, title, sb_id, latest_reason in rows
     ], total
 
 
@@ -1249,7 +1241,9 @@ def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]
     return [{"field": r.field, "issue": r.issue, "count": r.count} for r in rows]
 
 
-def get_validation_summary(session: Session, state: str | None = None) -> list[dict]:
+def get_validation_summary(
+    session: Session, state: str | None = None
+) -> list[dict[str, Any]]:
     q = session.query(
         ValidationIssue.issue,
         func.count(ValidationIssue.id).label("count"),
@@ -1301,8 +1295,8 @@ def get_validation_lifecycle_counts(
 
     rows = query.group_by(ValidationIssue.lifecycle_state).all()
     counts = {"new": 0, "recurring": 0, "already_seen": 0}
-    for r in rows:
-        counts[r.lifecycle_state] = r.count
+    for state, count in rows:
+        counts[state] = count
     counts["open"] = counts["new"] + counts["recurring"]
     return counts
 
@@ -1387,9 +1381,7 @@ def get_issues_page(
 
     if kind == "all":
         rows.sort(
-            key=lambda r: (
-                r["added_at"] or datetime.min.replace(tzinfo=UTC)
-            ),
+            key=lambda r: r["added_at"] or datetime.min.replace(tzinfo=UTC),
             reverse=(order != "asc"),
         )
         start = (page - 1) * per_page
@@ -1503,15 +1495,12 @@ def _get_scrape_failures_page(
     via the range/prefix logic in `severity_for_failure`."""
     from sqlalchemy import and_, or_
 
-    query = (
-        session.query(ScrapeFailure, ShopBook)
-        .outerjoin(
-            ShopBook,
-            and_(
-                ShopBook.shop_id == ScrapeFailure.shop_id,
-                ShopBook.url == ScrapeFailure.url,
-            ),
-        )
+    query = session.query(ScrapeFailure, ShopBook).outerjoin(
+        ShopBook,
+        and_(
+            ShopBook.shop_id == ScrapeFailure.shop_id,
+            ShopBook.url == ScrapeFailure.url,
+        ),
     )
 
     if state in {"new", "recurring", "already_seen"}:
@@ -1545,10 +1534,7 @@ def _get_scrape_failures_page(
         ]
         # error_reason prefix matched via LIKE 'prefix%'
         crit_pred = or_(
-            *[
-                ScrapeFailure.error_reason.like(f"{p}%")
-                for p in crit_prefixes
-            ]
+            *[ScrapeFailure.error_reason.like(f"{p}%") for p in crit_prefixes]
         )
         warn_pred = or_(
             and_(
@@ -1556,10 +1542,7 @@ def _get_scrape_failures_page(
                 ScrapeFailure.http_status >= 400,
                 ScrapeFailure.http_status < 600,
             ),
-            *[
-                ScrapeFailure.error_reason.like(f"{p}%")
-                for p in warn_prefixes
-            ],
+            *[ScrapeFailure.error_reason.like(f"{p}%") for p in warn_prefixes],
         )
         if severity == "critical":
             # critical = matches a critical prefix AND not an http range
@@ -1579,9 +1562,7 @@ def _get_scrape_failures_page(
     total = query.count()
 
     if order == "asc":
-        query = query.order_by(
-            ScrapeFailure.occurred_at.asc(), ScrapeFailure.id.asc()
-        )
+        query = query.order_by(ScrapeFailure.occurred_at.asc(), ScrapeFailure.id.asc())
     else:
         query = query.order_by(
             ScrapeFailure.occurred_at.desc(), ScrapeFailure.id.desc()
@@ -1621,7 +1602,7 @@ def get_validation_by_type(
     limit: int = 100,
     state: str | None = None,
     run_id: int | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get validation issues with shop_book IDs resolved from URL."""
     q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
     if state in {"new", "recurring", "already_seen"}:
@@ -1813,7 +1794,7 @@ def get_price_changes(
     return [dict(r) for r in rows], int(total)
 
 
-def get_inventory_stats(session: Session) -> dict:
+def get_inventory_stats(session: Session) -> dict[str, Any]:
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     active = (
         session.query(func.count(ShopBook.id))
@@ -1910,6 +1891,7 @@ def get_shop_books_page(
         query = query.filter(ShopBook.shop_id == shop_id)
     if search:
         from sqlalchemy import or_ as _or
+
         query = query.filter(
             _or(
                 ShopBook.title.ilike(f"%{search}%"),
@@ -1922,7 +1904,10 @@ def get_shop_books_page(
     if publisher:
         query = query.filter(ShopBook.publisher.ilike(f"%{publisher}%"))
     if category:
-        query = query.filter(ShopBook.categories.any(category))
+        # SQLAlchemy stubs don't model PG ARRAY.any(value) — accepts a
+        # scalar at runtime (Postgres ANY() match) but the stub demands
+        # a ColumnElement[bool].
+        query = query.filter(ShopBook.categories.any(category))  # type: ignore[arg-type]
     if type_filter:
         query = query.filter(ShopBook.type == type_filter)
     if format_filter:
@@ -1971,7 +1956,9 @@ def get_shop_books_page(
         )
         if attr_value:
             attr_subq = attr_subq.filter(ShopBookAttribute.value == attr_value)
-        query = query.filter(exists(attr_subq))
+        # SQLAlchemy 2.0 stubs prefer exists(select()) over the legacy
+        # exists(query) form; runtime is fine with a Query.
+        query = query.filter(exists(attr_subq))  # type: ignore[arg-type]
     if field_filters:
         query = apply_shop_book_field_filters(query, field_filters)
 
@@ -2064,7 +2051,7 @@ def get_shop_by_name(session: Session, name: str) -> Shop | None:
     return session.query(Shop).filter(Shop.name == name).first()
 
 
-def get_shop_stats(session: Session, shop_id: int) -> dict:
+def get_shop_stats(session: Session, shop_id: int) -> dict[str, Any]:
     shop_books = (
         session.query(func.count(ShopBook.id))
         .filter(ShopBook.shop_id == shop_id)
@@ -2108,8 +2095,7 @@ def get_shop_runs(session: Session, shop_id: int, limit: int = 20) -> list[Scrap
     )
 
 
-
-def get_shop_field_stats(session: Session, shop_id: int) -> dict:
+def get_shop_field_stats(session: Session, shop_id: int) -> dict[str, Any]:
     """Get per-field completeness stats for a shop."""
     total = (
         session.query(func.count(ShopBook.id))
@@ -2171,7 +2157,7 @@ def get_shop_book_changes(
     )
 
 
-def get_data_completeness(session: Session) -> list[dict]:
+def get_data_completeness(session: Session) -> list[dict[str, Any]]:
     """Get field completeness percentages for the overview page."""
     total = session.query(func.count(ShopBook.id)).scalar() or 0
     if total == 0:
@@ -2269,7 +2255,9 @@ DISCOVERED_URL_SORT_COLUMNS = {
 }
 
 
-def get_discovered_urls_stats(session: Session, shop_id: int | None = None) -> dict:
+def get_discovered_urls_stats(
+    session: Session, shop_id: int | None = None
+) -> dict[str, Any]:
     """Get stats for discovered URLs page."""
     base = session.query(DiscoveredUrl)
     if shop_id:
@@ -2304,7 +2292,7 @@ def get_discovered_urls_page(
     sort_by: str = "discovered",
     sort_order: str = "desc",
     failing: bool = False,
-) -> tuple[list, int]:
+) -> tuple[list[Any], int]:
     """Return paginated discovered URLs with filters."""
     needs_book_join = sort_by == "book" or has_book
     query = (
@@ -2329,6 +2317,7 @@ def get_discovered_urls_page(
     if is_book == "book":
         # URLs either classified as books OR linked to a shop_book via FK
         from sqlalchemy import or_ as _or
+
         query = query.filter(
             _or(
                 UrlClassification.is_book_product.is_(True),

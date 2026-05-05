@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -500,7 +501,7 @@ class ScrapeRunEvent(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     actor: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     run: Mapped["ScrapeRun"] = relationship(back_populates="events")
 
@@ -635,12 +636,8 @@ class ScrapeFailure(Base):
         ForeignKey("scrape_url_items.id", ondelete="CASCADE"),
         nullable=False,
     )
-    run_id: Mapped[int] = mapped_column(
-        ForeignKey("scrape_runs.id"), nullable=False
-    )
-    shop_id: Mapped[int] = mapped_column(
-        ForeignKey("shops.id"), nullable=False
-    )
+    run_id: Mapped[int] = mapped_column(ForeignKey("scrape_runs.id"), nullable=False)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     discovered_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("discovered_urls.id"), nullable=True
