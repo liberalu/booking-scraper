@@ -3,12 +3,21 @@ import html as html_module
 import json
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
 
 from book_scraper.book_types import BookType
 from book_scraper.isbn import is_valid_isbn
 from book_scraper.spiders.cover_type import format_from_cover_type
+
+
+@dataclass(frozen=True)
+class BookClassification:
+    score: int
+    is_book_product: bool
+    reasons: list[dict[str, object]]
+    has_primary_book_signal: bool
 
 _BOOK_CATEGORY_LABELS = (
     "negrožinė literatūra",
@@ -76,15 +85,15 @@ def title_looks_like_game_or_toy(title: str | None) -> bool:
     return any(re.search(pattern, normalized) for pattern in _GAME_OR_TOY_PATTERNS)
 
 
-def classify_book_product(data: dict[str, object]) -> dict[str, object]:
+def classify_book_product(data: dict[str, object]) -> BookClassification:
     title = data.get("title")
     if not isinstance(title, str) or not title.strip():
-        return {
-            "score": 0,
-            "is_book_product": False,
-            "reasons": [{"key": "no_title", "points": 0}],
-            "has_primary_book_signal": False,
-        }
+        return BookClassification(
+            score=0,
+            is_book_product=False,
+            reasons=[{"key": "no_title", "points": 0}],
+            has_primary_book_signal=False,
+        )
 
     categories = data.get("categories")
     has_book_category = _categories_contain_labels(categories, _BOOK_CATEGORY_LABELS)
@@ -129,34 +138,34 @@ def classify_book_product(data: dict[str, object]) -> dict[str, object]:
 
     if has_non_book_category and not (has_book_category or valid_isbn or has_author):
         reasons.append({"key": "blocked_non_book_category", "points": 0})
-        return {
-            "score": score,
-            "is_book_product": False,
-            "reasons": reasons,
-            "has_primary_book_signal": False,
-        }
+        return BookClassification(
+            score=score,
+            is_book_product=False,
+            reasons=reasons,
+            has_primary_book_signal=False,
+        )
     if title_is_non_book and not (has_book_category or valid_isbn or has_book_metadata):
         reasons.append({"key": "blocked_game_toy_title", "points": 0})
-        return {
-            "score": score,
-            "is_book_product": False,
-            "reasons": reasons,
-            "has_primary_book_signal": False,
-        }
+        return BookClassification(
+            score=score,
+            is_book_product=False,
+            reasons=reasons,
+            has_primary_book_signal=False,
+        )
 
     has_primary_book_signal = has_book_category or valid_isbn
     if has_author and has_book_metadata:
         has_primary_book_signal = True
-    return {
-        "score": score,
-        "is_book_product": score >= 3 and has_primary_book_signal,
-        "reasons": reasons,
-        "has_primary_book_signal": has_primary_book_signal,
-    }
+    return BookClassification(
+        score=score,
+        is_book_product=score >= 3 and has_primary_book_signal,
+        reasons=reasons,
+        has_primary_book_signal=has_primary_book_signal,
+    )
 
 
 def is_book_product_page(data: dict[str, object]) -> bool:
-    return bool(classify_book_product(data)["is_book_product"])
+    return classify_book_product(data).is_book_product
 
 
 def infer_shop_book_type(data: dict[str, object]) -> BookType:
@@ -178,7 +187,7 @@ def infer_shop_book_type(data: dict[str, object]) -> BookType:
     if _categories_contain_keywords(categories, ("e-knyg", "eknyg", "elektronin")):
         return "ebook"
 
-    if classify_book_product(data)["is_book_product"]:
+    if classify_book_product(data).is_book_product:
         return "book"
     return "non_book"
 
@@ -485,8 +494,8 @@ def parse_product_page(html: str) -> dict[str, object]:
 
     data["schema_types"] = sorted(schema_types)
     classification = classify_book_product(data)
-    data["is_book_product"] = classification["is_book_product"]
-    data["book_score"] = classification["score"]
-    data["book_score_reasons"] = classification["reasons"]
+    data["is_book_product"] = classification.is_book_product
+    data["book_score"] = classification.score
+    data["book_score_reasons"] = classification.reasons
     data["type"] = infer_shop_book_type(data)
     return data

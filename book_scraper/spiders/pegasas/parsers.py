@@ -22,7 +22,7 @@ import re
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
-from book_scraper.book_types import BookType
+from book_scraper.book_types import BOOK_LIKE_TYPES, BookType
 from book_scraper.spiders.cover_type import format_from_cover_type
 from book_scraper.spiders.graphql_urls import _PRODUCT_FIELDS
 
@@ -618,7 +618,7 @@ def parse_product_page(text: str) -> dict[str, object]:
         "narrator": properties.get("narrator"),
         "translator": properties.get("translator"),
         "schema_types": [],
-        "is_book_product": product.get("type") in ("book", "audio", "ebook"),
+        "is_book_product": product.get("type") in BOOK_LIKE_TYPES,
         "book_score": 100,
         "book_score_reasons": [{"key": "graphql_sku_match", "points": 100}],
         "type": product.get("type"),

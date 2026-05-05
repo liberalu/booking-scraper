@@ -10,3 +10,7 @@ from typing import Literal
 BookType = Literal["book", "audio", "ebook", "non_book"]
 
 BOOK_TYPES: tuple[BookType, ...] = ("book", "audio", "ebook", "non_book")
+
+# Book-like types: everything except `non_book`. Used for `is_book_product`
+# checks where we want to keep audiobooks and ebooks but drop board games.
+BOOK_LIKE_TYPES: tuple[BookType, ...] = ("book", "audio", "ebook")
