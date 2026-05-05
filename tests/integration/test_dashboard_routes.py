@@ -18,6 +18,7 @@ from book_scraper.db.models import (
     ScrapeUrlItem,
     Shop,
     ShopBook,
+    ShopBookAttribute,
     ValidationIssue,
 )
 from book_scraper.db.repo import bulk_insert_validation_issues
@@ -67,6 +68,53 @@ def test_shop_book_detail_api_returns_classification(
     data = response.json()
     assert data["type"] == "non_book"
     assert "Mokyklinės ir raštinės prekės" in data["categories"]
+
+
+@pytest.mark.integration
+def test_shop_book_detail_api_returns_sku_and_attributes(
+    client: TestClient, db_session: Session
+) -> None:
+    """The detail endpoint must surface the durable identifier (sku) and
+    every shop_book_attributes row (translator, dimensions, cover_type,
+    language, …). Pre-fix these were captured by the parsers but never
+    rendered — the user looking at /shop-books/27739 saw an empty 'Raw
+    data' tab and concluded the data was missing entirely."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    shop_book = ShopBook(
+        shop_id=shop.id,
+        url="https://vaga.lt/test-attrs-1234",
+        title="Attrs Test",
+        sku="000000000001234567",
+        type="book",
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+    db_session.add_all(
+        [
+            ShopBookAttribute(
+                shop_book_id=shop_book.id,
+                key="translator",
+                value="Test Translator",
+            ),
+            ShopBookAttribute(
+                shop_book_id=shop_book.id, key="dimensions", value="23x15x1,4"
+            ),
+            ShopBookAttribute(
+                shop_book_id=shop_book.id, key="cover_type", value="Kietas"
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(f"/api/shop-books/{shop_book.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sku"] == "000000000001234567"
+    assert data["attributes"] == {
+        "translator": "Test Translator",
+        "dimensions": "23x15x1,4",
+        "cover_type": "Kietas",
+    }
 
 
 @pytest.mark.integration

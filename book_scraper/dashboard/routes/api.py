@@ -61,6 +61,7 @@ from book_scraper.db.models import (
     ScrapeUrlItem,
     Shop,
     ShopBook,
+    ShopBookAttribute,
     ShopBookChange,
     UrlClassification,
     ValidationIssue,
@@ -302,6 +303,7 @@ def _book_dict(sb: ShopBook) -> dict[str, Any]:
         "author": sb.author or "—",
         "shop": sb.shop.name if sb.shop else "—",
         "isbn": sb.isbn,
+        "sku": sb.sku,
         "price": price_str,
         "price_raw": float(sb.price) if sb.price is not None else None,
         "status": status,
@@ -1611,6 +1613,17 @@ def api_shop_book_detail(
     )
     cls = linked_url.classification if linked_url else None
 
+    # Load shop_book_attributes (translator, dimensions, cover_type,
+    # language, pages, color, original_title, is_new, …) — captured by
+    # the parsers but previously not surfaced on the detail view.
+    attributes = (
+        session.query(ShopBookAttribute)
+        .filter(ShopBookAttribute.shop_book_id == book_id)
+        .order_by(ShopBookAttribute.key)
+        .all()
+    )
+    attribute_map = {a.key: a.value for a in attributes}
+
     d = _book_dict(sb)
     d["issues"] = len(issues)
     d["issues_list"] = issues
@@ -1619,6 +1632,7 @@ def api_shop_book_detail(
     d["description"] = sb.description
     d["image_url"] = sb.image_url
     d["categories"] = sb.categories or []
+    d["attributes"] = attribute_map
     d["url_count"] = url_count
     d["run_count"] = run_count
     d["runs"] = recent_runs
