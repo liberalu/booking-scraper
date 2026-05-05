@@ -245,9 +245,34 @@ def upsert_shop_book(
     review_count: int | None = None,
     run_id: int | None = None,
 ) -> tuple[ShopBook, bool, Decimal | None, list[dict[str, Any]]]:
-    """Upsert a shop_book. Returns (shop_book, created, old_price, changes)."""
-    stmt = select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.url == url)
-    shop_book = session.execute(stmt).scalar_one_or_none()
+    """Upsert a shop_book. Returns (shop_book, created, old_price, changes).
+
+    Lookup precedence:
+
+    1. ``(shop_id, sku)`` when ``sku`` is provided. SKUs are durable
+       identifiers on shops that expose them (e.g. pegasas's Magento
+       SKU stays stable across slug changes), so a URL change shouldn't
+       create a new row — we update the existing row's ``url`` instead.
+    2. ``(shop_id, url)`` fallback for shops/items without a SKU
+       (vaga's HTML scrape sometimes lacks one).
+
+    URLs are normalised (trailing-slash stripped, scheme/host lowercased,
+    tracking params removed) before lookup + persistence so the same
+    product never gets two rows because two parsers produced two
+    cosmetic variants of the same URL — e.g. LupaSearch returns
+    ``…/title-12345/`` while the GraphQL parser builds ``…/title-12345``
+    from ``f"{base}/{url_key}"``.
+    """
+    url = normalize_url(url)
+    shop_book: ShopBook | None = None
+    if sku:
+        shop_book = session.execute(
+            select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.sku == sku)
+        ).scalar_one_or_none()
+    if shop_book is None:
+        shop_book = session.execute(
+            select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.url == url)
+        ).scalar_one_or_none()
     now = datetime.now(UTC)
     if shop_book is None:
         shop_book = ShopBook(
@@ -299,7 +324,12 @@ def upsert_shop_book(
 
         # Track field changes
         changes: list[dict[str, Any]] = []
+        # When a SKU match found the row but the URL has shifted (slug
+        # rename, category-path swap), update the stored URL too so it
+        # reflects the latest seen path. Logged as a change so postmortems
+        # can see it happened.
         tracked_fields = {
+            "url": url,
             "title": title,
         }
         # Fields that only update when provided (not None). Author is
