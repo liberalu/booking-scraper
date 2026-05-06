@@ -203,7 +203,7 @@ function HFPricesPanel() {
 
 function HFScheduleDetail({ nav, goto, params }) {
   const HF = getHF();
-  const jobId = params?.id;
+  const jobId = params?.id ? parseInt(params.id, 10) : null;
   const [tab, setTab] = React.useState('runs');
   const [detail, setDetail] = React.useState(null);
   const [loading, setLoading] = React.useState(true);

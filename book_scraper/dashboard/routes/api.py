@@ -2126,6 +2126,29 @@ def api_cron_toggle(job_id: int, session: Session = Depends(get_db)) -> dict[str
     return {"id": job_id, "enabled": new_enabled}
 
 
+def _chain_would_create_cycle(
+    session: Any, current_job_id: int | None, chain_to_id: int
+) -> bool:
+    """Return True if setting chain_to_id on current_job_id would create a cycle.
+
+    Walks the chain from chain_to_id upward; returns True if current_job_id is
+    ever reached. current_job_id=None means a new job (no self-reference possible).
+    """
+    visited: set[int] = set()
+    next_id: int | None = chain_to_id
+    while next_id is not None:
+        if next_id == current_job_id:
+            return True
+        if next_id in visited:
+            break  # existing cycle in data — stop walking
+        visited.add(next_id)
+        job = session.get(CronJob, next_id)
+        if job is None:
+            break
+        next_id = job.chain_to_job_id
+    return False
+
+
 class _CronJobBody(BaseModel):
     shop: str
     phase: str
@@ -2149,6 +2172,8 @@ def api_cron_create(
         chain_target = get_cron_job(session, body.chain_to_id)
         if chain_target is None:
             raise HTTPException(status_code=404, detail="Chain target job not found")
+        # New job has no id yet — cycle detection only needed if chain_to_id
+        # transitively loops back on itself (impossible for a new job, skip).
     strategy = body.strategy.strip() or None
     job = create_cron_job(
         session,
@@ -2197,9 +2222,13 @@ def api_cron_update(
             status_code=422, detail="Provide chain_to_id or clear_chain, not both"
         )
     if body.chain_to_id is not None:
+        if body.chain_to_id == job_id:
+            raise HTTPException(status_code=422, detail="A job cannot chain to itself")
         chain_target = get_cron_job(session, body.chain_to_id)
         if chain_target is None:
             raise HTTPException(status_code=404, detail="Chain target job not found")
+        if _chain_would_create_cycle(session, job_id, body.chain_to_id):
+            raise HTTPException(status_code=422, detail="Chain would create a cycle")
         fields["chain_to_job_id"] = body.chain_to_id
     elif body.clear_chain:
         fields["chain_to_job_id"] = None
