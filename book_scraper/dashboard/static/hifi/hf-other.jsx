@@ -23,7 +23,7 @@ function HFCron({ nav, goto }) {
 
   const runJobNow = async (job) => {
     try {
-      const body = { shop: job.shop, phase: job.phase, strategy: job.strategy || '', mode: 'delta' };
+      const body = { shop: job.shop, phase: job.phase, strategy: job.strategy || '', mode: 'delta', cron_job_id: job.id };
       const resp = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,7 +78,7 @@ function HFCron({ nav, goto }) {
           <HFEmptyState title="No schedules match" sub="Try clearing filters." onClear={filters.clearAll}/>
         ) : (
         <HFTable
-          onRowClick={(r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus })}
+          onRowClick={(r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus, chain_to_id: r.chain_to_id, chain_to_name: r.chain_to_name })}
           columns={[
             { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{v}</span> },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
@@ -86,6 +86,18 @@ function HFCron({ nav, goto }) {
             { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
             { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
             { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
+            { key:'chain_to_name', label:'Chain', w:'1fr', cell:(v) =>
+              v ? (
+                <span style={{
+                  display:'inline-flex', alignItems:'center', gap:4,
+                  fontSize:12, color:'var(--hf-accent-ink)', fontFamily:'var(--hf-mono)',
+                }}>
+                  <span style={{opacity:0.5}}>→</span> {v}
+                </span>
+              ) : (
+                <span style={{color:'var(--hf-ink5)', fontSize:12}}>—</span>
+              )
+            },
             { key:'enabled', label:'', w:'0.5fr', align:'right', cell:(v, r) => (
               <span
                 onClick={(e) => { e.stopPropagation(); toggleJob(r); }}
