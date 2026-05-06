@@ -401,7 +401,7 @@ function HFScheduleDetail({ nav, goto, params }) {
       {editOpen && (
         <HFEditScheduleDialog
           open={editOpen}
-          job={{ id: jobId, name, phase: detail?.phase, strategy: detail?.strategy, cron, chain_to_id: detail?.chain_to_id ?? null }}
+          job={{ id: jobId, name, shop, phase: detail?.phase, strategy: detail?.strategy, cron, chain_to_id: detail?.chain_to_id ?? null }}
           onClose={(saved) => { setEditOpen(false); if (saved) reload(); }}
         />
       )}
