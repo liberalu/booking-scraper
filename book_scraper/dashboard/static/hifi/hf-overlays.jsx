@@ -612,15 +612,14 @@ function HFNewScheduleDialog({ open, onClose }) {
   const [phase, setPhase] = React.useState('scan');
   const [strategy, setStrategy] = React.useState('');
   const [cron, setCron] = React.useState('0 */2 * * *');
+  const [chainToId, setChainToId] = React.useState(null);
   const [shops, setShops] = React.useState([]);
+  const [allJobs, setAllJobs] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
-  // Load shops + their per-shop strategies. Replaces the old hardcoded
-  // dropdown (which silently omitted pegasas).
   React.useEffect(() => {
-    if (!open) return;
-    setError('');
+    if (!open) { setChainToId(null); setError(''); return; }
     fetch('/api/shops')
       .then(r => r.json())
       .then(d => {
@@ -629,12 +628,16 @@ function HFNewScheduleDialog({ open, onClose }) {
         setShop(prev => prev || (list[0] && list[0].name) || '');
       })
       .catch(() => setError('Could not load shops'));
+    fetch('/api/cron')
+      .then(r => r.json())
+      .then(d => setAllJobs(d.jobs || []))
+      .catch(() => setAllJobs([]));
   }, [open]);
 
   const selShop = shops.find(s => s.name === shop);
   const shopStrategies = selShop?.discover_strategies || [];
+  const chainOptions = allJobs.filter(j => j.shop === shop);
 
-  // Snap to a valid default whenever phase/shop changes.
   React.useEffect(() => {
     if (phase === 'scan') {
       if (!['delta', 'full'].includes(strategy)) setStrategy('delta');
@@ -651,7 +654,7 @@ function HFNewScheduleDialog({ open, onClose }) {
       const resp = await fetch('/api/cron', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop, phase, strategy, cron_expression: cron }),
+        body: JSON.stringify({ shop, phase, strategy, cron_expression: cron, chain_to_id: chainToId || null }),
       });
       if (!resp.ok) {
         const d = await resp.json().catch(() => ({}));
@@ -707,6 +710,16 @@ function HFNewScheduleDialog({ open, onClose }) {
         <HFField label="Frequency" required>
           <HFCronFrequencyPicker value={cron} onChange={setCron}/>
         </HFField>
+        <HFField label="Chain to" hint="Spawn this job automatically after the selected job finishes">
+          <HFSelect
+            value={chainToId ? String(chainToId) : ''}
+            onChange={v => setChainToId(v ? parseInt(v, 10) : null)}
+            options={[
+              { value: '', label: 'None — run independently' },
+              ...chainOptions.map(j => ({ value: String(j.id), label: j.name })),
+            ]}
+          />
+        </HFField>
         {error && <div style={{color:'var(--hf-err-ink)', fontSize:13, marginTop:4}}>{error}</div>}
       </HFModalBody>
       <HFModalFoot>
@@ -724,22 +737,32 @@ function HFEditScheduleDialog({ open, job, onClose }) {
   const [phase, setPhase] = React.useState(job?.phase || 'scan');
   const [strategy, setStrategy] = React.useState(job?.strategy || '');
   const [cron, setCron] = React.useState(job?.cron || '');
+  const [chainToId, setChainToId] = React.useState(job?.chain_to_id || null);
   const [shopStrategies, setShopStrategies] = React.useState([]);
+  const [allJobs, setAllJobs] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
   React.useEffect(() => {
-    if (job) { setPhase(job.phase || 'scan'); setStrategy(job.strategy || ''); setCron(job.cron || ''); setError(''); }
+    if (job) {
+      setPhase(job.phase || 'scan');
+      setStrategy(job.strategy || '');
+      setCron(job.cron || '');
+      setChainToId(job.chain_to_id || null);
+      setError('');
+    }
   }, [job]);
 
-  // Look up the job's shop so we know which discover strategies are
-  // configured (vaga: sitemap/categories/full_crawl; pegasas: graphql/lupasearch).
   React.useEffect(() => {
-    if (!open || !job?.shop) { setShopStrategies([]); return; }
+    if (!open || !job?.shop) { setShopStrategies([]); setAllJobs([]); return; }
     fetch(`/api/shops/${encodeURIComponent(job.shop)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => setShopStrategies(d?.discover_strategies || []))
       .catch(() => setShopStrategies([]));
+    fetch('/api/cron')
+      .then(r => r.json())
+      .then(d => setAllJobs(d.jobs || []))
+      .catch(() => setAllJobs([]));
   }, [open, job?.shop]);
 
   React.useEffect(() => {
@@ -751,6 +774,8 @@ function HFEditScheduleDialog({ open, job, onClose }) {
     if (!shopStrategies.includes(strategy)) setStrategy(shopStrategies[0]);
   }, [phase, shopStrategies.join(',')]);
 
+  const chainOptions = allJobs.filter(j => j.shop === job?.shop && j.id !== job?.id);
+
   const handleSave = async () => {
     if (!cron.trim() || !job?.id) return;
     setSaving(true); setError('');
@@ -758,7 +783,13 @@ function HFEditScheduleDialog({ open, job, onClose }) {
       const resp = await fetch(`/api/cron/${job.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phase, strategy, cron_expression: cron }),
+        body: JSON.stringify({
+          phase,
+          strategy,
+          cron_expression: cron,
+          chain_to_id: chainToId || null,
+          clear_chain: chainToId === null,
+        }),
       });
       if (!resp.ok) {
         const d = await resp.json().catch(() => ({}));
@@ -805,6 +836,16 @@ function HFEditScheduleDialog({ open, job, onClose }) {
         </HFField>
         <HFField label="Frequency" required>
           <HFCronFrequencyPicker value={cron} onChange={setCron}/>
+        </HFField>
+        <HFField label="Chain to" hint="Spawn this job automatically after the selected job finishes">
+          <HFSelect
+            value={chainToId ? String(chainToId) : ''}
+            onChange={v => setChainToId(v ? parseInt(v, 10) : null)}
+            options={[
+              { value: '', label: 'None — run independently' },
+              ...chainOptions.map(j => ({ value: String(j.id), label: j.name })),
+            ]}
+          />
         </HFField>
         {error && <div style={{color:'var(--hf-err-ink)', fontSize:13, marginTop:4}}>{error}</div>}
       </HFModalBody>
