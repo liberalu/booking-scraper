@@ -2098,6 +2098,7 @@ def api_cron_detail(job_id: int, session: Session = Depends(get_db)) -> dict[str
         "cron": job.cron_expression,
         "enabled": job.enabled,
         "last_run_at": job.last_run_at.isoformat() if job.last_run_at else None,
+        "chain_to_id": job.chain_to_job_id,
         "upcoming": upcoming,
         "last24": last24,
         "stats": {
