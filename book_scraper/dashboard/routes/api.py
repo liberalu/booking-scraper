@@ -55,6 +55,7 @@ from book_scraper.dashboard.queries import (
 )
 from book_scraper.db import scrape_run_events as run_event_types
 from book_scraper.db.models import (
+    CronJob,
     DiscoveredUrl,
     ScrapeFailure,
     ScrapeRun,
@@ -538,6 +539,7 @@ class NewRunRequest(BaseModel):
     strategy: str = ""
     mode: str = "delta"
     urls: str = ""  # specific URL(s) for single-item rescrape; bypasses mode
+    cron_job_id: int | None = None
 
 
 def _preflight_checks(
@@ -592,6 +594,7 @@ def _spawn_scrapy_in_container(
     strategy: str = "",
     mode: str = "delta",
     urls: str = "",
+    cron_job_id: int | None = None,
 ) -> None:
     """Fire-and-forget a `scrapy crawl` inside the scraper container.
 
@@ -624,6 +627,8 @@ def _spawn_scrapy_in_container(
             cmd.extend(["-a", "rescrape=true"])
         elif mode == "sample":
             cmd.extend(["-a", "max_urls=10"])
+    if cron_job_id is not None:
+        cmd.extend(["-a", f"cron_job_id={cron_job_id}"])
 
     containers[0].exec_run(
         cmd,
@@ -667,6 +672,7 @@ def api_create_run(
         strategy=req.strategy,
         mode=req.mode,
         urls=req.urls,
+        cron_job_id=req.cron_job_id,
     )
     return {
         "status": "started",
@@ -1904,6 +1910,17 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
                 next_in_s = None
 
             metrics = _cron_job_metrics(session, j.shop_id, run_phase)
+            chain_job = (
+                session.get(CronJob, j.chain_to_job_id)
+                if j.chain_to_job_id
+                else None
+            )
+            chain_to_name = (
+                f"{chain_job.shop.name}.{chain_job.phase}"
+                f".{chain_job.strategy or 'default'}"
+                if chain_job
+                else None
+            )
             result.append(
                 {
                     "id": j.id,
@@ -1920,6 +1937,8 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
                     "next": _fmt_next(next_in_s) if j.enabled else "—",
                     "next_run_at": next_dt.isoformat() if next_dt and j.enabled else None,
                     "avg_dur": _fmt_dur(metrics["avg_dur_s"]),
+                    "chain_to_id": j.chain_to_job_id,
+                    "chain_to_name": chain_to_name,
                 }
             )
         except Exception:
@@ -2109,6 +2128,7 @@ class _CronJobBody(BaseModel):
     phase: str
     strategy: str = ""
     cron_expression: str
+    chain_to_id: int | None = None
 
 
 @router.post("/cron")
@@ -2122,6 +2142,10 @@ def api_cron_create(
         raise HTTPException(
             status_code=422, detail="phase must be 'discover' or 'scan'"
         )
+    if body.chain_to_id is not None:
+        chain_target = get_cron_job(session, body.chain_to_id)
+        if chain_target is None:
+            raise HTTPException(status_code=404, detail="Chain target job not found")
     strategy = body.strategy.strip() or None
     job = create_cron_job(
         session,
@@ -2130,6 +2154,7 @@ def api_cron_create(
         strategy=strategy,
         args="",
         cron_expression=body.cron_expression,
+        chain_to_job_id=body.chain_to_id,
     )
     session.commit()
     return {
@@ -2142,6 +2167,8 @@ class _CronJobPatch(BaseModel):
     cron_expression: str | None = None
     phase: str | None = None
     strategy: str | None = None
+    chain_to_id: int | None = None
+    clear_chain: bool = False  # set True to explicitly set chain_to_job_id to None
 
 
 @router.patch("/cron/{job_id}")
@@ -2162,6 +2189,13 @@ def api_cron_update(
         fields["phase"] = body.phase
     if body.strategy is not None:
         fields["strategy"] = body.strategy.strip() or None
+    if body.chain_to_id is not None:
+        chain_target = get_cron_job(session, body.chain_to_id)
+        if chain_target is None:
+            raise HTTPException(status_code=404, detail="Chain target job not found")
+        fields["chain_to_job_id"] = body.chain_to_id
+    elif body.clear_chain:
+        fields["chain_to_job_id"] = None
     if fields:
         update_cron_job(session, job_id, **fields)
         session.commit()

@@ -1208,3 +1208,57 @@ def test_retry_run_no_match_returns_400(
 def test_retry_run_404_when_missing(client: TestClient) -> None:
     resp = client.post("/api/runs/999999999/retry")
     assert resp.status_code == 404
+
+
+@pytest.mark.integration
+def test_api_cron_exposes_chain_to_id(client: TestClient, db_session: Session) -> None:
+    from book_scraper.db.repo import create_cron_job, upsert_shop
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    job_a = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    job_b = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 3 * * *",
+        chain_to_job_id=job_a.id,
+    )
+    db_session.commit()
+
+    resp = client.get("/api/cron")
+    assert resp.status_code == 200
+    jobs = {j["id"]: j for j in resp.json()["jobs"]}
+
+    assert jobs[job_a.id]["chain_to_id"] is None
+    assert jobs[job_b.id]["chain_to_id"] == job_a.id
+    assert jobs[job_b.id]["chain_to_name"] is not None
+
+
+@pytest.mark.integration
+def test_api_cron_create_with_chain(client: TestClient, db_session: Session) -> None:
+    from book_scraper.db.repo import create_cron_job, get_cron_job, upsert_shop
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    job_a = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.commit()
+
+    resp = client.post(
+        "/api/cron",
+        json={
+            "shop": "vaga",
+            "phase": "scan",
+            "strategy": "",
+            "cron_expression": "0 3 * * *",
+            "chain_to_id": job_a.id,
+        },
+    )
+    assert resp.status_code == 200
+    new_id = resp.json()["id"]
+
+    db_session.expire_all()
+    saved = get_cron_job(db_session, new_id)
+    assert saved.chain_to_job_id == job_a.id
