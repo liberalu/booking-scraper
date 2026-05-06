@@ -224,6 +224,11 @@ def _parse_phase(phase: str) -> tuple[str, str]:
     return "scan", "delta"
 
 
+_DISCOVER_STRATEGIES = frozenset(
+    ("sitemap", "categories", "full_crawl", "graphql", "lupasearch")
+)
+
+
 def _cron_run_phase(job_phase: str, job_strategy: str | None) -> str:
     """Compute the scrape_runs.phase value that corresponds to this cron job.
 
@@ -233,8 +238,7 @@ def _cron_run_phase(job_phase: str, job_strategy: str | None) -> str:
     """
     if job_phase == "scan":
         return "scan"
-    # discover_* — only concatenate if strategy is a real discover sub-phase
-    if job_strategy and job_strategy in ("sitemap", "categories", "full_crawl"):
+    if job_strategy and job_strategy in _DISCOVER_STRATEGIES:
         return f"discover_{job_strategy}"
     return job_phase or "scan"
 
@@ -1887,37 +1891,40 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
     now = datetime.now(UTC)
     result = []
     for j in jobs:
-        run_phase = _cron_run_phase(j.phase, j.strategy)
-        # Next fire time via croniter
-        next_dt: datetime | None
-        next_in_s: int | None
         try:
-            cron = croniter(j.cron_expression, now)
-            next_dt = cron.get_next(datetime).replace(tzinfo=UTC)
-            next_in_s = int((next_dt - now).total_seconds())
-        except Exception:
-            next_dt = None
-            next_in_s = None
+            run_phase = _cron_run_phase(j.phase, j.strategy)
+            next_dt: datetime | None
+            next_in_s: int | None
+            try:
+                cron = croniter(j.cron_expression, now)
+                next_dt = cron.get_next(datetime).replace(tzinfo=UTC)
+                next_in_s = int((next_dt - now).total_seconds())
+            except Exception:
+                next_dt = None
+                next_in_s = None
 
-        metrics = _cron_job_metrics(session, j.shop_id, run_phase)
-        result.append(
-            {
-                "id": j.id,
-                "name": f"{j.shop.name}.{j.phase}.{j.strategy or 'default'}",
-                "shop": j.shop.name,
-                "phase": j.phase,
-                "strategy": j.strategy or "",
-                "args": j.args or "",
-                "cron": j.cron_expression,
-                "enabled": j.enabled,
-                "last": _rel(j.last_run_at),
-                "last_run_at": j.last_run_at.isoformat() if j.last_run_at else None,
-                "last_status": metrics["last_status"] or "ok",
-                "next": _fmt_next(next_in_s) if j.enabled else "—",
-                "next_run_at": next_dt.isoformat() if next_dt and j.enabled else None,
-                "avg_dur": _fmt_dur(metrics["avg_dur_s"]),
-            }
-        )
+            metrics = _cron_job_metrics(session, j.shop_id, run_phase)
+            result.append(
+                {
+                    "id": j.id,
+                    "name": f"{j.shop.name}.{j.phase}.{j.strategy or 'default'}",
+                    "shop": j.shop.name,
+                    "phase": j.phase,
+                    "strategy": j.strategy or "",
+                    "args": j.args or "",
+                    "cron": j.cron_expression,
+                    "enabled": j.enabled,
+                    "last": _rel(j.last_run_at),
+                    "last_run_at": j.last_run_at.isoformat() if j.last_run_at else None,
+                    "last_status": metrics["last_status"] or "ok",
+                    "next": _fmt_next(next_in_s) if j.enabled else "—",
+                    "next_run_at": next_dt.isoformat() if next_dt and j.enabled else None,
+                    "avg_dur": _fmt_dur(metrics["avg_dur_s"]),
+                }
+            )
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).exception("api_cron: skipping job %d", j.id)
     return {"jobs": result}
 
 

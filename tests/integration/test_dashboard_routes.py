@@ -199,6 +199,33 @@ def test_api_cron(client: TestClient) -> None:
 
 
 @pytest.mark.integration
+def test_api_cron_returns_200_with_graphql_strategy_job(
+    client: TestClient, db_session: Session
+) -> None:
+    """Regression: graphql/lupasearch strategies must not crash /api/cron."""
+    from book_scraper.db.repo import create_cron_job, upsert_shop
+
+    shop = upsert_shop(db_session, "pegasas", "https://www.pegasas.lt")
+    create_cron_job(
+        db_session,
+        shop_id=shop.id,
+        phase="discover",
+        strategy="graphql",
+        args="",
+        cron_expression="0 1 * * *",
+        enabled=True,
+    )
+    db_session.commit()
+
+    resp = client.get("/api/cron")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "jobs" in data
+    graphql_jobs = [j for j in data["jobs"] if j["strategy"] == "graphql"]
+    assert len(graphql_jobs) == 1
+
+
+@pytest.mark.integration
 def test_api_issues(client: TestClient) -> None:
     resp = client.get("/api/issues")
     assert resp.status_code == 200
