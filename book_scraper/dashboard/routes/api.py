@@ -1935,7 +1935,9 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
                     "last_run_at": j.last_run_at.isoformat() if j.last_run_at else None,
                     "last_status": metrics["last_status"] or "ok",
                     "next": _fmt_next(next_in_s) if j.enabled else "—",
-                    "next_run_at": next_dt.isoformat() if next_dt and j.enabled else None,
+                    "next_run_at": (
+                        next_dt.isoformat() if next_dt and j.enabled else None
+                    ),
                     "avg_dur": _fmt_dur(metrics["avg_dur_s"]),
                     "chain_to_id": j.chain_to_job_id,
                     "chain_to_name": chain_to_name,

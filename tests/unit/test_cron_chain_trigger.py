@@ -54,10 +54,12 @@ def test_no_spawn_when_chain_to_job_id_is_none(crawler: MagicMock) -> None:
     mock_job = MagicMock()
     mock_job.chain_to_job_id = None
 
-    with patch.object(ext, "_get_chain_job", return_value=(mock_job, None)):
-        with patch.object(ext, "_spawn_chain_subprocess") as mock_spawn:
-            ext.spider_closed(spider, reason="finished")
-            mock_spawn.assert_not_called()
+    with (
+        patch.object(ext, "_get_chain_job", return_value=(mock_job, None)),
+        patch.object(ext, "_spawn_chain_subprocess") as mock_spawn,
+    ):
+        ext.spider_closed(spider, reason="finished")
+        mock_spawn.assert_not_called()
 
 
 def test_spawns_chain_on_finished(crawler: MagicMock) -> None:
@@ -77,16 +79,19 @@ def test_spawns_chain_on_finished(crawler: MagicMock) -> None:
     mock_chain_job.args = ""
     mock_chain_job.shop.name = "vaga"
 
-    with patch.object(ext, "_get_chain_job", return_value=(mock_this_job, mock_chain_job)):
-        with patch.object(ext, "_spawn_chain_subprocess") as mock_spawn:
-            ext.spider_closed(spider, reason="finished")
-            mock_spawn.assert_called_once_with(
-                phase="scan",
-                shop="vaga",
-                strategy=None,
-                args="",
-                chain_job_id=7,
-            )
+    ret = (mock_this_job, mock_chain_job)
+    with (
+        patch.object(ext, "_get_chain_job", return_value=ret),
+        patch.object(ext, "_spawn_chain_subprocess") as mock_spawn,
+    ):
+        ext.spider_closed(spider, reason="finished")
+        mock_spawn.assert_called_once_with(
+            phase="scan",
+            shop="vaga",
+            strategy=None,
+            args="",
+            chain_job_id=7,
+        )
 
 
 def test_spawns_chain_with_strategy(crawler: MagicMock) -> None:
@@ -106,13 +111,16 @@ def test_spawns_chain_with_strategy(crawler: MagicMock) -> None:
     mock_chain_job.args = ""
     mock_chain_job.shop.name = "pegasas"
 
-    with patch.object(ext, "_get_chain_job", return_value=(mock_this_job, mock_chain_job)):
-        with patch.object(ext, "_spawn_chain_subprocess") as mock_spawn:
-            ext.spider_closed(spider, reason="finished")
-            mock_spawn.assert_called_once_with(
-                phase="discover",
-                shop="pegasas",
-                strategy="graphql",
-                args="",
-                chain_job_id=2,
-            )
+    ret = (mock_this_job, mock_chain_job)
+    with (
+        patch.object(ext, "_get_chain_job", return_value=ret),
+        patch.object(ext, "_spawn_chain_subprocess") as mock_spawn,
+    ):
+        ext.spider_closed(spider, reason="finished")
+        mock_spawn.assert_called_once_with(
+            phase="discover",
+            shop="pegasas",
+            strategy="graphql",
+            args="",
+            chain_job_id=2,
+        )

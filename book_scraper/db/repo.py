@@ -2019,8 +2019,10 @@ def update_cron_job(
     job_id: int,
     **fields: Any,
 ) -> None:
-    """Update allowed fields: phase, strategy, args, cron_expression, enabled, chain_to_job_id."""
-    allowed = {"phase", "strategy", "args", "cron_expression", "enabled", "chain_to_job_id"}
+    """Update allowed fields: phase, strategy, args, cron_expression, enabled, chain_to_job_id."""  # noqa: E501
+    allowed = {
+        "phase", "strategy", "args", "cron_expression", "enabled", "chain_to_job_id"
+    }
     job = session.get(CronJob, job_id)
     if job is None:
         return
