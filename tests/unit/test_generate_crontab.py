@@ -62,3 +62,22 @@ def test_build_crontab_lines_empty_list_returns_no_lines():
     from scripts.generate_crontab import build_crontab_lines
 
     assert build_crontab_lines([]) == []
+
+
+def test_build_crontab_lines_includes_cron_job_id():
+    from scripts.generate_crontab import build_crontab_lines
+
+    jobs = [
+        SimpleNamespace(
+            id=42,
+            shop=SimpleNamespace(name="vaga"),
+            phase="discover",
+            strategy="sitemap",
+            args="",
+            cron_expression="0 2 * * *",
+            enabled=True,
+        ),
+    ]
+    lines = build_crontab_lines(jobs)
+    assert len(lines) == 1
+    assert "-a cron_job_id=42" in lines[0]

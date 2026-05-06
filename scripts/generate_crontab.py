@@ -33,6 +33,7 @@ def build_crontab_lines(jobs: "list[CronJob]") -> list[str]:
         cmd = f"{_ENV_PREFIX} {job.phase} -a shop={job.shop.name}"
         if job.strategy:
             cmd += f" -a strategy={job.strategy}"
+        cmd += f" -a cron_job_id={job.id}"
         if job.args:
             cmd += f" {job.args}"
         line = f"{job.cron_expression} {cmd} >> {_LOG_PATH} 2>&1"
