@@ -693,6 +693,9 @@ class CronJob(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    chain_to_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cron_jobs.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
