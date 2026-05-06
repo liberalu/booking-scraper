@@ -2168,7 +2168,7 @@ class _CronJobPatch(BaseModel):
     phase: str | None = None
     strategy: str | None = None
     chain_to_id: int | None = None
-    clear_chain: bool = False  # set True to explicitly set chain_to_job_id to None
+    clear_chain: bool = False
 
 
 @router.patch("/cron/{job_id}")
@@ -2189,6 +2189,10 @@ def api_cron_update(
         fields["phase"] = body.phase
     if body.strategy is not None:
         fields["strategy"] = body.strategy.strip() or None
+    if body.chain_to_id is not None and body.clear_chain:
+        raise HTTPException(
+            status_code=422, detail="Provide chain_to_id or clear_chain, not both"
+        )
     if body.chain_to_id is not None:
         chain_target = get_cron_job(session, body.chain_to_id)
         if chain_target is None:
