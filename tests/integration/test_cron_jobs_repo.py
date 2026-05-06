@@ -115,3 +115,63 @@ def test_update_last_run(db_session):
     update_cron_job_last_run(db_session, job.id, when)
     db_session.commit()
     assert get_cron_job(db_session, job.id).last_run_at == when
+
+
+def test_chain_to_job_id_create_and_update(db_session):
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    job_a = create_cron_job(
+        db_session,
+        shop_id=shop.id,
+        phase="discover",
+        strategy="sitemap",
+        args="",
+        cron_expression="0 2 * * *",
+        enabled=True,
+        chain_to_job_id=None,
+    )
+    db_session.commit()
+
+    job_b = create_cron_job(
+        db_session,
+        shop_id=shop.id,
+        phase="scan",
+        strategy=None,
+        args="",
+        cron_expression="0 3 * * *",
+        enabled=True,
+        chain_to_job_id=job_a.id,
+    )
+    db_session.commit()
+
+    # chain FK is stored
+    assert get_cron_job(db_session, job_b.id).chain_to_job_id == job_a.id
+
+    # update clears chain
+    update_cron_job(db_session, job_b.id, chain_to_job_id=None)
+    db_session.commit()
+    assert get_cron_job(db_session, job_b.id).chain_to_job_id is None
+
+    # update sets chain
+    update_cron_job(db_session, job_b.id, chain_to_job_id=job_a.id)
+    db_session.commit()
+    assert get_cron_job(db_session, job_b.id).chain_to_job_id == job_a.id
+
+
+def test_chain_to_job_id_set_null_on_delete(db_session):
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    job_a = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *", enabled=True,
+    )
+    job_b = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 3 * * *", enabled=True,
+        chain_to_job_id=job_a.id,
+    )
+    db_session.commit()
+
+    delete_cron_job(db_session, job_a.id)
+    db_session.commit()
+
+    db_session.expire(job_b)
+    assert get_cron_job(db_session, job_b.id).chain_to_job_id is None

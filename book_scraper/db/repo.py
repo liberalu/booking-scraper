@@ -1998,6 +1998,7 @@ def create_cron_job(
     args: str,
     cron_expression: str,
     enabled: bool = True,
+    chain_to_job_id: int | None = None,
 ) -> CronJob:
     job = CronJob(
         shop_id=shop_id,
@@ -2006,6 +2007,7 @@ def create_cron_job(
         args=args,
         cron_expression=cron_expression,
         enabled=enabled,
+        chain_to_job_id=chain_to_job_id,
     )
     session.add(job)
     session.flush()
@@ -2017,8 +2019,8 @@ def update_cron_job(
     job_id: int,
     **fields: Any,
 ) -> None:
-    """Update allowed fields: phase, strategy, args, cron_expression, enabled."""
-    allowed = {"phase", "strategy", "args", "cron_expression", "enabled"}
+    """Update allowed fields: phase, strategy, args, cron_expression, enabled, chain_to_job_id."""
+    allowed = {"phase", "strategy", "args", "cron_expression", "enabled", "chain_to_job_id"}
     job = session.get(CronJob, job_id)
     if job is None:
         return
