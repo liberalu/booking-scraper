@@ -62,6 +62,7 @@ STALL_FORCE_EXIT_S = 60  # pragma: no cover
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
     "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover
+    "book_scraper.extensions.CronChainTrigger": 520,  # pragma: no cover
 }  # pragma: no cover
 
 # Extend RETRY_EXCEPTIONS with httpx-side errors so transient network

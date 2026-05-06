@@ -578,3 +578,110 @@ class HeartbeatExtension:  # pragma: no cover
             return str(current_status) if current_status is not None else None
         finally:
             session.close()
+
+
+class CronChainTrigger:  # pragma: no cover
+    """After a cron-scheduled run finishes successfully, spawn the chained job."""
+
+    def __init__(self, crawler: Crawler) -> None:
+        self.crawler = crawler
+        self._cron_job_id: int | None = None
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "CronChainTrigger":
+        ext = cls(crawler)
+        crawler.signals.connect(ext.spider_opened, signal=signals.spider_opened)
+        crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
+        return ext
+
+    def spider_opened(self, spider: Any) -> None:
+        raw = getattr(spider, "cron_job_id", None)
+        try:
+            self._cron_job_id = int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            self._cron_job_id = None
+
+    def spider_closed(self, spider: Any, reason: str) -> None:
+        if reason != "finished":
+            return
+        if self._cron_job_id is None:
+            return
+        this_job, chain_job = self._get_chain_job(self._cron_job_id)
+        if chain_job is None:
+            return
+        self._spawn_chain_subprocess(
+            phase=chain_job.phase,
+            shop=chain_job.shop.name,
+            strategy=chain_job.strategy,
+            args=chain_job.args or "",
+            chain_job_id=chain_job.id,
+        )
+
+    def _get_chain_job(self, cron_job_id: int) -> tuple[Any, Any]:
+        from book_scraper.db.models import CronJob
+        from book_scraper.db.session import get_session_factory
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if not database_url:
+            return None, None
+        try:
+            session = get_session_factory(database_url)()
+            try:
+                this_job = session.get(CronJob, cron_job_id)
+                if this_job is None or not this_job.chain_to_job_id:
+                    return this_job, None
+                chain_job = session.get(CronJob, this_job.chain_to_job_id)
+                if chain_job is not None:
+                    _ = chain_job.shop.name  # eagerly load while session is open
+                return this_job, chain_job
+            finally:
+                session.close()
+        except Exception:
+            logger.exception(
+                "CronChainTrigger: DB lookup failed for cron_job_id=%d", cron_job_id
+            )
+            return None, None
+
+    def _spawn_chain_subprocess(
+        self,
+        *,
+        phase: str,
+        shop: str,
+        strategy: str | None,
+        args: str,
+        chain_job_id: int,
+    ) -> None:
+        import os
+        import shlex
+        import subprocess
+
+        cmd_parts = ["/app/.venv/bin/scrapy", "crawl", phase, "-a", f"shop={shop}"]
+        if phase == "discover" and strategy:
+            cmd_parts.extend(["-a", f"strategy={strategy}"])
+        cmd_parts.extend(["-a", f"cron_job_id={chain_job_id}"])
+        if args:
+            cmd_parts.extend(shlex.split(args))
+
+        env = os.environ.copy()
+        env.setdefault("PYTHONPATH", "/app")
+        cmd_str = " ".join(shlex.quote(p) for p in cmd_parts)
+
+        try:
+            subprocess.Popen(
+                cmd_parts,
+                cwd="/app",
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            logger.exception("CronChainTrigger: failed to spawn %s", cmd_str)
+            return
+
+        logger.info(
+            "CronChainTrigger: spawned chain job %d → %s (cron_job_id=%d)",
+            self._cron_job_id or -1,
+            cmd_str,
+            chain_job_id,
+        )
