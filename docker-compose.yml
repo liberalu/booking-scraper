@@ -27,6 +27,21 @@ services:
     volumes:
       - pgdata_test:/var/lib/postgresql/data
 
+  flaresolverr:
+    # Cloudflare Managed Challenge bypass. Only humanitas.lt routes
+    # through it (controlled per-shop via the [flaresolverr] block in
+    # the shop TOML); other shops continue to use httpx directly.
+    # Solves take 5–10 s and the browser session keeps the
+    # cf_clearance cookie warm across requests — see
+    # book_scraper/flaresolverr_middleware.py.
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      TZ: Europe/Vilnius
+    ports:
+      - "8191:8191"
+
   scraper:
     build:
       context: .
@@ -34,6 +49,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      flaresolverr:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
     # Default is 10s; on SIGTERM the spider's `closed()` callback runs

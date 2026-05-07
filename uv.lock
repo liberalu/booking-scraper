@@ -168,6 +168,9 @@ requires-dist = [
 ]
 provides-extras = ["dashboard", "dev"]
 
+[package.metadata.requires-dev]
+dev = []
+
 [[package]]
 name = "boolean-py"
 version = "5.0"

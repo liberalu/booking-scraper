@@ -71,7 +71,7 @@ function HFUrls({ nav, goto }) {
           {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
         </>}>
           <HFSearch placeholder="Search URL, book, shop…" width={300} value={q} onChange={setQ}/>
-          <HFFilter label="Shop"    value={shop}    options={['all','vaga','pegasas','knygos']}            onChange={setShop}/>
+          <HFFilter label="Shop"    value={shop}    options={['all','vaga','pegasas','humanitas','knygos']}            onChange={setShop}/>
           <HFFilter label="Type"    value={urlType} options={['all','product','non_product','unknown','unreachable']}    onChange={v => { setUrlType(v); setFailing(false); }}/>
           <HFFilter label="Is book" value={isBook}  options={['any','book','not_book']}                   onChange={setIsBook} allLabel="any"/>
           {failing  && <HFPill tone="err"  style={{cursor:'pointer'}} onClick={() => setFailing(false)}>Failing only ×</HFPill>}

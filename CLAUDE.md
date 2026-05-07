@@ -6,6 +6,7 @@ Multi-shop Lithuanian book price scraper built with Scrapy. Stores data in Postg
 
 - **vaga.lt** — OpenCart, HTML scraping (`sitemap` / `categories` / `full_crawl` strategies).
 - **pegasas.lt** — Magento 2 PWA, scoped to the Lithuanian-language subtree (cats 5107/5125/6122). `graphql` strategy returns full metadata; `lupasearch` strategy is a fast supplementary index for daily price/stock rescans + new-arrivals detection (via `is_new`). Scan phase is a no-op (PWA pages have no parseable HTML — all data comes from discover).
+- **humanitas.lt** — WordPress + WooCommerce + WPML, ~81k-book catalogue (mostly imported German/English academic + Lithuanian originals). Cloudflare **Managed Challenge** on every URL — bypassed via the **FlareSolverr** sidecar (`book_scraper/flaresolverr_middleware.py`, opted in per-shop via the `[flaresolverr]` block in the TOML). Discovery uses the `categories` strategy paginated at `m575a2product_limit=1000` with `cntnt01page` (the 5000 server cap hangs FS Chromium on the 17 MB response); `parse_product_page` reads the `<div class="book-info">` block and gates non-LT books via `Leidinio kalba`. Cron: Sundays 02:00 discover → 04:00 scan. Coverage on calibration: 99.3% ISBN, 96.1% year, 92.7% format.
 
 ## Key Commands
 
@@ -22,6 +23,10 @@ uv run scrapy crawl scan -a shop=vaga -a max_urls=20               # Cap scan to
 uv run scrapy crawl discover -a shop=vaga -a strategy=categories -a max_pages=3  # Cap discovery to 3 category pages
 uv run scrapy crawl discover -a shop=pegasas -a strategy=graphql   # Pegasas: full LT metadata via Magento GraphQL (rich + slow)
 uv run scrapy crawl discover -a shop=pegasas -a strategy=lupasearch  # Pegasas: fast price/stock rescan + is_new detection
+uv run scrapy crawl discover -a shop=humanitas -a strategy=categories  # Humanitas: paginated catalogue via FlareSolverr (~10 min)
+uv run scrapy crawl scan -a shop=humanitas                         # Humanitas: scan via FlareSolverr (slow — first run multi-day, then self-amortises)
+docker compose up -d flaresolverr                                  # FlareSolverr sidecar (required for humanitas)
+RUN_FLARESOLVERR_TESTS=1 uv run pytest tests/integration/test_humanitas_flaresolverr.py -v  # End-to-end FS test (opt-in)
 uv run pytest -v                              # Run tests
 uv run pytest tests/unit/ -v                  # Unit tests only (no DB)
 uv run pytest tests/integration/ -v           # Integration tests only

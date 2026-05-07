@@ -115,6 +115,34 @@ class TestDiscoverSpiderCategories:
         assert len(next_pages) == 1
         assert "page=2" in next_pages[0].url
 
+    def test_toml_max_pages_caps_when_no_cli_override(self):
+        """`max_pages` from CategoriesConfig acts as a safety cap.
+
+        Operator-supplied `-a max_pages=N` always wins; when it's
+        absent (cron-triggered runs where the args list doesn't carry
+        a CLI flag), the TOML value bounds runaway pagination.
+        """
+        spider = DiscoverSpider(shop="humanitas", strategy="categories")
+        # The humanitas TOML caps at 120; the spider should pick that up
+        # automatically with no `-a max_pages=` arg.
+        assert spider._max_pages == 120
+
+    def test_cli_max_pages_overrides_toml_safety_cap(self):
+        """Explicit CLI override always wins, including a smaller value."""
+        spider = DiscoverSpider(
+            shop="humanitas", strategy="categories", max_pages=5
+        )
+        assert spider._max_pages == 5
+
+    def test_explicit_zero_cli_max_pages_keeps_zero(self):
+        """`-a max_pages=0` is a deliberate "no cap" override; TOML must not
+        re-impose its cap on top.
+        """
+        spider = DiscoverSpider(
+            shop="humanitas", strategy="categories", max_pages=0
+        )
+        assert spider._max_pages == 0
+
 
 class TestDiscoverSpiderPropertiesMerge:
     """Regression: parser-emitted properties must survive into ShopBookItem.
@@ -618,6 +646,56 @@ class TestScanSpider:
         shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
         assert shop_book_items == []
 
+    def test_parse_product_carries_parser_emitted_properties(self, monkeypatch):
+        """Regression: parser-supplied properties (humanitas's `language`,
+        pegasas's `dimensions`/`ean`/`is_new`/`discount_rate`, …) must
+        survive into the ShopBookItem so the pipeline can persist them
+        in shop_book_attributes.
+
+        Pre-fix the scan spider only carried five hardcoded top-level
+        keys (pages/cover_type/duration/narrator/translator) and
+        silently dropped the parser's `properties` dict, even though
+        discover already had the correct merge.
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+
+        def fake_parse(_html: str) -> dict[str, object]:
+            return {
+                "title": "X",
+                "is_book_product": True,
+                "type": "book",
+                "in_stock": True,
+                "pages": 200,
+                "cover_type": "Kieti viršeliai",
+                # Parser-supplied extras — must survive.
+                "properties": {
+                    "language": "Lietuvių",
+                    "dimensions": "200 x 130 mm",
+                },
+                "categories": [],
+                "schema_types": [],
+                "book_score": 5,
+                "book_score_reasons": [],
+            }
+
+        monkeypatch.setattr(spider.parsers, "parse_product_page", fake_parse)
+
+        response = _fake_response(
+            "https://vaga.lt/test", "<html></html>", meta={"discovered_url_id": 9}
+        )
+        items = list(spider.parse_product(response))
+        shop_book_items = [i for i in items if isinstance(i, ShopBookItem)]
+        assert len(shop_book_items) == 1
+        props = shop_book_items[0]["properties"]
+        assert props is not None
+        assert props.get("language") == "Lietuvių"
+        assert props.get("dimensions") == "200 x 130 mm"
+        # Top-level keys still present too.
+        assert props.get("pages") == 200
+        assert props.get("cover_type") == "Kieti viršeliai"
+
     def test_is_anti_bot_response_matches_known_walls(self):
         from book_scraper.spiders.scan import _is_anti_bot_response
 
@@ -649,6 +727,54 @@ class TestScanSpider:
         # — assert that "platform" alone doesn't trigger.
         assert _is_anti_bot_response("This is a fun book about challenge.") is False
         assert _is_anti_bot_response("A platform for kids.") is False
+        # Cloudflare's post-clearance beacon (`cdn-cgi/challenge-platform/
+        # scripts/jsd/main.js`) ships on every protected page once the
+        # visitor has solved the challenge. It used to false-trigger the
+        # generic `challenge-platform` substring matcher and mark every
+        # FlareSolverr-rendered humanitas.lt page as anti_bot_detected.
+        assert (
+            _is_anti_bot_response(
+                "<html><body>Real product page<script src='https://example.com/"
+                "cdn-cgi/challenge-platform/scripts/jsd/main.js'></script>"
+                "</body></html>"
+            )
+            is False
+        )
+
+    def test_is_anti_bot_response_matches_real_challenge_orchestrator(self):
+        """The challenge interstitial loads `chl_page/v1?ray=…` — only that
+        path should trigger, not the post-clearance beacon."""
+        from book_scraper.spiders.scan import _is_anti_bot_response
+
+        # Real CF Managed Challenge HTML fragment captured from
+        # humanitas.lt before FlareSolverr cleared it.
+        challenge = (
+            "<html><head><title>Luktelėkite...</title></head><body>"
+            "<script src='/cdn-cgi/challenge-platform/h/g/orchestrate/"
+            "chl_page/v1?ray=9f7a27b99d15c5d3'></script></body></html>"
+        )
+        assert _is_anti_bot_response(challenge) is True
+
+    def test_is_anti_bot_response_matches_knygos_lt_challenge(self):
+        """Pre-onboarding sanity: knygos.lt also serves CF Managed Challenge.
+
+        The shop is on the roadmap (P3 follow-up). When we onboard, the
+        scan spider must mark its challenge HTML as anti_bot_detected
+        the same way it does for humanitas — without needing fresh
+        marker work. Captured from a live knygos.lt probe on
+        2026-05-07: English `Just a moment...` title + the same CF
+        orchestrator path. Both match existing markers.
+        """
+        from book_scraper.spiders.scan import _is_anti_bot_response
+
+        knygos_challenge = (
+            "<html><head><title>Just a moment...</title></head><body>"
+            "<div id='cf-please-wait'>"
+            "<script>window._cf_chl_opt={'cvId':'3','cZone':'www.knygos.lt'}"
+            ";a.src='/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/"
+            "v1?ray=9f7dddb4bbf90429';</script></div></body></html>"
+        )
+        assert _is_anti_bot_response(knygos_challenge) is True
 
     def test_parse_product_anti_bot_marks_failed_and_skips_parse(self):
         from book_scraper.spiders.scan import ScanSpider

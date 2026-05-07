@@ -71,6 +71,15 @@ class SitemapConfig(BaseModel):
 class CategoriesConfig(BaseModel):
     url: str
     max_age_hours: int = 672
+    # Safety cap on chained pagination. The discover spider chains
+    # page+1 until it sees an empty page; if a CF rate-limit blip or a
+    # transient empty response misreads as "end of catalogue" we'd be
+    # fine, but the inverse — pagination that quietly *never* ends —
+    # would burn FlareSolverr quota indefinitely. None disables the cap
+    # (per-CLI `-a max_pages=N` still works); set to a generous integer
+    # in the shop TOML to bound runaway runs. Mirrors the `-a max_pages`
+    # CLI override that takes precedence when supplied.
+    max_pages: int | None = None
 
 
 class FullCrawlConfig(BaseModel):
@@ -131,6 +140,31 @@ class ScanConfig(BaseModel):
     rescrape: bool = False
 
 
+class FlaresolverrConfig(BaseModel):
+    """Route every request for this shop through a FlareSolverr sidecar.
+
+    FlareSolverr runs a patched Chromium that solves Cloudflare's
+    Managed Challenge / Turnstile and returns the rendered HTML +
+    `cf_clearance` cookie. Used for shops where the challenge actively
+    rejects automated browsers (verified via patchright + real Brave
+    on humanitas.lt: cookie jar empty, error variant of the challenge
+    page returned). When the block is present, every request for the
+    shop goes through FS instead of httpx.
+
+    `endpoint` defaults to the `flaresolverr` Docker service name on
+    the compose network; override for local runs against a host-mapped
+    port (e.g. ``http://localhost:8191/v1``).
+
+    `session_ttl_minutes` controls how often we destroy and recreate
+    the FS session so the underlying Chromium re-mints `cf_clearance`
+    before the existing one expires (~30 min wall).
+    """
+
+    endpoint: str = "http://flaresolverr:8191/v1"
+    max_timeout_ms: int = 120_000
+    session_ttl_minutes: int = 25
+
+
 class ShopSection(BaseModel):
     name: str
     base_url: str
@@ -141,6 +175,7 @@ class ShopConfig(BaseModel):
     scraping: ScrapingConfig = ScrapingConfig()
     discover: DiscoverConfig = DiscoverConfig()
     scan: ScanConfig = ScanConfig()
+    flaresolverr: FlaresolverrConfig | None = None
     attributes: AttributesConfig | None = None
 
 

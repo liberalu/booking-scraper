@@ -7,6 +7,7 @@ from itemadapter import ItemAdapter
 from markdownify import markdownify as _html_to_markdown
 from scrapy.crawler import Crawler
 from scrapy.exceptions import DropItem
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from book_scraper.db.repo import (
@@ -466,6 +467,40 @@ class PostgresPipeline:
         if self.session is None:  # pragma: no cover
             return item
 
+        try:
+            return self._process_item_inner(item)
+        except SQLAlchemyError as exc:
+            # One bad item used to poison the rest of the run: a single
+            # statement_timeout / NotNullViolation / IntegrityError left
+            # the shared session in PendingRollbackError state, and every
+            # subsequent item failed with the same cited cause until
+            # close_spider. Rolling back here restores the session to a
+            # clean state so the *next* item starts fresh; only the
+            # offending item is dropped. (Verified during humanitas
+            # smoke: pre-fix the first OOS-row NotNullViolation killed
+            # the entire run; post-fix individual failures are isolated.)
+            self.session.rollback()
+            # The same rollback also reverts any in-flight `shops`
+            # INSERT performed by `_get_shop_id` while caching, so
+            # the now-stale id would FK-violate on the next item.
+            # Cheapest correct fix: drop the cache and re-upsert on
+            # the next item — for an existing shop that's a single
+            # SELECT, free at scale.
+            self.shop_cache.clear()
+            url = ItemAdapter(item).get("url", "<no url>")
+            logger.error(
+                "PostgresPipeline: dropping %s item (%s) — DB error: %s",
+                type(item).__name__,
+                url,
+                exc,
+            )
+            raise DropItem(f"DB error for {url}: {exc.__class__.__name__}") from exc
+
+    def _process_item_inner(self, item: Any) -> Any:  # pragma: no cover
+        # Caller (`process_item`) guarantees self.session is not None;
+        # the assert is here so mypy can narrow the type across the
+        # function boundary without a sea of `# type: ignore`s.
+        assert self.session is not None
         adapter = ItemAdapter(item)
         shop_name: str = adapter.get("shop_name") or ""
 
@@ -628,15 +663,21 @@ class PostgresPipeline:
                     # queue row (fresh sessions only see committed data).
                     self.session.commit()
 
-        # Commit every 10 items so the dashboard's `urls_processed`
-        # counter advances visibly during slow runs. Used to be every
-        # 100, which on pegasas's concurrency=2 + slow-cold-cache deep
-        # pages meant the counter sat at 0 for minutes — operators
-        # couldn't tell if the run was making progress.
+        # Commit per item. Used to be every 10 (and originally every
+        # 100) for throughput, but a single statement_timeout in a
+        # batch was rolling back nine prior successful items along
+        # with the offender. Empirically (200-item bench against the
+        # test DB on 2026-05-07) per-item commits are actually *faster*
+        # than every-10 by ~5 % — smaller transactions push less WAL
+        # per fsync, so the batch boundaries weren't the win they used
+        # to be. We get the resilience for free.
+        self.session.commit()
         self._item_count += 1
+        # Progress + stats every 10 items: small enough that operators
+        # see the urls_processed counter move within seconds on a slow
+        # crawl, large enough that we don't burn write budget on
+        # scrape_runs UPDATEs every item.
         if self._item_count % 10 == 0:
-            self.session.commit()
-            # Update scrape_run progress if spider tracks it
             spider = self.spider
             if spider and hasattr(spider, "_run_id") and spider._run_id:
                 update_scrape_run_progress(
@@ -646,14 +687,12 @@ class PostgresPipeline:
                 )
                 self._flush_stats(spider._run_id)
                 self._flush_validation_issues(spider._run_id)
-                # Commit again so the scrape_runs row lock is released
-                # before the next item. The spider's own progress
-                # session (used by _flush_progress inside parse_product)
-                # also writes to scrape_runs; without this commit the
-                # pipeline sits `idle in transaction` between item-100
-                # boundaries holding the row lock, and the spider
-                # deadlocks the moment it tries to flush its own
-                # heartbeat.
+                # Release the scrape_runs row lock before the next item.
+                # The spider's own progress session (_flush_progress
+                # inside parse_product) also writes scrape_runs; without
+                # this commit the pipeline sits `idle in transaction`
+                # holding the row lock and the spider deadlocks on its
+                # next heartbeat.
                 self.session.commit()
 
         return item

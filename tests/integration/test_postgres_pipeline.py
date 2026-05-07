@@ -147,3 +147,52 @@ class TestPostgresPipelineShopCache:
         )
         pipeline.process_item(item)
         assert "vaga" in pipeline.shop_cache
+
+
+@pytest.mark.integration
+class TestPostgresPipelineErrorIsolation:
+    """One bad item must not poison the shared session for following items.
+
+    Pre-fix, a single SQLAlchemyError (NotNullViolation, statement_timeout, …)
+    left the long-lived session in PendingRollbackError state and every
+    subsequent item failed citing the same original exception, until
+    ``close_spider``. Verified during humanitas.lt smoke. The pipeline
+    now rolls back per-item failures and continues.
+    """
+
+    def test_db_error_on_one_item_does_not_block_next_items(
+        self, pipeline, db_session
+    ):
+        from scrapy.exceptions import DropItem
+
+        # First item — `prices.in_stock` is NOT NULL on this schema, so
+        # passing None forces a NotNullViolation when insert_price runs.
+        # Pre-fix this would poison the session and the next item
+        # would fail with PendingRollbackError citing the same cause.
+        bad = ShopBookItem(
+            url="https://vaga.lt/poison-row",
+            shop_name="vaga",
+            title="Bad Item",
+            price="9.99",
+            in_stock=None,
+        )
+        with pytest.raises(DropItem):
+            pipeline.process_item(bad)
+
+        # Subsequent item must persist cleanly.
+        ok = ShopBookItem(
+            url="https://vaga.lt/healthy-row",
+            shop_name="vaga",
+            title="Healthy Row",
+            price="12.99",
+            in_stock=True,
+        )
+        result = pipeline.process_item(ok)
+        assert result is ok
+        survivor = (
+            db_session.query(ShopBook)
+            .filter_by(url="https://vaga.lt/healthy-row")
+            .first()
+        )
+        assert survivor is not None
+        assert survivor.title == "Healthy Row"

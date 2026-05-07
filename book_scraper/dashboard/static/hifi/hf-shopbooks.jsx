@@ -221,7 +221,7 @@ function HFShopBooks({ nav, goto }) {
         </>}>
           <HFSearch placeholder="Title, author, ISBN…" width={260} value={q} onChange={setQ}/>
           <HFSearch placeholder="Category…" width={160} value={category} onChange={setCategory}/>
-          <HFFilter label="Shop"    value={shop}     options={['all','vaga','pegasas','knygos']}     onChange={setShop}/>
+          <HFFilter label="Shop"    value={shop}     options={['all','vaga','pegasas','humanitas','knygos']}     onChange={setShop}/>
           <HFFilter label="Active"  value={active}   options={['all','true','false']}                onChange={setActive}/>
           <HFFilter label="Type"    value={bookType} options={['all','book','non_book','audio','ebook']} onChange={setBookType}/>
           <HFFilter label="Missing" value={missing}  options={['any','author','isbn','year','publisher','format','price']} onChange={setMissing} allLabel="any"/>
@@ -422,6 +422,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
             { id:'overview',       label:'Overview' },
+            { id:'details',        label:'Details',        count: 13 + Object.keys(data.attributes||{}).length },
             { id:'prices',         label:'Prices',         count: priceHistory.length || undefined },
             { id:'changes',        label:'Changes',        count: changes.length || undefined },
             { id:'issues',         label:'Issues',         count: data.issues || undefined },
@@ -468,21 +469,19 @@ function HFShopBookDetail({ nav, goto, params }) {
           );
         })()}
 
-        <HFCard title="Metadata" sub="extracted fields">
+        <HFCard title="Metadata" sub="key fields">
           <div style={{padding:`2px 0 6px`}}>
             {[
-              ['Type',        data.type ? data.type.replace('_', ' ') : '—', data.type && data.type !== 'non_book'],
-              ['URL type',    data.url_status || '—',   data.url_status && data.url_status !== 'non_product'],
-              ['ISBN',        data.isbn || '—',        data.isbn],
-              ['Author',      data.author || '—',      data.author],
-              ['Publisher',   data.publisher || '—',   data.publisher],
-              ['Year',        data.year ? String(data.year) : '—', data.year],
-              ['Format',      data.format || '—',      data.format],
-              ['Rating',      data.rating != null ? `${Number(data.rating).toFixed(1)} / 5.0` : '—', data.rating != null],
-              ['Reviews',     data.review_count != null ? Number(data.review_count).toLocaleString() : '—', data.review_count != null],
-              ['In stock',    data.in_stock ? 'yes' : 'no',  data.in_stock !== null],
-              ['First seen',  fmtDate(data.first_seen_at),   true],
-              ['Last seen',   fmtDate(data.last_seen_at),    true],
+              ['Type',       data.type ? data.type.replace('_', ' ') : '—', data.type && data.type !== 'non_book'],
+              ['ISBN',       data.isbn || '—',        data.isbn],
+              ['Author',     data.author || '—',      data.author],
+              ['Publisher',  data.publisher || '—',   data.publisher],
+              ['Year',       data.year ? String(data.year) : '—', data.year],
+              ['Format',     data.format || '—',      data.format],
+              ['In stock',   data.in_stock ? 'yes' : 'no', data.in_stock !== null],
+              ['Rating',     data.rating != null ? `${Number(data.rating).toFixed(1)} / 5.0` : '—', data.rating != null],
+              ['First seen', fmtDate(data.first_seen_at), true],
+              ['Last seen',  fmtDate(data.last_seen_at),  true],
             ].map(([k, v, ok], i, arr) => (
               <div key={k} style={{
                 display:'grid', gridTemplateColumns:'110px 1fr 14px',
@@ -825,6 +824,66 @@ function HFShopBookDetail({ nav, goto, params }) {
             </div>
           </HFCard>
         </>);
+      })()}
+
+      {tab === 'details' && (() => {
+        const coreRows = [
+          ['Type',       data.type ? data.type.replace('_', ' ') : '—', data.type && data.type !== 'non_book'],
+          ['URL type',   data.url_status || '—',   data.url_status && data.url_status !== 'non_product'],
+          ['ISBN',       data.isbn || '—',        data.isbn],
+          ['SKU',        data.sku || '—',         data.sku],
+          ['Author',     data.author || '—',      data.author],
+          ['Publisher',  data.publisher || '—',   data.publisher],
+          ['Year',       data.year ? String(data.year) : '—', data.year],
+          ['Format',     data.format || '—',      data.format],
+          ['Rating',     data.rating != null ? `${Number(data.rating).toFixed(1)} / 5.0` : '—', data.rating != null],
+          ['Reviews',    data.review_count != null ? Number(data.review_count).toLocaleString() : '—', data.review_count != null],
+          ['In stock',   data.in_stock ? 'yes' : 'no', data.in_stock !== null],
+          ['First seen', fmtDate(data.first_seen_at), true],
+          ['Last seen',  fmtDate(data.last_seen_at),  true],
+        ];
+        const attrs = Object.entries(data.attributes || {});
+        const rowStyle = (i, total) => ({
+          display:'grid', gridTemplateColumns:'130px 1fr 14px',
+          padding:`7px var(--hf-card-p)`, alignItems:'center',
+          borderBottom: i < total-1 ? `1px solid var(--hf-border-faint)` : 'none',
+          fontSize:13,
+        });
+        const coreTotal = coreRows.length + (attrs.length > 0 ? 1 : 0);
+        return (
+          <HFCard title="All fields" sub={`${coreRows.length} structured · ${attrs.length} shop attrs`}>
+            <div style={{padding:`2px 0 6px`}}>
+              {coreRows.map(([k, v, ok], i) => (
+                <div key={k} style={rowStyle(i, coreTotal)}>
+                  <span style={{color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)', fontSize:12}}>{k}</span>
+                  <span style={{color: v==='—'? 'var(--hf-ink4)' : 'var(--hf-ink)', fontWeight: v==='—'? 400 : 500}}>{v}</span>
+                  <span style={{color: ok? 'var(--hf-ok)' : 'var(--hf-warn)', display:'flex', justifyContent:'flex-end'}}>
+                    {ok ? HF_ICONS.check : HF_ICONS.bang}
+                  </span>
+                </div>
+              ))}
+              {attrs.length > 0 && <>
+                <div style={{padding:`4px var(--hf-card-p) 3px`, display:'flex', alignItems:'center', gap:8}}>
+                  <span style={{color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em'}}>shop attrs</span>
+                  <div style={{flex:1, height:1, background:'var(--hf-border-faint)'}}/>
+                </div>
+                {attrs.map(([k, v], i) => {
+                  const label = k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+                  const empty = v == null || v === '';
+                  return (
+                    <div key={k} style={rowStyle(i, attrs.length)}>
+                      <span style={{color:'var(--hf-ink3)', fontFamily:'var(--hf-mono)', fontSize:12}}>{label}</span>
+                      <span style={{color: empty ? 'var(--hf-ink4)' : 'var(--hf-ink)', fontWeight: empty ? 400 : 500}}>
+                        {empty ? '—' : String(v)}
+                      </span>
+                      <span/>
+                    </div>
+                  );
+                })}
+              </>}
+            </div>
+          </HFCard>
+        );
       })()}
 
       {tab === 'raw' && (

@@ -22,10 +22,34 @@ _ENV_PREFIX = (
     "DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper "
     "PYTHONPATH=. /app/.venv/bin/python -m scrapy crawl"
 )
+_SYSTEM_ENV_PREFIX = (
+    "cd /app && "
+    "DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper "
+    "PYTHONPATH=. /app/.venv/bin/python"
+)
+# System-level cron entries: not modelled in `cron_jobs` because they
+# don't map to a per-shop scrapy phase. Appended after the dynamic
+# rows so they survive an empty cron_jobs table.
+#
+#  - Daily health summary at 09:00 UTC (~3 h after pegasas, ~2 h after
+#    humanitas Sunday): one line to scraper.log of completed/failed
+#    runs in the last 24 h. Operators tail or grep this for a
+#    lightweight heartbeat without standing up Slack/email/PagerDuty.
+_SYSTEM_LINES: tuple[str, ...] = (
+    (
+        f"0 9 * * * {_SYSTEM_ENV_PREFIX} /app/scripts/cron_health_check.py"
+        f" >> {_LOG_PATH} 2>&1"
+    ),
+)
 
 
 def build_crontab_lines(jobs: "list[CronJob]") -> list[str]:
-    """Return one crontab line per enabled job."""
+    """Return one crontab line per enabled job + fixed system entries.
+
+    The system entries (health summary, etc.) are appended last so they
+    don't get suppressed by an empty `cron_jobs` table — the crontab
+    still has them whenever ``generate_crontab.py`` runs.
+    """
     lines: list[str] = []
     for job in jobs:
         if not job.enabled:
@@ -38,6 +62,7 @@ def build_crontab_lines(jobs: "list[CronJob]") -> list[str]:
             cmd += f" {job.args}"
         line = f"{job.cron_expression} {cmd} >> {_LOG_PATH} 2>&1"
         lines.append(line)
+    lines.extend(_SYSTEM_LINES)
     return lines
 
 

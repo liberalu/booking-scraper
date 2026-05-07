@@ -76,6 +76,18 @@ class DiscoverSpider(scrapy.Spider):
             raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
         self.strategy_conf: Any = strategy_conf
 
+        # TOML max_pages fallback: when the operator didn't pass
+        # `-a max_pages=N` on the CLI, fall back to the strategy's
+        # configured cap (currently exposed on CategoriesConfig). Acts
+        # as a safety net against runaway chained pagination during
+        # cron-triggered runs where no CLI override is supplied.
+        # Explicit CLI `-a max_pages=` always wins, including
+        # `-a max_pages=0` which means "no cap, override the TOML".
+        if not str(max_pages).strip() and self._max_pages == 0:
+            toml_cap = getattr(strategy_conf, "max_pages", None)
+            if isinstance(toml_cap, int) and toml_cap > 0:
+                self._max_pages = toml_cap
+
         self._run_id: int | None = None
         self._shop_id: int | None = None
         self._urls_processed: int = 0

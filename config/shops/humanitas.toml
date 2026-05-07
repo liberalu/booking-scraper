@@ -1,0 +1,66 @@
+[shop]
+name = "humanitas"
+base_url = "https://www.humanitas.lt"
+
+[scraping]
+# FlareSolverr is the bottleneck (~1–3 s per request, can spike to 10 s
+# while the browser warms up). Two parallel sessions saturate one FS
+# container; bump only after horizontally scaling FS.
+download_delay = 0.5
+concurrent_requests_per_domain = 2
+batch_size = 50
+batch_pause = 5
+max_retries = 2
+# FS waits up to 90–120 s for the browser to settle on a cold-start
+# challenge solve. Keep client-side timeouts well above that so we
+# don't kill the FS POST mid-render.
+connect_timeout = 15
+read_timeout = 180
+hard_timeout = 240
+batch_timeout = 600
+
+[flaresolverr]
+# Compose service name; override locally with FLARESOLVERR_ENDPOINT or
+# by editing this file. session_ttl_minutes < the cf_clearance ~30 min
+# wall so the cookie always rotates before it expires.
+endpoint = "http://flaresolverr:8191/v1"
+max_timeout_ms = 120000
+session_ttl_minutes = 25
+
+[discover]
+# Match the LT permalink namespace. EN mirror (/product/) and the
+# /produktas/visos-knygos/ paths from the broken sitemap (which leaks
+# the dev hostname humanitas.lt.kikilis.serveriai.lt) are excluded.
+url_include_pattern = "^https://www\\.humanitas\\.lt/produktas/"
+
+[discover.categories]
+# The published sitemap.xml is unusable on production (it leaks the
+# dev hostname `humanitas.lt.kikilis.serveriai.lt` and uses the wrong
+# category slug `/produktas/visos-knygos/...`). Instead we paginate
+# the "all categories" catalogue page.
+#
+# `m575a2product_limit` silently caps at 5 000 — anything higher
+# returns the homepage with zero product cards. We use **1 000** here
+# instead: the FlareSolverr-hosted Chromium hangs on the 17 MB
+# response a `limit=5000` produces (verified on 2026-05-07: page 1
+# never finished solving + rendering, killed after >5 min). At
+# `limit=1000` each page is ~3.5 MB and renders in ~15 s. With
+# ~17 500 books that's 18 chained pages — still completes in <10 min.
+# CMSMS Products module pagination param is `cntnt01page`; the
+# discover spider chains page+1 until a page returns zero products.
+#
+# Module instance id `m575a2` is stable per deploy; if humanitas
+# redeploys with a fresh module id, this URL needs updating —
+# parse_sitemap_urls would still work (it keys on `class="book-item"`,
+# not the URL shape).
+url = "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=1000"
+max_age_hours = 24
+# Safety cap on chained pagination. A single full discover run
+# observed 2026-05-07 yielded ~81 unique pages (~80 k raw / ~17 k
+# after dedupe) at limit=1000, so 120 leaves comfortable headroom
+# while preventing a CF rate-limit blip from manufacturing an
+# infinite-pagination loop. Operators can still override via
+# `-a max_pages=N` on the CLI.
+max_pages = 120
+
+[scan]

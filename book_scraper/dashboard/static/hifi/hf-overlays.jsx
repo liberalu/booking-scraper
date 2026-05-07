@@ -874,6 +874,8 @@ function HFAddURLDialog({ open, onClose }) {
         <HFField label="Shop" required>
           <HFSelect value={shop} onChange={setShop} options={[
             { value:'vaga', label:'vaga.lt' },
+            { value:'pegasas', label:'pegasas.lt' },
+            { value:'humanitas', label:'humanitas.lt' },
             { value:'knygos', label:'knygos.lt' },
             { value:'patogupirkti', label:'patogupirkti.lt' },
           ]}/>

@@ -121,7 +121,7 @@ function HFRuns({ nav, goto }) {
           )}
         </>}>
           <HFSearch placeholder="Search by ID, shop, phase…" width={260} value={q} onChange={setQ}/>
-          <HFFilter label="Shop"    value={shop}    onChange={setShop}    options={['all','vaga','pegasas','knygos']}/>
+          <HFFilter label="Shop"    value={shop}    onChange={setShop}    options={['all','vaga','pegasas','humanitas','knygos']}/>
           <HFFilter label="Phase"   value={phase}   onChange={setPhase}   options={['all','discover','scan']}/>
           <HFFilter label="Status"  value={status}  onChange={setStatus}  options={['all','running','paused','queued','completed','failed']}/>
           <HFFilter label="When"    value={when}    onChange={setWhen}    options={['any','1h','24h','7d','30d']}/>

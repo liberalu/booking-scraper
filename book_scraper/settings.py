@@ -120,6 +120,11 @@ _file_handler.setFormatter(logging.Formatter(_fmt))  # pragma: no cover
 logging.getLogger().addHandler(_file_handler)  # pragma: no cover
 
 DOWNLOADER_MIDDLEWARES = {  # pragma: no cover
+    # FS first (priority 0): when the active spider's TOML has a
+    # `[flaresolverr]` block, it short-circuits the request and returns
+    # the rendered HTML; otherwise it returns None and the request
+    # falls through to httpx at priority 1.
+    "book_scraper.flaresolverr_middleware.FlaresolverrMiddleware": 0,  # noqa: E501  # pragma: no cover
     "book_scraper.download_handler.HttpxMiddleware": 1,  # pragma: no cover
 }  # pragma: no cover
 

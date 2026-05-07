@@ -30,9 +30,15 @@ from book_scraper.spiders.registry import load_parsers
 ANTI_BOT_MARKERS: tuple[str, ...] = (
     # Cloudflare challenge / Bot Fight Mode
     "just a moment...",
+    "luktelėkite",  # Lithuanian "Just a moment…" used by humanitas.lt
     "checking your browser before accessing",
     "cf-browser-verification",
-    "challenge-platform",
+    # Tighter than just "challenge-platform": that substring also
+    # appears in the legitimate post-clearance beacon CF injects
+    # (`cdn-cgi/challenge-platform/scripts/jsd/main.js`) on every
+    # protected page once the visitor has cleared. The orchestrator
+    # path below only renders on the interstitial itself.
+    "challenge-platform/h/g/orchestrate/chl_page",
     # Akamai
     "pardon our interruption",
     # Datadome
@@ -472,10 +478,20 @@ class ScanSpider(scrapy.Spider):
             )
             return
 
-        # Build properties dict from format-specific fields
+        # Build properties dict from format-specific fields. Merge in
+        # the parser-supplied `properties` dict first so shop-specific
+        # extras (e.g. humanitas's `language` from `Leidinio kalba`,
+        # pegasas's `dimensions`/`ean`/`is_new`/`discount_rate`) survive
+        # into shop_book_attributes — without this, anything outside
+        # the five hardcoded top-level keys was silently dropped during
+        # scan-side ingestion. Discover already had the correct merge;
+        # this brings scan to parity.
         props: dict[str, object] = {}
+        parser_props = data.get("properties")
+        if isinstance(parser_props, dict):
+            props.update(parser_props)
         for key in ("pages", "cover_type", "duration", "narrator", "translator"):
-            if data.get(key) is not None:
+            if data.get(key) is not None and key not in props:
                 props[key] = data[key]
 
         item = ShopBookItem(
