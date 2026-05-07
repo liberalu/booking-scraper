@@ -37,30 +37,36 @@ url_include_pattern = "^https://www\\.humanitas\\.lt/produktas/"
 # The published sitemap.xml is unusable on production (it leaks the
 # dev hostname `humanitas.lt.kikilis.serveriai.lt` and uses the wrong
 # category slug `/produktas/visos-knygos/...`). Instead we paginate
-# the "all categories" catalogue page.
+# the "all categories" catalogue page with the CMSMS Products module's
+# server-side language filter applied.
 #
-# `m575a2product_limit` silently caps at 5 000 — anything higher
-# returns the homepage with zero product cards. We use **1 000** here
-# instead: the FlareSolverr-hosted Chromium hangs on the 17 MB
-# response a `limit=5000` produces (verified on 2026-05-07: page 1
-# never finished solving + rendering, killed after >5 min). At
-# `limit=1000` each page is ~3.5 MB and renders in ~15 s. With
-# ~17 500 books that's 18 chained pages — still completes in <10 min.
-# CMSMS Products module pagination param is `cntnt01page`; the
-# discover spider chains page+1 until a page returns zero products.
+# Why the LT-language filter is load-bearing:
+#   - Without it the unfiltered catalogue is ~81 k books, mostly
+#     imported German/English academic titles. The LT subset is
+#     ~5 k books — 16× smaller.
+#   - With `m575a2filt_leidimo_kalba=Lithuanian`, page 1 at
+#     `m575a2product_limit=5000` returns ~5 000 LT books in a single
+#     FlareSolverr round trip (~17 s). Page 2 picks up the ~20
+#     stragglers; page 3 is empty. Verified 2026-05-07.
+#   - Pagination at limit=5000 with the filter is somewhat unreliable
+#     (pages 1+2 overlap ~99 % — CMSMS quirk). The spider's stop-on-
+#     empty behaviour + max_pages=3 safety cap handles it cleanly.
+#   - Each `<a class="book-item">` card on the listing already
+#     carries title + author + final price + original price + image,
+#     so discover persists Price rows for the whole LT catalogue in
+#     ~35 s. The scan phase becomes a delta (only first-sight metadata
+#     enrichment for ISBN/year/pages/format) instead of a weekly grind.
 #
 # Module instance id `m575a2` is stable per deploy; if humanitas
 # redeploys with a fresh module id, this URL needs updating —
-# parse_sitemap_urls would still work (it keys on `class="book-item"`,
-# not the URL shape).
-url = "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=1000"
+# `parse_category_page` would still work (it keys on
+# `class="book-item"`, not the URL shape).
+url = "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian"
 max_age_hours = 24
-# Safety cap on chained pagination. A single full discover run
-# observed 2026-05-07 yielded ~81 unique pages (~80 k raw / ~17 k
-# after dedupe) at limit=1000, so 120 leaves comfortable headroom
-# while preventing a CF rate-limit blip from manufacturing an
-# infinite-pagination loop. Operators can still override via
-# `-a max_pages=N` on the CLI.
-max_pages = 120
+# Safety cap. With the LT filter, page 1 returns ~5 000 books and
+# page 2 returns ~20 stragglers — we need exactly 2 productive pages
+# in the steady state. 3 leaves room for one transient empty page
+# without giving up a runaway pagination guard.
+max_pages = 3
 
 [scan]

@@ -258,20 +258,144 @@ def parse_sitemap_urls(html: str) -> list[str]:
     return out
 
 
-def parse_category_page(html: str) -> CategoryPageResult:
-    """Yield one URL-only product dict per `<a class="book-item">` card.
+# Each book-item card on the listing page renders in roughly this
+# shape:
+#
+#   <a class="book-item" href="/produktas/<...>/<slug>/?cntnt01page=1">
+#     <div class="photo">
+#       <img src="https://www.humanitas.lt/uploads/_CGSmartImage/<slug>_<hash>.webp">
+#       <div class="discount-amount">-5%</div>     ← optional
+#     </div>
+#     <div class="author">David Markson</div>
+#     <div class="title">Wittgensteino meilužė</div>
+#     <div class="price">
+#       <div class="normal">
+#         <div class="price-container">
+#           <div class="discount">14.25 €</div>    ← final price
+#           <div class="price">15.00 €</div>       ← pre-discount
+#         </div>
+#       </div>
+#     </div>
+#     <div class="price-discount-info">5 % nuolaida perkant internetu</div>
+#   </a>
+#
+# We split the response on `<a … class="book-item" …>…</a>` boundaries
+# so per-card fields don't bleed into adjacent cards.
+_CARD_BLOCK_RE = re.compile(
+    r'<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>(.*?)</a>',
+    re.S | re.I,
+)
+_CARD_TITLE_RE = re.compile(
+    r'<div\s+class="title"[^>]*>\s*([^<]+?)\s*</div>', re.I
+)
+_CARD_AUTHOR_RE = re.compile(
+    r'<div\s+class="author"[^>]*>\s*([^<]+?)\s*</div>', re.I
+)
+_CARD_PRICE_PAIR_RE = re.compile(
+    r'<div\s+class="price-container"[^>]*>\s*'
+    r'<div\s+class="discount"[^>]*>\s*([^<]+?)\s*</div>\s*'
+    r'<div\s+class="price"[^>]*>\s*([^<]+?)\s*</div>',
+    re.S | re.I,
+)
+# When there's no online discount, only one price renders inside the
+# .price block (no .price-container wrapper).
+_CARD_SINGLE_PRICE_RE = re.compile(
+    r'<div\s+class="price"[^>]*>\s*([\d ]+[.,]\d+\s*€)\s*</div>', re.I
+)
+_CARD_IMG_RE = re.compile(
+    r'<img\s[^>]*\bsrc="([^"]+)"', re.I
+)
 
-    Humanitas's `m575a2product_limit` knob silently caps at 5 000
-    (anything higher returns the homepage). To cover the ~17 500-book
-    catalogue we paginate at limit=5 000 with the CMSMS-standard
-    `cntnt01page` page param — see `config/shops/humanitas.toml`. We
-    don't expose `total`: the page footer's pagination block has
-    page-count, not item-count, and the relationship to the chosen
-    `m575a2product_limit` isn't simple. Returning ``total=None`` makes
-    the discover spider chain page+1 each time and stop when it sees
-    an empty page (the standard fallback for HTML-scrape shops).
+
+def _parse_card(href: str, body: str) -> dict[str, Any] | None:
+    """Extract per-card fields from one `<a class="book-item">` block.
+
+    Returns ``None`` for anchors that don't look like a real book card
+    (e.g. footer/menu anchors that happen to share the class name) so
+    the caller can drop them. Title is the minimum signal — without
+    it the card carries no useful data.
     """
-    products = [{"url": url} for url in parse_sitemap_urls(html)]
+    cleaned = href.split("?", 1)[0].split("#", 1)[0].strip()
+    if not cleaned:
+        return None
+    if cleaned.startswith("//"):
+        cleaned = "https:" + cleaned
+    elif cleaned.startswith("/"):
+        cleaned = _BASE_URL + cleaned
+    if not cleaned.startswith(_BASE_URL + "/produktas/"):
+        return None
+
+    title_m = _CARD_TITLE_RE.search(body)
+    title = _unescape(title_m.group(1)) if title_m else None
+    if not title:
+        # Anchor styled as `book-item` but no .title block — not a
+        # product card (e.g. a navigation tile).
+        return {"url": cleaned}
+
+    author_m = _CARD_AUTHOR_RE.search(body)
+    author = _unescape(author_m.group(1)) if author_m else None
+
+    price = price_original = None
+    pair_m = _CARD_PRICE_PAIR_RE.search(body)
+    if pair_m:
+        price = _parse_price(pair_m.group(1))
+        price_original = _parse_price(pair_m.group(2))
+    else:
+        single_m = _CARD_SINGLE_PRICE_RE.search(body)
+        if single_m:
+            price = _parse_price(single_m.group(1))
+
+    image_url = None
+    img_m = _CARD_IMG_RE.search(body)
+    if img_m:
+        image_url = img_m.group(1)
+
+    return {
+        "url": cleaned,
+        "title": title,
+        "author": author,
+        "price": price,
+        "price_original": price_original,
+        "image_url": image_url,
+        # Catalogue cards don't carry a stock signal — humanitas hides
+        # OOS items from the listing entirely. Default to in-stock so
+        # the pipeline's `prices.in_stock` (NOT NULL) gets a sensible
+        # value; the scan path will overwrite this when it visits the
+        # detail page if the book has since gone OOS.
+        "in_stock": True,
+    }
+
+
+def parse_category_page(html: str) -> CategoryPageResult:
+    """Extract per-card products from a humanitas catalogue listing page.
+
+    With the LT-language server-side filter
+    (``m575a2filt_leidimo_kalba=Lithuanian``) the listing returns only
+    Lithuanian books, ~5 000 of them, in a single FlareSolverr round
+    trip at ``m575a2product_limit=5000`` (~17 s wall time). Each
+    `<a class="book-item">` card already carries title, author, final
+    price, original price, and image URL — everything needed for a
+    `Price` row. The detail page is still required for ISBN / year /
+    pages / format / publisher (static metadata) but only on first
+    sight, not on every weekly price refresh.
+
+    Pagination is unreliable with the language filter: pages 1 and 2
+    overlap by ~99 % at any limit (CMSMS quirk). We rely on the
+    discover spider's standard "stop when a page returns 0 products"
+    behaviour and a low ``max_pages`` safety cap in the TOML — page 2
+    typically yields ~20 stragglers before page 3 returns empty.
+    """
+    products: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for href, body in _CARD_BLOCK_RE.findall(html):
+        product = _parse_card(href, body)
+        if product is None:
+            continue
+        url = product["url"]
+        if url in seen:
+            continue
+        seen.add(url)
+        products.append(product)
     return {"products": products, "total": None}
 
 

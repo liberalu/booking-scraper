@@ -33,21 +33,78 @@ def test_parse_index_page_returns_list_of_url_dicts():
     assert items[0]["url"].startswith("https://www.humanitas.lt/produktas/")
 
 
-def test_parse_category_page_yields_url_only_products():
-    """Catagories strategy yields {url: …} dicts and total=None.
+def test_parse_category_page_extracts_per_card_fields():
+    """Listing cards carry url + title + author + price + image.
 
-    The discover spider's `_emit_products` skips the ShopBookItem
-    branch when title/price are missing — that's intentional here
-    because the catalogue cards are URL-discovery only; the rich
-    data comes from the per-product scan phase.
+    Discover then emits both `DiscoveredUrlItem` and `ShopBookItem`
+    per card, persisting Price rows for the whole LT catalogue in a
+    single FlareSolverr round trip. The detail page is only needed
+    for first-sight metadata enrichment (ISBN/year/pages/format).
     """
     html = (FIXTURES / "index_page.html").read_text(encoding="utf-8")
     result = parse_category_page(html)
     assert result["total"] is None
-    assert len(result["products"]) >= 10
-    assert result["products"][0]["url"].startswith(
-        "https://www.humanitas.lt/produktas/"
+    products = result["products"]
+    assert len(products) >= 10
+
+    # Find the canonical Wittgensteino meilužė card — its values are
+    # known from the live recon snapshot.
+    wittgenstein = next(
+        (p for p in products if "wittgensteino-meiluze" in p["url"]),
+        None,
     )
+    assert wittgenstein is not None, "expected wittgensteino-meiluze in fixture"
+    assert wittgenstein["title"] == "Wittgensteino meilužė"
+    assert wittgenstein["author"] == "David Markson"
+    assert wittgenstein["price"] == "14.25"          # final / discounted
+    assert wittgenstein["price_original"] == "15.00"  # pre-discount
+    assert wittgenstein["image_url"]
+    assert wittgenstein["image_url"].startswith("https://www.humanitas.lt/uploads/")
+    # Listings hide OOS books, so default to in_stock=True for the
+    # pipeline's NOT NULL constraint.
+    assert wittgenstein["in_stock"] is True
+
+
+def test_parse_category_page_dedupes_repeated_card_urls():
+    """If the listing renders the same product twice (sort/swiper edges),
+    we emit it once."""
+    html = (
+        '<a class="book-item" href="/produktas/x/foo/?cntnt01page=1">'
+        '<div class="title">Foo</div></a>'
+        '<a class="book-item" href="/produktas/x/foo/?cntnt01page=1">'
+        '<div class="title">Foo</div></a>'
+    )
+    products = parse_category_page(html)["products"]
+    assert len(products) == 1
+    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/foo/"
+
+
+def test_parse_category_page_handles_card_without_discount():
+    """Some listings render only one price (no discount split)."""
+    html = (
+        '<a class="book-item" href="/produktas/x/foo/">'
+        '<div class="author">Some Author</div>'
+        '<div class="title">Foo</div>'
+        '<div class="price"><div class="normal">'
+        '<div class="price">19.99 €</div>'
+        '</div></div></a>'
+    )
+    products = parse_category_page(html)["products"]
+    assert len(products) == 1
+    assert products[0]["price"] == "19.99"
+    assert products[0]["price_original"] is None
+
+
+def test_parse_category_page_drops_book_item_anchors_outside_product_namespace():
+    """`<a class="book-item">` styled but pointing at /krepselis/ etc."""
+    html = (
+        '<a class="book-item" href="/krepselis/">cart</a>'
+        '<a class="book-item" href="/produktas/x/real/">'
+        '<div class="title">Real</div></a>'
+    )
+    products = parse_category_page(html)["products"]
+    assert len(products) == 1
+    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/real/"
 
 
 def test_parse_sitemap_urls_handles_relative_hrefs_with_cntnt01page():

@@ -123,9 +123,11 @@ class TestDiscoverSpiderCategories:
         a CLI flag), the TOML value bounds runaway pagination.
         """
         spider = DiscoverSpider(shop="humanitas", strategy="categories")
-        # The humanitas TOML caps at 120; the spider should pick that up
-        # automatically with no `-a max_pages=` arg.
-        assert spider._max_pages == 120
+        # The humanitas TOML now caps at 3 (LT-filtered listing yields
+        # ~5 000 books on page 1 and ~20 stragglers on page 2 — page 3
+        # is empty). The TOML value should propagate when no CLI
+        # override is supplied.
+        assert spider._max_pages == 3
 
     def test_cli_max_pages_overrides_toml_safety_cap(self):
         """Explicit CLI override always wins, including a smaller value."""
