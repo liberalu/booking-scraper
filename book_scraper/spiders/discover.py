@@ -19,6 +19,42 @@ from book_scraper.services.discover import DiscoverService
 from book_scraper.spiders.registry import load_parsers
 from book_scraper.url_utils import normalize_url
 
+# Common pagination param names used across shops. Captured group is
+# the param name itself so the substitution preserves it. Pattern is
+# anchored after `?` or `&` so a `homepage=…` couldn't accidentally
+# match. Listed alternation is intentionally narrow — extend when a
+# new shop's pagination param shows up.
+_PAGE_PARAM_RE = re.compile(r"(?<=[?&])(cntnt01page|page)=\d+")
+
+
+def _next_categories_page_url(
+    response_url: str,
+    strategy_conf: Any,
+    next_page: int,
+) -> str:
+    """Derive the next categories page URL from the response URL.
+
+    Scaling from "single template `.format(page=N)`" to "list of
+    templates that paginate independently" is cleanest done by
+    operating on the response URL itself: the resolved URL already
+    carries the language filter / category id / etc. that the seed
+    template baked in, so we just need to bump the page number in
+    place. Falls back to template formatting when the response URL
+    doesn't carry a recognised pagination param (covers paths that
+    were enqueued without `?cntnt01page=` or `?page=` in the URL —
+    e.g. tests).
+    """
+    if _PAGE_PARAM_RE.search(response_url):
+        return _PAGE_PARAM_RE.sub(
+            lambda m: f"{m.group(1)}={next_page}", response_url
+        )
+    # Fallback: format the first configured template directly. Used
+    # by tests / single-URL shops where `response.url` happens to
+    # not carry a pagination param yet (page 1 with no explicit
+    # `?page=1`). Pre-list-URL behaviour preserved here.
+    templates: list[str] = strategy_conf.url_templates()
+    return templates[0].format(page=next_page)
+
 
 class DiscoverSpider(scrapy.Spider):
     name = "discover"
@@ -180,7 +216,13 @@ class DiscoverSpider(scrapy.Spider):
                     self.conf.shop.base_url, self.strategy_conf, page=1
                 )
             else:
-                url = self.strategy_conf.url.format(page=1)
+                # Legacy / test path: emit the FIRST seed URL only.
+                # Production path goes through DiscoverService which
+                # enqueues every URL in the list; tests calling
+                # `_legacy_seed_request` directly only exercise one
+                # template at a time.
+                templates = self.strategy_conf.url_templates()
+                url = templates[0].format(page=1)
             return scrapy.Request(
                 url,
                 callback=self.parse_categories,
@@ -359,7 +401,19 @@ class DiscoverSpider(scrapy.Spider):
         """
         request = failure.request
         status_obj = getattr(failure.value, "response", None)
-        http_status = status_obj.status if status_obj else None
+        # `status_obj` may be either a Twisted/Scrapy Response (with
+        # `.status`) or an httpx.Response (with `.status_code`). The
+        # FlaresolverrMiddleware path raises httpx exceptions whose
+        # `.response` is the httpx.Response. Pre-fix this errback
+        # crashed with `AttributeError: 'Response' object has no
+        # attribute 'status'` on every FS 500, leaving the spider to
+        # stall instead of failing fast (verified during humanitas
+        # multi-seed smoke 2026-05-07).
+        http_status: int | None = None
+        if status_obj is not None:
+            http_status = getattr(status_obj, "status", None) or getattr(
+                status_obj, "status_code", None
+            )
         detail = f"{type(failure.value).__name__}"
         if http_status is not None:
             detail = f"HTTP {http_status}"
@@ -601,7 +655,9 @@ class DiscoverSpider(scrapy.Spider):
                 self.conf.shop.base_url, self.strategy_conf, page=next_page
             )
         else:
-            next_url = self.strategy_conf.url.format(page=next_page)
+            next_url = _next_categories_page_url(
+                response.url, self.strategy_conf, next_page
+            )
 
         new_item_id = self._enqueue_url(next_url, "category_page")
         yield self._build_request_for_url_item(
@@ -635,8 +691,14 @@ class DiscoverSpider(scrapy.Spider):
             else:
                 # Non-graphql shops only reach this branch when their
                 # parser returns a non-None total — currently no caller
-                # does, so fall back to the conf URL template.
-                next_url = self.strategy_conf.url.format(page=page)
+                # does, so fall back to the first conf URL template.
+                # `_next_categories_page_url` is response-driven and
+                # we don't have a response here; format the first
+                # template directly. (When list URL + total both
+                # exist in some future shop, this would only walk
+                # the first list entry; revisit when needed.)
+                templates = self.strategy_conf.url_templates()
+                next_url = templates[0].format(page=page)
             new_item_id = self._enqueue_url(next_url, "category_page")
             yield self._build_request_for_url_item(
                 next_url, "category_page", item_id=new_item_id, page=page

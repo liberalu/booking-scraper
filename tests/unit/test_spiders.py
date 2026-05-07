@@ -145,6 +145,53 @@ class TestDiscoverSpiderCategories:
         )
         assert spider._max_pages == 0
 
+    def test_next_page_url_substitutes_cntnt01page_in_response_url(self):
+        """Pagination derives next URL from response.url (not template format)
+        so that a list of seed URLs each paginates independently."""
+        from book_scraper.spiders.discover import _next_categories_page_url
+
+        # Pure-LT seed at page 3:
+        url = (
+            "https://www.humanitas.lt/produktai/visos-kategorijos/"
+            "?cntnt01page=3&m575a2product_limit=5000"
+            "&m575a2filt_leidimo_kalba=Lithuanian"
+        )
+        spider = DiscoverSpider(shop="humanitas", strategy="categories")
+        next_url = _next_categories_page_url(url, spider.strategy_conf, 4)
+        assert "cntnt01page=4" in next_url
+        # Sibling filter URL must not be mutated.
+        assert "leidimo_kalba=Lithuanian" in next_url
+        assert "leidimo_kalba=Lithuanian-English" not in next_url
+
+    def test_next_page_url_keeps_other_filter_when_walking_bilingual_seed(self):
+        """The bilingual seed walks its own page sequence — substitution
+        must not leak across to the pure-LT seed's filter value."""
+        from book_scraper.spiders.discover import _next_categories_page_url
+
+        url = (
+            "https://www.humanitas.lt/produktai/visos-kategorijos/"
+            "?cntnt01page=1&m575a2product_limit=5000"
+            "&m575a2filt_leidimo_kalba=Lithuanian-English"
+        )
+        spider = DiscoverSpider(shop="humanitas", strategy="categories")
+        next_url = _next_categories_page_url(url, spider.strategy_conf, 2)
+        assert "cntnt01page=2" in next_url
+        assert "Lithuanian-English" in next_url
+
+    def test_next_page_url_falls_back_to_first_template_when_no_page_param(self):
+        """If the response URL doesn't carry a recognised pagination param
+        (e.g. seed URL without `?page=` in test scenarios), format the
+        first template directly."""
+        from book_scraper.spiders.discover import _next_categories_page_url
+
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        # vaga's URL doesn't have `cntnt01page=` — but it does have
+        # `page=`. The substitution still works for this case.
+        next_url = _next_categories_page_url(
+            "https://vaga.lt/knygos?limit=100&page=1", spider.strategy_conf, 2
+        )
+        assert "page=2" in next_url
+
 
 class TestDiscoverSpiderPropertiesMerge:
     """Regression: parser-emitted properties must survive into ShopBookItem.

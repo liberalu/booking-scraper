@@ -61,12 +61,24 @@ url_include_pattern = "^https://www\\.humanitas\\.lt/produktas/"
 # redeploys with a fresh module id, this URL needs updating —
 # `parse_category_page` would still work (it keys on
 # `class="book-item"`, not the URL shape).
-url = "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian"
+# Two seed URLs to capture both pure-LT books and Lithuanian-English
+# bilingual titles (`Leidinio kalba: Lietuvių-anglų`). The strict
+# `Lithuanian` filter alone misses ~112 bilingual books (M. K. Čiurlionio
+# kūryba, ADHD ir autizmas, etc.) — small but real false-negative class
+# verified 2026-05-07. Each filter walks its own page sequence; pages
+# across filters are deduplicated downstream by the `discovered_urls`
+# unique constraint.
+url = [
+  "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian",
+  "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian-English",
+]
 max_age_hours = 24
-# Safety cap. With the LT filter, page 1 returns ~5 000 books and
-# page 2 returns ~20 stragglers — we need exactly 2 productive pages
-# in the steady state. 3 leaves room for one transient empty page
-# without giving up a runaway pagination guard.
+# Safety cap (per seed URL, not total). With the LT filter, page 1
+# returns ~5 000 books and page 2 returns ~20 stragglers — we need
+# exactly 2 productive pages per seed in the steady state. 3 leaves
+# room for one transient empty page without giving up a runaway
+# pagination guard. Two seed URLs × max_pages=3 = up to 6 pages
+# total per discover run.
 max_pages = 3
 
 [scan]

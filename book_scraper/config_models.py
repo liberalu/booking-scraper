@@ -69,7 +69,17 @@ class SitemapConfig(BaseModel):
 
 
 class CategoriesConfig(BaseModel):
-    url: str
+    # `url` accepts either a single template string OR a list of
+    # template strings. Single is the common case (vaga, default
+    # humanitas); a list lets a shop walk multiple seed URLs that
+    # paginate independently — used by humanitas to combine the
+    # `Lithuanian` server-side filter with `Lithuanian-English` so
+    # bilingual LT books aren't missed (~1.6 % of the LT catalogue).
+    # Each element must contain a `{page}` placeholder; pagination
+    # across list entries chains independently from response.url
+    # substitution rather than re-formatting from a single template,
+    # so each filter walks its own page sequence.
+    url: str | list[str]
     max_age_hours: int = 672
     # Safety cap on chained pagination. The discover spider chains
     # page+1 until it sees an empty page; if a CF rate-limit blip or a
@@ -77,9 +87,15 @@ class CategoriesConfig(BaseModel):
     # fine, but the inverse — pagination that quietly *never* ends —
     # would burn FlareSolverr quota indefinitely. None disables the cap
     # (per-CLI `-a max_pages=N` still works); set to a generous integer
-    # in the shop TOML to bound runaway runs. Mirrors the `-a max_pages`
-    # CLI override that takes precedence when supplied.
+    # in the shop TOML to bound runaway runs. The cap applies *per seed
+    # URL* — a list of N seeds with max_pages=3 walks up to N×3 pages.
+    # Mirrors the `-a max_pages` CLI override that takes precedence
+    # when supplied.
     max_pages: int | None = None
+
+    def url_templates(self) -> list[str]:
+        """Always return the configured URL(s) as a list for uniform handling."""
+        return [self.url] if isinstance(self.url, str) else list(self.url)
 
 
 class FullCrawlConfig(BaseModel):

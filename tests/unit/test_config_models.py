@@ -147,6 +147,93 @@ class TestPegasasConfigLoads:
         assert config.discover.lupasearch.category_ids == ["5107", "5125", "6122"]
 
 
+class TestDiscoverServiceCategoriesSeedUrls:
+    """Multi-URL list configs must enqueue all seed URLs at page 1."""
+
+    def test_single_url_returns_one_seed(self):
+        from book_scraper.config_models import (
+            CategoriesConfig,
+            DiscoverConfig,
+            ScrapingConfig,
+            ShopConfig,
+            ShopSection,
+        )
+        from book_scraper.services.discover import DiscoverService
+
+        cfg = ShopConfig(
+            shop=ShopSection(name="x", base_url="https://x.lt"),
+            scraping=ScrapingConfig(),
+            discover=DiscoverConfig(
+                categories=CategoriesConfig(url="https://x.lt/?page={page}")
+            ),
+        )
+        seeds = DiscoverService._categories_seed_urls(cfg)
+        assert seeds == ["https://x.lt/?page=1"]
+
+    def test_list_url_returns_one_seed_per_template(self):
+        from book_scraper.config_models import (
+            CategoriesConfig,
+            DiscoverConfig,
+            ScrapingConfig,
+            ShopConfig,
+            ShopSection,
+        )
+        from book_scraper.services.discover import DiscoverService
+
+        cfg = ShopConfig(
+            shop=ShopSection(name="x", base_url="https://x.lt"),
+            scraping=ScrapingConfig(),
+            discover=DiscoverConfig(
+                categories=CategoriesConfig(
+                    url=[
+                        "https://x.lt/?page={page}&lang=Lithuanian",
+                        "https://x.lt/?page={page}&lang=Lithuanian-English",
+                    ]
+                )
+            ),
+        )
+        seeds = DiscoverService._categories_seed_urls(cfg)
+        assert seeds == [
+            "https://x.lt/?page=1&lang=Lithuanian",
+            "https://x.lt/?page=1&lang=Lithuanian-English",
+        ]
+
+
+class TestCategoriesConfigUrlTemplates:
+    """`url` may be a single string or a list of templates.
+
+    The list form lets a shop walk multiple seed URLs in one
+    discover run — humanitas combines `Lithuanian` and
+    `Lithuanian-English` server-side filters that way to capture
+    bilingual books the strict pure-LT filter misses.
+    """
+
+    def test_single_url_returns_single_element_list(self):
+        from book_scraper.config_models import CategoriesConfig
+
+        cfg = CategoriesConfig(url="https://x/?page={page}")
+        assert cfg.url_templates() == ["https://x/?page={page}"]
+
+    def test_list_url_templates_preserved(self):
+        from book_scraper.config_models import CategoriesConfig
+
+        urls = [
+            "https://x/?page={page}&lang=Lithuanian",
+            "https://x/?page={page}&lang=Lithuanian-English",
+        ]
+        cfg = CategoriesConfig(url=urls)
+        assert cfg.url_templates() == urls
+
+    def test_url_templates_returns_independent_list(self):
+        """Mutating the returned list must not mutate the config's stored value."""
+        from book_scraper.config_models import CategoriesConfig
+
+        cfg = CategoriesConfig(url=["https://x/?page={page}"])
+        templates = cfg.url_templates()
+        templates.append("https://y/")
+        assert cfg.url_templates() == ["https://x/?page={page}"]
+
+
 class TestDefaultConfig:
     def test_minimal(self):
         data = {

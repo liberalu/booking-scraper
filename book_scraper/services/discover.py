@@ -104,19 +104,49 @@ class DiscoverService:
             self.session, shop.id, phase, extra_payload={"strategy": strategy}
         )
 
-        seed_url = self._seed_url(strategy, shop_config)
+        seed_urls = self._seed_urls(strategy, shop_config)
         url_type = _STRATEGY_URL_TYPE[strategy]
-        insert_scrape_url_item(
-            self.session,
-            run_id=run.id,
-            shop_id=shop.id,
-            discovered_url_id=None,
-            url=seed_url,
-            url_type=url_type,
-        )
+        for url in seed_urls:
+            insert_scrape_url_item(
+                self.session,
+                run_id=run.id,
+                shop_id=shop.id,
+                discovered_url_id=None,
+                url=url,
+                url_type=url_type,
+            )
         self.session.commit()
 
-        return DiscoverPlan(run_id=run.id, shop_id=shop.id, urls_total=1)
+        return DiscoverPlan(run_id=run.id, shop_id=shop.id, urls_total=len(seed_urls))
+
+    @classmethod
+    def _seed_urls(cls, strategy: str, shop_config: Any) -> list[str]:
+        """Strategy-specific seed URLs. Always a list so prepare_discover
+        can enqueue multiple page-1 entries (humanitas combines two
+        language filters; other strategies emit a one-element list)."""
+        return [cls._seed_url(strategy, shop_config)] if strategy != "categories" \
+            else cls._categories_seed_urls(shop_config)
+
+    @staticmethod
+    def _categories_seed_urls(shop_config: Any) -> list[str]:
+        discover_cfg = (
+            shop_config.discover
+            if hasattr(shop_config, "discover")
+            else shop_config["discover"]
+        )
+        cats_cfg = (
+            discover_cfg.categories
+            if hasattr(discover_cfg, "categories")
+            else discover_cfg["categories"]
+        )
+        # Pydantic model exposes `url_templates()` returning a list;
+        # raw-dict fallback handles `url: str | list[str]`.
+        if hasattr(cats_cfg, "url_templates"):
+            templates: list[str] = cats_cfg.url_templates()
+        else:
+            raw = cats_cfg["url"]
+            templates = [raw] if isinstance(raw, str) else list(raw)
+        return [t.format(page=1) for t in templates]
 
     @staticmethod
     def _seed_url(strategy: str, shop_config: Any) -> str:
@@ -133,12 +163,11 @@ class DiscoverService:
             )
             return url
         if strategy == "categories":
-            tmpl: str = (
-                discover_cfg.categories.url
-                if hasattr(discover_cfg, "categories")
-                else discover_cfg["categories"]["url"]
-            )
-            return tmpl.format(page=1)
+            # Kept for backwards-compat call sites and unit tests; the
+            # production path now goes through `_categories_seed_urls`
+            # which can return >1 templates. This shim returns the
+            # first element (matches old single-URL behaviour).
+            return DiscoverService._categories_seed_urls(shop_config)[0]
         if strategy == "full_crawl":
             start_url: str = (
                 discover_cfg.full_crawl.start_url
