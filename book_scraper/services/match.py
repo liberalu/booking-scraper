@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -112,7 +113,7 @@ class MatchService:
     def _synthesise_one(self, isbn_norm: str) -> None:
         """Build a shop_inferred Book from the highest-trust shop's data,
         with the FIRST writer's publisher (sticky)."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from sqlalchemy import select
 
@@ -120,7 +121,7 @@ class MatchService:
 
         # Sentinel for NULL first_seen_at — sorts NULL rows last so they
         # don't accidentally win the "first writer" tiebreak.
-        _FAR_FUTURE = datetime(9999, 1, 1, tzinfo=timezone.utc)
+        far_future = datetime(9999, 1, 1, tzinfo=UTC)
 
         candidates = self.session.execute(text("""
             SELECT sb.id, sb.shop_id, s.name AS shop_name, sb.title, sb.year,
@@ -141,7 +142,7 @@ class MatchService:
 
         first_with_pub = sorted(
             [c for c in candidates if c.publisher],
-            key=lambda r: r.first_seen_at or _FAR_FUTURE,
+            key=lambda r: r.first_seen_at or far_future,
         )
         publisher_name = first_with_pub[0].publisher if first_with_pub else None
 

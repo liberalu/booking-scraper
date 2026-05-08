@@ -811,7 +811,9 @@ class Book(Base):
     duration: Mapped[str | None] = mapped_column(Text, nullable=True)
     dimensions: Mapped[str | None] = mapped_column(Text, nullable=True)
     language: Mapped[str | None] = mapped_column(Text, nullable=True)
-    translated_from: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    translated_from: Mapped[list[str] | None] = mapped_column(
+        ARRAY(Text), nullable=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     cover_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     upcoming_release: Mapped[bool] = mapped_column(

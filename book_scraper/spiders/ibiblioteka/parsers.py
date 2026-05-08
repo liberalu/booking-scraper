@@ -58,9 +58,7 @@ def parse_ibiblioteka_search_response(json_text: str) -> CategoryPageResult:
     except json.JSONDecodeError:
         return {"products": [], "total": None}
 
-    items: list[dict[str, Any]] = (
-        data.get("results", {}).get("content") or []
-    )
+    items: list[dict[str, Any]] = data.get("results", {}).get("content") or []
     products = []
     for item in items:
         book_id = item.get("id")
@@ -76,8 +74,7 @@ def parse_ibiblioteka_search_response(json_text: str) -> CategoryPageResult:
         products.append(
             {
                 "url": (
-                    f"{_COVER_BASE}"
-                    f"/metis-api/bibliographic-records/public/{book_id}"
+                    f"{_COVER_BASE}/metis-api/bibliographic-records/public/{book_id}"
                 ),
                 "title": item.get("titleView") or item.get("titleFull") or None,
                 "sku": item.get("code") or None,
@@ -138,7 +135,9 @@ def _extract_authors_canonical(raw: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         seen.add(key)
         pos = role_pos.get("author", 0)
-        out.append({"name": name, "libis_code": code, "role": "author", "position": pos})
+        out.append(
+            {"name": name, "libis_code": code, "role": "author", "position": pos}
+        )
         role_pos["author"] = pos + 1
 
     # persons[] — multi-role contributors via UNIMARC type codes.
@@ -156,7 +155,9 @@ def _extract_authors_canonical(raw: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             seen.add(key)
             pos = role_pos.get(role, 0)
-            out.append({"name": name, "libis_code": code, "role": role, "position": pos})
+            out.append(
+                {"name": name, "libis_code": code, "role": role, "position": pos}
+            )
             role_pos[role] = pos + 1
 
     return out
@@ -206,7 +207,13 @@ def parse_product_page(json_text: str) -> dict[str, Any]:
         if not raw_isbn:
             continue
         cleaned = raw_isbn.replace("-", "").replace(" ", "")
-        isbn_type = "isbn13" if len(cleaned) == 13 else "isbn10" if len(cleaned) == 10 else "unknown"
+        isbn_type = (
+            "isbn13"
+            if len(cleaned) == 13
+            else "isbn10"
+            if len(cleaned) == 10
+            else "unknown"
+        )
         isbns.append({"isbn": raw_isbn, "type": isbn_type})
 
     languages_raw = raw.get("languages") or []
@@ -289,12 +296,30 @@ def _infer_type_and_format(
 
 def _empty_result() -> ProductPageResult:
     return {
-        "title": None, "author": None, "isbn": None, "sku": None,
-        "publisher": None, "year": None, "format": None, "price": None,
-        "price_original": None, "in_stock": None, "image_url": None,
-        "categories": [], "description": None, "pages": None,
-        "cover_type": None, "duration": None, "narrator": None,
-        "translator": None, "schema_types": [], "is_book_product": False,
-        "book_score": 0, "book_score_reasons": [], "type": "book",
-        "planned_availability_date": None, "rating": None, "review_count": None,
+        "title": None,
+        "author": None,
+        "isbn": None,
+        "sku": None,
+        "publisher": None,
+        "year": None,
+        "format": None,
+        "price": None,
+        "price_original": None,
+        "in_stock": None,
+        "image_url": None,
+        "categories": [],
+        "description": None,
+        "pages": None,
+        "cover_type": None,
+        "duration": None,
+        "narrator": None,
+        "translator": None,
+        "schema_types": [],
+        "is_book_product": False,
+        "book_score": 0,
+        "book_score_reasons": [],
+        "type": "book",
+        "planned_availability_date": None,
+        "rating": None,
+        "review_count": None,
     }

@@ -726,13 +726,18 @@ class PostgresPipeline:
         """Insert or update a Book row with its publisher, series, ISBNs, authors.
 
         Resolution order to find target books.id:
-          1. By any incoming ISBN (normalized) — catches shop_inferred → ibiblioteka upgrade.
+          1. By any incoming ISBN (normalized) — catches shop_inferred
+             → ibiblioteka upgrade.
           2. By libis_code — for re-scrapes where ISBNs may have changed.
           3. Otherwise INSERT a new books row.
         """
         from sqlalchemy import select
+
         from book_scraper.db.models import (
-            Book, BookIsbn, Publisher, Series,
+            Book,
+            BookIsbn,
+            Publisher,
+            Series,
         )
         from book_scraper.isbn import normalize_isbn, to_isbn10, to_isbn13
 
@@ -861,6 +866,7 @@ class PostgresPipeline:
         self, session: "Session", book_id: int, isbn: str, isbn_type: str
     ) -> None:
         from sqlalchemy.dialects.postgresql import insert
+
         from book_scraper.db.models import BookIsbn
 
         stmt = insert(BookIsbn).values(book_id=book_id, isbn=isbn, isbn_type=isbn_type)
@@ -875,6 +881,7 @@ class PostgresPipeline:
     ) -> None:
         """Resolve or create the canonical Author row, then ensure book_authors row."""
         from sqlalchemy import select
+
         from book_scraper.db.models import Author, BookAuthor
 
         name = (entry.get("name") or "").strip()
