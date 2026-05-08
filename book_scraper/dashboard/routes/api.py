@@ -1762,6 +1762,34 @@ def _configured_discover_strategies(shop_name: str) -> list[str]:
     return available
 
 
+@router.get("/books")
+def api_books(
+    data_source: str | None = None,
+    has_isbn: bool | None = None,
+    year: int | None = None,
+    page: int = 1,
+    per_page: int = 50,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import list_books
+    return list_books(
+        session,
+        data_source=data_source, has_isbn=has_isbn, year=year,
+        page=page, per_page=per_page,
+    )
+
+
+@router.get("/books/{book_id}")
+def api_book_detail(
+    book_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import book_detail
+    detail = book_detail(session, book_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return detail
+
+
 @router.get("/shops")
 def api_shops(session: Session = Depends(get_db)) -> dict[str, Any]:
     shops = get_all_shops(session)

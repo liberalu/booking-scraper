@@ -2377,3 +2377,163 @@ def get_url_detail(
     if url is None:
         return None
     return url, url.classification
+
+
+def list_books(
+    session: Session,
+    *,
+    data_source: str | None = None,
+    has_isbn: bool | None = None,
+    year: int | None = None,
+    page: int = 1,
+    per_page: int = 50,
+) -> dict[str, Any]:
+    from sqlalchemy import func, select
+
+    from book_scraper.db.models import (
+        Author,
+        Book,
+        BookAuthor,
+        BookIsbn,
+        Publisher,
+        ShopBook,
+    )
+
+    base = select(Book)
+    if data_source:
+        base = base.where(Book.data_source == data_source)
+    if year is not None:
+        base = base.where(Book.year == year)
+    if has_isbn is True:
+        base = base.where(Book.id.in_(select(BookIsbn.book_id).distinct()))
+    elif has_isbn is False:
+        base = base.where(~Book.id.in_(select(BookIsbn.book_id).distinct()))
+
+    total = session.execute(
+        select(func.count()).select_from(base.subquery())
+    ).scalar_one()
+
+    rows = session.execute(
+        base.order_by(Book.created_at.desc())
+        .limit(per_page).offset((page - 1) * per_page)
+    ).scalars().all()
+
+    out = []
+    for b in rows:
+        pub_name = None
+        if b.publisher_id:
+            pub_name = session.execute(
+                select(Publisher.name).where(Publisher.id == b.publisher_id)
+            ).scalar_one_or_none()
+        authors = session.execute(
+            select(Author.name)
+            .join(BookAuthor)
+            .where(BookAuthor.book_id == b.id, BookAuthor.role == "author")
+            .order_by(BookAuthor.position)
+        ).scalars().all()
+        primary_isbn = session.execute(
+            select(BookIsbn.isbn).where(BookIsbn.book_id == b.id).limit(1)
+        ).scalar_one_or_none()
+        shop_count = session.execute(
+            select(func.count()).select_from(ShopBook).where(ShopBook.book_id == b.id)
+        ).scalar_one()
+        out.append({
+            "id": b.id,
+            "title": b.title,
+            "year": b.year,
+            "data_source": b.data_source,
+            "libis_code": b.libis_code,
+            "publisher": pub_name,
+            "primary_isbn": primary_isbn,
+            "authors": list(authors),
+            "shop_count": shop_count,
+        })
+
+    return {
+        "books": out, "total": total, "page": page, "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page if per_page else 1,
+    }
+
+
+def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
+    from sqlalchemy import select
+
+    from book_scraper.db.models import (
+        Author,
+        Book,
+        BookAuthor,
+        BookIsbn,
+        Publisher,
+        Series,
+        Shop,
+        ShopBook,
+    )
+
+    book = session.execute(
+        select(Book).where(Book.id == book_id)
+    ).scalar_one_or_none()
+    if book is None:
+        return None
+
+    pub_name = None
+    if book.publisher_id:
+        pub_name = session.execute(
+            select(Publisher.name).where(Publisher.id == book.publisher_id)
+        ).scalar_one_or_none()
+    series_title = None
+    if book.series_id:
+        series_title = session.execute(
+            select(Series.title).where(Series.id == book.series_id)
+        ).scalar_one_or_none()
+
+    isbns = session.execute(
+        select(BookIsbn.isbn, BookIsbn.isbn_type).where(BookIsbn.book_id == book_id)
+    ).all()
+    authors = session.execute(
+        select(Author.name, BookAuthor.role)
+        .join(BookAuthor, BookAuthor.author_id == Author.id)
+        .where(BookAuthor.book_id == book_id)
+        .order_by(BookAuthor.role, BookAuthor.position)
+    ).all()
+    shops = session.execute(
+        select(Shop.name, ShopBook.url, ShopBook.price, ShopBook.in_stock,
+               ShopBook.last_seen_at)
+        .join(ShopBook, ShopBook.shop_id == Shop.id)
+        .where(ShopBook.book_id == book_id)
+        .order_by(Shop.name)
+    ).all()
+
+    return {
+        "id": book.id,
+        "title": book.title,
+        "title_full": book.title_full,
+        "data_source": book.data_source,
+        "libis_code": book.libis_code,
+        "year": book.year,
+        "publisher": pub_name,
+        "series": series_title,
+        "release_place": book.release_place,
+        "type": book.type,
+        "format": book.format,
+        "pages": book.pages,
+        "duration": book.duration,
+        "dimensions": book.dimensions,
+        "language": book.language,
+        "translated_from": book.translated_from,
+        "description": book.description,
+        "cover_url": book.cover_url,
+        "udc_codes": book.udc_codes,
+        "subjects": book.subjects,
+        "audience": book.audience,
+        "isbns": [{"isbn": isbn, "type": typ} for isbn, typ in isbns],
+        "authors": [{"name": n, "role": r} for n, r in authors],
+        "shops": [
+            {
+                "shop": shop, "url": url,
+                "price": str(price) if price is not None else None,
+                "in_stock": in_stock,
+                "last_seen_at": last_seen.isoformat() if last_seen else None,
+            }
+            for shop, url, price, in_stock, last_seen in shops
+        ],
+    }

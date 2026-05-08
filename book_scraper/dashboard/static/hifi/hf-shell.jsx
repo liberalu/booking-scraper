@@ -29,6 +29,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
       ['issues', 'Issues', HF_ICONS.issues],
     ]},
     { group: 'Catalog', items: [
+      ['books', 'Books', HF_ICONS.books],
       ['shop-books', 'Shop Books', HF_ICONS.books],
       ['urls', 'URLs', HF_ICONS.urls],
       ['shops', 'Shops', HF_ICONS.shops],

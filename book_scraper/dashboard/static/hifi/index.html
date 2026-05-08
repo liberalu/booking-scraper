@@ -25,6 +25,7 @@
 <script type="text/babel" src="/static/hifi/hf-shell.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-overview.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-runs.jsx"></script>
+<script type="text/babel" src="/static/hifi/hf-books.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-shopbooks.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-urls-shops.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-other.jsx"></script>
@@ -35,6 +36,7 @@
 <script type="text/babel">
 const DETAIL_BY_HEAD = {
   'runs':       { page: 'run-detail',       param: 'id' },
+  'books':      { page: 'book-detail',      param: 'id' },
   'shop-books': { page: 'shop-book-detail', param: 'id' },
   'urls':       { page: 'url-detail',       param: 'id' },
   'shops':      { page: 'shop-detail',      param: 'name' },
@@ -46,6 +48,8 @@ const URL_BUILDERS = {
   'overview':         () => '/',
   'runs':             () => '/runs',
   'run-detail':       (p) => `/runs/${encodeURIComponent(p?.id ?? '')}`,
+  'books':            () => '/books',
+  'book-detail':      (p) => `/books/${encodeURIComponent(p?.id ?? '')}`,
   'shop-books':       () => '/shop-books',
   'shop-book-detail': (p) => `/shop-books/${encodeURIComponent(p?.id ?? '')}`,
   'urls':             () => '/urls',
@@ -155,6 +159,8 @@ function App() {
     'overview':         () => <HFOverview nav={nav} goto={goto} />,
     'runs':             () => <HFRuns nav={nav} goto={goto} />,
     'run-detail':       () => <HFRunDetail nav={nav} goto={goto} params={params} />,
+    'books':            () => <HFBooks nav={nav} goto={goto} />,
+    'book-detail':      () => <HFBookDetail nav={nav} goto={goto} params={params} />,
     'shop-books':       () => <HFShopBooks nav={nav} goto={goto} />,
     'shop-book-detail': () => <HFShopBookDetail nav={nav} goto={goto} params={params} />,
     'urls':             () => <HFUrls nav={nav} goto={goto} />,
