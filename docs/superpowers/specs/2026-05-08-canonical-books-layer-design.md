@@ -221,6 +221,16 @@ writing `'ibiblioteka'`, the row is upgraded in place: `data_source`
 flips, `libis_code` fills in, fields overwrite (per Q4) except
 `publisher_id` (sticky, see below).
 
+**Multi-match edge case.** Step 1 may find multiple distinct existing
+books — e.g. shop_inferred Book B owns ISBN `978-X` (print), shop_inferred
+Book C owns ISBN `978-Y` (ebook), and the incoming LIBIS record now
+declares both ISBNs belong to one work. Resolution: pick the existing
+book with the **lowest id** as the target, mark the others for merge,
+and emit a `book_merge_needed` validation issue. The merge itself (move
+shop_books.book_id from the loser to the winner, delete the loser) is
+out of scope for this spec — listed as a follow-on. For now, the matcher
+logs and skips so a human can resolve. This case is rare in practice.
+
 After the target `books.id` is known, the upsert performs:
 
 1. Upsert `publishers` by name → `publisher_id`
@@ -243,17 +253,35 @@ All in one transaction per item, same per-item commit pattern the existing
 `ShopBookItem` path uses.
 
 **ISBN normalization is shared between this pipeline and the Match
-phase.** A new helper `book_scraper/isbn_utils.py` exposes `normalize(s)
--> str` (strip dashes/spaces, uppercase X-checksum) and `to_isbn13(s)` /
-`to_isbn10(s)`. Used by:
+phase.** Verified state of the codebase (2026-05-08):
 
-- `_upsert_book` before any ISBN write
-- The matcher's join (see Match phase Step 1)
-- Existing `book_scraper/isbn.py` validator: extended to also expose
-  `normalized_isbn(raw)` so existing shop_books validation produces a
-  normalized form. **`shop_books.isbn` is back-filled to normalized form
-  via a one-shot SQL pass in commit 4** (no schema change — same
-  column, just consistent values going forward).
+- `book_scraper/isbn.py` already exposes `normalize_isbn(raw)` (strips
+  dashes/spaces) and `is_valid_isbn(raw)` (checksum validation, calls
+  normalize internally).
+- `ValidationPipeline.process_item` (pipelines.py around line 275)
+  calls `_is_valid_isbn(isbn)` to validate but **does not normalize the
+  stored value** — `adapter["isbn"]` keeps the raw form (dashes intact)
+  unless validation fails. So `shop_books.isbn` currently contains a
+  mix of dashed and undashed forms across shops.
+
+The fix:
+
+1. Extend `isbn.py` with `to_isbn13(s)` / `to_isbn10(s)` converters (new
+   functions; checksums recomputed for the converted form).
+2. Modify `ValidationPipeline` to set `adapter["isbn"] =
+   normalize_isbn(isbn)` after validation passes — going forward all
+   shop scrapes write the normalized form. (Single-line change.)
+3. One-shot SQL back-fill of existing `shop_books.isbn`:
+   ```sql
+   UPDATE shop_books
+      SET isbn = REPLACE(REPLACE(isbn, '-', ''), ' ', '')
+    WHERE isbn IS NOT NULL AND (isbn LIKE '%-%' OR isbn LIKE '% %');
+   ```
+   Run as part of commit 4 alongside the matcher landing.
+4. The matcher's join uses normalized form on both sides; defensive
+   `REPLACE(...)` in the SQL guards against any future regression.
+
+`book_isbns.isbn` is always normalized at write time by `_upsert_book`.
 
 ## Match phase
 
@@ -342,12 +370,22 @@ For each shop_book newly matched in step 1, link its `shop_authors` rows
 to canonical `authors` via the matched book's `book_authors`. The matched
 book vouches for the link — no name-based heuristics.
 
-`book_authors.position` is **per-role** (translators have their own
-positions starting at 0, narrators have their own, etc.). `shop_authors`
-records only primary authors, never translators or narrators. So the
-join must filter to `role = 'author'` to avoid the position=0 collision
-where a primary author would be paired with a translator/narrator/
-illustrator that also has position=0:
+`book_authors.position` is **per-role** by spec convention — translators
+start at position 0, narrators start at 0, primary authors start at 0,
+each independent. `_upsert_book` enforces this when inserting
+`book_authors` rows (verified against parser output: ibiblioteka emits
+`{role, position}` tuples where positions reset per role).
+
+`shop_authors` records only primary authors — verified against
+`book_scraper/db/repo.py:88` (`_sync_shop_book_authors` is fed by the
+single `ShopBookItem.author` string, splits multi-author separators,
+and writes positional rows; no notion of role). Translators, narrators
+and illustrators on shop products live in
+`shop_book_attributes.properties` (JSONB), not in `shop_authors`.
+
+So the join must filter to `role = 'author'` to avoid a primary
+shop_author at position=0 being paired with a canonical translator or
+narrator that also has position=0:
 
 ```sql
 UPDATE shop_authors sa
@@ -506,14 +544,18 @@ match is per-shop just like discover and scan.
 ## Backfill
 
 One-shot SQL run before deploying the new spider code. **Delete order
-matters** — `shop_books` is referenced by `prices`, `discovered_urls`,
-`shop_book_attributes`, `shop_book_changes`, `shop_book_field_updates`,
-and `shop_book_authors`, none of which currently `ON DELETE CASCADE` to
-`shop_books` (verified against `models.py` lines 229, 387, 195, 210, 236,
-193). Deleting `shop_books` first would fail on FK constraints.
+matters** because some tables FK to `shop_books` without
+`ON DELETE CASCADE`. Verified against `models.py`:
 
-Order: kill runs → drop child tables in dependency order → drop
-shop_books → drop discovered_urls → drop runs → drop shop:
+| Referencing table | FK behavior | Backfill action |
+|---|---|---|
+| `shop_book_authors` (line 196) | `ON DELETE CASCADE` | auto, no DELETE needed |
+| `shop_book_attributes` (line 211) | `ON DELETE CASCADE` | auto, no DELETE needed |
+| `shop_book_field_updates` (line 237) | `ON DELETE CASCADE` | auto, no DELETE needed |
+| `prices` (line 263) | RESTRICT (default) | explicit DELETE before shop_books |
+| `shop_book_changes` (line 292) | RESTRICT | explicit DELETE before shop_books |
+| `discovered_urls.shop_book_id` (line 394, nullable) | RESTRICT | UPDATE NULL before shop_books |
+| `validation_issues.shop_book_id` (line 599, nullable) | RESTRICT | UPDATE NULL before shop_books |
 
 ```sql
 BEGIN;
@@ -524,39 +566,33 @@ UPDATE scrape_runs
  WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka')
    AND status IN ('running','paused');
 
--- 2. Drop child rows that reference shop_books
-DELETE FROM prices                    WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-DELETE FROM shop_book_attributes      WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-DELETE FROM shop_book_changes         WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-DELETE FROM shop_book_field_updates   WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-DELETE FROM shop_book_authors         WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-
--- 3. Sever discovered_urls.shop_book_id FK before deleting shop_books
+-- 2. Drop / null non-cascading child rows that reference shop_books
+DELETE FROM prices             WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
+DELETE FROM shop_book_changes  WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
 UPDATE discovered_urls SET shop_book_id = NULL
  WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+UPDATE validation_issues SET shop_book_id = NULL
+ WHERE shop_book_id IN (SELECT id FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
 
--- 4. Now safe to delete shop_books, then the rest
-DELETE FROM shop_books      WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
-DELETE FROM discovered_urls WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
-DELETE FROM scrape_url_items WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+-- 3. Now safe to delete shop_books (cascades to authors/attributes/field_updates)
+DELETE FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 
--- 5. Validation issues + run events tied to ibiblioteka runs
+-- 4. Drop the rest of the ibiblioteka shop graph
+DELETE FROM discovered_urls   WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+DELETE FROM scrape_url_items  WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 DELETE FROM scrape_run_events WHERE run_id IN (SELECT id FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
 DELETE FROM validation_issues WHERE run_id IN (SELECT id FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-
--- 6. Drop runs and finally the shop
-DELETE FROM cron_jobs   WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
-DELETE FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
-DELETE FROM shop_settings WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
-DELETE FROM shops         WHERE name='ibiblioteka';
+DELETE FROM cron_jobs         WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+DELETE FROM scrape_runs       WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+DELETE FROM shop_settings     WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
+DELETE FROM shops             WHERE name='ibiblioteka';
 
 COMMIT;
 ```
 
-Implementation plan should verify each child table name against
-`models.py` before running — table names above are based on a single
-audit pass and could miss tables added later. Wrap the whole thing in
-a transaction; if any DELETE fails, abort.
+Implementation plan should re-audit `models.py` for any additional FK
+to `shop_books` or `shops` added since spec authoring. Wrap in a
+transaction; if any DELETE fails, abort.
 
 The 28k thin `shop_books` rows produced before the canonical layer existed
 are deleted. Fresh ibiblioteka runs write to the new `books` layer.

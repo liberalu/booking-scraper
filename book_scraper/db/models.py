@@ -315,6 +315,12 @@ discovery_source_enum = Enum(
 url_type_enum = Enum(
     "unknown",
     "product",
+    # Discovered with partial metadata (e.g. lupasearch yields title+price
+    # but no ISBN). Transient — the scan spider promotes to "product" on
+    # the first successful fetch, regardless of whether ISBN ended up
+    # filled. This lets the delta scan re-queue under-discovered books
+    # without looping on books whose product page genuinely has no ISBN.
+    "product_partial",
     "non_product",
     "unreachable",
     name="url_type",
@@ -327,6 +333,7 @@ scrape_phase_enum = Enum(
     "discover_full_crawl",
     "discover_graphql",
     "discover_lupasearch",
+    "discover_ibiblioteka_api",
     "scan",
     name="scrape_phase",
     create_type=False,

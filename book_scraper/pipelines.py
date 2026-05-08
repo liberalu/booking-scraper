@@ -577,12 +577,25 @@ class PostgresPipeline:
                     in_stock=adapter.get("in_stock", True),
                     run_id=self._run_id,
                 )
+            # Mark the URL as `product_partial` when the persisted
+            # shop_book has no ISBN — typically because the discovery
+            # source didn't return one (lupasearch, some category-page
+            # parsers). Reading from `shop_book.isbn` (not the adapter)
+            # respects the case where a previous run already captured
+            # ISBN and this lighter item just refreshes price/title.
+            #
+            # The delta scan picks `product_partial` rows up; the scan
+            # spider promotes them to `product` on the first successful
+            # fetch regardless of whether ISBN ends up filled — so books
+            # whose product page genuinely has no ISBN do not loop
+            # indefinitely.
             link_discovered_url_to_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
                 shop_book_id=shop_book.id,
                 run_id=self._run_id,
+                is_partial=shop_book.isbn is None,
             )
 
         elif isinstance(item, PriceItem):
@@ -622,12 +635,16 @@ class PostgresPipeline:
                 in_stock=adapter.get("in_stock", True),
                 run_id=self._run_id,
             )
+            # PriceItem carries no ISBN field — gauge partial-ness from
+            # the persisted shop_book. Same rationale as the ShopBookItem
+            # branch above.
             link_discovered_url_to_shop_book(
                 self.session,
                 shop_id=shop_id,
                 url=adapter["url"],
                 shop_book_id=shop_book.id,
                 run_id=self._run_id,
+                is_partial=shop_book.isbn is None,
             )
 
         elif isinstance(item, DiscoveredUrlItem):

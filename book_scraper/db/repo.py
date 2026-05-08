@@ -555,12 +555,22 @@ def link_discovered_url_to_shop_book(
     url: str,
     shop_book_id: int,
     run_id: int | None = None,
+    is_partial: bool = False,
 ) -> DiscoveredUrl | None:
     """Idempotently attach a shop_book to its discovered URL row.
 
     Returns the row (creating one if missing — useful when a shop_book
     is upserted via a path that didn't go through discovery yet).
+
+    ``is_partial=True`` signals the caller knows the persisted shop_book
+    is missing key metadata (e.g. ISBN from lupasearch). The url_type is
+    set/promoted to ``product_partial`` instead of ``product`` so the
+    delta scan picks it up. Calling again with ``is_partial=False`` (or
+    a successful scan-spider URL update) promotes it the rest of the way
+    to ``product``. Once a row is ``product``, a later partial call does
+    NOT demote it — full data is sticky.
     """
+    target_type = "product_partial" if is_partial else "product"
     normalized = normalize_url(url)
     stmt = select(DiscoveredUrl).where(
         DiscoveredUrl.shop_id == shop_id,
@@ -571,7 +581,12 @@ def link_discovered_url_to_shop_book(
     if existing is not None:
         if existing.shop_book_id != shop_book_id:
             existing.shop_book_id = shop_book_id
+        # Promotion ladder: unknown -> product_partial -> product. A
+        # non-partial call can advance product_partial to product, but a
+        # partial call must not demote an already-complete product row.
         if existing.url_type == "unknown":
+            existing.url_type = target_type
+        elif existing.url_type == "product_partial" and not is_partial:
             existing.url_type = "product"
         existing.last_seen_at = now
         if run_id is not None:
@@ -583,7 +598,7 @@ def link_discovered_url_to_shop_book(
         url=url,
         normalized_url=normalized,
         source="category",
-        url_type="product",
+        url_type=target_type,
         first_seen_at=now,
         last_seen_at=now,
         last_seen_run_id=run_id,
@@ -2021,7 +2036,12 @@ def update_cron_job(
 ) -> None:
     """Update allowed fields: phase, strategy, args, cron_expression, enabled, chain_to_job_id."""  # noqa: E501
     allowed = {
-        "phase", "strategy", "args", "cron_expression", "enabled", "chain_to_job_id"
+        "phase",
+        "strategy",
+        "args",
+        "cron_expression",
+        "enabled",
+        "chain_to_job_id",
     }
     job = session.get(CronJob, job_id)
     if job is None:

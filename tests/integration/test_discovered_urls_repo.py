@@ -276,6 +276,146 @@ def test_link_discovered_url_creates_row_when_missing(db_session):
     assert row.normalized_url == "https://test.lt/new"
 
 
+def test_link_discovered_url_marks_partial_when_isbn_missing(db_session):
+    """is_partial=True on a fresh row should land url_type=product_partial,
+    so the delta scan picks it up for an ISBN-fill scan."""
+    shop = _make_shop(db_session)
+    shop_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/p", title="Partial", is_active=True
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+
+    row = link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p",
+        shop_book_id=shop_book.id,
+        is_partial=True,
+    )
+    assert row is not None
+    assert row.url_type == "product_partial"
+
+
+def test_link_discovered_url_promotes_unknown_to_partial(db_session):
+    """An existing url_type=unknown row should promote to product_partial
+    when the linking call says the data is partial."""
+    shop = _make_shop(db_session)
+    upsert_discovered_url(
+        db_session, shop_id=shop.id, url="https://test.lt/p2", source="sitemap"
+    )
+    shop_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/p2", title="P2", is_active=True
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+
+    row = link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p2",
+        shop_book_id=shop_book.id,
+        is_partial=True,
+    )
+    assert row is not None
+    assert row.url_type == "product_partial"
+
+
+def test_link_discovered_url_promotes_partial_to_product_when_filled(db_session):
+    """A row that started product_partial should advance to product
+    when a subsequent non-partial call lands (e.g. scan filled ISBN)."""
+    shop = _make_shop(db_session)
+    shop_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/p3", title="P3", is_active=True
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+
+    # First pass: discovered with partial data.
+    link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p3",
+        shop_book_id=shop_book.id,
+        is_partial=True,
+    )
+    # Second pass: full data this time.
+    row = link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p3",
+        shop_book_id=shop_book.id,
+        is_partial=False,
+    )
+    assert row is not None
+    assert row.url_type == "product"
+
+
+def test_link_discovered_url_partial_does_not_demote_product(db_session):
+    """A complete `product` row must not be demoted by a later partial
+    call — full data is sticky."""
+    shop = _make_shop(db_session)
+    shop_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/p4", title="P4", is_active=True
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+
+    # First pass: full data, lands at product.
+    link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p4",
+        shop_book_id=shop_book.id,
+        is_partial=False,
+    )
+    # Second pass: a lighter source (e.g. lupasearch) revisits the URL
+    # without ISBN. Must not undo the previous full classification.
+    row = link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/p4",
+        shop_book_id=shop_book.id,
+        is_partial=True,
+    )
+    assert row is not None
+    assert row.url_type == "product"
+
+
+def test_get_urls_already_scraped_excludes_product_partial(db_session):
+    """The delta scan's 'already done' filter must not include
+    product_partial rows — that's the whole point of the new value."""
+    from book_scraper.db.repo import get_urls_already_scraped
+
+    shop = _make_shop(db_session)
+    full_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/full", title="F", is_active=True
+    )
+    partial_book = ShopBook(
+        shop_id=shop.id, url="https://test.lt/partial", title="P", is_active=True
+    )
+    db_session.add_all([full_book, partial_book])
+    db_session.flush()
+    link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/full",
+        shop_book_id=full_book.id,
+        is_partial=False,
+    )
+    link_discovered_url_to_shop_book(
+        db_session,
+        shop_id=shop.id,
+        url="https://test.lt/partial",
+        shop_book_id=partial_book.id,
+        is_partial=True,
+    )
+
+    already = get_urls_already_scraped(db_session, shop.id)
+    assert "https://test.lt/full" in already
+    assert "https://test.lt/partial" not in already
+
+
 def test_unique_constraint_enforced_on_normalized_url(db_session):
     """Two raw URLs with the same normalization must not coexist."""
     import sqlalchemy.exc
