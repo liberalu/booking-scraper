@@ -701,6 +701,49 @@ class TestScanSpider:
         assert spider._cached_run_status() == "running"
         assert calls["n"] == 2
 
+    def test_cached_run_status_handles_60k_iterations_in_budget(self):
+        """Regression for the patogupirkti heartbeat-starvation bug.
+
+        Without the TTL cache, `start()`'s per-URL `_poll_run_status`
+        call cost ~10 ms each; on a 60k-URL queue that accumulated to
+        > 60 s of synchronous work before the first request could
+        dispatch, blocking the reactor and starving the heartbeat
+        extension. Reaper killed the run at the 60 s threshold —
+        verified on patogupirkti runs 363–366 (2026-05-08).
+
+        The cache makes 60k iterations cost roughly ttl-window
+        polls (~12 over a 60 s wall-clock at ttl=5 s) instead of 60k.
+        We assert the *poll-count* invariant directly: 60k cache reads
+        with the TTL never expiring should produce exactly 1 underlying
+        DB poll. The wall-clock end of the invariant (the "doesn't
+        starve the reactor" half) follows trivially from in-memory
+        attribute access being O(1).
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        # Effectively-infinite TTL so a 60k-iteration loop never hits
+        # an expiry boundary. (The TTL-expiry path has its own test.)
+        spider._run_status_ttl_s = 3600.0
+        calls = {"n": 0}
+
+        def fake_poll() -> str | None:
+            calls["n"] += 1
+            return "running"
+
+        spider._poll_run_status = fake_poll  # type: ignore[method-assign]
+
+        # 60k cache reads — the size of patogupirkti's queue. Pre-cache
+        # this would have triggered 60k DB queries; with the cache we
+        # expect exactly 1.
+        for _ in range(60_000):
+            assert spider._cached_run_status() == "running"
+        assert calls["n"] == 1, (
+            "Expected exactly 1 underlying poll for 60k cache reads. "
+            f"Got {calls['n']}. The TTL cache regressed and the "
+            "reactor-starvation bug class is back."
+        )
+
     def test_max_urls_truncates_single_url_list(self):
         """In single-URL mode the cap applies before any scheduling."""
         from book_scraper.spiders.scan import ScanSpider

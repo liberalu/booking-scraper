@@ -318,24 +318,31 @@ class StallDetector:  # pragma: no cover
         env = os.environ.copy()
         env.setdefault("PYTHONPATH", "/app")
 
+        from book_scraper.spawn_logging import open_spawn_log
+
+        log_fd, log_path = open_spawn_log("stall-resume", shop)
         try:
-            subprocess.Popen(
-                cmd_parts,
-                cwd="/app",
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except Exception:
-            logger.exception("Auto-resume: failed to spawn %s", cmd)
-            return
+            try:
+                subprocess.Popen(
+                    cmd_parts,
+                    cwd="/app",
+                    env=env,
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            except Exception:
+                logger.exception("Auto-resume: failed to spawn %s", cmd)
+                return
+        finally:
+            log_fd.close()
 
         logger.warning(
-            "Auto-resuming after stall: spawned %s (attempt %d/%d)",
+            "Auto-resuming after stall: spawned %s (attempt %d/%d) — log=%s",
             cmd,
             attempt,
             max_attempts,
+            log_path,
         )
 
     def _force_exit_after_stall(self) -> None:
@@ -723,22 +730,29 @@ class CronChainTrigger:  # pragma: no cover
         env.setdefault("PYTHONPATH", "/app")
         cmd_str = " ".join(shlex.quote(p) for p in cmd_parts)
 
+        from book_scraper.spawn_logging import open_spawn_log
+
+        log_fd, log_path = open_spawn_log("cron-chain", shop)
         try:
-            subprocess.Popen(
-                cmd_parts,
-                cwd="/app",
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except Exception:
-            logger.exception("CronChainTrigger: failed to spawn %s", cmd_str)
-            return
+            try:
+                subprocess.Popen(
+                    cmd_parts,
+                    cwd="/app",
+                    env=env,
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            except Exception:
+                logger.exception("CronChainTrigger: failed to spawn %s", cmd_str)
+                return
+        finally:
+            log_fd.close()
 
         logger.info(
-            "CronChainTrigger: spawned chain job %d → %s (cron_job_id=%d)",
+            "CronChainTrigger: spawned chain job %d → %s (cron_job_id=%d, log=%s)",
             self._cron_job_id or -1,
             cmd_str,
             chain_job_id,
+            log_path,
         )

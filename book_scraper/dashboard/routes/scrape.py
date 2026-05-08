@@ -44,7 +44,28 @@ MAX_FILTERED_URLS = 5000
 
 
 def _default_runner(cmd: list[str]) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Spawn a `scrapy crawl …` subprocess with stdout+stderr captured.
+
+    Output goes to a per-spawn file under ``/var/log/scrapy_runs/`` so a
+    silent failure leaves a trail. Pre-fix this redirected both streams
+    to ``DEVNULL``, which made debugging a dead operator-triggered run
+    impossible without `docker exec` + guesswork.
+    """
+    from book_scraper.spawn_logging import open_spawn_log
+
+    # Extract `-a shop=<name>` from the cmd to label the log file.
+    # Falls through to "unknown" if absent.
+    shop = "unknown"
+    for i, part in enumerate(cmd[:-1]):
+        if part == "-a" and cmd[i + 1].startswith("shop="):
+            shop = cmd[i + 1].split("=", 1)[1] or "unknown"
+            break
+
+    log_fd, _log_path = open_spawn_log("operator", shop)
+    try:
+        return subprocess.Popen(cmd, stdout=log_fd, stderr=subprocess.STDOUT)
+    finally:
+        log_fd.close()
 
 
 # Override in tests so we don't actually fork a scrapy process.
