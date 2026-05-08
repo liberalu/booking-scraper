@@ -104,6 +104,7 @@ class DiscoverSpider(scrapy.Spider):
             "full_crawl",
             "graphql",
             "lupasearch",
+            "ibiblioteka_api",
         }
         if strategy not in _valid_strategies:
             raise ValueError(f"Strategy '{strategy}' not configured for shop '{shop}'")
@@ -247,6 +248,22 @@ class DiscoverSpider(scrapy.Spider):
                 meta={"page": 1},
                 **kwargs,
             )
+        if self.strategy == "ibiblioteka_api":
+            from book_scraper.spiders.ibiblioteka_api_urls import (
+                build_ibiblioteka_post_request_kwargs,
+                build_ibiblioteka_seed_urls,
+            )
+
+            # Test path: yield only the first year-band seed.
+            seed_url = build_ibiblioteka_seed_urls(self.strategy_conf)[0]
+            kwargs = build_ibiblioteka_post_request_kwargs(seed_url)
+            return scrapy.Request(
+                seed_url,
+                callback=self.parse_ibiblioteka_page,
+                errback=self.handle_start_error,
+                meta={"page": 1},
+                **kwargs,
+            )
         # full_crawl
         return scrapy.Request(
             self.strategy_conf.start_url,
@@ -295,6 +312,20 @@ class DiscoverSpider(scrapy.Spider):
                 **kwargs,
             )
 
+        if url_type == "ibiblioteka_page":
+            from book_scraper.spiders.ibiblioteka_api_urls import (
+                build_ibiblioteka_post_request_kwargs,
+            )
+
+            kwargs = build_ibiblioteka_post_request_kwargs(url)
+            return scrapy.Request(
+                url,
+                callback=self.dispatch,
+                errback=self.handle_start_error,
+                meta=meta,
+                **kwargs,
+            )
+
         headers: dict[str, str] = {}
         if url_type == "category_page" and self.strategy == "graphql":
             headers["Accept"] = "application/json"
@@ -317,6 +348,8 @@ class DiscoverSpider(scrapy.Spider):
                 yield from self.parse_categories(response)
             elif url_type == "lupasearch_page":
                 yield from self.parse_lupasearch_page(response)
+            elif url_type == "ibiblioteka_page":
+                yield from self.parse_ibiblioteka_page(response)
             else:
                 # "crawl" or "product" — both handled by full_crawl parser,
                 # which already branches on whether the URL is a product page.
@@ -929,6 +962,71 @@ class DiscoverSpider(scrapy.Spider):
         # offset > 0: the queue was already filled by the first-page
         # upfront pagination; nothing more to do.
         return
+
+    def parse_ibiblioteka_page(
+        self, response: scrapy.http.Response
+    ) -> Generator[DiscoveredUrlItem | ShopBookItem | scrapy.Request, None, None]:
+        """Parse an ibiblioteka.lt POST /detailed-search JSON response.
+
+        Emits a DiscoveredUrlItem for each book's detail endpoint URL, then
+        chains to the next page via pageStartIndex if this page was full.
+        The scan spider fetches each detail URL and calls parse_product_page.
+        """
+        from book_scraper.spiders.ibiblioteka.parsers import (
+            parse_ibiblioteka_search_response,
+        )
+        from book_scraper.spiders.ibiblioteka_api_urls import (
+            advance_ibiblioteka_url,
+            parse_ibiblioteka_url_params,
+        )
+
+        result: dict[str, Any] = parse_ibiblioteka_search_response(response.text)
+        products: list[dict[str, Any]] = result.get("products") or []
+
+        if not products:
+            page = response.meta.get("page", 0)
+            if page == 1:
+                self._report_validation(
+                    "discover_empty_first_page",
+                    "url",
+                    response.url,
+                    f"page 1 returned 0 products (len={len(response.text)})",
+                )
+                self._zero_yield_suppressed = True
+            return
+
+        # Emit DiscoveredUrlItem only — the BookItem with full metadata
+        # comes from the scan phase via parse_product_page (which now
+        # returns BookItem-shaped dict tagged _emit_as='book').
+        for product in products:
+            url = product.get("url")
+            if not url:
+                continue
+            self._urls_processed += 1
+            yield DiscoveredUrlItem(
+                url=url, shop_name=self.shop_name, source="category"
+            )
+
+        psi, ps, _yf, _yt = parse_ibiblioteka_url_params(response.url)
+        n = len(products)
+
+        # If the page was full, there may be more — chain to next page.
+        # The server hard-caps at pageStartIndex ~9 900; stop there.
+        if n < ps or psi + n >= 9900:
+            return
+
+        current_page = response.meta.get("page") or 1
+        if self._max_pages and current_page >= self._max_pages:
+            return
+
+        next_psi = psi + n
+        next_url = advance_ibiblioteka_url(response.url, next_psi)
+        new_item_id = self._enqueue_url(next_url, "ibiblioteka_page")
+        yield self._build_request_for_url_item(
+            next_url, "ibiblioteka_page",
+            item_id=new_item_id,
+            page=current_page + 1,
+        )
 
     def parse_full_crawl(
         self, response: scrapy.http.Response

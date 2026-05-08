@@ -143,6 +143,24 @@ class LupaSearchConfig(BaseModel):
     extra_filters: dict[str, list[str]] | None = None
 
 
+class IbibliotekaApiConfig(BaseModel):
+    """Discovery via the ibiblioteka.lt national library JSON API.
+
+    POST endpoint returning Lithuanian books from LIBIS (the national
+    bibliographic catalogue). No auth required. Pagination via
+    ``pageStartIndex``; each year-band query returns up to ~10 000 records.
+
+    ``year_from`` / ``year_to`` define the inclusive/exclusive publication
+    year window. The spider splits this into per-year bands automatically
+    so concurrent_requests_per_domain engages across years.
+    """
+
+    year_from: int = 1990
+    year_to: int = 2027  # exclusive upper bound
+    page_size: int = 100
+    max_age_hours: int = 168 * 4  # national library: resync monthly
+
+
 class DiscoverConfig(BaseModel):
     url_include_pattern: str | None = None
     sitemap: SitemapConfig | None = None
@@ -150,6 +168,7 @@ class DiscoverConfig(BaseModel):
     full_crawl: FullCrawlConfig | None = None
     graphql: GraphQLConfig | None = None
     lupasearch: LupaSearchConfig | None = None
+    ibiblioteka_api: IbibliotekaApiConfig | None = None
 
 
 class ScanConfig(BaseModel):

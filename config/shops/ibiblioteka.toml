@@ -1,0 +1,20 @@
+[shop]
+name = "ibiblioteka"
+base_url = "https://ibiblioteka.lt"
+
+[scraping]
+# The API is stateless and fast; no delay needed.
+download_delay = 0.1
+concurrent_requests_per_domain = 4
+
+[discover.ibiblioteka_api]
+# Publication year window for Lithuanian books. Per-year bands are generated
+# automatically; each year yields up to ~10 000 records via pageStartIndex.
+year_from = 1990
+year_to = 2027   # exclusive — update each calendar year
+page_size = 100
+max_age_hours = 672  # resync every 4 weeks
+
+[scan]
+# Scan fetches GET /metis-api/bibliographic-records/public/{id} — pure JSON,
+# no Cloudflare. Moderate concurrency is fine.

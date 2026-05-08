@@ -32,6 +32,7 @@ _STRATEGY_URL_TYPE = {
     "full_crawl": "crawl",
     "graphql": "category_page",
     "lupasearch": "lupasearch_page",
+    "ibiblioteka_api": "ibiblioteka_page",
 }
 
 
@@ -124,8 +125,29 @@ class DiscoverService:
         """Strategy-specific seed URLs. Always a list so prepare_discover
         can enqueue multiple page-1 entries (humanitas combines two
         language filters; other strategies emit a one-element list)."""
-        return [cls._seed_url(strategy, shop_config)] if strategy != "categories" \
-            else cls._categories_seed_urls(shop_config)
+        if strategy == "categories":
+            return cls._categories_seed_urls(shop_config)
+        if strategy == "ibiblioteka_api":
+            return cls._ibiblioteka_seed_urls(shop_config)
+        return [cls._seed_url(strategy, shop_config)]
+
+    @staticmethod
+    def _ibiblioteka_seed_urls(shop_config: Any) -> list[str]:
+        from book_scraper.spiders.ibiblioteka_api_urls import (
+            build_ibiblioteka_seed_urls,
+        )
+
+        discover_cfg = (
+            shop_config.discover
+            if hasattr(shop_config, "discover")
+            else shop_config["discover"]
+        )
+        ibiblioteka_cfg = (
+            discover_cfg.ibiblioteka_api
+            if hasattr(discover_cfg, "ibiblioteka_api")
+            else discover_cfg["ibiblioteka_api"]
+        )
+        return build_ibiblioteka_seed_urls(ibiblioteka_cfg)
 
     @staticmethod
     def _categories_seed_urls(shop_config: Any) -> list[str]:

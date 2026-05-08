@@ -516,6 +516,45 @@ class ScanSpider(scrapy.Spider):
             if data.get(key) is not None and key not in props:
                 props[key] = data[key]
 
+        # Canonical-book branch: ibiblioteka emits BookItem-shaped dict
+        # tagged with _emit_as='book'. Build BookItem and short-circuit
+        # the ShopBookItem construction below.
+        if data.get("_emit_as") == "book":
+            from book_scraper.items import BookItem
+            book = BookItem()
+            for k in (
+                "libis_code", "data_source", "title", "title_full", "year",
+                "publisher", "series", "isbns", "authors", "release_place",
+                "type", "format", "pages", "duration", "dimensions",
+                "language", "translated_from", "description", "cover_url",
+                "upcoming_release", "udc_codes", "subjects", "audience",
+                "libis_rating", "libis_review_count",
+            ):
+                if k in data and data[k] is not None:
+                    book[k] = data[k]
+            self._mark_response(
+                scrape_url_item_id,
+                response_url=url,
+                success=True,
+                http_status=200,
+                received_at=received_at,
+                response_bytes=response_bytes,
+                error_reason=None,
+                dispatched_at=dispatched_at,
+                url_type="product",
+                request_delay_s=request_delay_s,
+                delay_source=delay_source,
+                retry_count=retry_count,
+            )
+            self._queue_url_status_update(
+                discovered_url_id, http_status=200, url_type="product",
+                book_score=data.get("book_score", 5),
+                is_book_product=True,
+                book_score_reasons=data.get("book_score_reasons", []),
+            )
+            yield book
+            return
+
         item = ShopBookItem(
             url=url,
             shop_name=self.shop_name,
