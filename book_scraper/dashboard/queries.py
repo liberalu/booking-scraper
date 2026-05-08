@@ -2384,6 +2384,7 @@ def list_books(
     *,
     data_source: str | None = None,
     has_isbn: bool | None = None,
+    has_shops: bool | None = None,
     year: int | None = None,
     page: int = 1,
     per_page: int = 50,
@@ -2408,6 +2409,18 @@ def list_books(
         base = base.where(Book.id.in_(select(BookIsbn.book_id).distinct()))
     elif has_isbn is False:
         base = base.where(~Book.id.in_(select(BookIsbn.book_id).distinct()))
+    if has_shops is True:
+        base = base.where(
+            Book.id.in_(
+                select(ShopBook.book_id).where(ShopBook.book_id.is_not(None)).distinct()
+            )
+        )
+    elif has_shops is False:
+        base = base.where(
+            ~Book.id.in_(
+                select(ShopBook.book_id).where(ShopBook.book_id.is_not(None)).distinct()
+            )
+        )
 
     total = session.execute(
         select(func.count()).select_from(base.subquery())

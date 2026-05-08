@@ -1766,6 +1766,7 @@ def _configured_discover_strategies(shop_name: str) -> list[str]:
 def api_books(
     data_source: str | None = None,
     has_isbn: bool | None = None,
+    has_shops: bool | None = None,
     year: int | None = None,
     page: int = 1,
     per_page: int = 50,
@@ -1774,8 +1775,8 @@ def api_books(
     from book_scraper.dashboard.queries import list_books
     return list_books(
         session,
-        data_source=data_source, has_isbn=has_isbn, year=year,
-        page=page, per_page=per_page,
+        data_source=data_source, has_isbn=has_isbn, has_shops=has_shops,
+        year=year, page=page, per_page=per_page,
     )
 
 

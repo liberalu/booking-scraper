@@ -16,6 +16,7 @@ function HFBooks({ nav, goto }) {
   const [q, setQ]                   = React.useState(_sp.get('q') || '');
   const [dataSource, setDataSource] = React.useState(_sp.get('data_source') || 'all');
   const [hasIsbn, setHasIsbn]       = React.useState(_sp.get('has_isbn') || 'any');
+  const [hasShops, setHasShops]     = React.useState(_sp.get('has_shops') || 'any');
   const [year, setYear]             = React.useState(_sp.get('year') || '');
   const [page, setPage]             = React.useState(1);
   const PER_PAGE = 50;
@@ -27,6 +28,7 @@ function HFBooks({ nav, goto }) {
     const params = new URLSearchParams();
     if (dataSource !== 'all') params.set('data_source', dataSource);
     if (hasIsbn !== 'any')    params.set('has_isbn', hasIsbn === 'yes' ? 'true' : 'false');
+    if (hasShops !== 'any')   params.set('has_shops', hasShops === 'linked' ? 'true' : 'false');
     if (year)                 params.set('year', year);
     params.set('page', String(page));
     params.set('per_page', String(PER_PAGE));
@@ -34,7 +36,7 @@ function HFBooks({ nav, goto }) {
     fetch(`/api/books?${params}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); });
-  }, [dataSource, hasIsbn, year, page]);
+  }, [dataSource, hasIsbn, hasShops, year, page]);
 
   const visible = q
     ? data.books.filter(b => (b.title || '').toLowerCase().includes(q.toLowerCase()))
@@ -55,6 +57,8 @@ function HFBooks({ nav, goto }) {
             onChange={setDataSource} />
           <HFFilter label="ISBN" value={hasIsbn} options={['any', 'yes', 'no']}
             onChange={setHasIsbn} allLabel="any" />
+          <HFFilter label="Shops" value={hasShops} options={['any', 'linked', 'unlinked']}
+            onChange={setHasShops} allLabel="any" />
         </HFFilterBar>
       </HFCard>
 
