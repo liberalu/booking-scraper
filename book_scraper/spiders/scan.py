@@ -77,6 +77,16 @@ class ScanSpider(scrapy.Spider):
         self._single_urls = [u.strip() for u in urls.split(",") if u.strip()]
         # Hard cap for dev / sanity runs. 0 or empty means "no cap".
         self._max_urls: int = int(max_urls) if str(max_urls).strip() else 0
+        # Cached run_status for pause/stop detection inside start(). The
+        # uncached, per-URL DB poll blocks the reactor enough that on a
+        # 60k-URL queue (patogupirkti) the heartbeat extension's
+        # `callLater` can't fire and the dashboard reaper kills the run
+        # at the 60 s threshold without a single fetch landing
+        # (verified on runs 363–366, 2026-05-08). 5 s TTL is well below
+        # the reaper threshold (60 s) and short enough that operator
+        # pause/stop intent is honoured promptly.
+        self._run_status_cache: tuple[float, str | None] | None = None
+        self._run_status_ttl_s: float = 5.0
         self.conf = load_shop_config(shop)
         self.parsers = load_parsers(shop)
         self.allowed_domains = [
@@ -285,17 +295,29 @@ class ScanSpider(scrapy.Spider):
                 # Pause/resume: poll status before each dispatch.
                 # If 'paused', sleep in 5s increments until resumed or
                 # stopped. 'stopping' exits the loop immediately.
+                #
+                # Status is read through a TTL-cached helper
+                # (`_cached_run_status`) so a 60k-URL queue doesn't fire
+                # 60k DB queries between yields and starve the
+                # reactor of heartbeat ticks. Uncached, those queries
+                # accumulated to >60 s of synchronous work before any
+                # request landed, killing the run at the reaper
+                # threshold (verified: patogupirkti runs 363–366
+                # 2026-05-08). When the cache surfaces a paused/stopping
+                # state we fall through to the original blocking
+                # behaviour so operator intent is honoured promptly.
                 if self._run_id is not None:
                     import asyncio
 
                     while True:
-                        run_status = self._poll_run_status()
+                        run_status = self._cached_run_status()
                         if run_status == "paused":
                             self.logger.debug(
                                 "Run %d paused — waiting 5s", self._run_id
                             )
                             self._touch_heartbeat()
                             await asyncio.sleep(5)
+                            self._invalidate_run_status_cache()
                             continue
                         if run_status == "stopping":
                             self.logger.info(
@@ -695,6 +717,35 @@ class ScanSpider(scrapy.Spider):
             self.logger.exception("Heartbeat touch failed for run %d", self._run_id)
         finally:
             session.close()
+
+    def _cached_run_status(self) -> str | None:
+        """TTL-cached wrapper around `_poll_run_status`.
+
+        Cache key is just (cached-at, value); a run only has one
+        status at a time. Returns the cached value when fresh
+        (`_run_status_ttl_s` seconds), otherwise re-queries.
+
+        Pause/stop responsiveness: an operator-initiated transition is
+        observed at most `_run_status_ttl_s` seconds after the
+        dashboard click. The TTL is sized well below the dashboard
+        reaper threshold (60 s) so a missed tick can't fail the run.
+        """
+        if self._run_status_cache is not None:
+            cached_at, cached_value = self._run_status_cache
+            if time.monotonic() - cached_at < self._run_status_ttl_s:
+                return cached_value
+        value = self._poll_run_status()
+        self._run_status_cache = (time.monotonic(), value)
+        return value
+
+    def _invalidate_run_status_cache(self) -> None:
+        """Drop the cached value so the next `_cached_run_status` re-queries.
+
+        Used after a paused-loop sleep so the immediate next check
+        observes the fresh DB state instead of replaying the stale
+        `paused` value the loop entered with.
+        """
+        self._run_status_cache = None
 
     def _poll_run_status(self) -> str | None:
         """Read `scrape_runs.status` for the current run.

@@ -131,18 +131,14 @@ class TestDiscoverSpiderCategories:
 
     def test_cli_max_pages_overrides_toml_safety_cap(self):
         """Explicit CLI override always wins, including a smaller value."""
-        spider = DiscoverSpider(
-            shop="humanitas", strategy="categories", max_pages=5
-        )
+        spider = DiscoverSpider(shop="humanitas", strategy="categories", max_pages=5)
         assert spider._max_pages == 5
 
     def test_explicit_zero_cli_max_pages_keeps_zero(self):
         """`-a max_pages=0` is a deliberate "no cap" override; TOML must not
         re-impose its cap on top.
         """
-        spider = DiscoverSpider(
-            shop="humanitas", strategy="categories", max_pages=0
-        )
+        spider = DiscoverSpider(shop="humanitas", strategy="categories", max_pages=0)
         assert spider._max_pages == 0
 
     def test_next_page_url_substitutes_cntnt01page_in_response_url(self):
@@ -650,6 +646,60 @@ class TestScanSpider:
         assert ScanSpider(shop="vaga", max_urls=5)._max_urls == 5
         assert ScanSpider(shop="vaga", max_urls="10")._max_urls == 10
         assert ScanSpider(shop="vaga", max_urls="")._max_urls == 0
+
+    def test_cached_run_status_dedupes_db_polls(self):
+        """`_cached_run_status` only hits `_poll_run_status` once per TTL.
+
+        The uncached, per-URL DB poll blocks the reactor enough that on
+        a 60k-URL queue the heartbeat extension's callLater can't fire
+        and the run is reaped at the 60 s threshold (verified on
+        patogupirkti runs 363–366, 2026-05-08).
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        spider._run_status_ttl_s = (
+            60.0  # large enough that no test wall-time can outrun it
+        )
+        calls = {"n": 0}
+
+        def fake_poll() -> str | None:
+            calls["n"] += 1
+            return "running"
+
+        spider._poll_run_status = fake_poll  # type: ignore[method-assign]
+
+        # First call fills the cache, second/third reuse it.
+        assert spider._cached_run_status() == "running"
+        assert spider._cached_run_status() == "running"
+        assert spider._cached_run_status() == "running"
+        assert calls["n"] == 1
+
+        # Invalidation forces a fresh poll.
+        spider._invalidate_run_status_cache()
+        assert spider._cached_run_status() == "running"
+        assert calls["n"] == 2
+
+    def test_cached_run_status_expires_after_ttl(self):
+        """When the TTL elapses, the next call re-queries."""
+        import time
+
+        from book_scraper.spiders.scan import ScanSpider
+
+        spider = ScanSpider(shop="vaga")
+        spider._run_status_ttl_s = 0.01  # 10 ms TTL
+        calls = {"n": 0}
+
+        def fake_poll() -> str | None:
+            calls["n"] += 1
+            return "running"
+
+        spider._poll_run_status = fake_poll  # type: ignore[method-assign]
+
+        assert spider._cached_run_status() == "running"
+        time.sleep(0.02)
+        assert spider._cached_run_status() == "running"
+        assert calls["n"] == 2
 
     def test_max_urls_truncates_single_url_list(self):
         """In single-URL mode the cap applies before any scheduling."""
