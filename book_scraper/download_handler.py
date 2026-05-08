@@ -258,15 +258,28 @@ class HttpxMiddleware:  # pragma: no cover
         self._autothrottle_start = download_delay
         self._autothrottle_max = max(self._autothrottle_max, download_delay)
         self._max_concurrency = concurrency
+        # Bridge per-shop concurrency to AutoThrottle's target. The
+        # algorithm picks `target_delay = latency / target_concurrency`,
+        # so leaving target=1.0 (Scrapy's global default) makes
+        # `current_delay` drift toward `latency` regardless of how many
+        # slots the semaphore exposes — dispatches stay serial and
+        # `_max_concurrency` never engages. Verified on patogupirkti
+        # run 367 (2026-05-08): concurrency=4 in TOML, avg dispatch
+        # gap ≈ avg latency ≈ 1.2 s, in-flight ≈ 1.17. With target tied
+        # to concurrency, target_delay = latency / 4 ≈ 0.35 s and the
+        # semaphore actually saturates.
+        self._autothrottle_target_concurrency = float(concurrency)
         self._host_slots.clear()
         self._host_dispatch_locks.clear()
         self._host_last_dispatch.clear()
         self._host_current_delay.clear()
         logger.info(
-            "HttpxMiddleware: rate for %s — download_delay=%.2fs concurrent=%d",
+            "HttpxMiddleware: rate for %s — "
+            "download_delay=%.2fs concurrent=%d target_concurrency=%.1f",
             shop_name,
             self._download_delay,
             self._max_concurrency,
+            self._autothrottle_target_concurrency,
         )
 
     def _host_key(self, url: str) -> str:

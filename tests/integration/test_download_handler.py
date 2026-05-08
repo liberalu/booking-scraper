@@ -124,6 +124,37 @@ def test_spider_opened_unknown_shop_falls_back_to_scrapy_globals(
 
 
 @pytest.mark.integration
+def test_spider_opened_ties_target_concurrency_to_per_shop_concurrency(
+    db_session: Session,
+) -> None:
+    """`AUTOTHROTTLE_TARGET_CONCURRENCY` must be set from per-shop
+    concurrency, not the Scrapy global default of 1.0.
+
+    AutoThrottle's target_delay = latency / target_concurrency. If
+    target stays at 1.0 while concurrent_requests_per_domain is 4
+    (TOML), current_delay drifts toward latency and dispatches happen
+    serially regardless of slot availability — concurrency=4 never
+    engages. Verified live on patogupirkti run 367 (2026-05-08): avg
+    dispatch gap ≈ avg latency ≈ 1.2 s, throughput 0.88 URL/s instead
+    of the predicted ~2.5. Setting target=concurrency lets the algo
+    pick target_delay = latency / N, freeing the semaphore to
+    saturate.
+    """
+    _ensure_vaga(db_session)  # vaga.toml has concurrent_requests_per_domain=8
+
+    mw = _make_middleware()  # constructed with autothrottle_target_concurrency=1.0
+    mw._session_factory = lambda: db_session
+    try:
+        mw.spider_opened(_MockSpider())
+        # Target_concurrency is now bridged to the per-shop value, not
+        # the global 1.0 the middleware was constructed with.
+        assert mw._autothrottle_target_concurrency == 8.0
+        assert mw._max_concurrency == 8
+    finally:
+        asyncio.run(mw._close())
+
+
+@pytest.mark.integration
 def test_spider_opened_uses_toml_when_no_db_rows(db_session: Session) -> None:
     """Precedence chain: DB → TOML → Scrapy globals. With no DB rows
     for vaga, the TOML [scraping] values must be applied. vaga.toml
