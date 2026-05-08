@@ -1796,6 +1796,7 @@ Phases (this commit implements 1 + 2; 3 + 4 added in Task 6):
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import text
@@ -1804,19 +1805,30 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class MatchCounters:
+    """Per-run match outcome counters. Returned by MatchService.run()."""
+    books_linked: int = 0
+    authors_linked: int = 0
+    books_synthesized: int = 0
+
+    @property
+    def total_updates(self) -> int:
+        """Sum suitable for scrape_runs.items_updated."""
+        return self.books_linked + self.authors_linked
+
+
 class MatchService:
     """Per-shop matcher. Steps are SQL-driven and idempotent."""
 
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def run(self, shop_name: str) -> dict[str, Any]:
+    def run(self, shop_name: str) -> MatchCounters:
         """Run all match steps for one shop. Returns counters for the run row."""
-        counters = {"books_linked": 0, "authors_linked": 0}
-
-        counters["books_linked"] = self._step1_isbn_match(shop_name)
-        counters["authors_linked"] = self._step2_author_backfill(shop_name)
-
+        counters = MatchCounters()
+        counters.books_linked = self._step1_isbn_match(shop_name)
+        counters.authors_linked = self._step2_author_backfill(shop_name)
         return counters
 
     def _step1_isbn_match(self, shop_name: str) -> int:
@@ -1955,8 +1967,7 @@ class MatchSpider(scrapy.Spider):
         try:
             finish_scrape_run(
                 session, run_id, status="completed",
-                items_updated=counters.get("books_linked", 0)
-                              + counters.get("authors_linked", 0),
+                items_updated=counters.total_updates,
             )
             session.commit()
         finally:
@@ -2763,10 +2774,17 @@ In `book_scraper/services/match.py`, modify the class:
 
     @staticmethod
     def _load_shop_trust() -> dict[str, int]:
-        """Load per-shop trust from config/shops/*.toml [match] trust=N."""
+        """Load per-shop trust from config/shops/*.toml [match] trust=N.
+
+        Broken / missing TOMLs are logged but don't kill the matcher —
+        a single shop with an unreadable config falls back to default
+        trust (50) elsewhere; the rest of the catalogue still matches.
+        """
+        import logging
         from pathlib import Path
         from book_scraper.config import load_shop_config
 
+        logger = logging.getLogger(__name__)
         out: dict[str, int] = {}
         cfg_dir = Path("config/shops")
         if not cfg_dir.exists():
@@ -2775,21 +2793,21 @@ In `book_scraper/services/match.py`, modify the class:
             try:
                 cfg = load_shop_config(toml.stem)
                 out[toml.stem] = cfg.match.trust
+            except FileNotFoundError:
+                continue
             except Exception:
+                logger.exception("Failed to load match.trust from %s", toml)
                 continue
         return out
 
-    def run(self, shop_name: str) -> dict[str, Any]:
-        counters = {
-            "books_linked": 0, "authors_linked": 0,
-            "books_synthesized": 0,
-        }
-        counters["books_linked"] = self._step1_isbn_match(shop_name)
-        counters["authors_linked"] = self._step2_author_backfill(shop_name)
-        counters["books_synthesized"] = self._step3_shop_inferred_synthesis()
+    def run(self, shop_name: str) -> "MatchCounters":
+        counters = MatchCounters()
+        counters.books_linked = self._step1_isbn_match(shop_name)
+        counters.authors_linked = self._step2_author_backfill(shop_name)
+        counters.books_synthesized = self._step3_shop_inferred_synthesis()
         # Step 4 (LIBIS upgrade) is performed inside _upsert_book; nothing here.
         # Re-run step 1 so newly synthesised books pick up matches.
-        counters["books_linked"] += self._step1_isbn_match(shop_name)
+        counters.books_linked += self._step1_isbn_match(shop_name)
         return counters
 
     def _step3_shop_inferred_synthesis(self) -> int:
@@ -2822,8 +2840,13 @@ In `book_scraper/services/match.py`, modify the class:
     def _synthesise_one(self, isbn_norm: str) -> None:
         """Build a shop_inferred Book from the highest-trust shop's data,
         with the FIRST writer's publisher (sticky)."""
+        from datetime import datetime, timezone
         from sqlalchemy import select
         from book_scraper.db.models import Book, BookIsbn, Publisher, ShopBook, Shop
+
+        # Sentinel for NULL first_seen_at — sorts NULL rows last so they
+        # don't accidentally win the "first writer" tiebreak.
+        _FAR_FUTURE = datetime(9999, 1, 1, tzinfo=timezone.utc)
 
         # All shop_books carrying this ISBN, ordered by trust desc, then first_seen asc.
         candidates = self.session.execute(text("""
@@ -2844,10 +2867,10 @@ In `book_scraper/services/match.py`, modify the class:
         )
         winner = scored[0]
 
-        # First-writer wins for publisher.
+        # First-writer wins for publisher. NULL first_seen_at -> sorts last.
         first_with_pub = sorted(
             [c for c in candidates if c.publisher],
-            key=lambda r: (r.first_seen_at,),
+            key=lambda r: r.first_seen_at or _FAR_FUTURE,
         )
         publisher_name = first_with_pub[0].publisher if first_with_pub else None
 
