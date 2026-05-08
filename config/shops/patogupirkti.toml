@@ -7,13 +7,16 @@ base_url = "https://www.patogupirkti.lt"
 # desktop UA don't trigger the Managed Challenge (verified 2026-05-07,
 # 5/5 sequential curl OK in ~1 s each). No FlareSolverr needed.
 #
-# Pacing for the first full scan (~60 099 products in
-# sitemap_product.xml + sitemap_product-1.xml): concurrency=4 + delay
-# 0.5 s gives ~2.7 req/s effective, full scan ~6–7 h. If CF starts
-# challenging mid-run, drop these to (2, 1.0) via the live shop_settings
-# DB override (no restart needed) and the run finishes overnight.
+# Pacing tuned empirically on 60 099-URL scans (2026-05-08):
+#   * concurrency=4: avg server latency 3.3 s, throughput 0.90 URL/s
+#   * concurrency=3: avg server latency 2.4 s, throughput ~0.85 URL/s
+# Same effective throughput at conc=3 (server scales sub-linearly so
+# lower concurrency gives faster individual responses), ~30% lighter
+# on the Magento backend, smaller blast radius if Cloudflare ever
+# shifts to active challenge. Override via shop_settings DB row to
+# experiment without redeploying.
 download_delay = 0.5
-concurrent_requests_per_domain = 4
+concurrent_requests_per_domain = 3
 batch_size = 100
 batch_pause = 10
 max_retries = 2
