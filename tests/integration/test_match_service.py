@@ -156,3 +156,74 @@ def test_step2_does_not_pair_translator_at_position_0(db_session):
         select(ShopAuthor).where(ShopAuthor.id == shop_author.id)
     ).scalar_one()
     assert sa.canonical_author_id == primary.id
+
+
+def test_step3_synthesizes_shop_inferred_after_two_shops(db_session):
+    """Two shops carry the same ISBN, no canonical match -> create shop_inferred book."""
+    from book_scraper.db.models import Publisher
+
+    sv = _make_shop(db_session, "vaga")
+    sp = _make_shop(db_session, "pegasas")
+    isbn = "9780000000007"
+
+    sb_v = ShopBook(
+        shop_id=sv.id, url="https://vaga.lt/p/sa", title="Vaga Title",
+        isbn=isbn, publisher="Vaga Publisher", year=2024,
+    )
+    sb_p = ShopBook(
+        shop_id=sp.id, url="https://pegasas.lt/p/sa", title="Pegasas Title",
+        isbn=isbn, publisher="Pegasas Publisher", year=2024,
+    )
+    db_session.add_all([sb_v, sb_p])
+    db_session.commit()
+
+    svc = MatchService(db_session)
+    svc.shop_trust = {"vaga": 100, "pegasas": 90}
+    svc.run("vaga")
+
+    db_session.expire_all()
+    rows = db_session.execute(
+        select(Book).join(BookIsbn).where(BookIsbn.isbn == isbn)
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].data_source == "shop_inferred"
+    assert rows[0].title == "Vaga Title"
+
+
+def test_step3_publisher_is_first_writer_not_highest_trust(db_session):
+    """Sticky publisher: the FIRST shop's publisher persists even when
+    a higher-trust shop also has the ISBN."""
+    import datetime
+    from book_scraper.db.models import Publisher
+
+    sp = _make_shop(db_session, "pegasas")
+    sv = _make_shop(db_session, "vaga")
+    isbn = "9780000000008"
+
+    sb_p = ShopBook(
+        shop_id=sp.id, url="https://pegasas.lt/p/sb", title="P",
+        isbn=isbn, publisher="Pegasas Publisher",
+        first_seen_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc),
+    )
+    db_session.add(sb_p)
+    db_session.commit()
+    sb_v = ShopBook(
+        shop_id=sv.id, url="https://vaga.lt/p/sb", title="V",
+        isbn=isbn, publisher="Vaga Publisher",
+        first_seen_at=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc),
+    )
+    db_session.add(sb_v)
+    db_session.commit()
+
+    svc = MatchService(db_session)
+    svc.shop_trust = {"vaga": 100, "pegasas": 90}
+    svc.run("vaga")
+
+    db_session.expire_all()
+    book = db_session.execute(
+        select(Book).join(BookIsbn).where(BookIsbn.isbn == isbn)
+    ).scalar_one()
+    pub = db_session.execute(
+        select(Publisher).where(Publisher.id == book.publisher_id)
+    ).scalar_one()
+    assert pub.name == "Pegasas Publisher"

@@ -183,3 +183,38 @@ def test_lookup_by_isbn_finds_existing_shop_inferred(db_session, book_pipeline):
         select(Publisher).where(Publisher.id == rows[0].publisher_id)
     ).scalar_one()
     assert pub.name == "Shop Publisher"
+
+
+def test_libis_upgrade_preserves_inferred_publisher(db_session, book_pipeline):
+    """A shop_inferred book gets upgraded to ibiblioteka by ISBN; LIBIS
+    overwrites everything except publisher_id (sticky)."""
+    inferred = BookItem(
+        libis_code=None,
+        data_source="shop_inferred",
+        title="Inferred Title",
+        publisher="Shop Publisher",
+        isbns=[{"isbn": "9780000000099", "type": "isbn13"}],
+    )
+    book_pipeline.process_item(inferred)
+
+    db_session.expire_all()
+    upgrade = BookItem(
+        libis_code="LIBIS000000999900",
+        data_source="ibiblioteka",
+        title="LIBIS Title",
+        publisher="LIBIS Publisher",
+        isbns=[{"isbn": "9780000000099", "type": "isbn13"}],
+    )
+    book_pipeline.process_item(upgrade)
+
+    rows = db_session.execute(
+        select(Book).where(Book.libis_code == "LIBIS000000999900")
+    ).scalars().all()
+    assert len(rows) == 1
+    book = rows[0]
+    assert book.data_source == "ibiblioteka"
+    assert book.title == "LIBIS Title"
+    pub = db_session.execute(
+        select(Publisher).where(Publisher.id == book.publisher_id)
+    ).scalar_one()
+    assert pub.name == "Shop Publisher"
