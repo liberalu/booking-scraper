@@ -19,7 +19,7 @@ DELETE FROM shop_books WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblio
 DELETE FROM discovered_urls   WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 DELETE FROM scrape_url_items  WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 DELETE FROM scrape_run_events WHERE run_id IN (SELECT id FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
-DELETE FROM validation_issues WHERE run_id IN (SELECT id FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
+DELETE FROM validation_issues WHERE scrape_run_id IN (SELECT id FROM scrape_runs WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka'));
 DELETE FROM cron_jobs         WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 DELETE FROM scrape_runs       WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
 DELETE FROM shop_settings     WHERE shop_id = (SELECT id FROM shops WHERE name='ibiblioteka');
