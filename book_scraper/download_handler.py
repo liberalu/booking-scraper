@@ -71,7 +71,6 @@ class HttpxMiddleware:  # pragma: no cover
         autothrottle_enabled: bool,
         autothrottle_start_delay: float,
         autothrottle_max_delay: float,
-        autothrottle_target_concurrency: float,
         client_reset_after_requests: int,
     ):
         self._timeout = timeout
@@ -84,9 +83,14 @@ class HttpxMiddleware:  # pragma: no cover
         self._autothrottle_enabled = autothrottle_enabled
         self._autothrottle_start = max(autothrottle_start_delay, download_delay)
         self._autothrottle_max = max(autothrottle_max_delay, self._autothrottle_start)
-        self._autothrottle_target_concurrency = max(
-            0.1, autothrottle_target_concurrency
-        )
+        # `_autothrottle_target_concurrency` is no longer a constructor
+        # input — it's always derived from the per-shop concurrency in
+        # `spider_opened` (see commit 62f2df8). The 1.0 placeholder here
+        # is harmless: it's only consulted if `_adjust_delay` runs before
+        # `spider_opened`, which can't happen on a real run (the signal
+        # always fires first). Tests that call `_adjust_delay` directly
+        # set this attribute themselves.
+        self._autothrottle_target_concurrency: float = 1.0
         # Per-host throttling state.
         # _host_slots: Semaphore caps in-flight requests to _max_concurrency.
         # _host_dispatch_locks: Lock serialises timing/sleep so concurrent
@@ -161,9 +165,6 @@ class HttpxMiddleware:  # pragma: no cover
             autothrottle_enabled=s.getbool("AUTOTHROTTLE_ENABLED", True),
             autothrottle_start_delay=s.getfloat("AUTOTHROTTLE_START_DELAY", 2.0),
             autothrottle_max_delay=s.getfloat("AUTOTHROTTLE_MAX_DELAY", 30.0),
-            autothrottle_target_concurrency=s.getfloat(
-                "AUTOTHROTTLE_TARGET_CONCURRENCY", 1.0
-            ),
             client_reset_after_requests=s.getint(
                 "HTTPX_CLIENT_RESET_AFTER_REQUESTS", 80
             ),

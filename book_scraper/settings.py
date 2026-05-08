@@ -106,6 +106,13 @@ HTTPX_CLIENT_RESET_AFTER_REQUESTS = 80  # pragma: no cover
 AUTOTHROTTLE_ENABLED = True  # pragma: no cover
 AUTOTHROTTLE_START_DELAY = 2.0  # pragma: no cover
 AUTOTHROTTLE_MAX_DELAY = 30  # pragma: no cover
+# Scrapy's built-in AutoThrottle extension reads this, but it's a
+# no-op for us: HttpxMiddleware short-circuits Scrapy's downloader so
+# the built-in extension has no slot data to act on. The middleware's
+# own per-host autothrottle derives target_concurrency from the per-shop
+# `concurrent_requests_per_domain` (commit 62f2df8 + this commit), so
+# this global is dead weight aside from silencing Scrapy's "missing
+# setting" warnings.  # pragma: no cover
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0  # pragma: no cover
 
 FEED_EXPORT_ENCODING = "utf-8"  # pragma: no cover

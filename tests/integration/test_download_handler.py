@@ -20,7 +20,6 @@ def _make_middleware() -> HttpxMiddleware:
         autothrottle_enabled=True,
         autothrottle_start_delay=2.0,
         autothrottle_max_delay=30.0,
-        autothrottle_target_concurrency=1.0,
         client_reset_after_requests=80,
     )
 
@@ -142,14 +141,21 @@ def test_spider_opened_ties_target_concurrency_to_per_shop_concurrency(
     """
     _ensure_vaga(db_session)  # vaga.toml has concurrent_requests_per_domain=8
 
-    mw = _make_middleware()  # constructed with autothrottle_target_concurrency=1.0
+    mw = _make_middleware()  # default target=1.0 placeholder
+    # Sanity-check the placeholder so the assertion below proves
+    # spider_opened actually changed the value.
+    assert mw._autothrottle_target_concurrency == 1.0
     mw._session_factory = lambda: db_session
     try:
         mw.spider_opened(_MockSpider())
-        # Target_concurrency is now bridged to the per-shop value, not
-        # the global 1.0 the middleware was constructed with.
+        # Target_concurrency is now bridged to the per-shop value (8 from
+        # vaga.toml), replacing the 1.0 placeholder. _max_concurrency and
+        # _autothrottle_target_concurrency are derived from the same
+        # source, so they must agree — that's the whole point of the
+        # collapse.
         assert mw._autothrottle_target_concurrency == 8.0
         assert mw._max_concurrency == 8
+        assert mw._autothrottle_target_concurrency == float(mw._max_concurrency)
     finally:
         asyncio.run(mw._close())
 

@@ -30,7 +30,6 @@ def _make_httpx_middleware() -> HttpxMiddleware:
         autothrottle_enabled=False,
         autothrottle_start_delay=0.01,
         autothrottle_max_delay=1.0,
-        autothrottle_target_concurrency=1.0,
         client_reset_after_requests=1000,
     )
 
