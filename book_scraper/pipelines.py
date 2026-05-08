@@ -23,7 +23,7 @@ from book_scraper.db.repo import (
 )
 from book_scraper.db.session import get_session_factory
 from book_scraper.isbn import is_valid_isbn
-from book_scraper.items import DiscoveredUrlItem, PriceItem, ShopBookItem
+from book_scraper.items import BookItem, DiscoveredUrlItem, PriceItem, ShopBookItem
 
 logger = logging.getLogger(__name__)
 
@@ -273,9 +273,13 @@ class ValidationPipeline:
                 self._warn("year_pages_swap", "year", url, str(year_before))
 
             isbn = adapter.get("isbn")
-            if isbn is not None and not _is_valid_isbn(isbn):
-                self._warn("invalid_isbn", "isbn", url, str(isbn))
-                adapter["isbn"] = None
+            if isbn is not None:
+                if _is_valid_isbn(isbn):
+                    from book_scraper.isbn import normalize_isbn
+                    adapter["isbn"] = normalize_isbn(isbn)
+                else:
+                    self._warn("invalid_isbn", "isbn", url, str(isbn))
+                    adapter["isbn"] = None
 
             # Strip whitespace from text fields
             for field in ("title", "author", "publisher"):
@@ -647,6 +651,10 @@ class PostgresPipeline:
                 is_partial=shop_book.isbn is None,
             )
 
+        elif isinstance(item, BookItem):
+            self._upsert_book(adapter)
+            return item
+
         elif isinstance(item, DiscoveredUrlItem):
             shop_id = self._get_shop_id(shop_name)
             record = upsert_discovered_url(
@@ -713,3 +721,198 @@ class PostgresPipeline:
                 self.session.commit()
 
         return item
+
+    def _upsert_book(self, adapter: ItemAdapter) -> None:
+        """Insert or update a Book row with its publisher, series, ISBNs, authors.
+
+        Resolution order to find target books.id:
+          1. By any incoming ISBN (normalized) — catches shop_inferred → ibiblioteka upgrade.
+          2. By libis_code — for re-scrapes where ISBNs may have changed.
+          3. Otherwise INSERT a new books row.
+        """
+        from sqlalchemy import select
+        from book_scraper.db.models import (
+            Book, BookIsbn, Publisher, Series,
+        )
+        from book_scraper.isbn import normalize_isbn, to_isbn10, to_isbn13
+
+        if self.session_factory is None:
+            return
+        session = self.session_factory()
+        try:
+            incoming_isbns_raw = adapter.get("isbns") or []
+            incoming_isbns_norm: list[str] = []
+            for entry in incoming_isbns_raw:
+                norm = normalize_isbn(entry.get("isbn") or "")
+                if norm:
+                    incoming_isbns_norm.append(norm)
+
+            target: Book | None = None
+            if incoming_isbns_norm:
+                target = session.execute(
+                    select(Book).join(BookIsbn)
+                    .where(BookIsbn.isbn.in_(incoming_isbns_norm))
+                    .limit(1)
+                ).scalar_one_or_none()
+
+            libis_code = adapter.get("libis_code")
+            if target is None and libis_code:
+                target = session.execute(
+                    select(Book).where(Book.libis_code == libis_code)
+                ).scalar_one_or_none()
+
+            publisher_id: int | None = None
+            pub_name = adapter.get("publisher")
+            if pub_name:
+                pub_name = pub_name.strip()
+                pub = session.execute(
+                    select(Publisher).where(Publisher.name == pub_name)
+                ).scalar_one_or_none()
+                if pub is None:
+                    pub = Publisher(name=pub_name)
+                    session.add(pub)
+                    session.flush()
+                publisher_id = pub.id
+
+            series_id: int | None = None
+            ser_name = adapter.get("series")
+            if ser_name:
+                ser_name = ser_name.strip()
+                ser = session.execute(
+                    select(Series).where(Series.title == ser_name)
+                ).scalar_one_or_none()
+                if ser is None:
+                    ser = Series(title=ser_name)
+                    session.add(ser)
+                    session.flush()
+                series_id = ser.id
+
+            field_map = {
+                "title": adapter.get("title"),
+                "title_full": adapter.get("title_full"),
+                "year": adapter.get("year"),
+                "release_place": adapter.get("release_place"),
+                "type": adapter.get("type"),
+                "format": adapter.get("format"),
+                "pages": adapter.get("pages"),
+                "duration": adapter.get("duration"),
+                "dimensions": adapter.get("dimensions"),
+                "language": adapter.get("language"),
+                "translated_from": adapter.get("translated_from"),
+                "description": adapter.get("description"),
+                "cover_url": adapter.get("cover_url"),
+                "upcoming_release": adapter.get("upcoming_release", False),
+                "udc_codes": adapter.get("udc_codes"),
+                "subjects": adapter.get("subjects"),
+                "audience": adapter.get("audience"),
+                "libis_rating": adapter.get("libis_rating"),
+                "libis_review_count": adapter.get("libis_review_count"),
+                "series_id": series_id,
+            }
+            if target is None:
+                target = Book(
+                    data_source=adapter.get("data_source"),
+                    libis_code=libis_code,
+                    publisher_id=publisher_id,
+                    **{k: v for k, v in field_map.items() if v is not None},
+                )
+                session.add(target)
+                session.flush()
+            else:
+                if (target.data_source == "shop_inferred"
+                        and adapter.get("data_source") == "ibiblioteka"):
+                    target.data_source = "ibiblioteka"
+                    target.libis_code = libis_code
+                for k, v in field_map.items():
+                    if v is not None:
+                        setattr(target, k, v)
+                if target.publisher_id is None and publisher_id is not None:
+                    target.publisher_id = publisher_id
+                if libis_code and target.libis_code is None:
+                    target.libis_code = libis_code
+
+            seen: set[str] = set()
+            for entry in incoming_isbns_raw:
+                raw = entry.get("isbn") or ""
+                norm = normalize_isbn(raw)
+                if not norm or norm in seen:
+                    continue
+                seen.add(norm)
+                self._upsert_book_isbn(
+                    session, target.id, norm, entry.get("type") or "unknown"
+                )
+                opp = to_isbn10(norm) if len(norm) == 13 else to_isbn13(norm)
+                if opp and opp != norm and opp not in seen:
+                    seen.add(opp)
+                    opp_type = "isbn10" if len(opp) == 10 else "isbn13"
+                    self._upsert_book_isbn(session, target.id, opp, opp_type)
+
+            for entry in adapter.get("authors") or []:
+                self._upsert_book_author(session, target.id, entry)
+
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def _upsert_book_isbn(
+        self, session: "Session", book_id: int, isbn: str, isbn_type: str
+    ) -> None:
+        from sqlalchemy.dialects.postgresql import insert
+        from book_scraper.db.models import BookIsbn
+
+        stmt = insert(BookIsbn).values(book_id=book_id, isbn=isbn, isbn_type=isbn_type)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["isbn"],
+            set_={"book_id": book_id, "isbn_type": isbn_type},
+        )
+        session.execute(stmt)
+
+    def _upsert_book_author(
+        self, session: "Session", book_id: int, entry: dict
+    ) -> None:
+        """Resolve or create the canonical Author row, then ensure book_authors row."""
+        from sqlalchemy import select
+        from book_scraper.db.models import Author, BookAuthor
+
+        name = (entry.get("name") or "").strip()
+        if not name:
+            return
+        libis_code = entry.get("libis_code")
+        normalized = name.lower().replace(",", "").strip()
+
+        author: Author | None = None
+        if libis_code:
+            author = session.execute(
+                select(Author).where(Author.libis_code == libis_code)
+            ).scalar_one_or_none()
+        if author is None:
+            author = session.execute(
+                select(Author).where(Author.normalized_name == normalized)
+            ).scalar_one_or_none()
+        if author is None:
+            author = Author(
+                name=name, normalized_name=normalized, libis_code=libis_code,
+            )
+            session.add(author)
+            session.flush()
+        elif libis_code and not author.libis_code:
+            author.libis_code = libis_code
+
+        role = entry.get("role") or "author"
+        position = int(entry.get("position") or 0)
+        existing = session.execute(
+            select(BookAuthor).where(
+                BookAuthor.book_id == book_id,
+                BookAuthor.author_id == author.id,
+                BookAuthor.role == role,
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.add(BookAuthor(
+                book_id=book_id, author_id=author.id, role=role, position=position,
+            ))
+        else:
+            existing.position = position
