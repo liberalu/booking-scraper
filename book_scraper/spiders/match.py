@@ -24,7 +24,18 @@ from book_scraper.services.match import MatchService
 
 class MatchSpider(scrapy.Spider):
     name = "match"
-    custom_settings = {"ITEM_PIPELINES": {}}  # no items, no DB pipelines
+    custom_settings = {
+        "ITEM_PIPELINES": {},  # no items, no DB pipelines
+        # Match makes zero HTTP requests — disable stall/heartbeat
+        # extensions that key on response_received. A long step 3
+        # (shop_inferred synthesis scans all shop_books) would
+        # otherwise trip stall_timeout and the run gets killed mid-SQL.
+        "EXTENSIONS": {
+            "book_scraper.extensions.StallDetector": None,
+            "book_scraper.extensions.HeartbeatExtension": None,
+            "book_scraper.extensions.CronChainTrigger": 520,
+        },
+    }
 
     def __init__(self, shop: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
