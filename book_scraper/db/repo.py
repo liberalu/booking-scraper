@@ -764,6 +764,60 @@ _RETRYABLE_FAILURE_REASONS = frozenset(
 )
 
 
+def count_consecutive_zero_progress_resumes(
+    session: Session, run_id: int, max_lookback: int = 8
+) -> int:
+    """Count how many ancestors in the auto-resume chain — including
+    `run_id` itself — finished with `urls_processed = 0`, stopping at
+    the first ancestor that made any progress.
+
+    Used by the StallDetector to circuit-break: if the last N runs in
+    the chain all failed before producing a single URL, the bug is
+    structural (not a transient network blip), and another auto-resume
+    will just burn the depth budget on the same failure mode. Better
+    to bail and let the operator click Continue after fixing the
+    underlying issue.
+
+    The walk is capped at `max_lookback` so a pathological chain
+    can't make the lookup expensive. In practice the StallDetector
+    only cares about "≥ 2 in a row" for the circuit decision, so the
+    cap mostly pays for itself in unit-test simplicity.
+
+    Returns the count of trailing zero-progress runs in the chain.
+    A fresh run with no `resumed_after_failure` event returns 1 if it
+    has urls_processed=0, 0 otherwise — the run itself is the only
+    candidate.
+    """
+    consecutive = 0
+    current = run_id
+    seen: set[int] = set()
+    while current not in seen and consecutive < max_lookback:
+        seen.add(current)
+        run = session.query(ScrapeRun).filter(ScrapeRun.id == current).first()
+        if run is None:
+            return consecutive
+        if (run.urls_processed or 0) > 0:
+            return consecutive
+        consecutive += 1
+
+        evt = (
+            session.query(ScrapeRunEvent)
+            .filter(
+                ScrapeRunEvent.run_id == current,
+                ScrapeRunEvent.event_type == "resumed_after_failure",
+            )
+            .order_by(ScrapeRunEvent.id.desc())
+            .first()
+        )
+        if evt is None:
+            return consecutive
+        prev = (evt.payload or {}).get("previous_run_id")
+        if prev is None:
+            return consecutive
+        current = int(prev)
+    return consecutive
+
+
 def count_auto_resume_chain_depth(session: Session, run_id: int) -> int:
     """Count how many auto-resumes precede this run.
 

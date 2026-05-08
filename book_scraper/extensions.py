@@ -204,18 +204,45 @@ class StallDetector:  # pragma: no cover
         if not database_url:
             return
 
-        from book_scraper.db.repo import count_auto_resume_chain_depth
+        from book_scraper.db.repo import (
+            count_auto_resume_chain_depth,
+            count_consecutive_zero_progress_resumes,
+        )
         from book_scraper.db.session import get_session_factory
 
         try:
             session = get_session_factory(database_url)()
             try:
                 depth = count_auto_resume_chain_depth(session, run_id)
+                zero_progress = count_consecutive_zero_progress_resumes(session, run_id)
             finally:
                 session.close()
         except Exception:
             logger.exception(
                 "Auto-resume: chain-depth lookup failed for run %d", run_id
+            )
+            return
+
+        # Circuit-break on consecutive zero-progress failures. Bug class:
+        # patogupirkti runs 363→364→365 all died at heartbeat_timeout
+        # with urls_processed=0 because the queue size starved the
+        # reactor before any fetch landed. STALL_AUTO_RESUME_MAX caps
+        # depth, but it still lets the same structural bug burn 3
+        # attempts. If the previous run AND this run both finished
+        # with 0 progress, the next attempt will too — bail now and
+        # let an operator diagnose. Threshold = 2 (this run + 1
+        # previous), which fires earlier than the depth cap (3) so the
+        # user sees the structural-bug signal sooner.
+        zero_progress_threshold = 2
+        if zero_progress >= zero_progress_threshold:
+            logger.warning(
+                "Auto-resume circuit-break for run %d: %d consecutive "
+                "zero-progress runs in the chain (threshold=%d). The "
+                "bug is structural — operator must hit Continue after "
+                "diagnosing.",
+                run_id,
+                zero_progress,
+                zero_progress_threshold,
             )
             return
 
@@ -416,6 +443,15 @@ class HeartbeatExtension:  # pragma: no cover
         self._run_id: int | None = None
         self._task: Any = None
         self._session_factory: Any = None
+        # Diagnostic: track when the last `_tick` actually fired (i.e.
+        # the reactor unblocked enough to run our callLater). If a tick
+        # fires more than ~2× interval after the previous one, the
+        # reactor was starved — log a warning so reactor pressure
+        # surfaces in normal logs *before* the dashboard reaper kills
+        # the run. Patogupirkti runs 363–366 (2026-05-08) died from
+        # exactly this pattern, but the only diagnostic was the run row
+        # going `failed`.
+        self._last_tick_at: float | None = None
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> "HeartbeatExtension":
@@ -492,6 +528,27 @@ class HeartbeatExtension:  # pragma: no cover
         reactor thread, so `_schedule_next` and `_signal_stop` are safe
         to call there.
         """
+        # Diagnostic: callLater is scheduled `interval` seconds out. If
+        # this fires materially later than that, the reactor was busy
+        # in synchronous code between scheduling and now — which is the
+        # exact failure pattern that killed runs 363–366. Surface it.
+        import time as _time
+
+        now = _time.monotonic()
+        if self._last_tick_at is not None:
+            gap = now - self._last_tick_at
+            if gap > 2 * self.interval:
+                logger.warning(
+                    "HeartbeatExtension: tick fired %.1fs after the "
+                    "previous one (interval=%.1fs). The reactor was "
+                    "starved — likely synchronous I/O blocking the "
+                    "event loop. If this keeps happening the dashboard "
+                    "reaper will kill the run.",
+                    gap,
+                    self.interval,
+                )
+        self._last_tick_at = now
+
         run_id = self._resolve_run_id()
         if run_id is None:
             # spider hasn't assigned _run_id yet — no-op, try again next tick.

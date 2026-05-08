@@ -160,6 +160,52 @@ def test_spider_opened_ties_target_concurrency_to_per_shop_concurrency(
         asyncio.run(mw._close())
 
 
+def test_adjust_delay_ratchets_up_on_status_code_none() -> None:
+    """A None status_code (timeout / connection drop / DNS / TLS) is a
+    failure signal — back off, don't decay.
+
+    Pre-fix, the algorithm only ratcheted on 5xx; status_code=None
+    fell into the averaging branch, so a flood of timeouts would
+    *decrease* current_delay toward latency/N — exactly the inversion
+    of what protective throttling should do. Verified by inspection
+    2026-05-08; no production incident pinned to it but it would have
+    masked Cloudflare-403 storms or backend dying scenarios.
+    """
+    mw = HttpxMiddleware(
+        timeout=15.0,
+        user_agent="test",
+        database_url=None,
+        download_delay=0.5,
+        autothrottle_enabled=True,
+        autothrottle_start_delay=2.0,
+        autothrottle_max_delay=30.0,
+        client_reset_after_requests=80,
+    )
+    mw._autothrottle_target_concurrency = 4.0
+    host = "example.com"
+    mw._host_current_delay[host] = 1.0
+
+    # Simulate a long-latency timeout (status_code=None). The ratchet
+    # should push current_delay UP toward target = latency / N, never
+    # below the previous value.
+    mw._adjust_delay(host, latency_s=20.0, status_code=None)
+    # target = 20 / 4 = 5.0 (clamped to autothrottle_max=30 — fine)
+    # ratchet: max(1.0, 5.0) = 5.0
+    assert mw._host_current_delay[host] == pytest.approx(5.0)
+
+    # 5xx behaves the same — keep the symmetric back-off invariant.
+    mw._host_current_delay[host] = 1.0
+    mw._adjust_delay(host, latency_s=20.0, status_code=503)
+    assert mw._host_current_delay[host] == pytest.approx(5.0)
+
+    # 200 still uses the averaging branch (decays).
+    mw._host_current_delay[host] = 5.0
+    mw._adjust_delay(host, latency_s=1.0, status_code=200)
+    # target = 1.0 / 4 = 0.25, clamped to download_delay=0.5
+    # new = (5.0 + 0.5) / 2 = 2.75
+    assert mw._host_current_delay[host] == pytest.approx(2.75)
+
+
 @pytest.mark.integration
 def test_spider_opened_uses_toml_when_no_db_rows(db_session: Session) -> None:
     """Precedence chain: DB → TOML → Scrapy globals. With no DB rows

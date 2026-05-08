@@ -197,6 +197,65 @@ def test_count_auto_resume_chain_depth(db_session):
     assert count_auto_resume_chain_depth(db_session, run_c.id) == 2
 
 
+def test_count_consecutive_zero_progress_resumes(db_session):
+    """Circuit-break helper: counts trailing zero-progress runs in the
+    auto-resume chain so the StallDetector can bail on structural bugs.
+
+    Patogupirkti runs 363→364→365 each died at heartbeat_timeout with
+    urls_processed=0 because the 60k-URL queue starved the reactor
+    before any fetch landed (commit 54f6b5a). STALL_AUTO_RESUME_MAX=3
+    capped the chain depth but burned 3 attempts on the same
+    structural bug; this helper lets the detector circuit-break at
+    threshold=2 instead.
+    """
+    from book_scraper.db import scrape_run_events as run_event_types
+    from book_scraper.db.repo import (
+        count_consecutive_zero_progress_resumes,
+        create_scrape_run,
+        emit_scrape_run_event,
+    )
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    db_session.commit()
+
+    run_a = create_scrape_run(db_session, shop.id, "scan")
+    run_a.urls_processed = 0  # zero progress
+    run_b = create_scrape_run(db_session, shop.id, "scan")
+    run_b.urls_processed = 0
+    run_c = create_scrape_run(db_session, shop.id, "scan")
+    run_c.urls_processed = 0
+    db_session.commit()
+
+    # Fresh run, urls_processed=0 → counts itself as 1.
+    assert count_consecutive_zero_progress_resumes(db_session, run_a.id) == 1
+
+    # Chain B → A, both zero-progress: count = 2 (the threshold the
+    # circuit-breaker triggers on).
+    emit_scrape_run_event(
+        db_session,
+        run_b.id,
+        run_event_types.RESUMED_AFTER_FAILURE,
+        payload={"previous_run_id": run_a.id},
+    )
+    db_session.commit()
+    assert count_consecutive_zero_progress_resumes(db_session, run_b.id) == 2
+
+    # Chain C → B → A, all zero: count = 3.
+    emit_scrape_run_event(
+        db_session,
+        run_c.id,
+        run_event_types.RESUMED_AFTER_FAILURE,
+        payload={"previous_run_id": run_b.id},
+    )
+    db_session.commit()
+    assert count_consecutive_zero_progress_resumes(db_session, run_c.id) == 3
+
+    # If A had made progress, the walk stops there and returns 2 (B + C).
+    run_a.urls_processed = 5
+    db_session.commit()
+    assert count_consecutive_zero_progress_resumes(db_session, run_c.id) == 2
+
+
 def test_finish_discover_keeps_staging_rows(db_session):
     """scrape_url_items used to be deleted on discover finish; they're now
     kept as the source of truth for per-URL run history (see commit

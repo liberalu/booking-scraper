@@ -310,18 +310,24 @@ class HttpxMiddleware:  # pragma: no cover
           new_delay    = (current + target) / 2
           clamp to [DOWNLOAD_DELAY, AUTOTHROTTLE_MAX_DELAY]
 
-        Plus: 5xx responses ratchet up (never down) so we back off when
-        the server is unhappy.
+        Plus: failure responses ratchet up (never down) so we back off
+        when the server is unhappy. "Failure" includes both 5xx and
+        ``status_code is None`` (timeout / connection drop / DNS
+        failure / TLS error). The latter is the more important case:
+        a flood of timeouts usually means the server is dying or
+        Cloudflare is blocking us, and treating it as "things are fine,
+        decay the delay" via the averaging branch was the inverse of
+        what we want. Treating it as a back-off signal protects the
+        server while it's struggling and avoids escalating Cloudflare's
+        challenge tier.
         """
         if not self._autothrottle_enabled:
             return
         current = self._host_current_delay.get(host, self._autothrottle_start)
         target = latency_s / self._autothrottle_target_concurrency
         target = max(self._download_delay, min(self._autothrottle_max, target))
-        if status_code is not None and 500 <= status_code < 600:
-            new_delay = max(current, target)
-        else:
-            new_delay = (current + target) / 2.0
+        is_failure = status_code is None or 500 <= status_code < 600
+        new_delay = max(current, target) if is_failure else (current + target) / 2.0
         new_delay = max(self._download_delay, min(self._autothrottle_max, new_delay))
         self._host_current_delay[host] = new_delay
 
