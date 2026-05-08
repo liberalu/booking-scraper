@@ -82,3 +82,6 @@ max_age_hours = 24
 max_pages = 3
 
 [scan]
+
+[match]
+trust = 70

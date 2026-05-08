@@ -71,3 +71,6 @@ max_pages = 500
 # Reads from discovered_urls table; no URL needed. parsers.parse_product_page
 # pulls itemprop microdata + spec table → ~99% ISBN/year/pages/format
 # coverage on calibration samples.
+
+[match]
+trust = 50

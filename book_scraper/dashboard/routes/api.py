@@ -648,7 +648,7 @@ def api_create_run(
     req: NewRunRequest, session: Session = Depends(get_db)
 ) -> dict[str, Any]:
     """Trigger a scrape via docker exec into the scraper container."""
-    if req.phase not in ("scan", "discover"):
+    if req.phase not in ("scan", "discover", "match"):
         raise HTTPException(status_code=400, detail=f"Unknown phase: {req.phase}")
 
     run_phase = (
@@ -1753,7 +1753,10 @@ def _configured_discover_strategies(shop_name: str) -> list[str]:
         return []
     available: list[str] = []
     # Order matches the dialog: cheap-and-fast first, slowest last.
-    for name in ("sitemap", "categories", "graphql", "lupasearch", "full_crawl"):
+    for name in (
+        "sitemap", "categories", "graphql", "lupasearch",
+        "ibiblioteka_api", "full_crawl",
+    ):
         if getattr(cfg.discover, name, None) is not None:
             available.append(name)
     return available

@@ -340,6 +340,7 @@ scrape_phase_enum = Enum(
     "discover_graphql",
     "discover_lupasearch",
     "discover_ibiblioteka_api",
+    "match",
     "scan",
     name="scrape_phase",
     create_type=False,

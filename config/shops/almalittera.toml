@@ -1,0 +1,44 @@
+[shop]
+name = "almalittera"
+base_url = "https://almalittera.lt"
+
+[scraping]
+# Shopify is fast (~150–400 ms per page) and the catalogue is small
+# (~4.4k products). Conservative defaults — tighten after a calibration
+# run if needed.
+download_delay = 0.3
+concurrent_requests_per_domain = 4
+batch_size = 100
+batch_pause = 5
+max_retries = 2
+connect_timeout = 10
+read_timeout = 30
+hard_timeout = 60
+batch_timeout = 600
+
+[discover]
+# Product URLs look like https://almalittera.lt/products/<handle>.
+# Anchored to the product path so collection / blog / page URLs that
+# leak into a future strategy (e.g. full_crawl) are excluded.
+url_include_pattern = "https://almalittera\\.lt/products/[^/?#]+"
+
+[discover.categories]
+# Shopify's public products.json is paginated up to limit=250 per page.
+# Returns rich JSON: title, vendor (author), variants[].price/sku/
+# available, images, product_type ("EPUB" for e-books, blank for paper),
+# tags. No ISBN/year/pages here — those come from HTML metafields on
+# the product page, fetched in the scan phase. The endpoint doesn't
+# expose a total count; the parser returns total=None and the spider
+# chains pagination until it hits an empty page.
+url = "https://almalittera.lt/products.json?limit=250&page={page}"
+max_age_hours = 24
+# 4400 products / 250 per page = ~18 pages. Cap at 40 to leave headroom
+# for catalogue growth and stop runaway loops if a Shopify regression
+# starts returning non-empty pages forever.
+max_pages = 40
+
+[scan]
+# Reads from discovered_urls table, no URL needed.
+
+[match]
+trust = 50

@@ -175,6 +175,16 @@ class ScanConfig(BaseModel):
     rescrape: bool = False
 
 
+class MatchConfig(BaseModel):
+    """Per-shop match settings.
+
+    `trust` ranks shops when synthesizing shop_inferred books — the
+    highest-trust shop's title/year/format/etc. wins. Publisher is NOT
+    trust-ranked: it sticks to the first writer.
+    """
+    trust: int = 50
+
+
 class FlaresolverrConfig(BaseModel):
     """Route every request for this shop through a FlareSolverr sidecar.
 
@@ -210,6 +220,7 @@ class ShopConfig(BaseModel):
     scraping: ScrapingConfig = ScrapingConfig()
     discover: DiscoverConfig = DiscoverConfig()
     scan: ScanConfig = ScanConfig()
+    match: MatchConfig = MatchConfig()
     flaresolverr: FlaresolverrConfig | None = None
     attributes: AttributesConfig | None = None
 

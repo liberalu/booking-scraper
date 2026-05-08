@@ -37,3 +37,6 @@ start_url = "https://vaga.lt"
 
 [scan]
 # Reads from discovered_urls table, no URL needed
+
+[match]
+trust = 100

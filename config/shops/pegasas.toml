@@ -70,3 +70,6 @@ max_age_hours = 24
 # discover_graphql remains available for ad-hoc deep-cat scans but is no
 # longer the primary harvest mechanism — the deep-paginated full-LT crawl
 # stalled too often on Magento full-page-cache cold misses.
+
+[match]
+trust = 90
