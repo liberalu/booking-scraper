@@ -127,6 +127,9 @@ class ShopBook(Base):
         match_status_enum, nullable=False, default="unmatched"
     )
     match_method: Mapped[str | None] = mapped_column(match_method_enum, nullable=True)
+    book_id: Mapped[int | None] = mapped_column(
+        ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Run tracking
     last_run_id: Mapped[int | None] = mapped_column(
@@ -181,6 +184,9 @@ class ShopAuthor(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
+    )
+    canonical_author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("authors.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -712,3 +718,164 @@ class CronJob(Base):
     shop: Mapped["Shop"] = relationship()
 
     __table_args__ = (Index("ix_cron_jobs_shop_enabled", "shop_id", "enabled"),)
+
+
+# ── Canonical book layer ──────────────────────────────────────────────────
+# Tables created by Alembic c5d8e2f3a9b1; ORM mappings only here.
+
+book_data_source_enum = Enum(
+    "ibiblioteka", "shop_inferred", "manual",
+    name="book_data_source", create_type=False,
+)
+
+book_isbn_type_enum = Enum(
+    "isbn10", "isbn13", "ebook", "audio", "unknown",
+    name="book_isbn_type", create_type=False,
+)
+
+book_author_role_enum = Enum(
+    "author", "translator", "narrator", "illustrator", "editor", "compiler",
+    name="book_author_role", create_type=False,
+)
+
+
+class Publisher(Base):
+    __tablename__ = "publishers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    country: Mapped[str | None] = mapped_column(Text, nullable=True)
+    libis_codes: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()")
+    )
+
+
+class Series(Base):
+    __tablename__ = "series"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    libis_code: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()")
+    )
+
+
+class Author(Base):
+    """Canonical author with international authority codes.
+
+    Distinct from `shop_authors` (raw shop dedup). The matcher links
+    `shop_authors.canonical_author_id` to `authors.id` after a book
+    matches by ISBN — no name-based heuristics.
+    """
+
+    __tablename__ = "authors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    libis_code: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    viaf_id: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    isni: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    wikidata_id: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()")
+    )
+
+
+class Book(Base):
+    """Canonical book record. data_source='ibiblioteka' requires libis_code
+    (enforced by CHECK constraint on the table).
+    """
+
+    __tablename__ = "books"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    data_source: Mapped[str] = mapped_column(book_data_source_enum, nullable=False)
+    libis_code: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    title_full: Mapped[str | None] = mapped_column(Text, nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    publisher_id: Mapped[int | None] = mapped_column(
+        ForeignKey("publishers.id", ondelete="SET NULL"), nullable=True
+    )
+    series_id: Mapped[int | None] = mapped_column(
+        ForeignKey("series.id", ondelete="SET NULL"), nullable=True
+    )
+    release_place: Mapped[str | None] = mapped_column(Text, nullable=True)
+    type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    format: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dimensions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    translated_from: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upcoming_release: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa_text("false")
+    )
+    udc_codes: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    subjects: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    audience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    libis_rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)
+    libis_review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa_text("now()")
+    )
+
+    publisher: Mapped["Publisher | None"] = relationship()
+    series_rel: Mapped["Series | None"] = relationship()
+    isbns: Mapped[list["BookIsbn"]] = relationship(
+        back_populates="book", cascade="all, delete-orphan"
+    )
+    authors_join: Mapped[list["BookAuthor"]] = relationship(
+        back_populates="book", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "data_source != 'ibiblioteka' OR libis_code IS NOT NULL",
+            name="ck_books_libis_code_for_ibiblioteka",
+        ),
+    )
+
+
+class BookIsbn(Base):
+    __tablename__ = "book_isbns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    book_id: Mapped[int] = mapped_column(
+        ForeignKey("books.id", ondelete="CASCADE"), nullable=False
+    )
+    isbn: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    isbn_type: Mapped[str] = mapped_column(
+        book_isbn_type_enum, nullable=False, server_default="unknown"
+    )
+
+    book: Mapped["Book"] = relationship(back_populates="isbns")
+
+
+class BookAuthor(Base):
+    __tablename__ = "book_authors"
+
+    book_id: Mapped[int] = mapped_column(
+        ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+    )
+    author_id: Mapped[int] = mapped_column(
+        ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(
+        book_author_role_enum, primary_key=True, server_default="author"
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    book: Mapped["Book"] = relationship(back_populates="authors_join")
+    author: Mapped["Author"] = relationship()
