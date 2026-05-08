@@ -86,6 +86,7 @@ def _spa_html() -> HTMLResponse:
 _SPA_FLAT_PATHS = [
     "/",
     "/runs",
+    "/books",
     "/shop-books",
     "/urls",
     "/shops",
@@ -96,6 +97,7 @@ _SPA_FLAT_PATHS = [
 ]
 _SPA_DETAIL_PATHS = [
     "/runs/{rest:path}",
+    "/books/{rest:path}",
     "/shop-books/{rest:path}",
     "/urls/{rest:path}",
     "/shops/{rest:path}",
