@@ -1415,3 +1415,51 @@ def test_api_run_live_failure_groups_include_attempts_stats(
     )
     assert bucket["max_attempts"] == 3
     assert bucket["capped_count"] == 1
+
+
+@pytest.mark.integration
+def test_retry_failures_resets_attempts(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    """Operator manual Retry-failures is the explicit override path:
+    capped items get their attempts counter zeroed so they get a fresh
+    retry window. (Auto-retry sweep, by contrast, leaves attempts alone.)
+    """
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        insert_scrape_url_item,
+        record_scrape_failure,
+        upsert_shop,
+    )
+
+    shop = upsert_shop(db_session, "vaga", "https://www.vaga.lt")
+    run = create_scrape_run(db_session, shop.id, "scan")
+    run.status = "failed"
+    run.resumable_after_failure = True
+    item = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url="https://www.vaga.lt/p/x",
+        url_type="product",
+    )
+    item.status = "failed"
+    item.attempts = 3  # capped
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=item,
+        error_reason="http_500",
+        http_status=500,
+    )
+    db_session.commit()
+
+    response = client.post(f"/api/runs/{run.id}/retry")
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScrapeUrlItem, item.id)
+    assert refreshed is not None
+    assert refreshed.status == "pending"
+    assert refreshed.attempts == 0

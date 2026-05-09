@@ -72,6 +72,7 @@ from book_scraper.db.repo import (
     emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
+    reset_failed_items_to_pending,
     toggle_cron_job,
     update_cron_job,
 )
@@ -1052,18 +1053,11 @@ def api_retry_run_failures(
                 ),
             )
 
-    session.query(ScrapeUrlItem).filter(ScrapeUrlItem.id.in_(candidate_ids)).update(
-        {
-            "status": "pending",
-            # PR 3: error_reason column dropped. http_status is the
-            # last-response cache; reset it so a retry that succeeds
-            # doesn't display the prior failure's status alongside `done`.
-            "http_status": None,
-            "claimed_at": None,
-            "done_at": None,
-        },
-        synchronize_session=False,
-    )
+    # Operator manual retry is the explicit override path: zero `attempts`
+    # so capped items get a fresh retry window. (The end-of-run auto-retry
+    # sweep calls the same helper without `reset_attempts` so capped items
+    # stay capped.)
+    reset_failed_items_to_pending(session, candidate_ids, reset_attempts=True)
 
     retry_payload: dict[str, Any] = {"rows_reset": int(matches)}
     if error_reason_is_null:
