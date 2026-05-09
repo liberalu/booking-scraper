@@ -1262,3 +1262,38 @@ def test_api_cron_create_with_chain(client: TestClient, db_session: Session) -> 
     db_session.expire_all()
     saved = get_cron_job(db_session, new_id)
     assert saved.chain_to_job_id == job_a.id
+
+
+def test_api_run_detail_exposes_restarted_event(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db import scrape_run_events as run_event_types
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        emit_scrape_run_event,
+        upsert_shop,
+    )
+
+    shop = upsert_shop(db_session, "vaga", "https://www.vaga.lt")
+    run = create_scrape_run(db_session, shop.id, "scan")
+    emit_scrape_run_event(
+        db_session,
+        run.id,
+        run_event_types.RESTARTED,
+        payload={
+            "previous_close_reason": "stall_timeout",
+            "attempt": 1,
+            "urls_processed_snapshot": 0,
+        },
+        actor=run_event_types.ACTOR_SYSTEM,
+    )
+    db_session.commit()
+
+    response = client.get(f"/api/runs/{run.id}")
+    assert response.status_code == 200
+    data = response.json()
+    event_types = [e["event_type"] for e in data["events"]]
+    assert "restarted" in event_types
+    restarted = next(e for e in data["events"] if e["event_type"] == "restarted")
+    assert restarted["payload"]["attempt"] == 1
+    assert restarted["payload"]["previous_close_reason"] == "stall_timeout"

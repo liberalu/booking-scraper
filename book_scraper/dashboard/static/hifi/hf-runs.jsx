@@ -332,6 +332,7 @@ const RUN_EVENT_META = {
   rerun:                 { glyph: '⟲',  label: 'Re-run triggered' },
   continued:             { glyph: '▶',  label: 'Continued' },
   resumed_after_failure: { glyph: '⤴',  label: 'Picked up earlier run' },
+  restarted:             { glyph: '↻',  label: 'Process restarted' },
   subdivided:            { glyph: '⊟',  label: 'Subdivided heavy page' },
   completed:             { glyph: '✓',  label: 'Finished' },
   failed:                { glyph: '✗',  label: 'Failed' },
@@ -405,6 +406,15 @@ function _eventSummary(eventType, payload) {
       return p.pending_count != null ? `${_nfmt(p.pending_count)} URL${p.pending_count === 1 ? '' : 's'} still pending` : '';
     case 'resumed_after_failure':
       return p.previous_run_id ? `from run #${p.previous_run_id}` : '';
+    case 'restarted': {
+      const reason = p.previous_close_reason || 'unknown';
+      const attempt = p.attempt;
+      const snap = p.urls_processed_snapshot;
+      const parts = [`reason=${reason}`];
+      if (attempt) parts.push(`attempt=${attempt}`);
+      if (snap !== undefined && snap !== null) parts.push(`progress=${snap}`);
+      return parts.join(' · ');
+    }
     case 'subdivided': {
       // Emitted when a 5xx forces the spider to retry a heavy
       // pageSize=N request as N smaller sub-requests, OR when a
