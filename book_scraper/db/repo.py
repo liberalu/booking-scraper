@@ -918,6 +918,57 @@ def inherit_pending_items(
     return int(rowcount) if rowcount is not None else 0
 
 
+def restart_run_in_place(
+    session: Session,
+    run: ScrapeRun,
+    *,
+    payload: dict[str, Any],
+    actor: str,
+    event_type: str = "restarted",
+) -> None:
+    """Mutate a `failed`+`resumable_after_failure` run back to `running`
+    on the same row, then emit the restart marker event.
+
+    **Service-layer use only** — call from inside the spawned scrapy
+    subprocess so `os.getpid()` is the spider's PID. The dashboard
+    Continue endpoint already mutates the row in-place itself before
+    spawning the subprocess; do not call this from the dashboard
+    process — it would stamp the dashboard PID on the run.
+
+    Atomic with the surrounding caller's transaction: the UPDATE and
+    the event INSERT both go through `session.flush()` and rely on the
+    caller to commit.
+
+    Refuses to operate on a row that is not `failed`+`resumable_after_failure`
+    — callers must filter on `find_resumable_run`'s output.
+    """
+    if run.status != "failed" or not run.resumable_after_failure:
+        raise ValueError(
+            f"restart_run_in_place expects status='failed' "
+            f"AND resumable_after_failure=True; got status={run.status!r}, "
+            f"resumable_after_failure={run.resumable_after_failure!r}"
+        )
+
+    run.status = "running"
+    run.finished_at = None
+    run.close_reason = None
+    run.resumable_after_failure = False
+    run.pid = os.getpid()
+    run.last_heartbeat = datetime.now(UTC)
+    session.flush()
+
+    _reset_retryable_failures(session, run.id)
+    reset_processing_scrape_url_items(session, run.id)
+
+    emit_scrape_run_event(
+        session,
+        run.id,
+        event_type,
+        payload=payload,
+        actor=actor,
+    )
+
+
 def emit_scrape_run_event(
     session: Session,
     run_id: int,
