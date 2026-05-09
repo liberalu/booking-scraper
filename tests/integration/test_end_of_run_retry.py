@@ -162,8 +162,12 @@ def test_scan_spider_idle_resets_failed_below_cap_to_pending(engine):
         run = create_scrape_run(setup, shop.id, "scan")
         run.status = "running"
         item = insert_scrape_url_item(
-            setup, run_id=run.id, shop_id=shop.id, discovered_url_id=None,
-            url="https://www.vaga.lt/p/idle-retry-1", url_type="product",
+            setup,
+            run_id=run.id,
+            shop_id=shop.id,
+            discovered_url_id=None,
+            url="https://www.vaga.lt/p/idle-retry-1",
+            url_type="product",
         )
         item.status = "failed"
         item.attempts = 1
@@ -189,6 +193,7 @@ def test_scan_spider_idle_resets_failed_below_cap_to_pending(engine):
         spider._build_scan_request = MagicMock(return_value=MagicMock())
 
         from scrapy.exceptions import DontCloseSpider
+
         with pytest.raises(DontCloseSpider):
             spider.spider_idle(spider)
 
@@ -216,6 +221,102 @@ def test_scan_spider_idle_resets_failed_below_cap_to_pending(engine):
         # spider_idle should NOT raise — sweep already done, no other pending.
         result = spider.spider_idle(spider)
         assert result is None
+    finally:
+        cleanup = session_factory()
+        try:
+            cleanup.execute(
+                text("DELETE FROM scrape_url_items WHERE run_id = :id"),
+                {"id": run_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM scrape_run_events WHERE run_id = :id"),
+                {"id": run_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM scrape_runs WHERE id = :id"),
+                {"id": run_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM shops WHERE id = :id"),
+                {"id": shop_id},
+            )
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+
+def test_discover_spider_idle_resets_failed_below_cap_to_pending(engine):
+    """Discover-side mirror of the scan retry sweep test.
+
+    spider_idle should flip a failed-below-cap item back to pending,
+    set the sweep flag, and raise DontCloseSpider after dispatching.
+    Bypasses the rollback-isolated db_session fixture: spider_idle
+    opens its own connection via get_session_factory.
+    """
+    from unittest.mock import MagicMock
+
+    from sqlalchemy import text
+    from sqlalchemy.orm import sessionmaker
+
+    from book_scraper.db.models import ScrapeUrlItem
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        insert_scrape_url_item,
+        upsert_shop,
+    )
+    from book_scraper.spiders.discover import DiscoverSpider
+    from tests.conftest import TEST_DATABASE_URL
+
+    session_factory = sessionmaker(bind=engine)
+    setup = session_factory()
+    try:
+        shop = upsert_shop(setup, "vaga_disc_idle_retry", "https://www.vaga.lt")
+        run = create_scrape_run(setup, shop.id, "discover_sitemap")
+        run.status = "running"
+        item = insert_scrape_url_item(
+            setup,
+            run_id=run.id,
+            shop_id=shop.id,
+            discovered_url_id=None,
+            url="https://www.vaga.lt/sitemap-disc-idle-retry.xml",
+            url_type="sitemap",
+        )
+        item.status = "failed"
+        item.attempts = 1
+        setup.commit()
+        run_id = run.id
+        shop_id = shop.id
+        item_id = item.id
+    finally:
+        setup.close()
+
+    try:
+        spider = DiscoverSpider.__new__(DiscoverSpider)  # bypass __init__
+        spider._run_id = run_id
+        spider._end_of_run_retry_done = False
+        spider.settings = MagicMock()
+        spider.settings.get = lambda k, default=None: {
+            "DATABASE_URL": TEST_DATABASE_URL,
+            "RETRY_CAP": 3,
+        }.get(k, default)
+        spider.settings.getint = lambda k, default=None: 3
+        spider.crawler = MagicMock()
+        spider.crawler.engine = MagicMock()
+        spider._build_request_for_url_item = MagicMock(return_value=MagicMock())
+
+        from scrapy.exceptions import DontCloseSpider
+
+        with pytest.raises(DontCloseSpider):
+            spider.spider_idle(spider)
+
+        verify = session_factory()
+        try:
+            refreshed = verify.get(ScrapeUrlItem, item_id)
+            assert refreshed is not None
+            assert refreshed.status == "pending"
+        finally:
+            verify.close()
+        assert spider._end_of_run_retry_done is True
     finally:
         cleanup = session_factory()
         try:

@@ -45,9 +45,7 @@ def _next_categories_page_url(
     e.g. tests).
     """
     if _PAGE_PARAM_RE.search(response_url):
-        return _PAGE_PARAM_RE.sub(
-            lambda m: f"{m.group(1)}={next_page}", response_url
-        )
+        return _PAGE_PARAM_RE.sub(lambda m: f"{m.group(1)}={next_page}", response_url)
     # Fallback: format the first configured template directly. Used
     # by tests / single-URL shops where `response.url` happens to
     # not carry a pagination param yet (page 1 with no explicit
@@ -140,6 +138,12 @@ class DiscoverSpider(scrapy.Spider):
         # more specific zero-yield cause — avoids duplicate noise from the
         # generic closed() check.
         self._zero_yield_suppressed: bool = False
+
+        # Per-process flag — set to True after the end-of-run retry sweep
+        # has run once, so the second idle tick lets the spider close
+        # cleanly. Resets per process; on restart, the new process gets
+        # its own flag and may sweep again (bounded by attempts < cap).
+        self._end_of_run_retry_done: bool = False
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -392,19 +396,35 @@ class DiscoverSpider(scrapy.Spider):
                     session.close()
 
     def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
-        """Pick up items enqueued mid-run (e.g. via parse_categories dual-write).
+        """Mid-run pickup + one-shot end-of-run retry sweep.
 
-        Mirrors the scan spider pattern: when the engine runs dry, re-check
-        the queue for newly-inserted pending items and schedule them.
+        Mirrors `ScanSpider.spider_idle` — queue empty triggers the
+        retry pass over failed items with attempts < RETRY_CAP. Sweep
+        is gated by `_end_of_run_retry_done` so it runs once per
+        process. Mid-run dual-write pickup behaviour preserved.
         """
         if self._run_id is None:
             return
         database_url = self.settings.get("DATABASE_URL")
+        retry_cap = self.settings.getint("RETRY_CAP", 3)
         factory = get_session_factory(database_url)
         session = factory()
         try:
             reset_processing_scrape_url_items(session, self._run_id)
             new_items = get_pending_scrape_url_items(session, self._run_id)
+            if not new_items and not self._end_of_run_retry_done:
+                from book_scraper.db.repo import (
+                    fetch_retryable_failed_items,
+                    reset_failed_items_to_pending,
+                )
+
+                eligible = fetch_retryable_failed_items(
+                    session, self._run_id, cap=retry_cap
+                )
+                if eligible:
+                    reset_failed_items_to_pending(session, [it.id for it in eligible])
+                    new_items = get_pending_scrape_url_items(session, self._run_id)
+                self._end_of_run_retry_done = True
             session.commit()
         finally:
             session.close()
@@ -1023,7 +1043,8 @@ class DiscoverSpider(scrapy.Spider):
         next_url = advance_ibiblioteka_url(response.url, next_psi)
         new_item_id = self._enqueue_url(next_url, "ibiblioteka_page")
         yield self._build_request_for_url_item(
-            next_url, "ibiblioteka_page",
+            next_url,
+            "ibiblioteka_page",
             item_id=new_item_id,
             page=current_page + 1,
         )
