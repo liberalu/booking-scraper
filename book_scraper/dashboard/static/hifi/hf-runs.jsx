@@ -580,7 +580,7 @@ function HFRunTimelineCard({ events, style }) {
 // failures card) can reach the setters. Component is pure-render given
 // that state.
 function HFRunHistoryCard({
-  urlData, historyRef, goto,
+  urlData, retryCap = 3, historyRef, goto,
   urlStatus, setUrlStatus,
   urlSort, urlOrder, toggleSort,
   urlPage, setUrlPage,
@@ -854,10 +854,10 @@ function HFRunHistoryCard({
                       </>;
                     })()}
                     {(() => {
-                      // Per-URL retry counter. RETRY_CAP mirrors backend
-                      // book_scraper.settings.RETRY_CAP — kept in sync with
-                      // the Failures-card capped_count badge below.
-                      const cap = 3;
+                      // Per-URL retry counter. Cap surfaced via
+                      // /api/runs/{id}/live (book_scraper.settings.RETRY_CAP)
+                      // and threaded down as the `retryCap` prop.
+                      const cap = retryCap;
                       const attempts = u.attempts ?? 0;
                       const capped = attempts >= cap;
                       return (
@@ -952,7 +952,7 @@ function HFRunHistoryCard({
 // Owns its own disclosure state (expanded group + which example detail is
 // open). All actions go to handlers passed in by the parent.
 function HFRunFailuresCard({
-  failureGroups, showAckedFailures, setShowAckedFailures,
+  failureGroups, retryCap = 3, showAckedFailures, setShowAckedFailures,
   actionPending, retryRun, ackGroup, applyGroupFilter,
 }) {
   const HF = getHF();
@@ -1047,14 +1047,14 @@ function HFRunFailuresCard({
                     </span>
                   )}
                   {(g.capped_count ?? 0) > 0 && (
-                    <span title={`${g.capped_count} item${g.capped_count === 1 ? '' : 's'} have exhausted the retry cap (${g.max_attempts}/3 attempts) — retrying won't help until the underlying cause is fixed`} style={{
+                    <span title={`${g.capped_count} item${g.capped_count === 1 ? '' : 's'} have exhausted the retry cap (${g.max_attempts}/${retryCap} attempts) — retrying won't help until the underlying cause is fixed`} style={{
                       display:'inline-flex', alignItems:'center', gap: 4,
                       height: 20, padding: '0 7px',
                       background: 'var(--hf-err-soft)', color: 'var(--hf-err-ink)',
                       border: `1px solid ${'var(--hf-err-border)'}`, borderRadius: 4,
                       fontFamily: 'var(--hf-mono)', fontSize: 11, fontWeight: 500,
                     }}>
-                      🔒 {g.capped_count} capped (max {g.max_attempts}/3)
+                      🔒 {g.capped_count} capped (max {g.max_attempts}/{retryCap})
                     </span>
                   )}
                   {g.recurring_in_runs > 0 && (
@@ -1913,6 +1913,10 @@ function HFRunDetail({ nav, goto, params }) {
   // which silently excluded error types not in the 10 most-recent rows.
   const failureGroups = liveData?.failure_groups || [];
 
+  // Backend single source of truth (book_scraper.settings.RETRY_CAP).
+  // Falls back to 3 only if the API hasn't responded yet.
+  const retryCap = liveData?.retry_cap ?? 3;
+
   const validationIssueCount = (data.issues || []).reduce((s, g) => s + g.count, 0);
 
   // ── Health pill (in-flight panel header) ──
@@ -2144,6 +2148,7 @@ function HFRunDetail({ nav, goto, params }) {
       {/* Failures card — grouped by error_reason from recent_failures */}
       <HFRunFailuresCard
         failureGroups={failureGroups}
+        retryCap={retryCap}
         showAckedFailures={showAckedFailures}
         setShowAckedFailures={setShowAckedFailures}
         actionPending={actionPending}
@@ -2158,6 +2163,7 @@ function HFRunDetail({ nav, goto, params }) {
       {/* History card — tabbed URL queue / discovered URL history */}
       <HFRunHistoryCard
         urlData={urlData}
+        retryCap={retryCap}
         historyRef={historyRef}
         goto={goto}
         urlStatus={urlStatus} setUrlStatus={setUrlStatus}

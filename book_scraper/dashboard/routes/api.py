@@ -76,6 +76,7 @@ from book_scraper.db.repo import (
     toggle_cron_job,
     update_cron_job,
 )
+from book_scraper.settings import RETRY_CAP
 
 router = APIRouter()
 
@@ -1322,6 +1323,7 @@ def api_run_live(
         "failure_groups": failure_groups,
         "recent_activity": recent_activity,
         "events": events,
+        "retry_cap": RETRY_CAP,
     }
 
 

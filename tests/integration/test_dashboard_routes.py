@@ -576,6 +576,22 @@ def test_continue_run_404_when_missing(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+@pytest.mark.integration
+def test_api_run_live_exposes_retry_cap(
+    client: TestClient, db_session: Session
+) -> None:
+    """Dashboard reads RETRY_CAP from /api/runs/{id}/live so the JSX
+    doesn't have to duplicate the literal."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
+    db_session.add(run)
+    db_session.commit()
+
+    resp = client.get(f"/api/runs/{run.id}/live")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["retry_cap"] == 3
+
+
 # ── /api/runs/{id}/urls — failure-group filters ────────────────────────────
 
 
