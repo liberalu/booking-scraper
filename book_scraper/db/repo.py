@@ -1873,6 +1873,10 @@ def mark_scrape_url_item_processing(
             return
         item.status = "processing"
         item.claimed_at = datetime.fromtimestamp(dispatched_at, tz=UTC)
+        # `attempts` ticks once per dispatch cycle. Scrapy's RetryMiddleware
+        # re-issues without re-claiming, so internal retries don't bump
+        # this — see scrape_url_items.retry_count for that count.
+        item.attempts = (item.attempts or 0) + 1
         if request_delay_s is not None:
             item.request_delay_s = request_delay_s
         if delay_source is not None:

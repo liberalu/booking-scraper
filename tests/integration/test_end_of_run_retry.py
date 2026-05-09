@@ -92,3 +92,39 @@ def test_reset_failed_items_to_pending_with_attempts_reset(db_session):
     refreshed = db_session.get(ScrapeUrlItem, items[0].id)
     assert refreshed.status == "pending"
     assert refreshed.attempts == 0
+
+
+def test_mark_processing_increments_attempts(db_session):
+    import time
+
+    from book_scraper.db.repo import mark_scrape_url_item_processing
+
+    run, items = _seed_run_with_items(db_session, [("pending", 0)])
+    db_session.get(type(items[0]), items[0].id)  # ensure attached
+
+    # Run must be 'running' for mark_scrape_url_item_processing to apply.
+    run.status = "running"
+    db_session.commit()
+
+    mark_scrape_url_item_processing(db_session, items[0].id, time.time())
+    db_session.commit()
+
+    refreshed = db_session.get(type(items[0]), items[0].id)
+    assert refreshed.status == "processing"
+    assert refreshed.attempts == 1
+
+
+def test_mark_processing_increments_attempts_on_redispatch(db_session):
+    import time
+
+    from book_scraper.db.repo import mark_scrape_url_item_processing
+
+    run, items = _seed_run_with_items(db_session, [("pending", 1)])
+    run.status = "running"
+    db_session.commit()
+
+    mark_scrape_url_item_processing(db_session, items[0].id, time.time())
+    db_session.commit()
+
+    refreshed = db_session.get(type(items[0]), items[0].id)
+    assert refreshed.attempts == 2
