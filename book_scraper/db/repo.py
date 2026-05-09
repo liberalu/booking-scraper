@@ -767,92 +767,64 @@ _RETRYABLE_FAILURE_REASONS = frozenset(
 def count_consecutive_zero_progress_resumes(
     session: Session, run_id: int, max_lookback: int = 8
 ) -> int:
-    """Count how many ancestors in the auto-resume chain — including
-    `run_id` itself — finished with `urls_processed = 0`, stopping at
-    the first ancestor that made any progress.
+    """Count trailing zero-progress restart events on a run.
 
-    Used by the StallDetector to circuit-break: if the last N runs in
-    the chain all failed before producing a single URL, the bug is
-    structural (not a transient network blip), and another auto-resume
-    will just burn the depth budget on the same failure mode. Better
-    to bail and let the operator click Continue after fixing the
-    underlying issue.
+    Walks `restarted` events newest → oldest. Each event's payload
+    carries `urls_processed_snapshot` — the value of `urls_processed`
+    captured at the moment of the restart. A "zero-progress restart"
+    is one whose snapshot equals the snapshot of the previous restart
+    (i.e. nothing got done between the two attempts).
 
-    The walk is capped at `max_lookback` so a pathological chain
-    can't make the lookup expensive. In practice the StallDetector
-    only cares about "≥ 2 in a row" for the circuit decision, so the
-    cap mostly pays for itself in unit-test simplicity.
+    Stops at the first event that DID make progress, or after
+    `max_lookback` events. Returns the streak length.
 
-    Returns the count of trailing zero-progress runs in the chain.
-    A fresh run with no `resumed_after_failure` event returns 1 if it
-    has urls_processed=0, 0 otherwise — the run itself is the only
-    candidate.
+    Used by the StallDetector to circuit-break: 2+ consecutive zero-
+    progress restarts means the bug is structural, not transient.
     """
-    consecutive = 0
-    current = run_id
-    seen: set[int] = set()
-    while current not in seen and consecutive < max_lookback:
-        seen.add(current)
-        run = session.query(ScrapeRun).filter(ScrapeRun.id == current).first()
-        if run is None:
-            return consecutive
-        if (run.urls_processed or 0) > 0:
-            return consecutive
-        consecutive += 1
-
-        evt = (
-            session.query(ScrapeRunEvent)
-            .filter(
-                ScrapeRunEvent.run_id == current,
-                ScrapeRunEvent.event_type == "resumed_after_failure",
-            )
-            .order_by(ScrapeRunEvent.id.desc())
-            .first()
+    events = (
+        session.query(ScrapeRunEvent)
+        .filter(
+            ScrapeRunEvent.run_id == run_id,
+            ScrapeRunEvent.event_type == run_event_types.RESTARTED,
         )
-        if evt is None:
-            return consecutive
-        prev = (evt.payload or {}).get("previous_run_id")
-        if prev is None:
-            return consecutive
-        current = int(prev)
-    return consecutive
+        .order_by(ScrapeRunEvent.id.desc())
+        .limit(max_lookback)
+        .all()
+    )
+    if not events:
+        return 0
+
+    # Compare each event's snapshot to the next-older one's snapshot.
+    # If equal, the gap between them produced no progress.
+    streak = 0
+    for newer, older in zip(events, events[1:], strict=False):
+        newer_snap = (newer.payload or {}).get("urls_processed_snapshot")
+        older_snap = (older.payload or {}).get("urls_processed_snapshot")
+        if newer_snap is None or older_snap is None:
+            break
+        if newer_snap == older_snap:
+            streak += 1
+        else:
+            break
+    # The streak above counts pairs; if we have N pairs of zero-progress,
+    # that's N+1 zero-progress restarts in a row. Cap by total events.
+    return min(streak + 1 if streak > 0 else 0, len(events))
 
 
 def count_auto_resume_chain_depth(session: Session, run_id: int) -> int:
-    """Count how many auto-resumes precede this run.
+    """Count `restarted` events on this run.
 
-    A run that adopted a previous failed-resumable run's queue emits a
-    `resumed_after_failure` event with `previous_run_id` in its
-    payload. Walking back through that chain tells us how many resume
-    cycles have already happened — the StallDetector uses this to cap
-    runaway loops when the underlying network problem isn't going to
-    fix itself.
-
-    Returns 0 for a fresh run (no `resumed_after_failure` event) and
-    increments by 1 for each ancestor in the chain.
+    Returns 0 for a run that has never restarted. Used by the
+    StallDetector + reconcile_runs to cap runaway auto-resume loops.
     """
-    depth = 0
-    current = run_id
-    seen: set[int] = set()
-    while current not in seen:
-        seen.add(current)
-        evt = (
-            session.query(ScrapeRunEvent)
-            .filter(
-                ScrapeRunEvent.run_id == current,
-                ScrapeRunEvent.event_type == "resumed_after_failure",
-            )
-            .order_by(ScrapeRunEvent.id.desc())
-            .first()
+    return (
+        session.query(ScrapeRunEvent)
+        .filter(
+            ScrapeRunEvent.run_id == run_id,
+            ScrapeRunEvent.event_type == run_event_types.RESTARTED,
         )
-        if evt is None:
-            return depth
-        depth += 1
-        prev = (evt.payload or {}).get("previous_run_id")
-        if prev is None:
-            return depth
-        current = int(prev)
-    return depth
+        .count()
+    )
 
 
 def _reset_retryable_failures(session: Session, run_id: int) -> int:

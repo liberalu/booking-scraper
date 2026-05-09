@@ -151,12 +151,10 @@ def test_lupasearch_seed_round_trips_to_post_body(db_session):
 
 
 def test_count_auto_resume_chain_depth(db_session):
-    """The chain depth helper backs the StallDetector's auto-resume cap.
-
-    A run that adopted a previous failed-resumable run's queue emits a
-    `resumed_after_failure` event with `previous_run_id` in its
-    payload. Walking that chain back gives the count the cap compares
-    against.
+    """Single-row restart model: depth = count of `restarted` events on
+    the run. The StallDetector compares this against
+    STALL_AUTO_RESUME_MAX before deciding whether to spawn another
+    auto-resume.
     """
     from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (
@@ -166,47 +164,34 @@ def test_count_auto_resume_chain_depth(db_session):
     )
 
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    run = create_scrape_run(db_session, shop.id, "discover_sitemap")
     db_session.commit()
 
-    run_a = create_scrape_run(db_session, shop.id, "discover_sitemap")
-    run_b = create_scrape_run(db_session, shop.id, "discover_sitemap")
-    run_c = create_scrape_run(db_session, shop.id, "discover_sitemap")
+    # Fresh run — no restart events.
+    assert count_auto_resume_chain_depth(db_session, run.id) == 0
+
+    for attempt in (1, 2, 3):
+        emit_scrape_run_event(
+            db_session,
+            run.id,
+            run_event_types.RESTARTED,
+            payload={
+                "attempt": attempt,
+                "urls_processed_snapshot": 0,
+                "previous_close_reason": "stall_timeout",
+            },
+            actor=run_event_types.ACTOR_SYSTEM,
+        )
     db_session.commit()
 
-    # Fresh run — no resumed_after_failure event.
-    assert count_auto_resume_chain_depth(db_session, run_a.id) == 0
-
-    # B was resumed from A.
-    emit_scrape_run_event(
-        db_session,
-        run_b.id,
-        run_event_types.RESUMED_AFTER_FAILURE,
-        payload={"previous_run_id": run_a.id},
-    )
-    db_session.commit()
-    assert count_auto_resume_chain_depth(db_session, run_b.id) == 1
-
-    # C was resumed from B → chain depth 2.
-    emit_scrape_run_event(
-        db_session,
-        run_c.id,
-        run_event_types.RESUMED_AFTER_FAILURE,
-        payload={"previous_run_id": run_b.id},
-    )
-    db_session.commit()
-    assert count_auto_resume_chain_depth(db_session, run_c.id) == 2
+    assert count_auto_resume_chain_depth(db_session, run.id) == 3
 
 
 def test_count_consecutive_zero_progress_resumes(db_session):
-    """Circuit-break helper: counts trailing zero-progress runs in the
-    auto-resume chain so the StallDetector can bail on structural bugs.
-
-    Patogupirkti runs 363→364→365 each died at heartbeat_timeout with
-    urls_processed=0 because the 60k-URL queue starved the reactor
-    before any fetch landed (commit 54f6b5a). STALL_AUTO_RESUME_MAX=3
-    capped the chain depth but burned 3 attempts on the same
-    structural bug; this helper lets the detector circuit-break at
-    threshold=2 instead.
+    """Single-row restart model: streak counts `restarted` events whose
+    `urls_processed_snapshot` matches the previous restart's snapshot
+    (no progress between attempts). Threshold=2 makes the
+    StallDetector circuit-break on structural bugs.
     """
     from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (
@@ -216,44 +201,44 @@ def test_count_consecutive_zero_progress_resumes(db_session):
     )
 
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    run = create_scrape_run(db_session, shop.id, "scan")
+    run.urls_processed = 0
     db_session.commit()
 
-    run_a = create_scrape_run(db_session, shop.id, "scan")
-    run_a.urls_processed = 0  # zero progress
-    run_b = create_scrape_run(db_session, shop.id, "scan")
-    run_b.urls_processed = 0
-    run_c = create_scrape_run(db_session, shop.id, "scan")
-    run_c.urls_processed = 0
+    # No restart events yet → streak 0.
+    assert count_consecutive_zero_progress_resumes(db_session, run.id) == 0
+
+    # Two restarts, both with zero-progress snapshot → streak >= 2.
+    for snap in (0, 0):
+        emit_scrape_run_event(
+            db_session,
+            run.id,
+            run_event_types.RESTARTED,
+            payload={
+                "attempt": 1,
+                "urls_processed_snapshot": snap,
+                "previous_close_reason": "stall_timeout",
+            },
+            actor=run_event_types.ACTOR_SYSTEM,
+        )
     db_session.commit()
+    assert count_consecutive_zero_progress_resumes(db_session, run.id) >= 2
 
-    # Fresh run, urls_processed=0 → counts itself as 1.
-    assert count_consecutive_zero_progress_resumes(db_session, run_a.id) == 1
-
-    # Chain B → A, both zero-progress: count = 2 (the threshold the
-    # circuit-breaker triggers on).
+    # A subsequent restart that DID make progress (snapshot 5) breaks
+    # the streak — newest pair (5,0) compares unequal.
     emit_scrape_run_event(
         db_session,
-        run_b.id,
-        run_event_types.RESUMED_AFTER_FAILURE,
-        payload={"previous_run_id": run_a.id},
+        run.id,
+        run_event_types.RESTARTED,
+        payload={
+            "attempt": 3,
+            "urls_processed_snapshot": 5,
+            "previous_close_reason": "stall_timeout",
+        },
+        actor=run_event_types.ACTOR_SYSTEM,
     )
     db_session.commit()
-    assert count_consecutive_zero_progress_resumes(db_session, run_b.id) == 2
-
-    # Chain C → B → A, all zero: count = 3.
-    emit_scrape_run_event(
-        db_session,
-        run_c.id,
-        run_event_types.RESUMED_AFTER_FAILURE,
-        payload={"previous_run_id": run_b.id},
-    )
-    db_session.commit()
-    assert count_consecutive_zero_progress_resumes(db_session, run_c.id) == 3
-
-    # If A had made progress, the walk stops there and returns 2 (B + C).
-    run_a.urls_processed = 5
-    db_session.commit()
-    assert count_consecutive_zero_progress_resumes(db_session, run_c.id) == 2
+    assert count_consecutive_zero_progress_resumes(db_session, run.id) == 0
 
 
 def test_finish_discover_keeps_staging_rows(db_session):
