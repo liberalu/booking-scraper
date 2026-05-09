@@ -149,6 +149,58 @@ class TestScanServicePrepareScan:
 
 
 @pytest.mark.integration
+def test_prepare_scan_reuses_failed_resumable_row(db_session):
+    """A failed+resumable run is reused; no new row is created."""
+    from datetime import UTC, datetime
+
+    from book_scraper.db import scrape_run_events as run_event_types
+    from book_scraper.db.models import ScrapeRun
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        insert_scrape_url_item,
+        upsert_shop,
+    )
+    from book_scraper.services.scan import ScanService
+
+    shop = upsert_shop(db_session, "vaga", "https://www.vaga.lt")
+    failed = create_scrape_run(db_session, shop.id, "scan", urls_total=1)
+    failed.status = "failed"
+    failed.finished_at = datetime.now(UTC)
+    failed.close_reason = "stall_timeout"
+    failed.resumable_after_failure = True
+    failed.urls_processed = 0
+    insert_scrape_url_item(
+        db_session,
+        run_id=failed.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url="https://www.vaga.lt/p/1",
+        url_type="product",
+    )
+    db_session.commit()
+    failed_id = failed.id
+
+    pre_count = db_session.query(ScrapeRun).count()
+    service = ScanService(db_session)
+    plan = service.prepare_scan_create_run("vaga", "https://www.vaga.lt", {})
+    service.populate_scan_queue(plan)
+    db_session.commit()
+
+    post_count = db_session.query(ScrapeRun).count()
+    assert post_count == pre_count, "no new ScrapeRun row should be created"
+    assert plan.run_id == failed_id, "service must return the existing row id"
+
+    refreshed = db_session.get(ScrapeRun, failed_id)
+    assert refreshed.status == "running"
+    restart_events = [
+        e for e in refreshed.events if e.event_type == run_event_types.RESTARTED
+    ]
+    assert len(restart_events) == 1
+    assert restart_events[0].payload["previous_close_reason"] == "stall_timeout"
+    assert restart_events[0].payload["urls_processed_snapshot"] == 0
+
+
+@pytest.mark.integration
 class TestScanServiceFinishScan:
     def test_completes_run(self, db_session):
         shop = upsert_shop(db_session, name="fin_shop", base_url="https://fin.lt")

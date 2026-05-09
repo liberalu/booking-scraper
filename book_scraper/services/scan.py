@@ -4,20 +4,19 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from book_scraper.db import scrape_run_events as run_event_types
-from book_scraper.db.models import ScrapeRun, ScrapeUrlItem
+from book_scraper.db.models import ScrapeRun, ScrapeRunEvent, ScrapeUrlItem
 from book_scraper.db.repo import (
     check_discover_freshness,
     create_scrape_run,
-    emit_scrape_run_event,
     find_resumable_run,
     finish_scrape_run,
     get_pending_scan_urls,
     get_urls_already_scraped,
-    inherit_pending_items,
     insert_scrape_url_item,
     mark_cron_job_ran_if_matches,
     mark_stale_runs_failed,
     prepare_scrape_url_items,
+    restart_run_in_place,
     try_acquire_scan_lock,
     update_discovered_url_status,
     update_scrape_run_progress,
@@ -44,10 +43,6 @@ class ScanPlan:
     # another scrapy process owns the active run, this is True and the
     # spider should exit cleanly.
     lock_not_acquired: bool = False
-    # When `find_resumable_run` returned a previously-failed run flagged
-    # `resumable_after_failure`, this carries that run's id; the spider
-    # should re-point its pending items to the new run before yielding.
-    _inherit_from_run_id: int | None = None
 
 
 class ScanService:
@@ -126,29 +121,36 @@ class ScanService:
                     freshness_warnings=[],
                 )
             # Resumable-failed run (heartbeat_timeout / stall_timeout):
-            # spawn a fresh run row that inherits the failed run's pending
-            # queue. Old run stays `failed` for postmortem.
-            run = create_scrape_run(
-                self.session,
-                shop.id,
-                "scan",
-                urls_total=pending_count,
-                extra_payload={"rescrape": rescrape},
+            # mutate the same row back to running and emit `restarted`.
+            # No new row, no cross-row inherit — the queue is already on
+            # this row. See
+            # docs/superpowers/specs/2026-05-09-restart-and-retry-design.md.
+            attempt_number = (
+                self.session.query(ScrapeRunEvent)
+                .filter(
+                    ScrapeRunEvent.run_id == resumable.id,
+                    ScrapeRunEvent.event_type == run_event_types.RESTARTED,
+                )
+                .count()
+                + 1
             )
-            emit_scrape_run_event(
+            restart_run_in_place(
                 self.session,
-                run.id,
-                run_event_types.RESUMED_AFTER_FAILURE,
-                payload={"previous_run_id": resumable.id},
+                resumable,
+                payload={
+                    "previous_close_reason": resumable.close_reason,
+                    "attempt": attempt_number,
+                    "urls_processed_snapshot": resumable.urls_processed,
+                    "rescrape": rescrape,
+                },
                 actor=run_event_types.ACTOR_SYSTEM,
             )
             self.session.commit()
             return ScanPlan(
-                run_id=run.id,
+                run_id=resumable.id,
                 urls_total=pending_count,
                 urls_skipped=0,
                 freshness_warnings=[],
-                _inherit_from_run_id=resumable.id,
             )
 
         mark_stale_runs_failed(self.session, shop.id, "scan")
@@ -195,19 +197,13 @@ class ScanService:
     def populate_scan_queue(self, plan: ScanPlan) -> None:
         """Phase 2: insert scrape_url_items rows for the plan.
 
-        No-op when the plan is for a resumable-running run (queue already
-        populated) or when the lock was not acquired. When the plan
-        carries `_inherit_from_run_id`, re-points pending items from the
-        failed predecessor instead of inserting fresh rows.
+        No-op when the plan is for a resumable run (queue already
+        populated) or when the lock was not acquired.
         """
         if plan.lock_not_acquired:
             return
-        if plan._inherit_from_run_id is not None:
-            inherit_pending_items(self.session, plan._inherit_from_run_id, plan.run_id)
-            self.session.commit()
-            return
         if plan._urls_to_scrape is None or plan._shop_id is None:
-            # Resumable-running fast path — queue already there.
+            # Resumable run fast path — queue already there.
             return
         prepare_scrape_url_items(
             self.session, plan._shop_id, plan.run_id, plan._urls_to_scrape
