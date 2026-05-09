@@ -136,6 +136,14 @@ After completing any task that changes code, suggest to the user:
    - **BuildKit cache gotcha**: on macOS Docker Desktop, the `COPY book_scraper/` layer occasionally hits a stale-cache path even though source files changed — the new image is "Built" but inside the container `/app/book_scraper/...` still has the previous code. If you're verifying a fix and the running container disagrees with your edits, rebuild with `--no-cache`: `docker compose build --no-cache dashboard scraper && docker compose up -d dashboard scraper`. Quick way to confirm: `docker exec book-scraper-<svc>-1 grep <new-symbol> /app/book_scraper/<changed-file>` — if your new symbol isn't there, the cache lied.
 2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes.
 3. After schema migrations, trigger a short scan (`scrapy crawl scan -a shop=vaga -a urls=<one-url>`) to confirm the scraper container picked up the new models.
+4. After deploying single-row restarts (2026-05-09): on shops with large
+   stale-failed backlogs (humanitas, patogupirkti), the first scan may
+   trigger an end-of-run retry sweep over hundreds–thousands of URLs.
+   Watch heartbeat during the first run; if the sweep extends past
+   STALL_TIMEOUT, the run will restart cleanly (single-row, capped at
+   STALL_AUTO_RESUME_MAX restarts). To grandfather stale failures as
+   exhausted before the first run, run:
+   `UPDATE scrape_url_items SET attempts=3 WHERE status='failed';`
 
 ### Don't `kill -9` scrapy processes inside the container
 
