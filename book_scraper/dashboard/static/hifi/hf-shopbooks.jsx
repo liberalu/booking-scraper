@@ -134,6 +134,7 @@ function HFShopBooks({ nav, goto }) {
   const statusTone = { active:'ok', out:'warn', delisted:'neutral' };
 
   // Filter state — backend handles filtering and pagination.
+  const shopNames = useShopNames();
   const _sp = new URLSearchParams(window.location.search);
   const [q, setQ]                 = React.useState(_sp.get('q') || '');
   const [shop, setShop]           = React.useState(_sp.get('shop') || 'all');
@@ -221,7 +222,7 @@ function HFShopBooks({ nav, goto }) {
         </>}>
           <HFSearch placeholder="Title, author, ISBN…" width={260} value={q} onChange={setQ}/>
           <HFSearch placeholder="Category…" width={160} value={category} onChange={setCategory}/>
-          <HFFilter label="Shop"    value={shop}     options={['all','vaga','pegasas','humanitas','knygos']}     onChange={setShop}/>
+          <HFFilter label="Shop"    value={shop}     options={shopNames}     onChange={setShop}/>
           <HFFilter label="Active"  value={active}   options={['all','true','false']}                onChange={setActive}/>
           <HFFilter label="Type"    value={bookType} options={['all','book','non_book','audio','ebook']} onChange={setBookType}/>
           <HFFilter label="Missing" value={missing}  options={['any','author','isbn','year','publisher','format','price']} onChange={setMissing} allLabel="any"/>

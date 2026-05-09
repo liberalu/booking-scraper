@@ -42,6 +42,7 @@ function HFCron({ nav, goto }) {
     avgDur: j.avg_dur || '—',
   }));
 
+  const shopNames = useShopNames();
   const filters = useHFFilters(jobs, {
     search: { fields: j => `${j.name} ${j.cron} ${j.shop}` },
     filters: [
@@ -68,7 +69,7 @@ function HFCron({ nav, goto }) {
           {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
         </>}>
           <HFSearch placeholder="Search jobs…" width={260} value={filters.q} onChange={filters.setQ}/>
-          <HFFilter label="Shop"  value={filters.vals.shop}  options={['all','vaga','pegasas','humanitas','knygos','—']} onChange={v=>filters.setVal('shop',v)}/>
+          <HFFilter label="Shop"  value={filters.vals.shop}  options={[...shopNames,'—']} onChange={v=>filters.setVal('shop',v)}/>
           <HFFilter label="State" value={filters.vals.state} options={['all','active','failing','disabled']} onChange={v=>filters.setVal('state',v)}/>
         </HFFilterBar>
       </HFCard>
@@ -497,6 +498,7 @@ function HFIssues({ nav, goto }) {
 
 function HFPrices({ nav, goto }) {
   const HF = getHF();
+  const shopNames = useShopNames();
   const [page, setPage] = React.useState(1);
   const [days, setDays] = React.useState(7);
   const [shop, setShop] = React.useState('all');
@@ -579,7 +581,7 @@ function HFPrices({ nav, goto }) {
             {(dir!=='all' || q.trim()) && <HFButton size="sm" variant="subtle" onClick={()=>{setDir('all');setQ('');}}>Clear</HFButton>}
           </>}>
             <HFSearch placeholder="Search book…" width={260} value={q} onChange={setQ}/>
-            <HFFilter label="Shop"      value={shop} options={['all','vaga','pegasas','humanitas','knygos']}   onChange={setShop}/>
+            <HFFilter label="Shop"      value={shop} options={shopNames}   onChange={setShop}/>
             <HFFilter label="Direction" value={dir}  options={['all','drop','rise']}     onChange={setDir}/>
           </HFFilterBar>
         </div>

@@ -1,5 +1,21 @@
 // Hi-fi UI primitives — light-mode, density-aware.
 
+// Shared shops cache — fetched once per page load, shared across all filter dropdowns.
+const _shopsCache = { names: null, promise: null };
+function useShopNames() {
+  const [names, setNames] = React.useState(_shopsCache.names);
+  React.useEffect(() => {
+    if (_shopsCache.names) { setNames(_shopsCache.names); return; }
+    if (!_shopsCache.promise) {
+      _shopsCache.promise = fetch('/api/shops')
+        .then(r => r.json())
+        .then(d => { _shopsCache.names = (d.shops || []).map(s => s.name); return _shopsCache.names; });
+    }
+    _shopsCache.promise.then(n => setNames(n));
+  }, []);
+  return names ? ['all', ...names] : ['all'];
+}
+
 // Generic filter hook. Pass rows + filter spec; returns {filtered, filterBar state, clearAll, activeCount, empty}.
 // Each filter: { id, label, options (array), match: (row, value) => bool }
 // `search` spec: { placeholder, width, fields: (row) => string to match against }

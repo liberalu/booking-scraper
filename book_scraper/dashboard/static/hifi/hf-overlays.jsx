@@ -22,11 +22,12 @@ const _hfModalCtx = React.createContext(null);
 // (/api/shops) tells us which keys are configured for each shop; we filter
 // this catalog by that list when rendering the segmented picker.
 const HF_DISCOVER_STRATEGIES = {
-  sitemap:    { label: 'Sitemap',    hint: 'Read /sitemap.xml — fastest, only URL discovery' },
-  categories: { label: 'Categories', hint: 'Walk category listing pages — also extracts prices' },
-  graphql:    { label: 'GraphQL',    hint: 'Magento GraphQL — full metadata (ISBN, year, pages) in one pass' },
-  lupasearch: { label: 'LupaSearch', hint: 'Fast price + stock + new-arrival pass (no ISBN/year/pages)' },
-  full_crawl: { label: 'Full crawl', hint: 'Follow every internal link — slowest, most thorough' },
+  sitemap:         { label: 'Sitemap',         hint: 'Read /sitemap.xml — fastest, only URL discovery' },
+  categories:      { label: 'Categories',      hint: 'Walk category listing pages — also extracts prices' },
+  graphql:         { label: 'GraphQL',         hint: 'Magento GraphQL — full metadata (ISBN, year, pages) in one pass' },
+  lupasearch:      { label: 'LupaSearch',      hint: 'Fast price + stock + new-arrival pass (no ISBN/year/pages)' },
+  ibiblioteka_api: { label: 'Ibiblioteka API', hint: 'Lithuanian National Library — canonical ISBNs, authors, covers (no prices)' },
+  full_crawl:      { label: 'Full crawl',      hint: 'Follow every internal link — slowest, most thorough' },
 };
 
 // Build segmented options from the strategy keys a shop has configured.
@@ -878,6 +879,7 @@ function HFAddURLDialog({ open, onClose }) {
             { value:'humanitas', label:'humanitas.lt' },
             { value:'knygos', label:'knygos.lt' },
             { value:'patogupirkti', label:'patogupirkti.lt' },
+            { value:'ibiblioteka', label:'ibiblioteka.lt' },
           ]}/>
         </HFField>
         <HFField label="Mode">
