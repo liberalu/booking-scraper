@@ -14,3 +14,12 @@ def test_validation_pipeline_does_not_emit_field_missing() -> None:
     assert not hasattr(pipeline, "_report_empty_fields"), (
         "_report_empty_fields should be removed; field_missing is no longer tracked"
     )
+
+
+def test_scrape_url_item_attempts_defaults_to_zero():
+    from book_scraper.db.models import ScrapeUrlItem
+
+    column = ScrapeUrlItem.__table__.c.attempts
+    # server_default="0" stores the literal string; .arg is the str itself.
+    assert column.server_default.arg == "0"
+    assert column.nullable is False

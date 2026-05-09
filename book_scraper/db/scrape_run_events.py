@@ -18,6 +18,13 @@ FAILED: Final = "failed"
 # operators see when the backend got rough and the spider adapted —
 # vs. the run going silent until the next stall.
 SUBDIVIDED: Final = "subdivided"
+# Single-row restart marker. Distinct from RESUMED_AFTER_FAILURE which
+# was emitted on the *new* row when the chain-row model created one
+# child row per process attempt. RESTARTED is emitted on the same
+# logical-run row each time a process restart happens (stall, heartbeat
+# timeout, boot reconcile). Operator-triggered restarts continue to use
+# CONTINUED.
+RESTARTED: Final = "restarted"
 
 EVENT_TYPES: Final[frozenset[str]] = frozenset(
     {
@@ -29,6 +36,7 @@ EVENT_TYPES: Final[frozenset[str]] = frozenset(
         RERUN,
         CONTINUED,
         RESUMED_AFTER_FAILURE,
+        RESTARTED,
         COMPLETED,
         FAILED,
         SUBDIVIDED,

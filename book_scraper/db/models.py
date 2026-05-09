@@ -524,7 +524,8 @@ class ScrapeRunEvent(Base):
         CheckConstraint(
             "event_type IN ("
             "'started','paused','resumed','stop_requested','retry_failures',"
-            "'rerun','continued','resumed_after_failure','completed','failed'"
+            "'rerun','continued','resumed_after_failure','restarted',"
+            "'completed','failed','subdivided'"
             ")",
             name="ck_scrape_run_events_event_type",
         ),
@@ -581,6 +582,13 @@ class ScrapeUrlItem(Base):
     retry_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    # Number of dispatch cycles for this URL within its current logical
+    # run. Initial dispatch increments to 1; the end-of-run retry sweep
+    # adds another increment per re-dispatch. Capped at RETRY_CAP (3) by
+    # the sweep — items at the cap stay `failed` (sticky). NOT
+    # incremented per Scrapy RetryMiddleware retry — that's tracked
+    # separately in `retry_count`.
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     response_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
@@ -725,18 +733,32 @@ class CronJob(Base):
 # Tables created by Alembic c5d8e2f3a9b1; ORM mappings only here.
 
 book_data_source_enum = Enum(
-    "ibiblioteka", "shop_inferred", "manual",
-    name="book_data_source", create_type=False,
+    "ibiblioteka",
+    "shop_inferred",
+    "manual",
+    name="book_data_source",
+    create_type=False,
 )
 
 book_isbn_type_enum = Enum(
-    "isbn10", "isbn13", "ebook", "audio", "unknown",
-    name="book_isbn_type", create_type=False,
+    "isbn10",
+    "isbn13",
+    "ebook",
+    "audio",
+    "unknown",
+    name="book_isbn_type",
+    create_type=False,
 )
 
 book_author_role_enum = Enum(
-    "author", "translator", "narrator", "illustrator", "editor", "compiler",
-    name="book_author_role", create_type=False,
+    "author",
+    "translator",
+    "narrator",
+    "illustrator",
+    "editor",
+    "compiler",
+    name="book_author_role",
+    create_type=False,
 )
 
 

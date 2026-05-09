@@ -246,3 +246,25 @@ def test_api_pause_resume_stop_emit_events(api_client, db_session):
         run_event_types.RESUMED,
         run_event_types.STOP_REQUESTED,
     ]
+
+
+def test_restarted_event_accepted(db_session):
+    shop = upsert_shop(db_session, "vaga", "https://www.vaga.lt")
+    run = create_scrape_run(db_session, shop.id, "scan")
+    db_session.commit()
+
+    event = emit_scrape_run_event(
+        db_session,
+        run.id,
+        run_event_types.RESTARTED,
+        payload={
+            "previous_close_reason": "stall_timeout",
+            "attempt": 1,
+            "urls_processed_snapshot": 0,
+        },
+        actor=run_event_types.ACTOR_SYSTEM,
+    )
+    db_session.commit()
+
+    assert event.event_type == "restarted"
+    assert event.payload["attempt"] == 1
