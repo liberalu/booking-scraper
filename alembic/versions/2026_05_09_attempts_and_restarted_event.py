@@ -47,6 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DELETE FROM scrape_run_events WHERE event_type = 'restarted'")
     op.drop_constraint(
         "ck_scrape_run_events_event_type",
         "scrape_run_events",

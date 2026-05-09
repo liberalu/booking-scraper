@@ -16,7 +16,7 @@ def test_validation_pipeline_does_not_emit_field_missing() -> None:
     )
 
 
-def test_scrape_url_item_attempts_defaults_to_zero():
+def test_scrape_url_item_attempts_defaults_to_zero() -> None:
     from book_scraper.db.models import ScrapeUrlItem
 
     column = ScrapeUrlItem.__table__.c.attempts
