@@ -2049,6 +2049,72 @@ def mark_scrape_url_item_failed(
         )
 
 
+def fetch_retryable_failed_items(
+    session: Session,
+    run_id: int,
+    cap: int,
+) -> list[ScrapeUrlItem]:
+    """Return failed items on this run with attempts < cap.
+
+    Used by the end-of-run retry sweep. No filter on `error_reason` —
+    every failed item under the cap gets one more dispatch chance.
+    """
+    return list(
+        session.query(ScrapeUrlItem)
+        .filter(
+            ScrapeUrlItem.run_id == run_id,
+            ScrapeUrlItem.status == "failed",
+            ScrapeUrlItem.attempts < cap,
+        )
+        .all()
+    )
+
+
+def reset_failed_items_to_pending(
+    session: Session,
+    item_ids: list[int],
+    *,
+    reset_attempts: bool = False,
+) -> int:
+    """Flip given failed items back to `pending` and clear stale
+    terminal metadata so the next claim starts fresh.
+
+    Clears `claimed_at`, `done_at`, `http_status`, and `response_bytes`
+    — these were stamped by the previous failed dispatch and would
+    otherwise show up on the pending row in the History card. The
+    underlying scrape_failures rows stay (they're an append-only
+    event log).
+
+    `reset_attempts=False` (default, end-of-run sweep): leaves the
+    counter alone — the next claim ticks it.
+    `reset_attempts=True` (operator manual retry): zeros the counter
+    so capped items get a fresh window.
+
+    Returns the number of items updated.
+    """
+    if not item_ids:
+        return 0
+    values: dict[str, Any] = {
+        "status": "pending",
+        "claimed_at": None,
+        "done_at": None,
+        "http_status": None,
+        "response_bytes": None,
+    }
+    if reset_attempts:
+        values["attempts"] = 0
+    stmt = (
+        update(ScrapeUrlItem)
+        .where(ScrapeUrlItem.id.in_(item_ids))
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(stmt)
+    session.flush()
+    rowcount = getattr(result, "rowcount", 0)
+    return int(rowcount) if rowcount is not None else 0
+
+
 def reset_processing_scrape_url_items(session: Session, run_id: int) -> int:
     """Reset 'processing' items back to 'pending' for crash recovery.
 
