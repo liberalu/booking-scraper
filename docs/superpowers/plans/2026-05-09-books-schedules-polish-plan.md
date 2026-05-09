@@ -80,13 +80,9 @@ Expected: ImportError or AttributeError — `_validate_cron` does not yet exist.
 
 - [ ] **Step 3: Add the helper**
 
-Open `book_scraper/dashboard/routes/api.py`. Find the imports block at the top and add:
+Open `book_scraper/dashboard/routes/api.py`. The existing module already imports `croniter` locally inside two functions (lines 1926 and 1988) using `from croniter import croniter  # type: ignore[import-untyped]`. Match that convention — import inside the helper, do **not** add a top-level import (mypy is strict in this project).
 
-```python
-from croniter import croniter
-```
-
-Then, near the other private helpers in the file (above the cron route block, e.g. just before `def _chain_would_create_cycle`), add:
+Near the other private helpers in the file (above the cron route block, e.g. just before `def _chain_would_create_cycle` around line 2161), add:
 
 ```python
 def _validate_cron(expression: str) -> None:
@@ -95,6 +91,8 @@ def _validate_cron(expression: str) -> None:
     croniter.is_valid is permissive about 6/7-field forms; we want strict
     5-field so the value round-trips cleanly through scripts/generate_crontab.py.
     """
+    from croniter import croniter  # type: ignore[import-untyped]
+
     parts = expression.strip().split()
     if len(parts) != 5 or not croniter.is_valid(expression.strip()):
         raise HTTPException(
@@ -448,7 +446,7 @@ def api_cron_delete(
 
     delete_cron_job(session, job_id)
     session.commit()
-    return {"deleted": job_id}
+    return {"id": job_id}
 ```
 
 If `select`, `CronJob`, `Shop`, or `delete_cron_job` are not yet imported in this file, add them. Run the file's lint check to confirm:
@@ -840,6 +838,25 @@ to:
 
 Open `book_scraper/dashboard/static/hifi/hf-books.jsx`. Delete the entire `HFBookDetail` function (starts around line 111 with `function HFBookDetail({ nav, goto, params }) {` and ends at the closing brace at line ~197). Keep `HFBooks` (the list) and the `DataSourceBadge` definition above it (still used by `HFBooks` rows).
 
+- [ ] **Step 3b: Update the stale top-of-file comment in `hf-book.jsx`**
+
+The current comment at the top of `book_scraper/dashboard/static/hifi/hf-book.jsx` says:
+
+```jsx
+// Canonical Book detail page.
+// Used in the design prototype (HFBook fetches the first available book when no params.id).
+// In the production dashboard, HFBookDetail (hf-books.jsx) handles the routed case with params.id.
+```
+
+After this task that's false — `HFBook` IS the production routed page. Replace those three lines with:
+
+```jsx
+// Canonical Book detail page — the routed component for /books/:id.
+// The fallback "fetch the first book when no params.id" path remains for the
+// design prototype's pager (Test design/Book Hifi.html), which renders this
+// component without a route.
+```
+
 - [ ] **Step 4: Rebuild dashboard and restart**
 
 ```
@@ -880,7 +897,7 @@ git add book_scraper/dashboard/static/hifi/index.html book_scraper/dashboard/sta
 git commit -m "feat(dashboard): adopt HFBook on /books/:id, remove HFBookDetail"
 ```
 
-(The `hf-book.jsx` file already exists untracked from earlier work — this commit promotes it to tracked.)
+(`hf-book.jsx` is already a tracked file; the commit only updates its top comment in this task. Task 8 will modify its body further.)
 
 ---
 
@@ -1077,7 +1094,7 @@ git commit -m "fix(dashboard): UX polish on HFBook (CLS, locale, a11y, copy)"
 
 Open `book_scraper/dashboard/static/hifi/hf-books.jsx`. Locate `HFBooks` (now the only component in the file after Task 7).
 
-Replace the existing `useEffect` and the post-fetch client-side filter. Specifically:
+Replace the existing `useEffect` and the post-fetch client-side filter, and reset `page` directly from the input handlers (not via a separate effect — that races with in-flight fetches).
 
 Replace this block:
 
@@ -1128,11 +1145,16 @@ React.useEffect(() => {
 const visible = data.books;
 ```
 
-Also: when `q` changes, reset to page 1 so search starts fresh. Add this effect right under the debounce effect:
+Then reset `page` synchronously in each input handler so it lands in the same render as the new filter/search value (the API call dispatched from the effect uses the post-reset `page=1`):
 
-```jsx
-React.useEffect(() => { setPage(1); }, [debouncedQ]);
-```
+- The search input: `<HFSearch ... value={q} onChange={v => { setQ(v); setPage(1); }} />`
+- Each filter:
+  - `<HFFilter label="Source"  ... onChange={v => { setDataSource(v); setPage(1); }} ...>`
+  - `<HFFilter label="ISBN"    ... onChange={v => { setHasIsbn(v); setPage(1); }} ...>`
+  - `<HFFilter label="Shops"   ... onChange={v => { setHasShops(v); setPage(1); }} ...>`
+- The year input (if changed): `onChange={v => { setYear(v); setPage(1); }}`
+
+Do NOT add a `React.useEffect(() => setPage(1), [debouncedQ])` — it can fire after a fetch is already in flight with the previous `page`, double-fetching and possibly landing on stale results.
 
 - [ ] **Step 2: Rebuild + verify**
 
@@ -1190,7 +1212,7 @@ At the end of the JSX returned by `HFScheduleDetail` (next to the existing `<HFE
 <HFModal open={deleteState.open} onClose={() => setDeleteState(s => ({ ...s, open: false }))} width={520}>
   <HFModalHead
     title="Delete schedule"
-    sub={name ? `Confirm deletion of ${job.name}` : undefined}
+    sub={name ? `Confirm deletion of ${name}` : undefined}
     onClose={() => setDeleteState(s => ({ ...s, open: false }))}
   />
   <HFModalBody>
