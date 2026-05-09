@@ -577,6 +577,74 @@ def test_continue_run_404_when_missing(client: TestClient) -> None:
 
 
 @pytest.mark.integration
+def test_continue_run_resets_retryable_failures(
+    client: TestClient, db_session: Session, _mock_spawn: list[dict]
+) -> None:
+    """Operator Continue should match auto-resume's failure reset.
+
+    Items with retryable error reasons (run_aborted /
+    stuck_in_processing / subdivision_5xx) flip back to pending.
+    Terminal failures (http_500, etc.) stay failed.
+    """
+    from book_scraper.db.repo import (
+        insert_scrape_url_item,
+        record_scrape_failure,
+    )
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = _make_stopped_scan_run(db_session, shop.id, pending=1)
+
+    failed_retryable = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url=f"https://www.vaga.lt/p/retryable-{run.id}",
+        url_type="product",
+    )
+    failed_retryable.status = "failed"
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=failed_retryable,
+        error_reason="run_aborted",
+        http_status=None,
+    )
+
+    failed_terminal = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url=f"https://www.vaga.lt/p/terminal-{run.id}",
+        url_type="product",
+    )
+    failed_terminal.status = "failed"
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=failed_terminal,
+        error_reason="http_500",
+        http_status=500,
+    )
+    db_session.commit()
+
+    resp = client.post(f"/api/runs/{run.id}/continue")
+    assert resp.status_code == 200, resp.text
+
+    db_session.expire_all()
+    refreshed_retryable = db_session.get(ScrapeUrlItem, failed_retryable.id)
+    refreshed_terminal = db_session.get(ScrapeUrlItem, failed_terminal.id)
+    assert refreshed_retryable is not None
+    assert refreshed_terminal is not None
+    assert refreshed_retryable.status == "pending"
+    assert refreshed_terminal.status == "failed"
+    assert _mock_spawn == [
+        {"phase": "scan", "shop": "vaga", "strategy": "", "mode": "delta"}
+    ]
+
+
+@pytest.mark.integration
 def test_api_run_live_exposes_retry_cap(
     client: TestClient, db_session: Session
 ) -> None:

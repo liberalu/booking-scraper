@@ -67,6 +67,7 @@ from book_scraper.db.models import (
     ValidationIssue,
 )
 from book_scraper.db.repo import (
+    _reset_retryable_failures,
     create_cron_job,
     delete_cron_job,
     emit_scrape_run_event,
@@ -901,6 +902,12 @@ def api_continue_run(run_id: int, session: Session = Depends(get_db)) -> dict[st
     run.close_reason = None
     run.last_heartbeat = datetime.now(UTC)
     run.pid = None
+    # Match auto-resume behaviour (restart_run_in_place) so operators
+    # clicking Continue get the same retryable-failure reset:
+    # run_aborted / stuck_in_processing / subdivision_5xx items flip
+    # back to pending. Terminal failures (http_5xx, parse errors, etc.)
+    # stay failed.
+    _reset_retryable_failures(session, run_id)
     emit_scrape_run_event(
         session,
         run_id,
