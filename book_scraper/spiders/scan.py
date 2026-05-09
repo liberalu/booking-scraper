@@ -111,6 +111,12 @@ class ScanSpider(scrapy.Spider):
         self._errors_5xx: int = 0
         self._error_count: int = 0
 
+        # Per-process flag — set to True after the end-of-run retry sweep
+        # has run once, so the second idle tick lets the spider close
+        # cleanly. Resets per process; on restart, the new process gets
+        # its own flag and may sweep again (bounded by attempts < cap).
+        self._end_of_run_retry_done: bool = False
+
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
         spider = super().from_crawler(crawler, *args, **kwargs)
@@ -118,23 +124,49 @@ class ScanSpider(scrapy.Spider):
         return spider
 
     def spider_idle(self, spider) -> None:  # type: ignore[no-untyped-def]
-        """When the main queue drains, check for new items queued mid-run
-        and schedule them. Called by Scrapy when no requests are in flight.
+        """End-of-run retry sweep + mid-run pickup.
 
-        Hooks into Scrapy's ``spider_idle`` signal to pick up items enqueued
-        mid-run via ``ScanService.enqueue_new_url``. Currently no code path
-        emits such enqueues during a scan run; this handler remains inert
-        until Phase 2 wires the scan spider to yield ``DiscoveredUrlItem``
-        for newly-discovered product URLs.
+        Two responsibilities, run in order:
+
+        1. **Retry sweep** (one-shot per process): when no fresh
+           pending items are queued and the run still has `failed`
+           items with `attempts < RETRY_CAP`, flip them back to
+           `pending`, dispatch them, and raise `DontCloseSpider`. Set
+           `_end_of_run_retry_done` so the next idle doesn't re-sweep.
+
+        2. **Mid-run pickup** (always): pre-existing behaviour — pick
+           up items enqueued mid-run via `ScanService.enqueue_new_url`
+           and reset crash-orphaned `processing` items.
         """
         if self._run_id is None:
             return
         database_url = self.settings.get("DATABASE_URL")
+        retry_cap = self.settings.getint("RETRY_CAP", 3)
         session_factory = get_session_factory(database_url)
         session = session_factory()
         try:
             reset_processing_scrape_url_items(session, self._run_id)
             new_items = get_pending_scrape_url_items(session, self._run_id)
+
+            # If the queue is empty AND the sweep hasn't run yet,
+            # take a single retry pass over failed-with-attempts<cap.
+            if not new_items and not self._end_of_run_retry_done:
+                from book_scraper.db.repo import (
+                    fetch_retryable_failed_items,
+                    reset_failed_items_to_pending,
+                )
+
+                eligible = fetch_retryable_failed_items(
+                    session, self._run_id, cap=retry_cap
+                )
+                if eligible:
+                    reset_failed_items_to_pending(
+                        session, [it.id for it in eligible]
+                    )
+                    new_items = get_pending_scrape_url_items(
+                        session, self._run_id
+                    )
+                self._end_of_run_retry_done = True
             session.commit()
         finally:
             session.close()
