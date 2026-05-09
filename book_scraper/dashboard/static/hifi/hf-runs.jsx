@@ -607,6 +607,7 @@ function HFRunHistoryCard({
           { w: '75px', skelW: 50, mono: true },
           { w: '60px', skelW: 40, mono: true },
           { w: '85px', skelW: 60, mono: true },
+          { w: '60px', skelW: 36, mono: true },
         ]}/>
       </HFCard>
     );
@@ -678,7 +679,7 @@ function HFRunHistoryCard({
           <div style={{
             display:'grid',
             gridTemplateColumns: urlData.source === 'live'
-              ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
+              ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px 60px'
               : '1fr 60px 70px 150px',
             padding:`8px var(--hf-card-p)`,
             borderBottom: `1px solid ${'var(--hf-border)'}`,
@@ -727,6 +728,7 @@ function HFRunHistoryCard({
                   <span>Size</span>
                   <span>Throttle</span>
                   <span>Source</span>
+                  <span>Attempts</span>
                 </>
               ) : (
                 <>
@@ -765,7 +767,7 @@ function HFRunHistoryCard({
               <div key={i} style={{
                 display:'grid',
                 gridTemplateColumns: urlData.source === 'live'
-                  ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px'
+                  ? '55px 1fr 85px 120px 80px 70px 70px 75px 60px 85px 60px'
                   : '1fr 60px 70px 150px',
                 padding:`7px var(--hf-card-p)`,
                 borderBottom: i < urlData.rows.length-1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
@@ -850,6 +852,24 @@ function HFRunHistoryCard({
                           {lbl.suffix || u.delay_source || '—'}
                         </span>
                       </>;
+                    })()}
+                    {(() => {
+                      // Per-URL retry counter. RETRY_CAP mirrors backend
+                      // book_scraper.settings.RETRY_CAP — kept in sync with
+                      // the Failures-card capped_count badge below.
+                      const cap = 3;
+                      const attempts = u.attempts ?? 0;
+                      const capped = attempts >= cap;
+                      return (
+                        <span title={capped ? `Retry cap reached (${attempts}/${cap})` : `${attempts}/${cap} attempts`}
+                              style={{
+                                fontFamily:'var(--hf-mono)', fontSize:11,
+                                color: capped ? 'var(--hf-err-ink)' : 'var(--hf-ink4)',
+                                fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap',
+                              }}>
+                          {attempts}/{cap}{capped ? ' 🔒' : ''}
+                        </span>
+                      );
                     })()}
                   </>
                 ) : (
@@ -1024,6 +1044,17 @@ function HFRunFailuresCard({
                     }}>
                       <span aria-hidden="true" style={{display:'inline-flex'}}><HFIcon d={<><path d="M3 8 L7 12 L13 4"/></>} size={11} sw={2}/></span>
                       acked × {g.acked_count}
+                    </span>
+                  )}
+                  {(g.capped_count ?? 0) > 0 && (
+                    <span title={`${g.capped_count} item${g.capped_count === 1 ? '' : 's'} have exhausted the retry cap (${g.max_attempts}/3 attempts) — retrying won't help until the underlying cause is fixed`} style={{
+                      display:'inline-flex', alignItems:'center', gap: 4,
+                      height: 20, padding: '0 7px',
+                      background: 'var(--hf-err-soft)', color: 'var(--hf-err-ink)',
+                      border: `1px solid ${'var(--hf-err-border)'}`, borderRadius: 4,
+                      fontFamily: 'var(--hf-mono)', fontSize: 11, fontWeight: 500,
+                    }}>
+                      🔒 {g.capped_count} capped (max {g.max_attempts}/3)
                     </span>
                   )}
                   {g.recurring_in_runs > 0 && (

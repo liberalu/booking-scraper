@@ -24,6 +24,7 @@ from book_scraper.db.models import (
     UrlClassification,
     ValidationIssue,
 )
+from book_scraper.settings import RETRY_CAP
 
 logger = logging.getLogger(__name__)
 
@@ -836,6 +837,14 @@ def get_run_failure_groups(
     acked_expr = func.sum(
         case((latest.c.lifecycle_state == "already_seen", 1), else_=0)
     ).label("acked_count")
+    # Group-level retry-cap stats: surface per-bucket "max attempts seen" and
+    # "how many items already exhausted the cap" so operators can spot
+    # buckets where retries won't help anymore (Task 12 of the
+    # restart-and-retry plan).
+    max_attempts_expr = func.max(ScrapeUrlItem.attempts).label("max_attempts")
+    capped_expr = func.sum(
+        case((ScrapeUrlItem.attempts >= RETRY_CAP, 1), else_=0)
+    ).label("capped_count")
 
     base = (
         session.query(
@@ -843,6 +852,8 @@ def get_run_failure_groups(
             latest.c.http_status,
             unacked_expr,
             acked_expr,
+            max_attempts_expr,
+            capped_expr,
         )
         .join(ScrapeUrlItem, ScrapeUrlItem.id == latest.c.scrape_url_item_id)
         .filter(latest.c.rn == 1, ScrapeUrlItem.status == "failed")
@@ -875,9 +886,18 @@ def get_run_failure_groups(
         ]
 
     out: list[dict[str, Any]] = []
-    for reason, http, unacked_count, acked_count in rows:
+    for (
+        reason,
+        http,
+        unacked_count,
+        acked_count,
+        max_attempts,
+        capped_count,
+    ) in rows:
         unacked_count = int(unacked_count or 0)
         acked_count = int(acked_count or 0)
+        max_attempts = int(max_attempts or 0)
+        capped_count = int(capped_count or 0)
         recurring_runs = 0
         if prior_run_ids:
             reason_pred = (
@@ -953,6 +973,8 @@ def get_run_failure_groups(
                 "unacked_count": unacked_count,
                 "acked_count": acked_count,
                 "recurring_in_runs": int(recurring_runs),
+                "max_attempts": max_attempts,
+                "capped_count": capped_count,
                 "examples": examples,
             }
         )
@@ -2426,10 +2448,15 @@ def list_books(
         select(func.count()).select_from(base.subquery())
     ).scalar_one()
 
-    rows = session.execute(
-        base.order_by(Book.created_at.desc())
-        .limit(per_page).offset((page - 1) * per_page)
-    ).scalars().all()
+    rows = (
+        session.execute(
+            base.order_by(Book.created_at.desc())
+            .limit(per_page)
+            .offset((page - 1) * per_page)
+        )
+        .scalars()
+        .all()
+    )
 
     out = []
     for b in rows:
@@ -2438,32 +2465,41 @@ def list_books(
             pub_name = session.execute(
                 select(Publisher.name).where(Publisher.id == b.publisher_id)
             ).scalar_one_or_none()
-        authors = session.execute(
-            select(Author.name)
-            .join(BookAuthor)
-            .where(BookAuthor.book_id == b.id, BookAuthor.role == "author")
-            .order_by(BookAuthor.position)
-        ).scalars().all()
+        authors = (
+            session.execute(
+                select(Author.name)
+                .join(BookAuthor)
+                .where(BookAuthor.book_id == b.id, BookAuthor.role == "author")
+                .order_by(BookAuthor.position)
+            )
+            .scalars()
+            .all()
+        )
         primary_isbn = session.execute(
             select(BookIsbn.isbn).where(BookIsbn.book_id == b.id).limit(1)
         ).scalar_one_or_none()
         shop_count = session.execute(
             select(func.count()).select_from(ShopBook).where(ShopBook.book_id == b.id)
         ).scalar_one()
-        out.append({
-            "id": b.id,
-            "title": b.title,
-            "year": b.year,
-            "data_source": b.data_source,
-            "libis_code": b.libis_code,
-            "publisher": pub_name,
-            "primary_isbn": primary_isbn,
-            "authors": list(authors),
-            "shop_count": shop_count,
-        })
+        out.append(
+            {
+                "id": b.id,
+                "title": b.title,
+                "year": b.year,
+                "data_source": b.data_source,
+                "libis_code": b.libis_code,
+                "publisher": pub_name,
+                "primary_isbn": primary_isbn,
+                "authors": list(authors),
+                "shop_count": shop_count,
+            }
+        )
 
     return {
-        "books": out, "total": total, "page": page, "per_page": per_page,
+        "books": out,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
         "pages": (total + per_page - 1) // per_page if per_page else 1,
     }
 
@@ -2482,9 +2518,7 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         ShopBook,
     )
 
-    book = session.execute(
-        select(Book).where(Book.id == book_id)
-    ).scalar_one_or_none()
+    book = session.execute(select(Book).where(Book.id == book_id)).scalar_one_or_none()
     if book is None:
         return None
 
@@ -2509,8 +2543,13 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         .order_by(BookAuthor.role, BookAuthor.position)
     ).all()
     shops = session.execute(
-        select(Shop.name, ShopBook.url, ShopBook.price, ShopBook.in_stock,
-               ShopBook.last_seen_at)
+        select(
+            Shop.name,
+            ShopBook.url,
+            ShopBook.price,
+            ShopBook.in_stock,
+            ShopBook.last_seen_at,
+        )
         .join(ShopBook, ShopBook.shop_id == Shop.id)
         .where(ShopBook.book_id == book_id)
         .order_by(Shop.name)
@@ -2542,7 +2581,8 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         "authors": [{"name": n, "role": r} for n, r in authors],
         "shops": [
             {
-                "shop": shop, "url": url,
+                "shop": shop,
+                "url": url,
                 "price": str(price) if price is not None else None,
                 "in_stock": in_stock,
                 "last_seen_at": last_seen.isoformat() if last_seen else None,

@@ -1216,12 +1216,20 @@ def test_api_cron_exposes_chain_to_id(client: TestClient, db_session: Session) -
 
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     job_a = create_cron_job(
-        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
-        args="", cron_expression="0 2 * * *",
+        db_session,
+        shop_id=shop.id,
+        phase="discover",
+        strategy="sitemap",
+        args="",
+        cron_expression="0 2 * * *",
     )
     job_b = create_cron_job(
-        db_session, shop_id=shop.id, phase="scan", strategy=None,
-        args="", cron_expression="0 3 * * *",
+        db_session,
+        shop_id=shop.id,
+        phase="scan",
+        strategy=None,
+        args="",
+        cron_expression="0 3 * * *",
         chain_to_job_id=job_a.id,
     )
     db_session.commit()
@@ -1241,8 +1249,12 @@ def test_api_cron_create_with_chain(client: TestClient, db_session: Session) -> 
 
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     job_a = create_cron_job(
-        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
-        args="", cron_expression="0 2 * * *",
+        db_session,
+        shop_id=shop.id,
+        phase="discover",
+        strategy="sitemap",
+        args="",
+        cron_expression="0 2 * * *",
     )
     db_session.commit()
 
@@ -1297,3 +1309,109 @@ def test_api_run_detail_exposes_restarted_event(
     restarted = next(e for e in data["events"] if e["event_type"] == "restarted")
     assert restarted["payload"]["attempt"] == 1
     assert restarted["payload"]["previous_close_reason"] == "stall_timeout"
+
+
+@pytest.mark.integration
+def test_api_run_urls_includes_attempts(
+    client: TestClient, db_session: Session
+) -> None:
+    """History card surfaces per-URL attempts so the operator can see
+    how close each failed item is to the retry cap (Task 12)."""
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        insert_scrape_url_item,
+        record_scrape_failure,
+    )
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = create_scrape_run(db_session, shop.id, "scan")
+    run.status = "running"
+    item = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url="https://www.vaga.lt/p/x",
+        url_type="product",
+    )
+    item.status = "failed"
+    item.attempts = 2
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=item,
+        error_reason="http_500",
+        http_status=500,
+    )
+    db_session.commit()
+
+    response = client.get(f"/api/runs/{run.id}/urls?status=failed")
+    assert response.status_code == 200
+    rows = response.json()["rows"]
+    assert any(r.get("attempts") == 2 for r in rows)
+
+
+@pytest.mark.integration
+def test_api_run_live_failure_groups_include_attempts_stats(
+    client: TestClient, db_session: Session
+) -> None:
+    """Group-level Failures card surfaces max_attempts + capped_count so
+    operators can spot buckets where the retry cap is universally
+    exhausted (Task 12)."""
+    from book_scraper.db.repo import (
+        create_scrape_run,
+        insert_scrape_url_item,
+        record_scrape_failure,
+    )
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = create_scrape_run(db_session, shop.id, "scan")
+    run.status = "running"
+
+    capped = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url="https://www.vaga.lt/a",
+        url_type="product",
+    )
+    capped.status = "failed"
+    capped.attempts = 3
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=capped,
+        error_reason="http_500",
+        http_status=500,
+    )
+
+    fresh = insert_scrape_url_item(
+        db_session,
+        run_id=run.id,
+        shop_id=shop.id,
+        discovered_url_id=None,
+        url="https://www.vaga.lt/b",
+        url_type="product",
+    )
+    fresh.status = "failed"
+    fresh.attempts = 1
+    db_session.flush()
+    record_scrape_failure(
+        db_session,
+        scrape_url_item=fresh,
+        error_reason="http_500",
+        http_status=500,
+    )
+    db_session.commit()
+
+    response = client.get(f"/api/runs/{run.id}/live")
+    assert response.status_code == 200
+    groups = response.json()["failure_groups"]
+    # `get_run_failure_groups` returns `reason` + `http` (not error_reason /
+    # http_status) — match its existing contract.
+    bucket = next(
+        g for g in groups if g.get("reason") == "http_500" and g.get("http") == 500
+    )
+    assert bucket["max_attempts"] == 3
+    assert bucket["capped_count"] == 1

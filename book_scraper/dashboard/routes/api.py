@@ -1402,6 +1402,7 @@ def api_run_urls(
                     "item_id": it.id,
                     "discovered_url_id": it.discovered_url_id,
                     "shop_book_id": shop_book_id,
+                    "attempts": it.attempts,
                 }
             )
         source = "live"
@@ -1754,8 +1755,12 @@ def _configured_discover_strategies(shop_name: str) -> list[str]:
     available: list[str] = []
     # Order matches the dialog: cheap-and-fast first, slowest last.
     for name in (
-        "sitemap", "categories", "graphql", "lupasearch",
-        "ibiblioteka_api", "full_crawl",
+        "sitemap",
+        "categories",
+        "graphql",
+        "lupasearch",
+        "ibiblioteka_api",
+        "full_crawl",
     ):
         if getattr(cfg.discover, name, None) is not None:
             available.append(name)
@@ -1773,18 +1778,22 @@ def api_books(
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     from book_scraper.dashboard.queries import list_books
+
     return list_books(
         session,
-        data_source=data_source, has_isbn=has_isbn, has_shops=has_shops,
-        year=year, page=page, per_page=per_page,
+        data_source=data_source,
+        has_isbn=has_isbn,
+        has_shops=has_shops,
+        year=year,
+        page=page,
+        per_page=per_page,
     )
 
 
 @router.get("/books/{book_id}")
-def api_book_detail(
-    book_id: int, session: Session = Depends(get_db)
-) -> dict[str, Any]:
+def api_book_detail(book_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     from book_scraper.dashboard.queries import book_detail
+
     detail = book_detail(session, book_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -1943,9 +1952,7 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
 
             metrics = _cron_job_metrics(session, j.shop_id, run_phase)
             chain_job = (
-                session.get(CronJob, j.chain_to_job_id)
-                if j.chain_to_job_id
-                else None
+                session.get(CronJob, j.chain_to_job_id) if j.chain_to_job_id else None
             )
             chain_to_name = (
                 f"{chain_job.shop.name}.{chain_job.phase}"
@@ -1977,6 +1984,7 @@ def api_cron(session: Session = Depends(get_db)) -> dict[str, Any]:
             )
         except Exception:
             import logging as _logging
+
             _logging.getLogger(__name__).exception("api_cron: skipping job %d", j.id)
     return {"jobs": result}
 
