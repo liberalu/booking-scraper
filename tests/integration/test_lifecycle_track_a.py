@@ -364,7 +364,13 @@ def test_find_resumable_run_skips_failed_without_flag(db_session):
 
 
 def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
-    """End-to-end: a failed-but-resumable run's queue is adopted by a new run."""
+    """End-to-end: a failed-but-resumable run is restarted in place (same row).
+
+    Per docs/superpowers/specs/2026-05-09-restart-and-retry-design.md, auto-resume
+    after a stall reuses the same scrape_runs row instead of spawning a new one.
+    The queue stays attached to the row; status flips back to running and a
+    `restarted` event is appended for audit.
+    """
     shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
     _seed_one_url(db_session, shop.id, "https://vaga.lt/i1")
     _seed_one_url(db_session, shop.id, "https://vaga.lt/i2")
@@ -378,30 +384,38 @@ def test_prepare_scan_inherits_queue_from_resumable_failed_run(db_session):
     first_run.status = "failed"
     first_run.finished_at = datetime.now(UTC)
     first_run.resumable_after_failure = True
+    first_run.close_reason = "stall_timeout"
     db_session.commit()
 
-    # Next prepare_scan: must spawn a new run row that adopts the queue.
+    # Next prepare_scan: must reuse the same row (single-row restart).
     second = service.prepare_scan("vaga", "https://vaga.lt", {}, rescrape=True)
-    assert second.run_id != first.run_id
+    assert second.run_id == first.run_id
 
-    # All pending items are now under the new run.
-    moved = (
-        db_session.query(ScrapeUrlItem)
-        .filter_by(run_id=second.run_id, status="pending")
-        .count()
-    )
-    assert moved == 2
-    leftover = (
+    # Pending items remain on the same run row.
+    pending = (
         db_session.query(ScrapeUrlItem)
         .filter_by(run_id=first.run_id, status="pending")
         .count()
     )
-    assert leftover == 0
+    assert pending == 2
 
-    # Old run row stays for postmortem.
+    # Row was flipped back to running and finished_at cleared.
     db_session.refresh(first_run)
-    assert first_run.status == "failed"
-    assert first_run.resumable_after_failure is True
+    assert first_run.status == "running"
+    assert first_run.finished_at is None
+
+    # A `restarted` event was emitted for audit (attempt 1).
+    from book_scraper.db.models import ScrapeRunEvent
+
+    restart_events = (
+        db_session.query(ScrapeRunEvent)
+        .filter(
+            ScrapeRunEvent.run_id == first.run_id,
+            ScrapeRunEvent.event_type == "restarted",
+        )
+        .all()
+    )
+    assert len(restart_events) == 1
 
 
 # ─────────────────────── #2 — abort_processing idempotency ───────────────────────
