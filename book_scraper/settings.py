@@ -59,6 +59,12 @@ STALL_AUTO_RESUME_MAX = 3  # pragma: no cover
 # old run row is already `failed` by then.
 STALL_FORCE_EXIT_S = 60  # pragma: no cover
 
+# Maximum dispatch cycles per scrape_url_item within a logical run.
+# Counts the initial fetch plus any re-dispatches from the end-of-run
+# retry sweep. Once an item hits this cap it stays `failed` (sticky)
+# until an operator click on Retry-failures resets attempts to 0.
+RETRY_CAP = 3
+
 EXTENSIONS = {  # pragma: no cover
     "book_scraper.extensions.StallDetector": 500,  # pragma: no cover
     "book_scraper.extensions.HeartbeatExtension": 510,  # pragma: no cover
