@@ -241,6 +241,45 @@ def test_count_consecutive_zero_progress_resumes(db_session):
     assert count_consecutive_zero_progress_resumes(db_session, run.id) == 0
 
 
+def test_prepare_discover_reuses_failed_resumable_row(db_session):
+    from datetime import UTC, datetime
+    from book_scraper.db import scrape_run_events as run_event_types
+    from book_scraper.db.models import ScrapeRun
+    from book_scraper.db.repo import (
+        create_scrape_run, insert_scrape_url_item, upsert_shop,
+    )
+    from book_scraper.services.discover import DiscoverService
+
+    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
+    failed = create_scrape_run(db_session, shop.id, "discover_sitemap")
+    failed.status = "failed"
+    failed.finished_at = datetime.now(UTC)
+    failed.close_reason = "stall_timeout"
+    failed.resumable_after_failure = True
+    failed.urls_processed = 0
+    insert_scrape_url_item(
+        db_session, run_id=failed.id, shop_id=shop.id,
+        discovered_url_id=None, url="https://vaga.lt/sitemap.xml",
+        url_type="sitemap",
+    )
+    db_session.commit()
+    failed_id = failed.id
+    pre_count = db_session.query(ScrapeRun).count()
+
+    plan = DiscoverService(db_session).prepare_discover(
+        "vaga", "https://vaga.lt", "sitemap", _config()
+    )
+    db_session.commit()
+
+    assert db_session.query(ScrapeRun).count() == pre_count
+    assert plan.run_id == failed_id
+    refreshed = db_session.get(ScrapeRun, failed_id)
+    assert refreshed.status == "running"
+    assert any(
+        e.event_type == run_event_types.RESTARTED for e in refreshed.events
+    )
+
+
 def test_finish_discover_keeps_staging_rows(db_session):
     """scrape_url_items used to be deleted on discover finish; they're now
     kept as the source of truth for per-URL run history (see commit

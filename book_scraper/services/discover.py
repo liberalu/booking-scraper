@@ -12,16 +12,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from book_scraper.db import scrape_run_events as run_event_types
-from book_scraper.db.models import ScrapeUrlItem
+from book_scraper.db.models import ScrapeRunEvent, ScrapeUrlItem
 from book_scraper.db.repo import (
     create_scrape_run,
-    emit_scrape_run_event,
     find_resumable_run,
     finish_scrape_run,
-    inherit_pending_items,
     insert_scrape_url_item,
     mark_cron_job_ran_if_matches,
     mark_stale_runs_failed,
+    restart_run_in_place,
     update_scrape_run_progress,
     upsert_shop,
 )
@@ -80,24 +79,31 @@ class DiscoverService:
                 return DiscoverPlan(
                     run_id=resumable.id, shop_id=shop.id, urls_total=pending
                 )
-            # Failed-but-resumable run: create a fresh run that inherits
-            # the pending queue. Old row stays `failed` for postmortem.
-            run = create_scrape_run(
-                self.session,
-                shop.id,
-                phase,
-                extra_payload={"strategy": strategy},
+            # Failed-but-resumable run: mutate same row back to running.
+            attempt_number = (
+                self.session.query(ScrapeRunEvent)
+                .filter(
+                    ScrapeRunEvent.run_id == resumable.id,
+                    ScrapeRunEvent.event_type == run_event_types.RESTARTED,
+                )
+                .count()
+                + 1
             )
-            emit_scrape_run_event(
+            restart_run_in_place(
                 self.session,
-                run.id,
-                run_event_types.RESUMED_AFTER_FAILURE,
-                payload={"previous_run_id": resumable.id},
+                resumable,
+                payload={
+                    "previous_close_reason": resumable.close_reason,
+                    "attempt": attempt_number,
+                    "urls_processed_snapshot": resumable.urls_processed,
+                    "strategy": strategy,
+                },
                 actor=run_event_types.ACTOR_SYSTEM,
             )
-            inherit_pending_items(self.session, resumable.id, run.id)
             self.session.commit()
-            return DiscoverPlan(run_id=run.id, shop_id=shop.id, urls_total=pending)
+            return DiscoverPlan(
+                run_id=resumable.id, shop_id=shop.id, urls_total=pending
+            )
 
         mark_stale_runs_failed(self.session, shop.id, phase)
 
