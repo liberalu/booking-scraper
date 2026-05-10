@@ -26,6 +26,7 @@ from book_scraper.db.repo import (
 from book_scraper.db.session import get_session_factory
 from book_scraper.isbn import is_valid_isbn
 from book_scraper.items import BookItem, DiscoveredUrlItem, PriceItem, ShopBookItem
+from book_scraper.url_utils import normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -510,7 +511,7 @@ class PostgresPipeline:
                 try:
                     sui = (
                         self.session.query(ScrapeUrlItemModel)
-                        .filter_by(run_id=run_id, url=url)
+                        .filter_by(run_id=run_id, url=normalize_url(url))
                         .one_or_none()
                     )
                     if sui is not None:

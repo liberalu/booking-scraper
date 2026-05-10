@@ -371,7 +371,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         const body = await resp.json().catch(() => ({}));
         setRescrapeError(body.detail || `Error ${resp.status}`);
       }
-    } catch (e) {
+    } catch {
       setRescrapeError('Network error — could not reach server');
     } finally { setRescraping(false); }
   };
