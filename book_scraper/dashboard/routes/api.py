@@ -67,13 +67,13 @@ from book_scraper.db.models import (
     ValidationIssue,
 )
 from book_scraper.db.repo import (
-    _reset_retryable_failures,
     create_cron_job,
     delete_cron_job,
     emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
     reset_failed_items_to_pending,
+    reset_retryable_failures,
     toggle_cron_job,
     update_cron_job,
 )
@@ -907,7 +907,7 @@ def api_continue_run(run_id: int, session: Session = Depends(get_db)) -> dict[st
     # run_aborted / stuck_in_processing / subdivision_5xx items flip
     # back to pending. Terminal failures (http_5xx, parse errors, etc.)
     # stay failed.
-    _reset_retryable_failures(session, run_id)
+    reset_retryable_failures(session, run_id)
     emit_scrape_run_event(
         session,
         run_id,

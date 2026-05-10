@@ -827,7 +827,7 @@ def count_auto_resume_chain_depth(session: Session, run_id: int) -> int:
     )
 
 
-def _reset_retryable_failures(session: Session, run_id: int) -> int:
+def reset_retryable_failures(session: Session, run_id: int) -> int:
     """Reset failed URL items with retryable error reasons back to pending.
 
     run_aborted: items that were in-flight when the run was killed.
@@ -874,7 +874,7 @@ def inherit_pending_items(
     Also resets run_aborted and stuck_in_processing items to pending so
     they are retried by the new run (transient failures due to kill/timeout).
     """
-    _reset_retryable_failures(session, old_run_id)
+    reset_retryable_failures(session, old_run_id)
     stmt = (
         update(ScrapeUrlItem)
         .where(
@@ -929,7 +929,7 @@ def restart_run_in_place(
     run.last_heartbeat = datetime.now(UTC)
     session.flush()
 
-    _reset_retryable_failures(session, run.id)
+    reset_retryable_failures(session, run.id)
     reset_processing_scrape_url_items(session, run.id)
 
     emit_scrape_run_event(
