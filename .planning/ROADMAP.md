@@ -14,6 +14,19 @@
 
 **Requirements:** VAL-01, VAL-02, VAL-03, VAL-04, VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11, VAL-12, VAL-13, VAL-14
 
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Alembic migration: add 'validate' to scrape_phase enum (VAL-13, VAL-14)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — ValidateService skeleton (structural duplicates + slug-title) and ValidateSpider mirroring match.py (VAL-01, VAL-02, VAL-03, VAL-04, VAL-11)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-03-PLAN.md — Extend ValidateService with completeness, correctness, classification, staleness, match-readiness, relationship integrity checks + integration tests (VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11)
+- [ ] 01-04-PLAN.md — Dashboard integration: API allowlist + New Run modal validate option (VAL-12)
+
 **Success Criteria:**
 1. `scrapy crawl validate -a shop=vaga` runs without HTTP requests, creates a scrape_runs row with phase='validate', and writes validation_issues rows for any detected issues
 2. Re-running validate on the same data does not create duplicate validation_issues rows (deduplication by shop_book_id + field)
