@@ -24,7 +24,7 @@ Plans:
 - [x] 01-02-PLAN.md — ValidateService skeleton (structural duplicates + slug-title) and ValidateSpider mirroring match.py (VAL-01, VAL-02, VAL-03, VAL-04, VAL-11)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-03-PLAN.md — Extend ValidateService with completeness, correctness, classification, staleness, match-readiness, relationship integrity checks + integration tests (VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11)
+- [x] 01-03-PLAN.md — Extend ValidateService with completeness, correctness, classification, staleness, match-readiness, relationship integrity checks + integration tests (VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11)
 - [x] 01-04-PLAN.md — Dashboard integration: API allowlist + New Run modal validate option (VAL-12)
 
 **Success Criteria:**
