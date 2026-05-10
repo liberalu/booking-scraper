@@ -18,7 +18,7 @@
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Alembic migration: add 'validate' to scrape_phase enum (VAL-13, VAL-14)
+- [x] 01-01-PLAN.md — Alembic migration: add 'validate' to scrape_phase enum (VAL-13, VAL-14)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — ValidateService skeleton (structural duplicates + slug-title) and ValidateSpider mirroring match.py (VAL-01, VAL-02, VAL-03, VAL-04, VAL-11)
