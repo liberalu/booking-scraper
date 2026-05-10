@@ -14,7 +14,7 @@
 
 **Requirements:** VAL-01, VAL-02, VAL-03, VAL-04, VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11, VAL-12, VAL-13, VAL-14
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -25,7 +25,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Extend ValidateService with completeness, correctness, classification, staleness, match-readiness, relationship integrity checks + integration tests (VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10, VAL-11)
-- [ ] 01-04-PLAN.md — Dashboard integration: API allowlist + New Run modal validate option (VAL-12)
+- [x] 01-04-PLAN.md — Dashboard integration: API allowlist + New Run modal validate option (VAL-12)
 
 **Success Criteria:**
 1. `scrapy crawl validate -a shop=vaga` runs without HTTP requests, creates a scrape_runs row with phase='validate', and writes validation_issues rows for any detected issues

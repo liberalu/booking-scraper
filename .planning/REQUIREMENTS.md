@@ -18,7 +18,7 @@
 - [ ] **VAL-09**: Match phase readiness checks: unmatched_has_isbn, match_isbn_drift
 - [ ] **VAL-10**: Relationship integrity checks: url_aliases, product_url_non_book
 - [x] **VAL-11**: Each check deduplicates by (shop_book_id, field) to avoid duplicate rows on re-run
-- [ ] **VAL-12**: Operator can trigger validate run from dashboard shop detail page
+- [x] **VAL-12**: Operator can trigger validate run from dashboard shop detail page
 - [x] **VAL-13**: scrape_phase enum extended with 'validate' value
 - [x] **VAL-14**: Alembic migration adds validation_issues table (if not already exists)
 
@@ -53,7 +53,7 @@
 | VAL-09 | Phase 1 | Pending |
 | VAL-10 | Phase 1 | Pending |
 | VAL-11 | Phase 1 | Complete |
-| VAL-12 | Phase 1 | Pending |
+| VAL-12 | Phase 1 | Complete |
 | VAL-13 | Phase 1 | Complete |
 | VAL-14 | Phase 1 | Complete |
 
