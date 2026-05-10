@@ -51,14 +51,20 @@ from book_scraper.db.models import Book, BookAuthor, BookIsbn, Author, Publisher
 
 
 @pytest.fixture
-def book_pipeline(engine):
-    """PostgresPipeline configured to write to the test DB."""
+def book_pipeline(db_session):
+    """PostgresPipeline wired to the rollback-isolated test session.
+
+    Reuses `db_session`'s connection so the pipeline's `session.commit()`
+    calls only release a SAVEPOINT (see conftest). Binding to `engine`
+    directly here would leak inserted rows across tests (publisher
+    "Šviesa" in particular caused UniqueViolation in test_canonical_models
+    and test_books_api).
+    """
     from book_scraper.pipelines import PostgresPipeline
-    pipeline = PostgresPipeline(database_url=str(engine.url))
-    pipeline.session_factory = sessionmaker(bind=engine)
-    pipeline.session = pipeline.session_factory()
+    pipeline = PostgresPipeline(database_url=str(db_session.bind.engine.url))
+    pipeline.session_factory = sessionmaker(bind=db_session.connection())
+    pipeline.session = db_session
     yield pipeline
-    pipeline.session.close()
 
 
 def test_bookitem_inserts_publishers_series_authors_isbns(db_session, book_pipeline):
