@@ -90,7 +90,10 @@ class FlaresolverrMiddleware:  # pragma: no cover
         # Long client timeout — FS's POST blocks until the browser
         # finishes the navigation; CF challenge solves are routinely
         # 5–10 s and ramp to 30+ s under load.
-        self._client = httpx.AsyncClient(timeout=self._fs_max_timeout_ms / 1000.0 + 30)
+        self._client = httpx.AsyncClient(
+            timeout=self._fs_max_timeout_ms / 1000.0 + 30,
+            trust_env=False,  # same OrbStack IPv6-CIDR NO_PROXY issue as HttpxMiddleware
+        )
         logger.info(
             "FlaresolverrMiddleware: enabled for %s endpoint=%s "
             "max_timeout_ms=%d ttl=%.0fs",

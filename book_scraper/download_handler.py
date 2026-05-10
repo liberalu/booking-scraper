@@ -125,6 +125,12 @@ class HttpxMiddleware:  # pragma: no cover
                 "Connection": "close",
                 **_BROWSER_HEADERS,
             },
+            # Disable env-var proxy detection: OrbStack (and similar
+            # container runtimes) inject NO_PROXY entries with IPv6 CIDR
+            # notation (e.g. fd07:b51a:cc66:f0::/64) that httpx cannot
+            # parse as a URLPattern, crashing the spider at init time.
+            # We connect directly to target sites — no proxy needed.
+            trust_env=False,
         )
 
     async def _maybe_reset_client(self, reset_after: int | None = None) -> None:
