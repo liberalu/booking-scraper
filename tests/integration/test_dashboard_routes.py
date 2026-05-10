@@ -1547,3 +1547,79 @@ def test_retry_failures_resets_attempts(
     assert refreshed is not None
     assert refreshed.status == "pending"
     assert refreshed.attempts == 0
+
+
+# ── POST /api/runs — validate phase ───────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_api_create_run_accepts_validate_phase(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/runs with phase='validate' returns 200 and spawns the spider."""
+    spawn_calls: list[dict] = []
+
+    def fake_spawn(
+        *,
+        phase: str,
+        shop: str,
+        strategy: str = "",
+        mode: str = "delta",
+        urls: str = "",
+        cron_job_id: int | None = None,
+    ) -> None:
+        spawn_calls.append(
+            {
+                "phase": phase,
+                "shop": shop,
+                "strategy": strategy,
+                "mode": mode,
+                "urls": urls,
+                "cron_job_id": cron_job_id,
+            }
+        )
+
+    monkeypatch.setattr(
+        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container", fake_spawn
+    )
+
+    resp = client.post("/api/runs", json={"shop": "vaga", "phase": "validate"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["phase"] == "validate"
+    assert len(spawn_calls) == 1
+    assert spawn_calls[0]["phase"] == "validate"
+    assert spawn_calls[0]["shop"] == "vaga"
+
+
+@pytest.mark.integration
+def test_api_create_run_rejects_unknown_phase(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/runs with phase='banana' still returns 400 (allowlist enforced)."""
+    monkeypatch.setattr(
+        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container",
+        lambda **kw: None,
+    )
+    resp = client.post("/api/runs", json={"shop": "vaga", "phase": "banana"})
+    assert resp.status_code == 400
+    assert "Unknown phase" in resp.json()["detail"]
+
+
+@pytest.mark.integration
+def test_api_create_run_rejects_concurrent_validate(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second validate run while the first is 'running' returns 409."""
+    monkeypatch.setattr(
+        "book_scraper.dashboard.routes.api._spawn_scrapy_in_container",
+        lambda **kw: None,
+    )
+    from book_scraper.db.repo import create_scrape_run
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    run = create_scrape_run(db_session, shop.id, "validate")
+    run.status = "running"
+    db_session.commit()
+
+    resp = client.post("/api/runs", json={"shop": "vaga", "phase": "validate"})
+    assert resp.status_code == 409

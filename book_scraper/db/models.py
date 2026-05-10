@@ -342,6 +342,7 @@ scrape_phase_enum = Enum(
     "discover_ibiblioteka_api",
     "match",
     "scan",
+    "validate",
     name="scrape_phase",
     create_type=False,
 )
