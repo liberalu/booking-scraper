@@ -513,11 +513,14 @@ function HFNewRunDialog({ open, onClose, goto }) {
         <HFField label="Phase" hint={
           phase === 'scan'
             ? 'Scrape product pages for already-discovered URLs'
-            : 'Find new URLs (sitemap / categories / full crawl)'
+            : phase === 'discover'
+              ? 'Find new URLs (sitemap / categories / full crawl)'
+              : 'Run DB-only data quality checks (no HTTP)'
         }>
           <HFSegmented value={phase} onChange={setPhase} options={[
             { value:'scan',     label:'Scan (products)' },
             { value:'discover', label:'Discover (URLs)' },
+            { value:'validate', label:'Validate (DB checks)' },
           ]}/>
         </HFField>
         {phase === 'scan' && (
