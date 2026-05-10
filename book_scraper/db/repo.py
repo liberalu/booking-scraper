@@ -806,8 +806,10 @@ def count_consecutive_zero_progress_resumes(
             streak += 1
         else:
             break
-    # The streak above counts pairs; if we have N pairs of zero-progress,
-    # that's N+1 zero-progress restarts in a row. Cap by total events.
+    # `streak` counts adjacent pairs that match — N matching pairs span
+    # N+1 events. Return the event count, capped to total events seen.
+    # If no pair matched, the streak is 0; return 0 (not 1) — a single
+    # restart with no predecessor can't be "zero-progress" by definition.
     return min(streak + 1 if streak > 0 else 0, len(events))
 
 
