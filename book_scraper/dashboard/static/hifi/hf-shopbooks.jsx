@@ -325,6 +325,7 @@ function HFShopBookDetail({ nav, goto, params }) {
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState('overview');
   const [rescraping, setRescraping] = React.useState(false);
+  const [rescrapeError, setRescrapeError] = React.useState(null);
 
   React.useEffect(() => {
     if (!bookId) return;
@@ -357,13 +358,21 @@ function HFShopBookDetail({ nav, goto, params }) {
   const rescrape = async () => {
     if (rescraping || !data.url) return;
     setRescraping(true);
+    setRescrapeError(null);
     try {
       const resp = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shop: data.shop, phase: 'scan', mode: 'full', urls: data.url }),
       });
-      if (resp.ok) goto('runs');
+      if (resp.ok) {
+        goto('runs');
+      } else {
+        const body = await resp.json().catch(() => ({}));
+        setRescrapeError(body.detail || `Error ${resp.status}`);
+      }
+    } catch (e) {
+      setRescrapeError('Network error — could not reach server');
     } finally { setRescraping(false); }
   };
 
@@ -395,6 +404,18 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFButton>
       </>}
     >
+      {rescrapeError && (
+        <div style={{margin:`0 0 var(--hf-gap)`, padding:'12px 16px', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:8}}>
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            <span style={{color:'var(--hf-err)', display:'flex'}}>{HF_ICONS.bang}</span>
+            <div style={{flex:1}}>
+              <span style={{color:'var(--hf-err-ink)', fontWeight:600, fontSize:13}}>Re-scrape failed</span>
+              <span style={{color:'var(--hf-ink2)', fontSize:13}}> — {rescrapeError}</span>
+            </div>
+            <HFButton size="sm" onClick={() => setRescrapeError(null)}>Dismiss</HFButton>
+          </div>
+        </div>
+      )}
       {data.url_status === 'unreachable' && (
         <div style={{margin:`0 0 var(--hf-gap)`, padding:'12px 16px', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:8}}>
           <div style={{display:'flex', alignItems:'center', gap:10}}>

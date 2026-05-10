@@ -10,11 +10,13 @@ from scrapy.exceptions import DropItem
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from book_scraper.db.models import ScrapeUrlItem as ScrapeUrlItemModel
 from book_scraper.db.repo import (
     bulk_insert_validation_issues,
     increment_scrape_run_stats,
     insert_price,
     link_discovered_url_to_shop_book,
+    record_scrape_failure,
     touch_shop_book_field_updates,
     update_scrape_run_progress,
     upsert_discovered_url,
@@ -498,6 +500,36 @@ class PostgresPipeline:
                 url,
                 exc,
             )
+            # Surface the failure in the dashboard: without this, a DB
+            # error produces items_updated=0 with no explanation — the
+            # run's Runs tab on the shop book page stays blank and the
+            # operator has to hunt through Scrapy logs.
+            # Session is clean after rollback so this write is safe.
+            run_id = self._run_id
+            if run_id is not None and url != "<no url>":
+                try:
+                    sui = (
+                        self.session.query(ScrapeUrlItemModel)
+                        .filter_by(run_id=run_id, url=url)
+                        .one_or_none()
+                    )
+                    if sui is not None:
+                        record_scrape_failure(
+                            self.session,
+                            scrape_url_item=sui,
+                            error_reason="pipeline_db_error",
+                            http_status=None,
+                            error_detail=f"{type(exc).__name__}: {exc}",
+                        )
+                        self.session.commit()
+                except Exception as inner_exc:
+                    logger.error(
+                        "PostgresPipeline: failed to record scrape_failure "
+                        "for %s: %s",
+                        url,
+                        inner_exc,
+                    )
+                    self.session.rollback()
             raise DropItem(f"DB error for {url}: {exc.__class__.__name__}") from exc
 
     def _process_item_inner(self, item: Any) -> Any:  # pragma: no cover

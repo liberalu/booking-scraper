@@ -42,6 +42,18 @@ docker compose up -d dashboard                # Restart dashboard container
 uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after deploy
 ```
 
+> **OrbStack build gotcha:** OrbStack injects `NO_PROXY` entries containing IPv6 CIDR blocks
+> (e.g. `fd07:b51a:cc66:f0::/64`) into container env vars. `httpx.AsyncClient` chokes on
+> these during spider init (treats the CIDR as a port). The spider-side fix is
+> `trust_env=False` (already applied). For `docker compose build` the proxy vars also break
+> `apt-get` inside the build context — prefix the build command to clear them:
+>
+> ```bash
+> HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy="" docker compose build scraper
+> # or for all services:
+> HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy="" docker compose build
+> ```
+
 ## Architecture
 
 - **Framework:** Scrapy with asyncio reactor
