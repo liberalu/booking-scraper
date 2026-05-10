@@ -862,36 +862,6 @@ def reset_retryable_failures(session: Session, run_id: int) -> int:
     return int(rowcount) if rowcount is not None else 0
 
 
-def inherit_pending_items(
-    session: Session,
-    old_run_id: int,
-    new_run_id: int,
-) -> int:
-    """Re-point pending scrape_url_items from one run to another.
-
-    Used when a previously-`failed` run was flagged
-    `resumable_after_failure`: a fresh run row is created and adopts the
-    failed run's pending queue. The failed run row stays for postmortem.
-
-    Also resets run_aborted and stuck_in_processing items to pending so
-    they are retried by the new run (transient failures due to kill/timeout).
-    """
-    reset_retryable_failures(session, old_run_id)
-    stmt = (
-        update(ScrapeUrlItem)
-        .where(
-            ScrapeUrlItem.run_id == old_run_id,
-            ScrapeUrlItem.status == "pending",
-        )
-        .values(run_id=new_run_id)
-        .execution_options(synchronize_session=False)
-    )
-    result = session.execute(stmt)
-    session.flush()
-    rowcount = getattr(result, "rowcount", 0)
-    return int(rowcount) if rowcount is not None else 0
-
-
 def restart_run_in_place(
     session: Session,
     run: ScrapeRun,

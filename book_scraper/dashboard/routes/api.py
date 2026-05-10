@@ -776,10 +776,9 @@ def api_rerun_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, 
     """Re-fire a failed run.
 
     Flags the failed run `resumable_after_failure=True` so Track A's
-    `find_resumable_run` picks it up; the new scrapy subprocess then
-    inherits the original run's pending queue via
-    `inherit_pending_items`. Old run row stays for postmortem; new run
-    gets its own id.
+    `find_resumable_run` picks it up; the spawned scrapy subprocess then
+    mutates the same run row back to `running` via `restart_run_in_place`
+    (single-row restart — no cross-row repoint).
     """
     run = (
         session.query(ScrapeRun)

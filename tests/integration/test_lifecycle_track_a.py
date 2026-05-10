@@ -21,7 +21,6 @@ from book_scraper.db.repo import (
     create_scrape_run,
     find_resumable_run,
     finish_scrape_run,
-    inherit_pending_items,
     insert_scrape_url_item,
     mark_scrape_url_item_processing,
     mark_scrape_url_item_response,
@@ -286,43 +285,6 @@ def test_create_run_phase_sets_heartbeat_before_queue(db_session):
 
 
 # ─────────────────────── #2 + #10 — queue inheritance ───────────────────────
-
-
-def test_inherit_pending_items_repoints_run_id(db_session):
-    """inherit_pending_items moves pending rows from old run to new run."""
-    shop = upsert_shop(db_session, "vaga", "https://vaga.lt")
-    _seed_one_url(db_session, shop.id, "https://vaga.lt/q1")
-    _seed_one_url(db_session, shop.id, "https://vaga.lt/q2")
-    du1 = db_session.query(DiscoveredUrl).filter_by(url="https://vaga.lt/q1").one()
-    du2 = db_session.query(DiscoveredUrl).filter_by(url="https://vaga.lt/q2").one()
-
-    old_run = create_scrape_run(db_session, shop.id, "scan")
-    insert_scrape_url_item(db_session, old_run.id, shop.id, du1.id, du1.url)
-    item2 = insert_scrape_url_item(db_session, old_run.id, shop.id, du2.id, du2.url)
-    # Mark item2 done so only item1 is pending.
-    item2.status = "done"
-    item2.done_at = datetime.now(UTC)
-    db_session.commit()
-
-    new_run = create_scrape_run(db_session, shop.id, "scan")
-    moved = inherit_pending_items(db_session, old_run.id, new_run.id)
-    db_session.commit()
-
-    assert moved == 1
-    # Pending row moved to new run.
-    new_pending = (
-        db_session.query(ScrapeUrlItem)
-        .filter_by(run_id=new_run.id, status="pending")
-        .count()
-    )
-    assert new_pending == 1
-    # Done row stays with the old run.
-    old_done = (
-        db_session.query(ScrapeUrlItem)
-        .filter_by(run_id=old_run.id, status="done")
-        .count()
-    )
-    assert old_done == 1
 
 
 def test_find_resumable_run_picks_up_resumable_after_failure(db_session):
