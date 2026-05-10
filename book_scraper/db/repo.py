@@ -269,6 +269,35 @@ def upsert_shop_book(
         shop_book = session.execute(
             select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.sku == sku)
         ).scalar_one_or_none()
+
+    # Stale-SKU guard: SKU matched a row at a *different* URL — this can
+    # happen when a shop assigns a product the wrong URL slug, then later
+    # fixes it (moving the product to a corrected slug and recycling the
+    # old slug for a different product). If the incoming URL is already
+    # owned by another row, updating the SKU-matched row's URL would hit
+    # `uq_shop_book_shop_url` and cause an IntegrityError. Detect this
+    # split-identity case early: detach the SKU from the stale row and
+    # fall through to the URL-matched row so the correct row is updated.
+    if shop_book is not None and shop_book.url != url:
+        url_owner = session.execute(
+            select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.url == url)
+        ).scalar_one_or_none()
+        if url_owner is not None and url_owner.id != shop_book.id:
+            logger.warning(
+                "upsert_shop_book: stale SKU %s detached from shop_book %s "
+                "(url=%s) — URL %s already owned by shop_book %s. "
+                "Likely cause: shop reassigned slug after wrong slug was "
+                "scraped.",
+                sku,
+                shop_book.id,
+                shop_book.url,
+                url,
+                url_owner.id,
+            )
+            shop_book.sku = None
+            session.flush()
+            shop_book = url_owner
+
     if shop_book is None:
         shop_book = session.execute(
             select(ShopBook).where(ShopBook.shop_id == shop_id, ShopBook.url == url)
