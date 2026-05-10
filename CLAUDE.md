@@ -145,6 +145,24 @@ After completing any task that changes code, suggest to the user:
    exhausted before the first run, run:
    `UPDATE scrape_url_items SET attempts=3 WHERE status='failed';`
 
+### Counter drift probe (single-row restart era)
+
+With single-row restarts, old + new processes can briefly write to the same
+`scrape_runs` row during handover (~60s window). Aggregate counters can
+drift by tens of items. To check whether drift has crossed cosmetic levels:
+
+```sql
+SELECT id, urls_processed, urls_total,
+       urls_processed - urls_total AS drift
+FROM scrape_runs
+WHERE urls_total IS NOT NULL AND urls_processed > urls_total
+ORDER BY drift DESC LIMIT 10;
+```
+
+Drift of 1–10 across the fleet: cosmetic, ignore.
+Drift of 50+ on a single run: investigate (process fencing may be needed —
+see spec's Architectural alternatives section).
+
 ### Don't `kill -9` scrapy processes inside the container
 
 If a runaway loop spawned multiple spiders, **don't** mass-`kill -9` them from inside the scraper container. The detached processes (started via `subprocess.Popen(start_new_session=True)` in `reconcile_runs.py` and `extensions.py`) leave open httpx + TCP sockets when SIGKILL'd, and Docker Desktop's macOS networking shim (vpnkit) can wedge — the daemon stops responding for 5–10 minutes. Escalation order instead:
