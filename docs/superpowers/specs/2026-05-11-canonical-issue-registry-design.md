@@ -162,6 +162,7 @@ def run(self, shop_id: int, run_id: int) -> dict[str, int]:
 
 `GET /api/issues` — same query params; `state` default changes to `"new"`. Response includes
 new fields: `run_count`, `first_seen_at`, `last_seen_at`, `resolved_at`, `snoozed_until`.
+The existing `shop=` query param is already accepted; no change needed server-side.
 
 New endpoint: `GET /api/issues/groups` — see Groups section.
 
@@ -223,6 +224,13 @@ The issues page gains a view-mode toggle: **List | By type | By type × shop**.
 - Clicking a group row navigates to the flat list filtered to that issue_type (and shop if applicable).
 - Group rows show severity badge, total count, and a `new` sub-count badge.
 - "Ack all" button on each group row; confirmation not required (reversible by un-acknowledging).
+
+### Shop Filter
+
+A **shop selector** is added to the filter bar (both in List and Grouped views). It populates from
+`GET /api/shops` and renders as a dropdown alongside the existing severity / type / url_type
+filters. Selecting a shop sets `shop=<name>` on all subsequent queries. When combined with the
+Grouped view it further narrows the groups shown (e.g., "humanitas only, grouped by type").
 
 ---
 
