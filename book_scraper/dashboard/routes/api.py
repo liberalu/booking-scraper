@@ -49,6 +49,7 @@ from book_scraper.dashboard.queries import (
     get_shop_field_stats,
     get_shop_runs,
     get_shop_stats,
+    get_issue_counts,
     get_url_detail,
     get_validation_lifecycle_counts,
     get_validation_summary,

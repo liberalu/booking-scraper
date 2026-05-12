@@ -1290,37 +1290,29 @@ def get_validation_lifecycle_counts(
     q: str = "",
     severity: str = "",
 ) -> dict[str, int]:
-    """Bucket counts of issues (new/recurring/already_seen/open) under the same
-    filter semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs."""
-    from sqlalchemy import or_
+    """Bucket counts of issues by lifecycle state under the same filter
+    semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs.
+    Delegates to `get_issue_counts` for the actual DB query."""
+    return get_issue_counts(session, shop_id=shop_id)
 
-    query = session.query(
+
+def get_issue_counts(session: Session, shop_id: int | None = None) -> dict[str, int]:
+    """Return counts by lifecycle state for badge display."""
+    q = select(
         ValidationIssue.lifecycle_state,
-        func.count(ValidationIssue.id).label("count"),
-    )
-    if shop_id is not None or q:
-        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        func.count().label("cnt"),
+    ).group_by(ValidationIssue.lifecycle_state)
     if shop_id is not None:
-        query = query.filter(ScrapeRun.shop_id == shop_id)
-    if issue_type:
-        query = query.filter(ValidationIssue.issue == issue_type)
-    if severity in ("critical", "warning"):
-        severity_types = [k for k, v in ISSUE_SEVERITY.items() if v == severity]
-        query = query.filter(ValidationIssue.issue.in_(severity_types))
-    if run_id is not None:
-        query = query.filter(ValidationIssue.scrape_run_id == run_id)
-    if q:
-        pattern = f"%{q}%"
-        query = query.outerjoin(
-            ShopBook, ValidationIssue.shop_book_id == ShopBook.id
-        ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
-
-    rows = query.group_by(ValidationIssue.lifecycle_state).all()
-    counts = {"new": 0, "recurring": 0, "already_seen": 0}
-    for state, count in rows:
-        counts[state] = count
-    counts["open"] = counts["new"] + counts["recurring"]
-    return counts
+        q = q.where(ValidationIssue.shop_id == shop_id)
+    rows = session.execute(q).all()
+    counts = {r.lifecycle_state: r.cnt for r in rows}
+    return {
+        "new": counts.get("new", 0),
+        "acknowledged": counts.get("acknowledged", 0),
+        "snoozed": counts.get("snoozed", 0),
+        "resolved": counts.get("resolved", 0),
+        "total": sum(counts.values()),
+    }
 
 
 ISSUE_KIND_VALIDATION = "validation"
@@ -1429,7 +1421,7 @@ def _get_validation_issues_page(
 ) -> tuple[list[dict[str, Any]], int]:
     query = (
         session.query(ValidationIssue, ScrapeRun, ShopBook, DiscoveredUrl)
-        .join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        .join(ScrapeRun, ValidationIssue.last_seen_run_id == ScrapeRun.id)
         .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
         .outerjoin(
             DiscoveredUrl,
@@ -1438,10 +1430,12 @@ def _get_validation_issues_page(
         )
     )
 
-    if state in {"new", "recurring", "already_seen"}:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         query = query.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
-        query = query.filter(ValidationIssue.lifecycle_state != "already_seen")
+        # Legacy alias: treat as 'new'
+        query = query.filter(ValidationIssue.lifecycle_state == "new")
+    # empty string or None = no filter
 
     if shop_id is not None:
         query = query.filter(ScrapeRun.shop_id == shop_id)
@@ -1451,7 +1445,7 @@ def _get_validation_issues_page(
         severity_types = [k for k, v in ISSUE_SEVERITY.items() if v == severity]
         query = query.filter(ValidationIssue.issue.in_(severity_types))
     if run_id is not None:
-        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+        query = query.filter(ValidationIssue.last_seen_run_id == run_id)
     if url_type:
         query = query.filter(DiscoveredUrl.url_type == url_type)
     if book_type:
@@ -1486,7 +1480,13 @@ def _get_validation_issues_page(
                 "raw_value": issue.raw_value,
                 "error_reason": None,
                 "http_status": None,
-                "scrape_run_id": issue.scrape_run_id,
+                # backwards-compat alias for frontend code not yet updated
+                "scrape_run_id": issue.last_seen_run_id,
+                "last_seen_run_id": issue.last_seen_run_id,
+                "first_seen_run_id": issue.first_seen_run_id,
+                "run_count": issue.run_count,
+                "resolved_at": issue.resolved_at.isoformat() if issue.resolved_at else None,
+                "snoozed_until": issue.snoozed_until.isoformat() if issue.snoozed_until else None,
                 "shop_book_id": issue.shop_book_id,
                 "shop_book_title": shop_book.title if shop_book else None,
                 "url_type": disc_url.url_type if disc_url else None,
