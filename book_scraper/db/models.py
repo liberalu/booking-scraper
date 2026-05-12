@@ -366,8 +366,9 @@ scrape_status_enum = Enum(
 
 validation_lifecycle_enum = Enum(
     "new",
-    "recurring",
-    "already_seen",
+    "acknowledged",
+    "snoozed",
+    "resolved",
     name="validation_lifecycle",
     create_type=False,
 )
@@ -486,7 +487,8 @@ class ScrapeRun(Base):
 
     shop: Mapped["Shop"] = relationship()
     validation_issues: Mapped[list["ValidationIssue"]] = relationship(
-        back_populates="scrape_run"
+        back_populates="last_seen_run",
+        foreign_keys="[ValidationIssue.last_seen_run_id]",
     )
     events: Mapped[list["ScrapeRunEvent"]] = relationship(
         back_populates="run",
@@ -604,8 +606,14 @@ class ValidationIssue(Base):
     __tablename__ = "validation_issues"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    scrape_run_id: Mapped[int] = mapped_column(
+    shop_id: Mapped[int] = mapped_column(
+        ForeignKey("shops.id"), nullable=False, index=True
+    )
+    last_seen_run_id: Mapped[int] = mapped_column(
         ForeignKey("scrape_runs.id"), nullable=False, index=True
+    )
+    first_seen_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scrape_runs.id"), nullable=True
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
     field: Mapped[str] = mapped_column(String, nullable=False)
@@ -617,6 +625,7 @@ class ValidationIssue(Base):
     discovered_url_id: Mapped[int | None] = mapped_column(
         ForeignKey("discovered_urls.id"), nullable=True, index=True
     )
+    run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     lifecycle_state: Mapped[str] = mapped_column(
         validation_lifecycle_enum,
         nullable=False,
@@ -625,19 +634,30 @@ class ValidationIssue(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    snoozed_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
             "NOT (shop_book_id IS NOT NULL AND discovered_url_id IS NOT NULL)",
             name="ck_validation_issues_single_entity",
         ),
-        Index(
-            "ix_validation_issues_lifecycle_state",
-            "lifecycle_state",
-        ),
+        Index("ix_validation_issues_lifecycle_state", "lifecycle_state"),
+        Index("ix_vi_shop_id_lifecycle", "shop_id", "lifecycle_state"),
     )
 
-    scrape_run: Mapped["ScrapeRun"] = relationship(back_populates="validation_issues")
+    last_seen_run: Mapped["ScrapeRun"] = relationship(
+        foreign_keys="[ValidationIssue.last_seen_run_id]",
+        back_populates="validation_issues",
+    )
+    first_seen_run: Mapped["ScrapeRun | None"] = relationship(
+        foreign_keys="[ValidationIssue.first_seen_run_id]",
+    )
+    shop: Mapped["Shop"] = relationship(foreign_keys="[ValidationIssue.shop_id]")
     shop_book: Mapped["ShopBook | None"] = relationship()
     discovered_url: Mapped["DiscoveredUrl | None"] = relationship()
 
