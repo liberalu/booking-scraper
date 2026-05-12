@@ -427,9 +427,9 @@ def get_repeated_failures(
         # (`record_scrape_run_failed_issue` writes one row per failed run).
         ids = [r.id for r in recent]
         reasons = (
-            session.query(ValidationIssue.scrape_run_id, ValidationIssue.raw_value)
+            session.query(ValidationIssue.last_seen_run_id, ValidationIssue.raw_value)
             .filter(
-                ValidationIssue.scrape_run_id.in_(ids),
+                ValidationIssue.last_seen_run_id.in_(ids),
                 ValidationIssue.issue == "scrape_run_failed",
             )
             .all()
@@ -495,7 +495,7 @@ def get_run_close_reason(session: Session, run: ScrapeRun) -> str | None:
         row = (
             session.query(ValidationIssue.raw_value)
             .filter(
-                ValidationIssue.scrape_run_id == run.id,
+                ValidationIssue.last_seen_run_id == run.id,
                 ValidationIssue.issue == "scrape_run_failed",
             )
             .order_by(ValidationIssue.id.desc())
@@ -832,10 +832,10 @@ def get_run_failure_groups(
     # by lifecycle state so the UI can show "(N unacked · M total)" without
     # a second roundtrip.
     unacked_expr = func.sum(
-        case((latest.c.lifecycle_state != "already_seen", 1), else_=0)
+        case((latest.c.lifecycle_state != "acknowledged", 1), else_=0)
     ).label("unacked_count")
     acked_expr = func.sum(
-        case((latest.c.lifecycle_state == "already_seen", 1), else_=0)
+        case((latest.c.lifecycle_state == "acknowledged", 1), else_=0)
     ).label("acked_count")
     # Group-level retry-cap stats: surface per-bucket "max attempts seen" and
     # "how many items already exhausted the cap" so operators can spot
@@ -860,7 +860,7 @@ def get_run_failure_groups(
         .group_by(latest.c.error_reason, latest.c.http_status)
     )
     if not include_acked:
-        # Hide buckets where every latest event is already_seen.
+        # Hide buckets where every latest event is acknowledged.
         base = base.having(unacked_expr > 0)
 
     rows = base.order_by(unacked_expr.desc(), acked_expr.desc()).all()
@@ -946,7 +946,7 @@ def get_run_failure_groups(
             )
         )
         if not include_acked:
-            examples_q = examples_q.filter(latest.c.lifecycle_state != "already_seen")
+            examples_q = examples_q.filter(latest.c.lifecycle_state != "acknowledged")
         examples = [
             {
                 "url": url,
@@ -1255,7 +1255,7 @@ def get_run_issue_summary(session: Session, run_id: int) -> list[dict[str, Any]]
             ValidationIssue.issue,
             func.count(ValidationIssue.id).label("count"),
         )
-        .filter(ValidationIssue.scrape_run_id == run_id)
+        .filter(ValidationIssue.last_seen_run_id == run_id)
         .group_by(ValidationIssue.field, ValidationIssue.issue)
         .order_by(func.count(ValidationIssue.id).desc())
         .all()
@@ -1270,10 +1270,10 @@ def get_validation_summary(
         ValidationIssue.issue,
         func.count(ValidationIssue.id).label("count"),
     )
-    if state in {"new", "recurring", "already_seen"}:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         q = q.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
-        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+        q = q.filter(ValidationIssue.lifecycle_state == "new")
     rows = (
         q.group_by(ValidationIssue.issue)
         .order_by(func.count(ValidationIssue.id).desc())
@@ -1291,9 +1291,36 @@ def get_validation_lifecycle_counts(
     severity: str = "",
 ) -> dict[str, int]:
     """Bucket counts of issues by lifecycle state under the same filter
-    semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs.
-    Delegates to `get_issue_counts` for the actual DB query."""
-    return get_issue_counts(session, shop_id=shop_id)
+    semantics as `get_issues_page`. Used by the stat strip + lifecycle tabs."""
+    from sqlalchemy import or_
+
+    query = session.query(
+        ValidationIssue.lifecycle_state,
+        func.count(ValidationIssue.id).label("cnt"),
+    )
+    if shop_id is not None:
+        query = query.filter(ValidationIssue.shop_id == shop_id)
+    if issue_type:
+        query = query.filter(ValidationIssue.issue == issue_type)
+    if run_id is not None:
+        query = query.filter(ValidationIssue.last_seen_run_id == run_id)
+    if severity:
+        severity_types = [k for k, v in ISSUE_SEVERITY.items() if v == severity]
+        query = query.filter(ValidationIssue.issue.in_(severity_types))
+    if q:
+        pattern = f"%{q}%"
+        query = query.outerjoin(
+            ShopBook, ValidationIssue.shop_book_id == ShopBook.id
+        ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
+    rows = query.group_by(ValidationIssue.lifecycle_state).all()
+    counts = {r.lifecycle_state: r.cnt for r in rows}
+    return {
+        "new": counts.get("new", 0),
+        "acknowledged": counts.get("acknowledged", 0),
+        "snoozed": counts.get("snoozed", 0),
+        "resolved": counts.get("resolved", 0),
+        "total": sum(counts.values()),
+    }
 
 
 def get_issue_counts(session: Session, shop_id: int | None = None) -> dict[str, int]:
@@ -1525,10 +1552,10 @@ def _get_scrape_failures_page(
         ),
     )
 
-    if state in {"new", "recurring", "already_seen"}:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         query = query.filter(ScrapeFailure.lifecycle_state == state)
     elif state == "open":
-        query = query.filter(ScrapeFailure.lifecycle_state != "already_seen")
+        query = query.filter(ScrapeFailure.lifecycle_state != "acknowledged")
 
     if shop_id is not None:
         query = query.filter(ScrapeFailure.shop_id == shop_id)
@@ -1627,12 +1654,12 @@ def get_validation_by_type(
 ) -> list[dict[str, Any]]:
     """Get validation issues with shop_book IDs resolved from URL."""
     q = session.query(ValidationIssue).filter(ValidationIssue.issue == issue_type)
-    if state in {"new", "recurring", "already_seen"}:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         q = q.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
-        q = q.filter(ValidationIssue.lifecycle_state != "already_seen")
+        q = q.filter(ValidationIssue.lifecycle_state == "new")
     if run_id is not None:
-        q = q.filter(ValidationIssue.scrape_run_id == run_id)
+        q = q.filter(ValidationIssue.last_seen_run_id == run_id)
     issues = q.order_by(ValidationIssue.id.desc()).limit(limit).all()
     # Resolve shop_book IDs by URL
     urls = {i.url for i in issues}
@@ -1655,7 +1682,7 @@ def get_validation_by_type(
                 "field": issue.field,
                 "issue": issue.issue,
                 "raw_value": issue.raw_value,
-                "scrape_run_id": issue.scrape_run_id,
+                "scrape_run_id": issue.last_seen_run_id,
                 "shop_book_id": shop_book["id"] if shop_book else None,
                 "shop_book_title": shop_book["title"] if shop_book else None,
                 "lifecycle_state": issue.lifecycle_state,
@@ -2160,7 +2187,7 @@ def get_shop_book_issues(session: Session, shop_book_id: int) -> list[dict[str, 
             "field": issue.field,
             "raw_value": issue.raw_value,
             "lifecycle_state": issue.lifecycle_state,
-            "scrape_run_id": issue.scrape_run_id,
+            "scrape_run_id": issue.last_seen_run_id,
             "severity": ISSUE_SEVERITY.get(issue.issue, "warning"),
         }
         for issue in rows

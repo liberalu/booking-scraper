@@ -145,7 +145,7 @@ def test_finalize_run_failsafe_persists_close_reason(engine):
         cleanup = session_factory()
         try:
             cleanup.execute(
-                text("DELETE FROM validation_issues WHERE scrape_run_id = :id"),
+                text("DELETE FROM validation_issues WHERE last_seen_run_id = :id"),
                 {"id": run_id},
             )
             cleanup.execute(
@@ -212,7 +212,7 @@ def test_finalize_run_failsafe_skips_already_terminal_run(engine):
         cleanup = session_factory()
         try:
             cleanup.execute(
-                text("DELETE FROM validation_issues WHERE scrape_run_id = :id"),
+                text("DELETE FROM validation_issues WHERE last_seen_run_id = :id"),
                 {"id": run_id},
             )
             cleanup.execute(

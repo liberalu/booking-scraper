@@ -568,16 +568,11 @@ def test_url_aliases_flagged_when_multiple_urls_per_shop_book(db_session):
 
 @pytest.mark.integration
 def test_dedup_second_run_does_not_create_duplicate_rows(db_session):
-    """Re-running validate on the same data produces `recurring` rows, not fresh ones.
+    """Re-running validate on the same data upserts existing rows, not inserts new ones.
 
     After run 1: 2 rows with lifecycle_state='new' (one per duplicate pair member).
-    After run 2: 2 more rows with lifecycle_state='recurring'.
-    Total: 4 rows, but the SECOND run's rows are all 'recurring', not 'new'.
-
-    Note: bulk_insert_validation_issues always inserts (no ON CONFLICT skip).
-    The dedup guarantee is lifecycle-state-level: recurring rows signal known
-    issues without masking triage state. The test verifies the second run's
-    rows are all 'recurring'.
+    After run 2: still 2 rows — the upsert updates last_seen_run_id and
+    increments run_count; lifecycle_state stays 'new' (canonical registry model).
     """
     shop = _make_shop(db_session, "o")
     run1 = _make_run(db_session, shop.id)
@@ -625,14 +620,16 @@ def test_dedup_second_run_does_not_create_duplicate_rows(db_session):
         .scalars()
         .all()
     )
-    # 2 from run1 + 2 from run2 = 4 total
-    assert len(all_issues) == 4
+    # Canonical registry: upsert means still 2 rows total (no duplicates)
+    assert len(all_issues) == 2
 
-    second_run_issues = [i for i in all_issues if i.scrape_run_id == run2.id]
-    assert len(second_run_issues) == 2
-    assert all(i.lifecycle_state == "recurring" for i in second_run_issues), (
-        f"Expected all second-run issues to be 'recurring', "
-        f"got: {[i.lifecycle_state for i in second_run_issues]}"
+    # All rows should now point to run2 as last_seen, with run_count=2
+    assert all(i.last_seen_run_id == run2.id for i in all_issues), (
+        f"Expected last_seen_run_id={run2.id}, "
+        f"got: {[i.last_seen_run_id for i in all_issues]}"
+    )
+    assert all(i.run_count == 2 for i in all_issues), (
+        f"Expected run_count=2, got: {[i.run_count for i in all_issues]}"
     )
 
 

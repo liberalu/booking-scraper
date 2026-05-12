@@ -391,7 +391,8 @@ def _make_stopped_scan_run(
     if close_reason_value is not None:
         db_session.add(
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop_id,
                 url="run-level",
                 field="run",
                 issue="scrape_run_failed",
@@ -980,7 +981,8 @@ def test_api_issues_kind_all_unions_validation_and_scrape_failures(
     # Add a validation issue on the same run for cross-source coverage.
     db_session.add(
         ValidationIssue(
-            scrape_run_id=run.id,
+            last_seen_run_id=run.id,
+            shop_id=shop.id,
             url="https://vaga.lt/v1",
             field="price",
             issue="missing_price",
@@ -1017,7 +1019,8 @@ def test_api_issues_kind_scrape_failure_excludes_validation(
     run = _make_run_with_failures(db_session, shop.id)
     db_session.add(
         ValidationIssue(
-            scrape_run_id=run.id,
+            last_seen_run_id=run.id,
+            shop_id=shop.id,
             url="https://vaga.lt/v2",
             field="price",
             issue="missing_price",
@@ -1095,7 +1098,7 @@ def test_acknowledge_run_failures_flips_lifecycle(
         )
         .all()
     )
-    assert all(r.lifecycle_state == "already_seen" for r in rows)
+    assert all(r.lifecycle_state == "acknowledged" for r in rows)
     assert all(r.acknowledged_at is not None for r in rows)
     assert all(r.acknowledged_note == "vendor outage 2026-04-28" for r in rows)
     # Other buckets untouched.
@@ -1165,7 +1168,7 @@ def test_failure_groups_hides_acknowledged_by_default(
     db_session.query(ScrapeFailure).filter(
         ScrapeFailure.run_id == run.id,
         ScrapeFailure.error_reason == "http_404",
-    ).update({"lifecycle_state": "already_seen"}, synchronize_session=False)
+    ).update({"lifecycle_state": "acknowledged"}, synchronize_session=False)
     db_session.commit()
 
     resp = client.get(f"/api/runs/{run.id}/live")

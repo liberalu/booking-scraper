@@ -1236,7 +1236,7 @@ def record_scrape_run_failed_issue(
     existing = (
         session.query(ValidationIssue.id)
         .filter(
-            ValidationIssue.scrape_run_id == run.id,
+            ValidationIssue.last_seen_run_id == run.id,
             ValidationIssue.issue == "scrape_run_failed",
         )
         .first()
@@ -1245,7 +1245,8 @@ def record_scrape_run_failed_issue(
         session.flush()
         return
     issue = ValidationIssue(
-        scrape_run_id=run.id,
+        last_seen_run_id=run.id,
+        shop_id=run.shop_id,
         url=f"run:{run.id}",
         field="run",
         issue="scrape_run_failed",
@@ -1727,18 +1728,16 @@ def acknowledge_validation_issues_bulk(
 
     now = datetime.now(UTC)
     query = session.query(ValidationIssue).filter(
-        ValidationIssue.lifecycle_state != "already_seen"
+        ValidationIssue.lifecycle_state != "acknowledged"
     )
     if issue_type is not None:
         query = query.filter(ValidationIssue.issue == issue_type)
-    if state in {"new", "recurring"}:
+    if state in {"new"}:
         query = query.filter(ValidationIssue.lifecycle_state == state)
-    if shop_id is not None or q:
-        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
     if shop_id is not None:
-        query = query.filter(ScrapeRun.shop_id == shop_id)
+        query = query.filter(ValidationIssue.shop_id == shop_id)
     if run_id is not None:
-        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+        query = query.filter(ValidationIssue.last_seen_run_id == run_id)
     if q:
         pattern = f"%{q}%"
         query = query.outerjoin(
@@ -1746,7 +1745,7 @@ def acknowledge_validation_issues_bulk(
         ).filter(or_(ValidationIssue.url.ilike(pattern), ShopBook.title.ilike(pattern)))
     issues = query.all()
     for issue in issues:
-        issue.lifecycle_state = "already_seen"
+        issue.lifecycle_state = "acknowledged"
         issue.acknowledged_at = now
     session.flush()
     return len(issues)
@@ -1777,16 +1776,14 @@ def delete_validation_issues_matching(
     query = session.query(ValidationIssue)
     if issue_type is not None:
         query = query.filter(ValidationIssue.issue == issue_type)
-    if state in {"new", "recurring", "already_seen"}:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         query = query.filter(ValidationIssue.lifecycle_state == state)
     elif state == "open":
-        query = query.filter(ValidationIssue.lifecycle_state != "already_seen")
-    if shop_id is not None or q:
-        query = query.join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        query = query.filter(ValidationIssue.lifecycle_state == "new")
     if shop_id is not None:
-        query = query.filter(ScrapeRun.shop_id == shop_id)
+        query = query.filter(ValidationIssue.shop_id == shop_id)
     if run_id is not None:
-        query = query.filter(ValidationIssue.scrape_run_id == run_id)
+        query = query.filter(ValidationIssue.last_seen_run_id == run_id)
     if q:
         pattern = f"%{q}%"
         query = query.outerjoin(

@@ -12,7 +12,7 @@ TEST_DATABASE_URL = (
 @pytest.fixture(scope="session")
 def engine():
     engine = create_engine(TEST_DATABASE_URL)
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine, checkfirst=True)
     yield engine
     Base.metadata.drop_all(engine)
     engine.dispose()

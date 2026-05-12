@@ -180,11 +180,11 @@ def _run_vi_counts(session: Session, run_ids: list[int]) -> dict[int, int]:
         return {}
     rows = (
         session.query(
-            ValidationIssue.scrape_run_id,
+            ValidationIssue.last_seen_run_id,
             func.count(ValidationIssue.id),
         )
-        .filter(ValidationIssue.scrape_run_id.in_(run_ids))
-        .group_by(ValidationIssue.scrape_run_id)
+        .filter(ValidationIssue.last_seen_run_id.in_(run_ids))
+        .group_by(ValidationIssue.last_seen_run_id)
         .all()
     )
     return {run_id: count for run_id, count in rows}
@@ -1179,7 +1179,7 @@ def api_acknowledge_run_failures(
 
     now = datetime.now(UTC)
     update_values: dict[str, Any] = {
-        "lifecycle_state": "already_seen",
+        "lifecycle_state": "acknowledged",
         "acknowledged_at": now,
     }
     if note:
@@ -2451,7 +2451,7 @@ def api_issue_detail(
 
     row = (
         session.query(ValidationIssue, ScrapeRun, ShopBook, Shop)
-        .join(ScrapeRun, ValidationIssue.scrape_run_id == ScrapeRun.id)
+        .join(ScrapeRun, ValidationIssue.last_seen_run_id == ScrapeRun.id)
         .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
         .outerjoin(Shop, ScrapeRun.shop_id == Shop.id)
         .filter(ValidationIssue.id == issue_id)
@@ -2468,7 +2468,7 @@ def api_issue_detail(
         "field": issue.field,
         "issue": issue.issue,
         "raw_value": issue.raw_value,
-        "scrape_run_id": issue.scrape_run_id,
+        "scrape_run_id": issue.last_seen_run_id,
         "shop_book_id": issue.shop_book_id,
         "shop_book_title": shop_book.title if shop_book else None,
         "shop_name": shop.name if shop else None,
@@ -2489,7 +2489,7 @@ def api_issue_lifecycle(
     state: str,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    allowed = {"new", "recurring", "already_seen"}
+    allowed = {"new", "acknowledged", "snoozed", "resolved"}
     if state not in allowed:
         raise HTTPException(status_code=400, detail=f"state must be one of {allowed}")
 
@@ -2498,7 +2498,7 @@ def api_issue_lifecycle(
         raise HTTPException(status_code=404, detail="Issue not found")
 
     issue.lifecycle_state = state
-    if state == "already_seen":
+    if state == "acknowledged":
         issue.acknowledged_at = datetime.now(UTC)
     else:
         issue.acknowledged_at = None

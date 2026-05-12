@@ -89,7 +89,7 @@ def test_reaper_marks_stuck_stopping_run_failed(db_session: Session):
     assert run.close_reason == "stop_timeout"
     issue = (
         db_session.query(ValidationIssue)
-        .filter_by(scrape_run_id=run.id, issue="scrape_run_failed")
+        .filter_by(last_seen_run_id=run.id, issue="scrape_run_failed")
         .one()
     )
     assert issue.raw_value == "stop_timeout"

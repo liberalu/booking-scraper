@@ -25,14 +25,16 @@ def _make_two_issues(db_session: Session) -> tuple[int, int, int]:
     db_session.add_all(
         [
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/a",
                 field="title",
                 issue="suspicious_title",
                 lifecycle_state="new",
             ),
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/b",
                 field="price",
                 issue="missing_price",
@@ -51,7 +53,7 @@ def test_ack_bulk_respects_issue_type_filter(db_session: Session) -> None:
     assert updated == 1
     remaining_open = (
         db_session.query(ValidationIssue)
-        .filter(ValidationIssue.lifecycle_state != "already_seen")
+        .filter(ValidationIssue.lifecycle_state != "acknowledged")
         .count()
     )
     assert remaining_open == 1
@@ -103,7 +105,8 @@ def test_ack_bulk_filters_by_search_query(db_session: Session) -> None:
     db_session.add_all(
         [
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/x",
                 field="title",
                 issue="suspicious_title",
@@ -111,7 +114,8 @@ def test_ack_bulk_filters_by_search_query(db_session: Session) -> None:
                 lifecycle_state="new",
             ),
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/y",
                 field="price",
                 issue="missing_price",
@@ -130,15 +134,15 @@ def test_ack_bulk_filters_by_search_query(db_session: Session) -> None:
 
 @pytest.mark.integration
 def test_delete_matching_supports_state_open(db_session: Session) -> None:
-    """state='open' on delete excludes already_seen rows."""
+    """state='open' on delete excludes acknowledged rows."""
     shop_id, run_id, _ = _make_two_issues(db_session)
-    # Acknowledge one row so it becomes already_seen
+    # Acknowledge one row
     first = db_session.query(ValidationIssue).first()
     assert first is not None
-    first.lifecycle_state = "already_seen"
+    first.lifecycle_state = "acknowledged"
     first.acknowledged_at = datetime.now(UTC)
     db_session.flush()
-    # Delete with state='open' should hit only the remaining open row
+    # Delete with state='open' should hit only the remaining new row
     deleted = delete_validation_issues_matching(db_session, state="open")
     assert deleted == 1
     remaining = db_session.query(ValidationIssue).count()

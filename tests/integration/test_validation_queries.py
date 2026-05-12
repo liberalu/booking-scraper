@@ -32,7 +32,8 @@ def _seed(db_session: Session) -> tuple[int, int]:
     db_session.add_all(
         [
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/x",
                 field="title",
                 issue="suspicious_title",
@@ -41,13 +42,14 @@ def _seed(db_session: Session) -> tuple[int, int]:
                 lifecycle_state="new",
             ),
             ValidationIssue(
-                scrape_run_id=run.id,
+                last_seen_run_id=run.id,
+                shop_id=shop.id,
                 url="https://vaga.lt/y",
                 field="price",
                 issue="missing_price",
                 raw_value=None,
                 shop_book_id=None,
-                lifecycle_state="recurring",
+                lifecycle_state="new",
             ),
         ]
     )
@@ -137,9 +139,8 @@ def test_lifecycle_counts_filters_by_issue_type_and_run(db_session: Session) -> 
         issue_type="missing_price",
         run_id=run_id,
     )
-    assert counts["recurring"] == 1
-    assert counts["new"] == 0
-    assert counts["open"] == 1
+    assert counts["new"] == 1
+    assert counts["acknowledged"] == 0
 
 
 @pytest.mark.integration
@@ -149,10 +150,8 @@ def test_lifecycle_counts_filters_by_search(db_session: Session) -> None:
     # Match by book title (resolved shop_book)
     counts_title = get_validation_lifecycle_counts(db_session, q="Test Book")
     assert counts_title["new"] == 1
-    assert counts_title["recurring"] == 0
-    assert counts_title["open"] == 1
+    assert counts_title["acknowledged"] == 0
     # Match by URL substring (unresolved shop_book)
     counts_url = get_validation_lifecycle_counts(db_session, q="vaga.lt/y")
-    assert counts_url["recurring"] == 1
-    assert counts_url["new"] == 0
-    assert counts_url["open"] == 1
+    assert counts_url["new"] == 1
+    assert counts_url["acknowledged"] == 0
