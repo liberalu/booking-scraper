@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from book_scraper.db.models import ScrapeUrlItem as ScrapeUrlItemModel
 from book_scraper.db.repo import (
-    bulk_insert_validation_issues,
     increment_scrape_run_stats,
     insert_price,
     link_discovered_url_to_shop_book,
@@ -22,6 +21,7 @@ from book_scraper.db.repo import (
     upsert_discovered_url,
     upsert_shop,
     upsert_shop_book,
+    upsert_validation_issues,
 )
 from book_scraper.db.session import get_session_factory
 from book_scraper.isbn import is_valid_isbn
@@ -369,14 +369,13 @@ class PostgresPipeline:
         if vp is None:
             return
         issues = vp.drain_issues()
-        for issue in issues:
-            issue["scrape_run_id"] = run_id
         # The shop is the same for every item in a run, so the first
         # cached shop id is always correct.
         shop_id: int | None = None
         if self.shop_cache:
             shop_id = next(iter(self.shop_cache.values()))
-        bulk_insert_validation_issues(self.session, issues, shop_id=shop_id)
+        if issues and shop_id is not None and run_id is not None:
+            upsert_validation_issues(self.session, issues, shop_id=shop_id, run_id=run_id)
 
     _SPIKE_THRESHOLD = Decimal("0.5")  # 50%
 

@@ -3,7 +3,7 @@ from book_scraper.dashboard.queries import (
     get_validation_by_type,
 )
 from book_scraper.db.models import ScrapeRun, Shop, ShopBook
-from book_scraper.db.repo import bulk_insert_validation_issues
+from book_scraper.db.repo import upsert_validation_issues
 
 
 def _setup(db_session):
@@ -19,12 +19,11 @@ def _setup(db_session):
     return shop, shop_book, run
 
 
-def _insert(db_session, run_id, field, issue, shop_book_id):
-    bulk_insert_validation_issues(
+def _insert(db_session, shop_id, run_id, field, issue, shop_book_id):
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run_id,
                 "url": "https://vaga.lt/b",
                 "field": field,
                 "issue": issue,
@@ -32,25 +31,25 @@ def _insert(db_session, run_id, field, issue, shop_book_id):
                 "shop_book_id": shop_book_id,
             }
         ],
+        shop_id=shop_id,
+        run_id=run_id,
     )
 
 
 def test_issue_summary_groups_and_sorts_desc(db_session):
-    _shop, shop_book, run = _setup(db_session)
+    shop, shop_book, run = _setup(db_session)
 
-    # 3 x (title, too_short), 2 x (isbn, invalid), 1 x (price, missing)
-    for _ in range(3):
-        _insert(db_session, run.id, "title", "too_short", shop_book.id)
-    for _ in range(2):
-        _insert(db_session, run.id, "isbn", "invalid", shop_book.id)
-    _insert(db_session, run.id, "price", "missing", shop_book.id)
+    # Each distinct (entity, field, issue) is one canonical row with upsert.
+    _insert(db_session, shop.id, run.id, "title", "too_short", shop_book.id)
+    _insert(db_session, shop.id, run.id, "isbn", "invalid", shop_book.id)
+    _insert(db_session, shop.id, run.id, "price", "missing", shop_book.id)
     db_session.flush()
 
     rows = get_run_issue_summary(db_session, run.id)
     assert rows == [
-        {"field": "title", "issue": "too_short", "count": 3},
-        {"field": "isbn", "issue": "invalid", "count": 2},
+        {"field": "isbn", "issue": "invalid", "count": 1},
         {"field": "price", "issue": "missing", "count": 1},
+        {"field": "title", "issue": "too_short", "count": 1},
     ]
 
 
@@ -64,20 +63,16 @@ def test_validation_by_type_filters_by_run_id(db_session):
     db_session.add(run_b)
     db_session.flush()
 
-    _insert(db_session, run_a.id, "title", "too_short", shop_book.id)
-    _insert(db_session, run_a.id, "title", "too_short", shop_book.id)
-    _insert(db_session, run_b.id, "title", "too_short", shop_book.id)
+    # With upsert semantics: same entity×field×issue is one canonical row.
+    # Insert for run_a; then upsert again for run_b updates last_seen_run_id.
+    _insert(db_session, shop.id, run_a.id, "title", "too_short", shop_book.id)
+    _insert(db_session, shop.id, run_b.id, "title", "too_short", shop_book.id)
     db_session.flush()
 
     all_issues = get_validation_by_type(db_session, "too_short", state=None)
-    run_a_issues = get_validation_by_type(
-        db_session, "too_short", state=None, run_id=run_a.id
-    )
     run_b_issues = get_validation_by_type(
         db_session, "too_short", state=None, run_id=run_b.id
     )
 
-    assert len(all_issues) == 3
-    assert len(run_a_issues) == 2
+    assert len(all_issues) == 1
     assert len(run_b_issues) == 1
-    assert all(i["scrape_run_id"] == run_a.id for i in run_a_issues)

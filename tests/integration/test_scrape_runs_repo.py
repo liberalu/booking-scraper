@@ -1,4 +1,9 @@
-from book_scraper.db.models import ScrapeRun, Shop
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from book_scraper.db.models import ScrapeRun, Shop, ShopBook, ValidationIssue
 from book_scraper.db.repo import (
     create_scrape_run,
     finalize_run_failsafe,
@@ -6,7 +11,9 @@ from book_scraper.db.repo import (
     get_latest_completed_run,
     mark_orphan_runs_failed,
     mark_stale_runs_failed,
+    resolve_gone_issues,
     update_scrape_run_progress,
+    upsert_validation_issues,
 )
 from tests.conftest import TEST_DATABASE_URL
 
@@ -148,6 +155,73 @@ def test_finalize_run_failsafe_persists_close_reason(engine):
             cleanup.close()
 
 
+def test_finalize_run_failsafe_skips_already_terminal_run(engine):
+    """finalize_run_failsafe must NOT overwrite a run that already reached a
+    terminal state (completed or failed).
+
+    Regression test for the validate spider bug: finish_scrape_run sets
+    status='completed' inside start(), then Scrapy calls closed() which
+    fires finalize_run_failsafe(..., status='failed'). Without the guard the
+    completed status is clobbered — run 424 exhibited exactly this."""
+    from sqlalchemy import text
+    from sqlalchemy.orm import sessionmaker
+
+    session_factory = sessionmaker(bind=engine)
+    setup = session_factory()
+    try:
+        shop = Shop(name="failsafe_terminal_guard_shop", base_url="https://guard.lt")
+        setup.add(shop)
+        setup.flush()
+        run = create_scrape_run(setup, shop_id=shop.id, phase="validate")
+        setup.commit()
+        run_id = run.id
+        shop_id = shop.id
+    finally:
+        setup.close()
+
+    try:
+        # Simulate the happy path: spider finishes and marks the run completed.
+        happy = session_factory()
+        try:
+            finish_scrape_run(happy, run_id, status="completed", reason="finished")
+            happy.commit()
+        finally:
+            happy.close()
+
+        # Simulate closed() firing after start() already completed successfully.
+        finalize_run_failsafe(
+            TEST_DATABASE_URL,
+            run_id=run_id,
+            status="failed",
+            reason="spider_closed",
+        )
+
+        verify = session_factory()
+        try:
+            updated = verify.get(ScrapeRun, run_id)
+            assert updated is not None
+            assert updated.status == "completed", (
+                f"finalize_run_failsafe clobbered completed→failed "
+                f"(close_reason={updated.close_reason!r})"
+            )
+        finally:
+            verify.close()
+    finally:
+        cleanup = session_factory()
+        try:
+            cleanup.execute(
+                text("DELETE FROM validation_issues WHERE scrape_run_id = :id"),
+                {"id": run_id},
+            )
+            cleanup.execute(
+                text("DELETE FROM scrape_runs WHERE id = :id"), {"id": run_id}
+            )
+            cleanup.execute(text("DELETE FROM shops WHERE id = :id"), {"id": shop_id})
+            cleanup.commit()
+        finally:
+            cleanup.close()
+
+
 def test_get_latest_completed_run(db_session):
     shop = Shop(name="test_shop", base_url="https://test.lt")
     db_session.add(shop)
@@ -220,3 +294,166 @@ def test_update_scrape_run_progress(db_session):
     db_session.refresh(run)
     assert run.urls_processed == 50
     assert run.urls_total == 100
+
+
+class TestUpsertValidationIssues:
+    def test_creates_new_issue_on_first_detection(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        issues = [{"url": shop_book.url, "field": "isbn", "issue": "missing_isbn", "raw_value": None}]
+        upsert_validation_issues(session, issues, shop_id=shop.id, run_id=scrape_run.id)
+        session.flush()
+
+        rows = session.execute(select(ValidationIssue)).scalars().all()
+        assert len(rows) == 1
+        vi = rows[0]
+        assert vi.lifecycle_state == "new"
+        assert vi.run_count == 1
+        assert vi.first_seen_run_id == scrape_run.id
+        assert vi.last_seen_run_id == scrape_run.id
+        assert vi.shop_id == shop.id
+
+    def test_increments_run_count_on_re_detection(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        issues = [{"url": shop_book.url, "field": "isbn", "issue": "missing_isbn"}]
+        upsert_validation_issues(session, issues, shop_id=shop.id, run_id=scrape_run.id)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        upsert_validation_issues(session, issues, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        rows = session.execute(select(ValidationIssue)).scalars().all()
+        assert len(rows) == 1, "upsert must not insert a second row"
+        assert rows[0].run_count == 2
+        assert rows[0].first_seen_run_id == scrape_run.id
+        assert rows[0].last_seen_run_id == run2.id
+
+    def test_resets_resolved_to_new_when_issue_reappears(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        vi = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn", url=shop_book.url, lifecycle_state="resolved",
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+            resolved_at=datetime.now(UTC),
+        )
+        session.add(vi)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        issues = [{"url": shop_book.url, "field": "isbn", "issue": "missing_isbn"}]
+        upsert_validation_issues(session, issues, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        session.refresh(vi)
+        assert vi.lifecycle_state == "new"
+        assert vi.resolved_at is None
+        assert vi.run_count == 2
+
+    def test_leaves_acknowledged_state_on_re_detection(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        vi = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn", url=shop_book.url, lifecycle_state="acknowledged",
+            acknowledged_at=datetime.now(UTC),
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+        )
+        session.add(vi)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        issues = [{"url": shop_book.url, "field": "isbn", "issue": "missing_isbn"}]
+        upsert_validation_issues(session, issues, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        session.refresh(vi)
+        assert vi.lifecycle_state == "acknowledged"
+        assert vi.run_count == 2
+
+
+class TestResolveGoneIssues:
+    def test_marks_open_issues_resolved_when_not_detected(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        vi = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn", url=shop_book.url, lifecycle_state="new",
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+        )
+        session.add(vi)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        resolve_gone_issues(session, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        session.refresh(vi)
+        assert vi.lifecycle_state == "resolved"
+        assert vi.resolved_at is not None
+
+    def test_does_not_touch_already_resolved(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        vi = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn", url=shop_book.url, lifecycle_state="resolved",
+            resolved_at=datetime.now(UTC),
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+        )
+        session.add(vi)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        resolve_gone_issues(session, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        session.refresh(vi)
+        assert vi.lifecycle_state == "resolved"
+
+    def test_does_not_affect_other_shops(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        other_shop = Shop(name="other_shop_resolve", base_url="https://other-vi.lt")
+        session.add(other_shop)
+        session.flush()
+        other_run = ScrapeRun(shop_id=other_shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(other_run)
+        session.flush()
+
+        vi = ValidationIssue(
+            shop_id=other_shop.id, shop_book_id=None, discovered_url_id=None,
+            field="isbn", issue="missing_isbn",
+            url="http://other.example.com/book",
+            lifecycle_state="new",
+            last_seen_run_id=other_run.id, first_seen_run_id=other_run.id,
+        )
+        session.add(vi)
+        session.flush()
+
+        run2 = ScrapeRun(shop_id=shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(run2)
+        session.flush()
+
+        resolve_gone_issues(session, shop_id=shop.id, run_id=run2.id)
+        session.flush()
+
+        session.refresh(vi)
+        assert vi.lifecycle_state == "new"

@@ -1075,6 +1075,14 @@ def finalize_run_failsafe(
         session = session_factory()
         try:
             session.execute(sa_text("SET LOCAL statement_timeout = '5s'"))
+            # Guard: only finalize if the run is still in a non-terminal state.
+            # Without this, the closed() failsafe in spiders that call
+            # finish_scrape_run() before returning would have their completed
+            # status clobbered to failed here (closed() fires after start()
+            # returns, so finish_scrape_run already ran successfully).
+            _run = session.get(ScrapeRun, run_id)
+            if _run is not None and _run.status in ("completed", "failed"):
+                return
             finish_scrape_run(session, run_id, status, reason=reason)
             if resumable_after_failure:
                 run = session.get(ScrapeRun, run_id)
@@ -1497,164 +1505,180 @@ def check_discover_freshness(
     return warnings
 
 
-def bulk_insert_validation_issues(
+def _resolve_entity_fks(
     session: Session,
     issues: list[dict[str, str | int | None]],
-    shop_id: int | None = None,
+    shop_id: int,
 ) -> None:
-    """Insert a batch of validation issues, resolving shop_book/discovered_url FKs.
-
-    When `shop_id` is provided, each issue's `url` is resolved to a
-    `shop_book_id` first; failing that, to a `discovered_url_id`. If the
-    caller already populated either FK on the dict it is left alone.
-    """
-    if not issues:
+    """Resolve url strings to shop_book_id / discovered_url_id FKs in-place."""
+    urls: set[str] = {
+        str(i["url"])
+        for i in issues
+        if i.get("url") and not i.get("shop_book_id") and not i.get("discovered_url_id")
+    }
+    if not urls:
         return
-
-    if shop_id is not None:
-        urls: set[str] = {str(issue["url"]) for issue in issues if issue.get("url")}
-        shop_book_by_url: dict[str, int] = {}
-        du_by_url: dict[str, int] = {}
-        if urls:
-            rows = session.execute(
-                select(ShopBook.url, ShopBook.id).where(
-                    ShopBook.shop_id == shop_id,
-                    ShopBook.url.in_(urls),
-                )
-            ).all()
-            for url, shop_book_id in rows:
-                shop_book_by_url[url] = shop_book_id
-            # Only look up discovered_urls for the leftover set.
-            leftover = urls - shop_book_by_url.keys()
-            if leftover:
-                normalized_map = {url: normalize_url(str(url)) for url in leftover}
-                rev = {v: k for k, v in normalized_map.items()}
-                du_rows = session.execute(
-                    select(DiscoveredUrl.normalized_url, DiscoveredUrl.id).where(
-                        DiscoveredUrl.shop_id == shop_id,
-                        DiscoveredUrl.normalized_url.in_(normalized_map.values()),
-                    )
-                ).all()
-                for normalized, du_id in du_rows:
-                    raw = rev.get(normalized)
-                    if raw is not None:
-                        du_by_url[raw] = du_id
-
-        for issue in issues:
-            if issue.get("shop_book_id") or issue.get("discovered_url_id"):
-                continue
-            url = issue.get("url")
-            if url and url in shop_book_by_url:
-                issue["shop_book_id"] = shop_book_by_url[url]
-            elif url and url in du_by_url:
-                issue["discovered_url_id"] = du_by_url[url]
-
-    _assign_lifecycle_states(session, issues)
-    session.add_all([ValidationIssue(**issue) for issue in issues])
-
-
-def _assign_lifecycle_states(
-    session: Session,
-    issues: list[dict[str, str | int | None]],
-) -> None:
-    """Stamp each issue with `new` or `recurring` based on prior history.
-
-    Lifecycle rule: an issue is `recurring` if the SAME (entity, field,
-    issue) triple has been seen in a previous scrape run — including
-    when the previous occurrence was acknowledged (i.e. acknowledged
-    issues that re-appear surface as `new` instead of `recurring` so
-    they get triage attention; this matches the spec's
-    "previously-acknowledged issue that reappears surfaces as new".
-    """
-    if not issues:
-        return
-
-    shop_book_keys: set[tuple[int, str, str]] = set()
-    du_keys: set[tuple[int, str, str]] = set()
-    url_keys: set[tuple[str, str, str]] = set()
+    sb_rows = session.execute(
+        select(ShopBook.url, ShopBook.id).where(
+            ShopBook.shop_id == shop_id, ShopBook.url.in_(urls)
+        )
+    ).all()
+    shop_book_by_url = {url: sid for url, sid in sb_rows}
+    leftover = urls - shop_book_by_url.keys()
+    du_by_url: dict[str, int] = {}
+    if leftover:
+        norm_map = {url: normalize_url(str(url)) for url in leftover}
+        rev = {v: k for k, v in norm_map.items()}
+        du_rows = session.execute(
+            select(DiscoveredUrl.normalized_url, DiscoveredUrl.id).where(
+                DiscoveredUrl.shop_id == shop_id,
+                DiscoveredUrl.normalized_url.in_(norm_map.values()),
+            )
+        ).all()
+        for normalized, du_id in du_rows:
+            raw = rev.get(normalized)
+            if raw is not None:
+                du_by_url[raw] = du_id
     for issue in issues:
-        field = str(issue.get("field") or "")
-        issue_type = str(issue.get("issue") or "")
-        if issue.get("shop_book_id"):
-            shop_book_keys.add((int(issue["shop_book_id"]), field, issue_type))  # type: ignore[arg-type]
-        elif issue.get("discovered_url_id"):
-            du_keys.add((int(issue["discovered_url_id"]), field, issue_type))  # type: ignore[arg-type]
-        else:
-            url_keys.add((str(issue.get("url") or ""), field, issue_type))
+        if issue.get("shop_book_id") or issue.get("discovered_url_id"):
+            continue
+        url = issue.get("url")
+        if url and url in shop_book_by_url:
+            issue["shop_book_id"] = shop_book_by_url[str(url)]
+        elif url and url in du_by_url:
+            issue["discovered_url_id"] = du_by_url[str(url)]
 
-    seen_shop_book: set[tuple[int, str, str]] = set()
-    seen_du: set[tuple[int, str, str]] = set()
-    seen_url: set[tuple[str, str, str]] = set()
 
-    # Look up prior occurrences. We filter on unacknowledged rows only
-    # so an acknowledged-then-reappearing issue comes back as `new`.
-    if shop_book_keys:
-        rows = session.execute(
-            select(
-                ValidationIssue.shop_book_id,
-                ValidationIssue.field,
-                ValidationIssue.issue,
-            )
-            .where(
-                ValidationIssue.shop_book_id.in_({k[0] for k in shop_book_keys}),
-                ValidationIssue.acknowledged_at.is_(None),
-            )
-            .distinct()
-        ).all()
-        seen_shop_book = {(r.shop_book_id, r.field, r.issue) for r in rows}
-    if du_keys:
-        rows = session.execute(
-            select(
-                ValidationIssue.discovered_url_id,
-                ValidationIssue.field,
-                ValidationIssue.issue,
-            )
-            .where(
-                ValidationIssue.discovered_url_id.in_({k[0] for k in du_keys}),
-                ValidationIssue.acknowledged_at.is_(None),
-            )
-            .distinct()
-        ).all()
-        seen_du = {(r.discovered_url_id, r.field, r.issue) for r in rows}
-    if url_keys:
-        url_rows = session.execute(
-            select(
-                ValidationIssue.url,
-                ValidationIssue.field,
-                ValidationIssue.issue,
-            )
-            .where(
+def upsert_validation_issues(
+    session: Session,
+    issues: list[dict[str, str | int | None]],
+    shop_id: int,
+    run_id: int,
+) -> None:
+    """Upsert detected issues as canonical rows (one per entity×field×issue_type).
+
+    On first detection: INSERT with lifecycle_state='new', run_count=1.
+    On re-detection of open/ack/snoozed: UPDATE last_seen_run_id, run_count++.
+    On re-detection of resolved: reset to 'new', clear resolved_at.
+    Snoozed issues whose snoozed_until has passed are reset to 'new'.
+    """
+    if not issues:
+        return
+    _resolve_entity_fks(session, issues, shop_id)
+
+    import sqlalchemy as sa
+
+    sb_issues = [i for i in issues if i.get("shop_book_id")]
+    du_issues = [
+        i
+        for i in issues
+        if i.get("discovered_url_id") and not i.get("shop_book_id")
+    ]
+    url_issues = [
+        i
+        for i in issues
+        if not i.get("shop_book_id") and not i.get("discovered_url_id")
+    ]
+
+    def _make_values(
+        batch: list[dict[str, str | int | None]],
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "shop_id": shop_id,
+                "last_seen_run_id": run_id,
+                "first_seen_run_id": run_id,
+                "url": str(i.get("url") or ""),
+                "field": str(i.get("field") or ""),
+                "issue": str(i.get("issue") or ""),
+                "raw_value": i.get("raw_value"),
+                "shop_book_id": i.get("shop_book_id"),
+                "discovered_url_id": i.get("discovered_url_id"),
+                "lifecycle_state": "new",
+                "run_count": 1,
+            }
+            for i in batch
+        ]
+
+    excluded = pg_insert(ValidationIssue).excluded
+    _on_conflict_set = {
+        "last_seen_run_id": excluded.last_seen_run_id,
+        "run_count": ValidationIssue.run_count + 1,
+        "raw_value": excluded.raw_value,
+        "lifecycle_state": sa.case(
+            (ValidationIssue.lifecycle_state == "resolved", sa.literal("new")),
+            (
+                sa.and_(
+                    ValidationIssue.lifecycle_state == "snoozed",
+                    ValidationIssue.snoozed_until <= sa.func.now(),
+                ),
+                sa.literal("new"),
+            ),
+            else_=ValidationIssue.lifecycle_state,
+        ),
+        "resolved_at": sa.case(
+            (ValidationIssue.lifecycle_state == "resolved", sa.null()),
+            else_=ValidationIssue.resolved_at,
+        ),
+    }
+
+    if sb_issues:
+        stmt = pg_insert(ValidationIssue).values(_make_values(sb_issues))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["shop_book_id", "field", "issue"],
+            index_where=ValidationIssue.shop_book_id.isnot(None),
+            set_=_on_conflict_set,
+        )
+        session.execute(stmt)
+
+    if du_issues:
+        stmt = pg_insert(ValidationIssue).values(_make_values(du_issues))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["discovered_url_id", "field", "issue"],
+            index_where=ValidationIssue.discovered_url_id.isnot(None),
+            set_=_on_conflict_set,
+        )
+        session.execute(stmt)
+
+    if url_issues:
+        stmt = pg_insert(ValidationIssue).values(_make_values(url_issues))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["url", "field", "issue"],
+            index_where=sa.and_(
                 ValidationIssue.shop_book_id.is_(None),
                 ValidationIssue.discovered_url_id.is_(None),
-                ValidationIssue.url.in_({k[0] for k in url_keys}),
-                ValidationIssue.acknowledged_at.is_(None),
-            )
-            .distinct()
-        ).all()
-        seen_url = {(r.url, r.field, r.issue) for r in url_rows}
+            ),
+            set_=_on_conflict_set,
+        )
+        session.execute(stmt)
 
-    for issue in issues:
-        field = str(issue.get("field") or "")
-        issue_type = str(issue.get("issue") or "")
-        state = "new"
-        if issue.get("shop_book_id"):
-            if (int(issue["shop_book_id"]), field, issue_type) in seen_shop_book:  # type: ignore[arg-type]
-                state = "recurring"
-        elif issue.get("discovered_url_id"):
-            if (int(issue["discovered_url_id"]), field, issue_type) in seen_du:  # type: ignore[arg-type]
-                state = "recurring"
-        else:
-            if (str(issue.get("url") or ""), field, issue_type) in seen_url:
-                state = "recurring"
-        issue.setdefault("lifecycle_state", state)
+
+def resolve_gone_issues(session: Session, shop_id: int, run_id: int) -> int:
+    """Mark open issues not detected in run_id as resolved.
+
+    Returns the number of rows updated.
+    """
+    import sqlalchemy as sa
+
+    now = datetime.now(UTC)
+    result = session.execute(
+        sa.update(ValidationIssue)
+        .where(
+            ValidationIssue.shop_id == shop_id,
+            ValidationIssue.last_seen_run_id != run_id,
+            ValidationIssue.lifecycle_state.in_(["new", "acknowledged", "snoozed"]),
+        )
+        .values(lifecycle_state="resolved", resolved_at=now)
+    )
+    return result.rowcount  # type: ignore[return-value]
 
 
 def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
-    """Mark an issue as already_seen. Returns True if updated."""
+    """Mark an issue as acknowledged. Returns True if updated."""
     issue = session.get(ValidationIssue, issue_id)
     if issue is None:
         return False
-    issue.lifecycle_state = "already_seen"
+    issue.lifecycle_state = "acknowledged"
     issue.acknowledged_at = datetime.now(UTC)
     session.flush()
     return True

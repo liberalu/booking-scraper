@@ -21,7 +21,7 @@ from book_scraper.db.models import (
     ShopBookAttribute,
     ValidationIssue,
 )
-from book_scraper.db.repo import bulk_insert_validation_issues
+from book_scraper.db.repo import upsert_validation_issues
 
 
 @pytest.fixture()
@@ -243,19 +243,19 @@ def test_api_issues_run_id_filter(client: TestClient, db_session: Session) -> No
     db_session.flush()
 
     def _seed(run_id: int, n: int) -> None:
-        bulk_insert_validation_issues(
+        upsert_validation_issues(
             db_session,
             [
                 {
-                    "scrape_run_id": run_id,
                     "url": f"https://vaga.lt/book-{run_id}-{i}",
                     "field": "price",
                     "issue": "missing",
                     "raw_value": None,
-                    "shop_book_id": None,
                 }
                 for i in range(n)
             ],
+            shop_id=shop.id,
+            run_id=run_id,
         )
 
     _seed(run_a.id, 2)
@@ -266,9 +266,8 @@ def test_api_issues_run_id_filter(client: TestClient, db_session: Session) -> No
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 2
-    assert all(i["scrape_run_id"] == run_a.id for i in data["issues"])
     c = data["counts"]
-    assert c["new"] + c["recurring"] + c["already_seen"] == 2
+    assert c["new"] + c.get("acknowledged", 0) + c.get("snoozed", 0) == 2
 
     resp_b = client.get(f"/api/issues?run_id={run_b.id}&state=all")
     assert resp_b.json()["total"] == 3

@@ -1,7 +1,7 @@
 from book_scraper.db.models import ScrapeRun, Shop, ShopBook, ValidationIssue
 from book_scraper.db.repo import (
     acknowledge_validation_issue,
-    bulk_insert_validation_issues,
+    upsert_validation_issues,
 )
 
 
@@ -15,14 +15,13 @@ def _setup(db_session):
     return shop, shop_book
 
 
-def _insert_issue(
-    db_session, run_id, shop_book_id, field="price", issue="missing_price"
+def _upsert_issue(
+    db_session, shop_id, run_id, shop_book_id, field="price", issue="missing_price"
 ):
-    bulk_insert_validation_issues(
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run_id,
                 "url": "https://vaga.lt/b",
                 "field": field,
                 "issue": issue,
@@ -30,6 +29,8 @@ def _insert_issue(
                 "shop_book_id": shop_book_id,
             }
         ],
+        shop_id=shop_id,
+        run_id=run_id,
     )
     db_session.flush()
 
@@ -40,52 +41,50 @@ def test_first_occurrence_is_new(db_session):
     db_session.add(run)
     db_session.flush()
 
-    _insert_issue(db_session, run.id, shop_book.id)
+    _upsert_issue(db_session, shop.id, run.id, shop_book.id)
     issue = db_session.query(ValidationIssue).one()
     assert issue.lifecycle_state == "new"
 
 
-def test_second_occurrence_is_recurring(db_session):
+def test_second_occurrence_increments_run_count(db_session):
+    """Re-detection of the same issue increments run_count on the canonical row."""
     shop, shop_book = _setup(db_session)
     run1 = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
     db_session.add(run1)
     db_session.flush()
-    _insert_issue(db_session, run1.id, shop_book.id)
+    _upsert_issue(db_session, shop.id, run1.id, shop_book.id)
 
     run2 = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
     db_session.add(run2)
     db_session.flush()
-    _insert_issue(db_session, run2.id, shop_book.id)
+    _upsert_issue(db_session, shop.id, run2.id, shop_book.id)
 
-    states = [
-        i.lifecycle_state
-        for i in db_session.query(ValidationIssue).order_by(ValidationIssue.id).all()
-    ]
-    assert states == ["new", "recurring"]
+    issues = db_session.query(ValidationIssue).all()
+    assert len(issues) == 1, "upsert must keep exactly one canonical row"
+    assert issues[0].run_count == 2
+    assert issues[0].lifecycle_state == "new"
 
 
-def test_acknowledged_reappears_as_new(db_session):
-    """Acknowledging a recurring issue and then seeing it again on the
-    next run should resurface it as `new` — the point of the ack is
-    to mute it until its reality changes."""
+def test_acknowledged_stays_acknowledged_on_re_detection(db_session):
+    """An acknowledged issue stays acknowledged when re-detected (run_count still
+    increments) — operator mute is preserved across runs."""
     shop, shop_book = _setup(db_session)
     run1 = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
     db_session.add(run1)
     db_session.flush()
-    _insert_issue(db_session, run1.id, shop_book.id)
+    _upsert_issue(db_session, shop.id, run1.id, shop_book.id)
 
     issue = db_session.query(ValidationIssue).one()
     assert acknowledge_validation_issue(db_session, issue.id)
     db_session.refresh(issue)
-    assert issue.lifecycle_state == "already_seen"
+    assert issue.lifecycle_state == "acknowledged"
     assert issue.acknowledged_at is not None
 
     run2 = ScrapeRun(shop_id=shop.id, phase="scan", status="running")
     db_session.add(run2)
     db_session.flush()
-    _insert_issue(db_session, run2.id, shop_book.id)
+    _upsert_issue(db_session, shop.id, run2.id, shop_book.id)
 
-    newest = (
-        db_session.query(ValidationIssue).order_by(ValidationIssue.id.desc()).first()
-    )
-    assert newest.lifecycle_state == "new"
+    db_session.refresh(issue)
+    assert issue.lifecycle_state == "acknowledged"
+    assert issue.run_count == 2

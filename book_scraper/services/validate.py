@@ -12,9 +12,9 @@ Checks implemented here (plans 02 + 03):
   - Match readiness: unmatched_has_isbn, match_isbn_drift
   - Relationship integrity: url_aliases, product_url_non_book
 
-Results are written to validation_issues via bulk_insert_validation_issues,
-which handles (shop_book_id, field, issue) deduplication lifecycle
-(_assign_lifecycle_states transitions recurring rows automatically).
+Results are written to validation_issues via upsert_validation_issues,
+which handles (shop_book_id, field, issue) deduplication and lifecycle
+transitions (re-detect resolved → new; re-detect open → run_count++).
 
 Usage::
 
@@ -34,7 +34,7 @@ import unicodedata
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from book_scraper.db.repo import bulk_insert_validation_issues
+from book_scraper.db.repo import upsert_validation_issues
 
 # Per-shop discover cadence threshold used by the stale_active check (plan 03).
 # Deferred to v2: per-shop cadence field in DB (CONTEXT.md decision D-defer-1).
@@ -94,7 +94,7 @@ class ValidateService:
         issues.extend(self.check_relationship_integrity(shop_id, run_id))
 
         if issues:
-            bulk_insert_validation_issues(self._session, issues, shop_id=shop_id)
+            upsert_validation_issues(self._session, issues, shop_id=shop_id, run_id=run_id)
 
         counters: dict[str, int] = {}
         for issue in issues:

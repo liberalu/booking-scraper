@@ -8,7 +8,7 @@ from book_scraper.db.models import (
     ShopBook,
     ValidationIssue,
 )
-from book_scraper.db.repo import bulk_insert_validation_issues
+from book_scraper.db.repo import upsert_validation_issues
 
 
 def _setup(db_session):
@@ -21,17 +21,16 @@ def _setup(db_session):
     return shop, run
 
 
-def test_bulk_insert_resolves_shop_book_fk(db_session):
+def test_upsert_resolves_shop_book_fk(db_session):
     shop, run = _setup(db_session)
     shop_book = ShopBook(shop_id=shop.id, url="https://vaga.lt/b", title="B")
     db_session.add(shop_book)
     db_session.flush()
 
-    bulk_insert_validation_issues(
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run.id,
                 "url": "https://vaga.lt/b",
                 "field": "price",
                 "issue": "missing_price",
@@ -39,6 +38,7 @@ def test_bulk_insert_resolves_shop_book_fk(db_session):
             }
         ],
         shop_id=shop.id,
+        run_id=run.id,
     )
     db_session.flush()
 
@@ -47,7 +47,7 @@ def test_bulk_insert_resolves_shop_book_fk(db_session):
     assert issue.discovered_url_id is None
 
 
-def test_bulk_insert_falls_back_to_discovered_url_fk(db_session):
+def test_upsert_falls_back_to_discovered_url_fk(db_session):
     shop, run = _setup(db_session)
     du = DiscoveredUrl(
         shop_id=shop.id,
@@ -58,11 +58,10 @@ def test_bulk_insert_falls_back_to_discovered_url_fk(db_session):
     db_session.add(du)
     db_session.flush()
 
-    bulk_insert_validation_issues(
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run.id,
                 "url": "https://vaga.lt/unlisted",
                 "field": "url",
                 "issue": "http_4xx",
@@ -70,6 +69,7 @@ def test_bulk_insert_falls_back_to_discovered_url_fk(db_session):
             }
         ],
         shop_id=shop.id,
+        run_id=run.id,
     )
     db_session.flush()
 
@@ -78,16 +78,15 @@ def test_bulk_insert_falls_back_to_discovered_url_fk(db_session):
     assert issue.discovered_url_id == du.id
 
 
-def test_bulk_insert_leaves_both_null_when_no_match(db_session):
+def test_upsert_leaves_both_null_when_no_match(db_session):
     """A sitemap-duplicate issue reports a shop-wide URL without a
     corresponding shop_book or discovered_url row. Both FKs stay NULL."""
     shop, run = _setup(db_session)
 
-    bulk_insert_validation_issues(
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run.id,
                 "url": "https://vaga.lt/sitemap.xml",
                 "field": "url",
                 "issue": "duplicate_sitemap_url",
@@ -95,6 +94,7 @@ def test_bulk_insert_leaves_both_null_when_no_match(db_session):
             }
         ],
         shop_id=shop.id,
+        run_id=run.id,
     )
     db_session.flush()
 
@@ -117,7 +117,9 @@ def test_check_constraint_forbids_both_fks(db_session):
 
     db_session.add(
         ValidationIssue(
-            scrape_run_id=run.id,
+            shop_id=shop.id,
+            last_seen_run_id=run.id,
+            first_seen_run_id=run.id,
             url="https://vaga.lt/x",
             field="title",
             issue="suspicious_title",
@@ -135,11 +137,10 @@ def test_relationships_load(db_session):
     db_session.add(shop_book)
     db_session.flush()
 
-    bulk_insert_validation_issues(
+    upsert_validation_issues(
         db_session,
         [
             {
-                "scrape_run_id": run.id,
                 "url": "https://vaga.lt/y",
                 "field": "price",
                 "issue": "missing_price",
@@ -147,6 +148,7 @@ def test_relationships_load(db_session):
             }
         ],
         shop_id=shop.id,
+        run_id=run.id,
     )
     db_session.flush()
 
