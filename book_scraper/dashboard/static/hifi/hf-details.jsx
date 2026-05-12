@@ -195,6 +195,53 @@ const ISSUE_TITLES = {
   discover_fetch_failed:     'Discovery fetch failed',
 };
 
+function HFIssueRelated({ issue, shop, currentId, goto }) {
+  const [related, setRelated] = React.useState(null);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams({ issue_type: issue, shop, state: 'new', per_page: '6' });
+    fetch(`/api/issues?${params}`)
+      .then(r => r.json())
+      .then(d => {
+        // Exclude the current issue from the list
+        const others = (d.issues || []).filter(i => i.id !== currentId);
+        setRelated(others.slice(0, 5));
+      })
+      .catch(() => setRelated([]));
+  }, [issue, shop, currentId]);
+
+  if (!related || related.length === 0) return null;
+
+  return (
+    <HFCard title={`Other ${issue} issues in ${shop}`} sub={`${related.length} more open issues of this type`}>
+      <div>
+        {related.map((i, idx) => (
+          <div key={i.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px var(--hf-card-p)',
+            borderBottom: idx < related.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
+            cursor: 'pointer',
+          }} onClick={() => goto('issue-detail', { id: `ISS-${i.id}` })}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+              background: i.severity === 'critical' ? '#e53e3e' : i.severity === 'warning' ? '#d69e2e' : '#718096',
+            }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: 'var(--hf-ink)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {i.shop_book_title || i.url || '—'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)', marginTop: 2 }}>
+                ISS-{i.id} · {i.raw_value || i.field}
+              </div>
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--hf-ink4)', flexShrink: 0 }}>{i.added_ago}</span>
+          </div>
+        ))}
+      </div>
+    </HFCard>
+  );
+}
+
 function HFIssueDetail({ nav, goto, params }) {
   const HF = getHF();
   const rawId = params?.id || '';
@@ -400,6 +447,9 @@ function HFIssueDetail({ nav, goto, params }) {
           </div>
         </HFCard>
       )}
+
+      {/* Related issues — same type in same shop */}
+      {data.issue && data.shop_name && <HFIssueRelated issue={data.issue} shop={data.shop_name} currentId={data.id} goto={goto} />}
     </HFShell>
   );
 }

@@ -94,6 +94,96 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         "Category or sitemap page returned an error or timed out during URL discovery."
         " Transient network issues or a shop-side block."
     ),
+    # ValidateService check groups
+    "active_no_price": (
+        "Book is marked active but has no price on record. The pricing element may have"
+        " moved or the product was unpublished from the shop."
+    ),
+    "book_no_metadata": (
+        "Book is classified as a book but is missing key metadata (ISBN, year, or author)."
+        " Parser may be too permissive — check the classification logic."
+    ),
+    "book_no_signals": (
+        "Book has no features that classify it as a book (no ISBN, no author, format is"
+        " not a binding type). May be a non-book product that slipped through classification."
+    ),
+    "empty_response": (
+        "The product page returned an empty body (HTTP 200 but no content). FlareSolverr"
+        " may have timed out, or the shop serves an empty page for bot traffic."
+    ),
+    "format_is_dimensions": (
+        "Format field contains what looks like physical dimensions (e.g. '210×297 mm')"
+        " rather than a binding type. The parser is reading the wrong attribute."
+    ),
+    "in_stock_no_price": (
+        "Book is marked in-stock but has no current price. The price may have been removed"
+        " or the stock/price selectors are misaligned."
+    ),
+    "isbn_duplicate": (
+        "Two or more shop books share the same ISBN-13. One is likely a data entry error"
+        " or a reprinted edition. Check both entries and merge or correct."
+    ),
+    "match_isbn_drift": (
+        "The ISBN on the shop book differs from the ISBN on its canonical book match."
+        " One was likely corrected after the match was made — re-match or fix manually."
+    ),
+    "no_price_history": (
+        "No price has ever been recorded for this book. It may never have been successfully"
+        " scraped, or was discovered but never scanned."
+    ),
+    "non_book_has_isbn": (
+        "Item classified as non-book but carries an ISBN-13. Re-examine the classification"
+        " — it is likely a book."
+    ),
+    "non_product_active": (
+        "A URL classified as non-product is still marked active. Either the classifier is"
+        " wrong or the URL changed purpose."
+    ),
+    "orphan_no_url": (
+        "Shop book record exists but has no linked discovered_url. This can happen if the"
+        " URL was deleted from discovered_urls or was never discovered."
+    ),
+    "price_zero": (
+        "Price scraped as 0.00. Parser probably matched an empty or placeholder element."
+        " Same as zero_price — check parser selectors."
+    ),
+    "product_url_non_book": (
+        "A URL classified as a product page but the shop book at that URL is classified as"
+        " non-book. The product exists but is not a book — review classification."
+    ),
+    "sku_duplicate": (
+        "Two shop books share the same shop SKU. SKUs should be unique identifiers —"
+        " one entry is likely stale or mislabelled."
+    ),
+    "slug_title_mismatch": (
+        "The URL slug and the scraped title diverge significantly. The parser may be"
+        " picking up a wrong title element, or the shop renamed the product without"
+        " updating the slug."
+    ),
+    "stale_active": (
+        "Book is marked active but was last seen in a scrape run over 30 days ago."
+        " It may have been silently delisted."
+    ),
+    "title_author_duplicate": (
+        "Two or more shop books share the exact title and author. Could be duplicate data"
+        " entry or a multi-format edition (print/ebook) that should be a single record."
+    ),
+    "unmatched_has_isbn": (
+        "Book has a valid ISBN but no canonical book match. Either the match phase has not"
+        " run yet or the ISBN is not in the canonical catalogue."
+    ),
+    "unreachable_active": (
+        "Book is marked active but the URL consistently returns 404, 410, or connection"
+        " error. The product has likely been removed."
+    ),
+    "url_aliases": (
+        "Multiple distinct URLs resolve to the same product (e.g. via redirects or slug"
+        " variants). The shop may serve the same page under multiple paths."
+    ),
+    "year_out_of_range": (
+        "Publication year is before 1400 or in the future. The parser is likely picking up"
+        " a wrong numeric element (e.g. page count or product ID)."
+    ),
 }
 
 ISSUE_SEVERITY: dict[str, str] = {
@@ -114,6 +204,29 @@ ISSUE_SEVERITY: dict[str, str] = {
     "invalid_year": "warning",
     "year_pages_swap": "warning",
     "discover_fetch_failed": "warning",
+    # ValidateService check groups
+    "active_no_price": "critical",
+    "book_no_metadata": "warning",
+    "book_no_signals": "info",
+    "empty_response": "warning",
+    "format_is_dimensions": "info",
+    "in_stock_no_price": "critical",
+    "isbn_duplicate": "warning",
+    "match_isbn_drift": "warning",
+    "no_price_history": "warning",
+    "non_book_has_isbn": "warning",
+    "non_product_active": "info",
+    "orphan_no_url": "info",
+    "price_zero": "critical",
+    "product_url_non_book": "info",
+    "sku_duplicate": "warning",
+    "slug_title_mismatch": "info",
+    "stale_active": "warning",
+    "title_author_duplicate": "warning",
+    "unmatched_has_isbn": "info",
+    "unreachable_active": "warning",
+    "url_aliases": "info",
+    "year_out_of_range": "warning",
 }
 
 
