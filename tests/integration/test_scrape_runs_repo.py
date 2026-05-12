@@ -544,3 +544,90 @@ class TestAcknowledgeIssues:
         session.refresh(vi_other)
         assert vi_mine.lifecycle_state == "acknowledged"
         assert vi_other.lifecycle_state == "new"
+
+
+class TestGetIssuesGroups:
+    def _make_vi(
+        self,
+        session: Session,
+        shop: Shop,
+        run: ScrapeRun,
+        shop_book: ShopBook,
+        issue: str,
+        state: str,
+    ) -> ValidationIssue:
+        vi = ValidationIssue(
+            shop_id=shop.id,
+            shop_book_id=shop_book.id,
+            field="isbn",
+            issue=issue,
+            url=shop_book.url,
+            lifecycle_state=state,
+            last_seen_run_id=run.id,
+            first_seen_run_id=run.id,
+        )
+        session.add(vi)
+        session.flush()
+        return vi
+
+    def test_group_by_type_aggregates(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        from book_scraper.dashboard.queries import get_issues_groups
+
+        # Create a second shop_book for the same shop
+        sb2 = ShopBook(shop_id=shop.id, sku="grp-sb2", url="http://s.lt/b2", title="B2")
+        session.add(sb2)
+        session.flush()
+        self._make_vi(session, shop, scrape_run, shop_book, "missing_isbn", "new")
+        self._make_vi(session, shop, scrape_run, sb2, "missing_isbn", "acknowledged")
+        session.flush()
+
+        groups = get_issues_groups(session, group_by="type")
+        assert len(groups) == 1
+        g = groups[0]
+        assert g["issue_type"] == "missing_isbn"
+        assert g["total"] == 2
+        assert g["by_state"]["new"] == 1
+        assert g["by_state"]["acknowledged"] == 1
+        assert g["shop_name"] is None
+
+    def test_group_by_type_shop_splits_shops(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        from book_scraper.dashboard.queries import get_issues_groups
+
+        # Create a second shop
+        other = Shop(name="other_grp", base_url="https://other-grp.lt")
+        session.add(other)
+        session.flush()
+        other_run = ScrapeRun(shop_id=other.id, started_at=datetime.now(UTC), status="completed", phase="scan")
+        session.add(other_run)
+        session.flush()
+        other_sb = ShopBook(shop_id=other.id, sku="o1", url="http://o.lt/b", title="O")
+        session.add(other_sb)
+        session.flush()
+
+        self._make_vi(session, shop, scrape_run, shop_book, "missing_isbn", "new")
+        self._make_vi(session, other, other_run, other_sb, "missing_isbn", "new")
+
+        groups = get_issues_groups(session, group_by="type_shop")
+        assert len(groups) == 2
+        shops = {g["shop_name"] for g in groups}
+        assert shops == {shop.name, "other_grp"}
+        assert all(g["total"] == 1 for g in groups)
+
+    def test_state_filter(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        from book_scraper.dashboard.queries import get_issues_groups
+
+        sb2 = ShopBook(shop_id=shop.id, sku="sf-sb2", url="http://s.lt/b-sf2", title="B2-sf")
+        session.add(sb2)
+        session.flush()
+        self._make_vi(session, shop, scrape_run, shop_book, "missing_isbn", "new")
+        self._make_vi(session, shop, scrape_run, sb2, "missing_isbn", "resolved")
+
+        groups = get_issues_groups(session, group_by="type", state="new")
+        assert len(groups) == 1
+        assert groups[0]["total"] == 1

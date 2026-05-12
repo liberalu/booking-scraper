@@ -2268,6 +2268,84 @@ def get_not_listed_urls(
     return [dict(r) for r in rows], total
 
 
+def get_issues_groups(
+    session: Session,
+    group_by: str = "type",
+    state: str | None = None,
+    shop_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return grouped issue counts for the grouped-view toggle.
+
+    group_by='type'      -> one row per issue_type across all shops.
+    group_by='type_shop' -> one row per (issue_type, shop).
+    state                -> optional filter: 'new'|'acknowledged'|'snoozed'|'resolved'.
+    shop_id              -> optional shop scope.
+    """
+    count_cols = [
+        func.count().label("total"),
+        func.count()
+        .filter(ValidationIssue.lifecycle_state == "new")
+        .label("cnt_new"),
+        func.count()
+        .filter(ValidationIssue.lifecycle_state == "acknowledged")
+        .label("cnt_acknowledged"),
+        func.count()
+        .filter(ValidationIssue.lifecycle_state == "snoozed")
+        .label("cnt_snoozed"),
+        func.count()
+        .filter(ValidationIssue.lifecycle_state == "resolved")
+        .label("cnt_resolved"),
+    ]
+
+    if group_by == "type_shop":
+        q = (
+            select(
+                ValidationIssue.issue.label("issue_type"),
+                Shop.name.label("shop_name"),
+                Shop.id.label("shop_id_val"),
+                *count_cols,
+            )
+            .outerjoin(Shop, Shop.id == ValidationIssue.shop_id)
+        )
+    else:
+        q = select(
+            ValidationIssue.issue.label("issue_type"),
+            *count_cols,
+        )
+
+    if shop_id is not None:
+        q = q.where(ValidationIssue.shop_id == shop_id)
+    if state:
+        q = q.where(ValidationIssue.lifecycle_state == state)
+
+    if group_by == "type_shop":
+        q = q.group_by(ValidationIssue.issue, Shop.name, Shop.id).order_by(
+            func.count().desc(), ValidationIssue.issue
+        )
+    else:
+        q = q.group_by(ValidationIssue.issue).order_by(func.count().desc())
+
+    rows = session.execute(q).all()
+
+    is_type_shop = group_by == "type_shop"
+    return [
+        {
+            "issue_type": r.issue_type,
+            "shop_name": r.shop_name if is_type_shop else None,
+            "shop_id": r.shop_id_val if is_type_shop else None,
+            "severity": ISSUE_SEVERITY.get(r.issue_type, "warning"),
+            "total": r.total,
+            "by_state": {
+                "new": r.cnt_new,
+                "acknowledged": r.cnt_acknowledged,
+                "snoozed": r.cnt_snoozed,
+                "resolved": r.cnt_resolved,
+            },
+        }
+        for r in rows
+    ]
+
+
 DISCOVERED_URL_SORT_COLUMNS = {
     "url": DiscoveredUrl.url,
     "fails": DiscoveredUrl.fail_count,
