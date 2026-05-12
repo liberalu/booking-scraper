@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.deps import get_db, get_docker_client
@@ -50,6 +50,7 @@ from book_scraper.dashboard.queries import (
     get_shop_runs,
     get_shop_stats,
     get_issue_counts,
+    get_issues_groups,
     get_url_detail,
     get_validation_lifecycle_counts,
     get_validation_summary,
@@ -73,6 +74,7 @@ from book_scraper.db.repo import (
     emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
+    bulk_acknowledge_issues,
     reset_failed_items_to_pending,
     reset_retryable_failures,
     toggle_cron_job,
@@ -2296,7 +2298,7 @@ def api_cron_delete(job_id: int, session: Session = Depends(get_db)) -> dict[str
 
 @router.get("/issues")
 def api_issues(
-    state: str = "open",
+    state: str = "new",
     shop: str = "",
     issue_type: str = "",
     run_id: int = 0,
@@ -2387,6 +2389,57 @@ def api_issues(
         "counts": counts,
         "kind": kind,
     }
+
+
+@router.get("/issues/groups")
+def api_issues_groups(
+    group_by: str = "type",
+    state: str = "",
+    shop: str = "",
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """GET /issues/groups — aggregated issue counts for the grouped view.
+
+    group_by: 'type' (default) or 'type_shop'.
+    state: optional filter ('new'|'acknowledged'|'snoozed'|'resolved').
+    shop: optional shop name filter.
+    """
+    shop_id: int | None = None
+    if shop:
+        shop_obj = session.execute(select(Shop).where(Shop.name == shop)).scalar()
+        shop_id = shop_obj.id if shop_obj else None
+
+    groups = get_issues_groups(
+        session,
+        group_by=group_by,
+        state=state or None,
+        shop_id=shop_id,
+    )
+    return {"groups": groups, "group_by": group_by}
+
+
+@router.post("/issues/bulk-acknowledge")
+def api_bulk_acknowledge_issues(
+    payload: dict[str, Any],
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """POST /issues/bulk-acknowledge — acknowledge all new issues of a type.
+
+    Body: { "issue_type": "missing_isbn", "shop": "humanitas" (optional) }
+    """
+    issue_type = str(payload.get("issue_type") or "")
+    if not issue_type:
+        raise HTTPException(status_code=422, detail="issue_type is required")
+
+    shop_id: int | None = None
+    shop_name = str(payload.get("shop") or "")
+    if shop_name:
+        shop_obj = session.execute(select(Shop).where(Shop.name == shop_name)).scalar()
+        shop_id = shop_obj.id if shop_obj else None
+
+    count = bulk_acknowledge_issues(session, issue_type=issue_type, shop_id=shop_id)
+    session.commit()
+    return {"acknowledged": count}
 
 
 @router.get("/issues/{issue_id}")
