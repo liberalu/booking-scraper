@@ -250,10 +250,12 @@ function HFIssues({ nav, goto }) {
 
   const seed = data.issues.map(i => ({
     id: `ISS-${i.id}`,
+    rawId: i.id,
     type: i.issue,
     sev: i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low',
     shop: i.shop_name || '—',
     book: i.shop_book_title || '—',
+    shopBookId: i.shop_book_id || null,
     url: i.url || '—',
     url_type: i.url_type || '—',
     run_id: i.scrape_run_id,
@@ -537,6 +539,7 @@ function HFIssues({ nav, goto }) {
             }
           />
         ) : (
+        <div style={{overflowX:'auto'}}>
         <HFTable
           onRowClick={(r) => goto('issue-detail', { type: r.type, sev: r.sev, id: r.id, book: r.book, url: r.url, shop: r.shop })}
           columns={[
@@ -554,9 +557,15 @@ function HFIssues({ nav, goto }) {
             { key:'shop', label:'Shop',     w:'0.6fr', sortable:true, muted:true, mono:true,
               cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)'}}>{v}</span>) },
             { key:'book', label:'Book',     w:'1.3fr', sortable:true,
-              cell:(v, r) => dimIfKnown(r, v === '—' ? <span style={{color:'var(--hf-ink4)'}}>—</span> : <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, v === '—' ? <span style={{color:'var(--hf-ink4)'}}>—</span> :
+                r.shopBookId
+                  ? <a onClick={e => { e.stopPropagation(); goto('shop-book-detail', {id: r.shopBookId}); }} style={{color:'var(--hf-ink)', fontWeight:500, cursor:'pointer', textDecoration:'underline', textDecorationColor:'var(--hf-ink4)'}}>{v}</a>
+                  : <span style={{color:'var(--hf-ink)', fontWeight:500}}>{v}</span>
+              ) },
             { key:'url',  label:'URL',      w:'1.2fr', mono:true, muted:true,
-              cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block'}}>{v}</span>) },
+              cell:(v, r) => dimIfKnown(r, v === '—' ? <span style={{color:'var(--hf-ink4)'}}>—</span> :
+                <a href={v} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{color:'var(--hf-ink3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block'}}>{v}</a>
+              ) },
             { key:'detail', label:'Detail', w:'1.6fr',
               cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink2)', fontSize:13}}>{v}</span>) },
             { key:'age',  label:'When',     w:'0.8fr', mono:true, muted:true, sortable:true,
@@ -589,6 +598,7 @@ function HFIssues({ nav, goto }) {
           ]}
           rows={allIssues}
         />
+        </div>
           )
         ) : (
           <div>
