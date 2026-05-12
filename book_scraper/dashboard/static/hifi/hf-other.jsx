@@ -129,53 +129,135 @@ function HFCron({ nav, goto }) {
 
 function HFIssues({ nav, goto }) {
   const HF = getHF();
-  const [tab, setTab] = React.useState('open');
-  const [page, setPage] = React.useState(1);
   const PER_PAGE = 30;
+
+  // Read all filter/page state from URL on mount so bookmarks and reloads restore view.
+  const _sp = () => new URLSearchParams(window.location.search);
+  const [tab,           setTab]           = React.useState(() => { const t = _sp().get('tab'); return ['new','acknowledged','snoozed','resolved','all'].includes(t) ? t : 'new'; });
+  const [page,          setPage]          = React.useState(() => Math.max(parseInt(_sp().get('page') || '1', 10) || 1, 1));
+  const [severity,      setSeverity]      = React.useState(() => _sp().get('severity')   || 'all');
+  const [issueType,     setIssueType]     = React.useState(() => _sp().get('issue_type') || 'all');
+  const [shopFilter,    setShopFilter]    = React.useState(() => _sp().get('shop')       || 'all');
+  const [q,             setQ]             = React.useState(() => _sp().get('q')          || '');
   const [data, setData] = React.useState({
     issues: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
-    counts: { new: 0, recurring: 0, already_seen: 0, open: 0 },
+    counts: { new: 0, acknowledged: 0, snoozed: 0, resolved: 0, total: 0 },
   });
   const [loading, setLoading] = React.useState(true);
 
-  // Server-side filters — changes trigger a fresh API fetch
-  const [runIdInput, setRunIdInput] = React.useState(() =>
-    new URLSearchParams(window.location.search).get('run_id') || ''
-  );
-  const [urlTypeFilter, setUrlTypeFilter] = React.useState('all');
-  const [bookTypeFilter, setBookTypeFilter] = React.useState('all');
+  // Remaining server-side filters
+  const [runIdInput,    setRunIdInput]    = React.useState(() => _sp().get('run_id')    || '');
+  const [urlTypeFilter, setUrlTypeFilter] = React.useState(() => _sp().get('url_type')  || 'all');
+  const [bookTypeFilter,setBookTypeFilter]= React.useState(() => _sp().get('book_type') || 'all');
 
   const runId = parseInt(runIdInput, 10) > 0 ? parseInt(runIdInput, 10) : null;
+  const [showHelp, setShowHelp] = React.useState(false);
 
-  // Reset to page 1 when any filter or tab changes.
-  React.useEffect(() => { setPage(1); }, [tab, runId, urlTypeFilter, bookTypeFilter]);
+  const [shopsList, setShopsList] = React.useState([]);
+  React.useEffect(() => {
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => setShopsList(d.shops || []))
+      .catch(() => {});
+  }, []);
+
+  const [viewMode, setViewMode] = React.useState('list');
+  const [groups, setGroups] = React.useState([]);
+  const [groupsLoading, setGroupsLoading] = React.useState(false);
 
   React.useEffect(() => {
+    if (viewMode === 'list') return;
+    const groupBy = viewMode === 'by_type_shop' ? 'type_shop' : 'type';
+    const params = new URLSearchParams();
+    params.set('group_by', groupBy);
+    if (shopFilter && shopFilter !== 'all') params.set('shop', shopFilter);
+    if (tab && tab !== 'all') params.set('state', tab);
+    setGroupsLoading(true);
+    fetch(`/api/issues/groups?${params}`)
+      .then(r => r.json())
+      .then(d => { setGroups(d.groups || []); setGroupsLoading(false); })
+      .catch(() => setGroupsLoading(false));
+  }, [viewMode, shopFilter, tab]);
+
+  const ISSUE_REFERENCE = [
+    // critical
+    { key:'isbn_duplicate',      sev:'critical', desc:'Same ISBN, two rows in same shop' },
+    { key:'in_stock_no_price',   sev:'critical', desc:'In-stock book has no price' },
+    { key:'non_product_active',  sev:'critical', desc:'URL marked non-product but shop_book is active' },
+    { key:'unreachable_active',  sev:'critical', desc:'URL is unreachable but shop_book still active' },
+    // warning
+    { key:'slug_title_mismatch', sev:'warning',  desc:'URL slug shares zero tokens with book title' },
+    { key:'active_no_price',     sev:'warning',  desc:'Active book has no price at all' },
+    { key:'stale_active',        sev:'warning',  desc:'Active but not seen in last 28 days' },
+    { key:'non_book_has_isbn',   sev:'warning',  desc:'Type=non_book but has a valid ISBN' },
+    { key:'unmatched_has_isbn',  sev:'warning',  desc:'Has ISBN but not matched to canonical book' },
+    { key:'match_isbn_drift',    sev:'warning',  desc:'Matched book\'s ISBN differs from shop_book ISBN' },
+    { key:'sku_duplicate',       sev:'warning',  desc:'Same SKU, two rows in same shop' },
+    // info
+    { key:'book_no_metadata',       sev:'info', desc:'type=book but no ISBN, author, or year' },
+    { key:'no_price_history',       sev:'info', desc:'Active but zero rows in prices table' },
+    { key:'year_out_of_range',      sev:'info', desc:'Year < 1800 or > current year + 2' },
+    { key:'price_zero',             sev:'info', desc:'Price is exactly 0' },
+    { key:'format_is_dimensions',   sev:'info', desc:'Format field looks like dimensions (e.g. 210×148)' },
+    { key:'book_no_signals',        sev:'info', desc:'type=book but no ISBN, author, year, or format' },
+    { key:'orphan_no_url',          sev:'info', desc:'shop_book has no linked discovered_url row' },
+    { key:'url_aliases',            sev:'info', desc:'Same shop_book linked from multiple URLs' },
+    { key:'product_url_non_book',   sev:'info', desc:'URL type=product but shop_book type=non_book' },
+    { key:'title_author_duplicate', sev:'info', desc:'Same title+author, two rows in same shop' },
+  ];
+  const SEV_TONE = { critical:'err', warning:'warn', info:'neutral' };
+
+  // Reset to page 1 when any filter or tab changes (but not on page changes themselves).
+  React.useEffect(() => { setPage(1); }, [tab, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter]);
+
+  // Fetch from server whenever any server-side param changes.
+  React.useEffect(() => {
     let cancelled = false;
-    const stateParam = tab === 'known' ? 'already_seen' : tab === 'all' ? '' : tab;
+    setLoading(true);
+    const stateParam = tab === 'all' ? '' : tab;
     const params = new URLSearchParams({ state: stateParam, page: String(page), per_page: String(PER_PAGE), kind: 'validation' });
-    if (runId) params.set('run_id', String(runId));
-    if (urlTypeFilter && urlTypeFilter !== 'all') params.set('url_type', urlTypeFilter);
-    if (bookTypeFilter && bookTypeFilter !== 'all') params.set('book_type', bookTypeFilter);
+    if (runId)                           params.set('run_id',     String(runId));
+    if (urlTypeFilter  !== 'all')        params.set('url_type',   urlTypeFilter);
+    if (bookTypeFilter !== 'all')        params.set('book_type',  bookTypeFilter);
+    if (severity       !== 'all')        params.set('severity',   severity);
+    if (issueType      !== 'all')        params.set('issue_type', issueType);
+    if (shopFilter     !== 'all')        params.set('shop',       shopFilter);
+    if (q.trim())                        params.set('q',          q.trim());
     fetch(`/api/issues?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tab, page, runId, urlTypeFilter, bookTypeFilter]);
+  }, [tab, page, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter]);
+
+  // Mirror all filter state into the URL bar (replaceState — no history entries).
+  React.useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    tab           !== 'new'  ? sp.set('tab',       tab)            : sp.delete('tab');
+    page          !== 1      ? sp.set('page',      String(page))   : sp.delete('page');
+    severity      !== 'all'  ? sp.set('severity',  severity)       : sp.delete('severity');
+    issueType     !== 'all'  ? sp.set('issue_type',issueType)      : sp.delete('issue_type');
+    shopFilter    !== 'all'  ? sp.set('shop',      shopFilter)     : sp.delete('shop');
+    q.trim()                 ? sp.set('q',         q.trim())       : sp.delete('q');
+    runId                    ? sp.set('run_id',    String(runId))  : sp.delete('run_id');
+    urlTypeFilter !== 'all'  ? sp.set('url_type',  urlTypeFilter)  : sp.delete('url_type');
+    bookTypeFilter!== 'all'  ? sp.set('book_type', bookTypeFilter) : sp.delete('book_type');
+    const qs = sp.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+  }, [tab, page, severity, issueType, shopFilter, q, runId, urlTypeFilter, bookTypeFilter]);
 
   const seed = data.issues.map(i => ({
     id: `ISS-${i.id}`,
     type: i.issue,
     sev: i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low',
-    shop: '—',
+    shop: i.shop_name || '—',
     book: i.shop_book_title || '—',
     url: i.url || '—',
     url_type: i.url_type || '—',
     run_id: i.scrape_run_id,
     detail: i.description || i.raw_value || '—',
     age: i.added_ago,
-    known: i.lifecycle_state === 'already_seen',
+    known: i.lifecycle_state === 'acknowledged',
   }));
 
   // Persist known state + selection in component state (prototype — resets on reload).
@@ -191,28 +273,21 @@ function HFIssues({ nav, goto }) {
 
   const tabSource = allIssues;  // API already filtered by tab
 
+  const counts = data.counts || { new: 0, acknowledged: 0, snoozed: 0, resolved: 0, total: 0 };
   const byTab = {
-    open:     data.counts.open || 0,
-    triage:   0,
-    known:    data.counts.already_seen || 0,
-    snoozed:  0,
-    resolved: 0,
-    all:      data.total || 0,
+    new:          counts.new || 0,
+    acknowledged: counts.acknowledged || 0,
+    snoozed:      counts.snoozed || 0,
+    resolved:     counts.resolved || 0,
+    all:          counts.total || data.total || 0,
   };
 
   // When tab changes, clear selection (selection is only meaningful within a tab).
   React.useEffect(() => { setSelected(new Set()); }, [tab]);
 
-  const filters = useHFFilters(tabSource, {
-    search: { fields: i => `${i.id} ${i.type} ${i.book} ${i.url} ${i.detail} ${i.shop}` },
-    filters: [
-      { id:'sev',  default:'all', match:(i,v) => i.sev === v },
-      { id:'shop', default:'all', match:(i,v) => i.shop === v },
-      { id:'type', default:'all', match:(i,v) => i.type === v },
-    ],
-  });
-
-  const typeOptions = ['all', ...Array.from(new Set(allIssues.map(i => i.type)))];
+  // All filters are server-side — allIssues is already the filtered page.
+  const filters = { filtered: allIssues, activeCount: 0 };
+  const typeOptions = ['all', ...ISSUE_REFERENCE.map(r => r.key)];
 
   const toggleOne = (id) => {
     setSelected(prev => {
@@ -222,7 +297,7 @@ function HFIssues({ nav, goto }) {
     });
   };
   const toggleAllVisible = () => {
-    const visibleIds = filters.filtered.map(r => r.id);
+    const visibleIds = allIssues.map(r => r.id);
     const allOn = visibleIds.every(id => selected.has(id));
     setSelected(prev => {
       const next = new Set(prev);
@@ -241,12 +316,12 @@ function HFIssues({ nav, goto }) {
   };
   const clearSelection = () => setSelected(new Set());
 
-  const allVisibleSelected = filters.filtered.length > 0 &&
-    filters.filtered.every(r => selected.has(r.id));
-  const someVisibleSelected = filters.filtered.some(r => selected.has(r.id));
+  const allVisibleSelected = allIssues.length > 0 &&
+    allIssues.every(r => selected.has(r.id));
+  const someVisibleSelected = allIssues.some(r => selected.has(r.id));
 
   const selectedCount = selected.size;
-  const selectedAreKnown = tab === 'known';   // if we're in Known tab, bulk action is "Mark open"
+  const selectedAreKnown = tab === 'acknowledged';   // if we're in Acknowledged tab, bulk action is "Mark open"
 
   // Checkbox cell component (prevents row click, controls selection)
   const CheckCell = ({ id, checked }) => (
@@ -320,25 +395,51 @@ function HFIssues({ nav, goto }) {
           </HFButton>
         )}
         <HFButton>Assign</HFButton><HFButton variant="primary">Mark resolved</HFButton>
+        <HFButton size="sm" variant={showHelp ? 'primary' : 'subtle'} onClick={() => setShowHelp(h => !h)}
+          title="Show all issue types and severities">?</HFButton>
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Open',      value: String(byTab.open), delta:<span style={{color:'var(--hf-err-ink)'}}>open</span>, tone: byTab.open > 0 ? 'err' : 'ok' },
-        { label:'Known',     value: String(byTab.known), delta:<span style={{color:'var(--hf-ink3)'}}>acknowledged</span> },
+        { label:'New',          value: String(byTab.new),          delta:<span style={{color:'var(--hf-err-ink)'}}>new</span>,          tone: byTab.new > 0 ? 'err' : 'ok' },
+        { label:'Acknowledged', value: String(byTab.acknowledged), delta:<span style={{color:'var(--hf-ink3)'}}>acknowledged</span> },
+        { label:'Snoozed',      value: String(byTab.snoozed),      delta:<span style={{color:'var(--hf-ink3)'}}>snoozed</span> },
+        { label:'Resolved',     value: String(byTab.resolved),     delta:<span style={{color:'var(--hf-ok-ink)'}}>resolved</span> },
       ]}/>
 
       <HFCard style={{marginBottom:'var(--hf-gap)'}}>
         <div style={{padding:`0 var(--hf-card-p)`}}>
-          <HFTabs active={tab} onChange={setTab} tabs={[
-            { id:'open', label:'Open', count: byTab.open },
-            { id:'triage', label:'Needs triage' },
-            { id:'known', label:'Known', count: byTab.known },
-            { id:'snoozed', label:'Snoozed' },
-            { id:'resolved', label:'Resolved' },
-            { id:'all', label:'All', count: byTab.all },
+          <HFTabs active={tab} onChange={t => { setTab(t); }} tabs={[
+            { id:'new',          label:'New',          count: byTab.new },
+            { id:'acknowledged', label:'Acknowledged', count: byTab.acknowledged },
+            { id:'snoozed',      label:'Snoozed',      count: byTab.snoozed },
+            { id:'resolved',     label:'Resolved',     count: byTab.resolved },
+            { id:'all',          label:'All',          count: byTab.all },
           ]}/>
         </div>
       </HFCard>
+
+      {/* Issue type reference modal */}
+      <HFModal open={showHelp} onClose={() => setShowHelp(false)} width={560}>
+        <HFModalHead title="Issue type reference" sub="21 check types across 5 groups" onClose={() => setShowHelp(false)}/>
+        <HFModalBody>
+          <div style={{display:'flex', flexDirection:'column', gap:0}}>
+            {ISSUE_REFERENCE.map((r, i) => (
+              <div key={r.key} style={{
+                display:'flex', alignItems:'center', gap:10,
+                padding:'8px 0',
+                borderBottom: i < ISSUE_REFERENCE.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
+              }}>
+                <HFPill tone={SEV_TONE[r.sev]} style={{flexShrink:0, fontSize:10, width:60, textAlign:'center'}}>{r.sev}</HFPill>
+                <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink)', flexShrink:0, width:190}}>{r.key}</span>
+                <span style={{fontSize:12, color:'var(--hf-ink4)'}}>{r.desc}</span>
+              </div>
+            ))}
+          </div>
+        </HFModalBody>
+        <HFModalFoot>
+          <HFButton variant="primary" onClick={() => setShowHelp(false)}>Close</HFButton>
+        </HFModalFoot>
+      </HFModal>
 
       {/* Bulk action bar — replaces filter bar when ≥1 selected */}
       {selectedCount > 0 ? (
@@ -370,14 +471,20 @@ function HFIssues({ nav, goto }) {
       ) : (
         <HFCard style={{marginBottom:'var(--hf-gap)', overflow:"visible"}} padding={12}>
           <HFFilterBar right={<>
-            <span style={{fontSize:12, color: filters.activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
+            <span style={{fontSize:12, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums'}}>
               {data.total.toLocaleString()} total
             </span>
-            {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
+            {(severity !== 'all' || issueType !== 'all' || shopFilter !== 'all' || q || runId || urlTypeFilter !== 'all' || bookTypeFilter !== 'all') && (
+              <HFButton size="sm" variant="subtle" onClick={() => {
+                setSeverity('all'); setIssueType('all'); setShopFilter('all'); setQ('');
+                setRunIdInput(''); setUrlTypeFilter('all'); setBookTypeFilter('all');
+              }}>Clear filters</HFButton>
+            )}
           </>}>
-            <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={filters.q} onChange={filters.setQ}/>
-            <HFFilter label="Severity" value={filters.vals.sev}  options={['all','high','medium','low']} onChange={v=>filters.setVal('sev',v)}/>
-            <HFFilter label="Type"     value={filters.vals.type} options={typeOptions}                   onChange={v=>filters.setVal('type',v)}/>
+            <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={q} onChange={setQ}/>
+            <HFFilter label="Shop"     value={shopFilter}  options={['all', ...shopsList.map(s => s.name)]} onChange={setShopFilter}/>
+            <HFFilter label="Severity" value={severity}    options={['all','critical','warning','info']}  onChange={setSeverity}/>
+            <HFFilter label="Type"     value={issueType}   options={typeOptions}                          onChange={setIssueType}/>
             <HFFilter label="URL type" value={urlTypeFilter} options={['all','product','non_product','unreachable']} onChange={setUrlTypeFilter}/>
             <HFFilter label="Book type" value={bookTypeFilter} options={['all','book','non_book','audio','ebook']} onChange={setBookTypeFilter}/>
             <div style={{display:'flex', alignItems:'center', gap:6}}>
@@ -401,20 +508,31 @@ function HFIssues({ nav, goto }) {
       )}
 
       <HFCard>
-        {filters.filtered.length === 0 ? (
+        <div style={{display:'flex', gap:'8px', marginBottom:'12px', alignItems:'center', padding:'4px 0 0 0'}}>
+          {[{id:'list',label:'List'},{id:'by_type',label:'By type'},{id:'by_type_shop',label:'By type × shop'}].map(m =>
+            <button key={m.id} onClick={() => setViewMode(m.id)} style={{
+              padding:'4px 12px', borderRadius:'6px', border:'1px solid', cursor:'pointer',
+              background: viewMode === m.id ? 'var(--hf-accent-ink)' : 'transparent',
+              color: viewMode === m.id ? '#fff' : 'inherit',
+              borderColor: viewMode === m.id ? 'var(--hf-accent-ink)' : 'var(--hf-border-strong)',
+            }}>{m.label}</button>
+          )}
+        </div>
+
+        {viewMode === 'list' ? (
+          allIssues.length === 0 ? (
           <HFEmptyState
             title={
-              tab === 'known'    ? 'No known issues yet' :
-              tab === 'snoozed'  ? 'No snoozed issues' :
-              tab === 'resolved' ? 'Resolved issues appear here' :
+              tab === 'acknowledged' ? 'No acknowledged issues yet' :
+              tab === 'snoozed'      ? 'No snoozed issues' :
+              tab === 'resolved'     ? 'Resolved issues appear here' :
               'No issues match these filters'
             }
             sub={
-              tab === 'known'   ? 'Tick an issue\u2019s checkbox and click "Mark as known" to acknowledge it as expected.' :
-              tab === 'snoozed' ? 'Snooze an issue to hide it until later.' :
+              tab === 'acknowledged' ? 'Tick an issue\u2019s checkbox and click "Mark as known" to acknowledge it as expected.' :
+              tab === 'snoozed'      ? 'Snooze an issue to hide it until later.' :
               'Try clearing filters or switching tabs.'
             }
-            onClear={filters.activeCount > 0 ? filters.clearAll : undefined}
           />
         ) : (
         <HFTable
@@ -443,8 +561,39 @@ function HFIssues({ nav, goto }) {
               cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)'}}>{v}</span>) },
             { key:'_',    label:'',         w:'28px',  align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
-          rows={filters.filtered}
+          rows={allIssues}
         />
+          )
+        ) : (
+          <div>
+            {groupsLoading && <div style={{padding:'20px', color:'var(--hf-ink3)'}}>Loading…</div>}
+            {groups.map(g => {
+              const key = viewMode === 'by_type_shop' ? `${g.shop_name}/${g.issue_type}` : g.issue_type;
+              const sevColor = g.severity === 'critical' ? '#e53e3e' : g.severity === 'warning' ? '#d69e2e' : '#718096';
+              return (
+                <div key={key} style={{display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',marginBottom:'6px',border:'1px solid var(--hf-border-strong)',borderRadius:'8px',background:'var(--hf-surface)'}}>
+                  <span style={{width:'10px',height:'10px',borderRadius:'50%',background:sevColor,flexShrink:0}}/>
+                  {viewMode === 'by_type_shop' && <span style={{fontWeight:500,color:'var(--hf-ink3)',fontSize:'0.85em',fontFamily:'var(--hf-mono)'}}>{g.shop_name}</span>}
+                  <span style={{flex:1,fontWeight:500,fontFamily:'var(--hf-mono)',fontSize:'0.9em'}}>{g.issue_type}</span>
+                  {(g.by_state && g.by_state.new > 0) && <span style={{background:'#e53e3e',color:'#fff',borderRadius:'12px',padding:'1px 8px',fontSize:'0.8em',fontWeight:600}}>{g.by_state.new} new</span>}
+                  <span style={{color:'var(--hf-ink3)',fontSize:'0.85em'}}>{g.total} total</span>
+                  <button onClick={() => {
+                    const body = {issue_type: g.issue_type};
+                    if (viewMode === 'by_type_shop') body.shop = g.shop_name;
+                    else if (shopFilter && shopFilter !== 'all') body.shop = shopFilter;
+                    fetch('/api/issues/bulk-acknowledge', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+                      .then(() => { setViewMode('list'); setTab('acknowledged'); });
+                  }} style={{padding:'3px 10px',borderRadius:'5px',border:'1px solid var(--hf-border-strong)',cursor:'pointer',fontSize:'0.8em',background:'transparent',color:'inherit'}}>Ack all</button>
+                  <button onClick={() => {
+                    setIssueType(g.issue_type);
+                    if (viewMode === 'by_type_shop') setShopFilter(g.shop_name || 'all');
+                    setViewMode('list');
+                  }} style={{padding:'3px 10px',borderRadius:'5px',border:'1px solid var(--hf-border-strong)',cursor:'pointer',fontSize:'0.8em',background:'transparent',color:'inherit'}}>View</button>
+                </div>
+              );
+            })}
+            {!groupsLoading && groups.length === 0 && <div style={{textAlign:'center',color:'var(--hf-ink3)',padding:'40px'}}>No issues in this view.</div>}
+          </div>
         )}
       </HFCard>
 
