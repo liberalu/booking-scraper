@@ -409,9 +409,15 @@ function HFIssueDetail({ nav, goto, params }) {
               <div style={{padding:`8px var(--hf-card-p)`, borderTop:`1px solid ${'var(--hf-border-faint)'}`, display:'flex', gap:10, alignItems:'center', fontSize:13}}>
                 <span style={{color:'var(--hf-ink4)', minWidth:80, flexShrink:0, fontSize:12}}>URL</span>
                 <a href={data.url} target="_blank" rel="noopener noreferrer"
-                   style={{color:'var(--hf-accent-ink)', fontFamily:'var(--hf-mono)', fontSize:11, wordBreak:'break-all', textDecoration:'none'}}>
+                   style={{color:'var(--hf-accent-ink)', fontFamily:'var(--hf-mono)', fontSize:11, textDecoration:'none', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0}}>
                   {shortUrl}
                 </a>
+                {data.discovered_url_id && (
+                  <a onClick={e => { e.preventDefault(); goto('url-detail', {id: data.discovered_url_id}); }} href="#"
+                     style={{color:'var(--hf-accent-ink)', fontSize:11, flexShrink:0, textDecoration:'none', cursor:'pointer', whiteSpace:'nowrap'}}>
+                    View in URLs →
+                  </a>
+                )}
               </div>
             )}
           </div>

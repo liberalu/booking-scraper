@@ -2462,6 +2462,19 @@ def api_issue_detail(
         raise HTTPException(status_code=404, detail="Issue not found")
 
     issue, run, shop_book, shop = row
+
+    # Resolve discovered_url_id: use FK directly if set, otherwise look up by URL+shop
+    disc_url_id = issue.discovered_url_id
+    if disc_url_id is None and issue.url and run:
+        disc_url_id = (
+            session.query(DiscoveredUrl.id)
+            .filter(
+                DiscoveredUrl.url == issue.url,
+                DiscoveredUrl.shop_id == run.shop_id,
+            )
+            .scalar()
+        )
+
     return {
         "id": issue.id,
         "kind": "validation",
@@ -2471,6 +2484,7 @@ def api_issue_detail(
         "raw_value": issue.raw_value,
         "scrape_run_id": issue.last_seen_run_id,
         "shop_book_id": issue.shop_book_id,
+        "discovered_url_id": disc_url_id,
         "shop_book_title": shop_book.title if shop_book else None,
         "shop_name": shop.name if shop else None,
         "lifecycle_state": issue.lifecycle_state,
