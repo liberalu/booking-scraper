@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from book_scraper.db.models import ScrapeRun, Shop, ShopBook, ValidationIssue
 from book_scraper.db.repo import (
+    acknowledge_validation_issue,
+    bulk_acknowledge_issues,
     create_scrape_run,
     finalize_run_failsafe,
     finish_scrape_run,
@@ -457,3 +459,88 @@ class TestResolveGoneIssues:
 
         session.refresh(vi)
         assert vi.lifecycle_state == "new"
+
+
+class TestAcknowledgeIssues:
+    def test_acknowledge_sets_acknowledged_state(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        vi = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn", url=shop_book.url, lifecycle_state="new",
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+        )
+        session.add(vi)
+        session.flush()
+
+        result = acknowledge_validation_issue(session, vi.id)
+        session.flush()
+
+        assert result is True
+        session.refresh(vi)
+        assert vi.lifecycle_state == "acknowledged"
+        assert vi.acknowledged_at is not None
+
+    def test_bulk_acknowledge_marks_all_new_for_issue_type(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        books = []
+        for i in range(3):
+            sb = ShopBook(shop_id=shop.id, sku=f"sku-bulk-{i}", title=f"Book {i}",
+                          url=f"http://shop.lt/book-bulk-{i}")
+            session.add(sb)
+            books.append(sb)
+        session.flush()
+
+        for b in books:
+            vi = ValidationIssue(
+                shop_id=shop.id, shop_book_id=b.id, field="isbn",
+                issue="missing_isbn", url=b.url, lifecycle_state="new",
+                last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+            )
+            session.add(vi)
+        session.flush()
+
+        count = bulk_acknowledge_issues(session, issue_type="missing_isbn", shop_id=shop.id)
+        session.flush()
+
+        assert count == len(books)
+        rows = session.execute(
+            select(ValidationIssue).where(ValidationIssue.shop_id == shop.id, ValidationIssue.issue == "missing_isbn")
+        ).scalars().all()
+        assert all(r.lifecycle_state == "acknowledged" for r in rows)
+
+    def test_bulk_acknowledge_scoped_to_shop(
+        self, session: Session, shop: Shop, scrape_run: ScrapeRun, shop_book: ShopBook
+    ) -> None:
+        other_shop = Shop(name="other_ack_shop", base_url="https://other-ack.lt")
+        session.add(other_shop)
+        session.flush()
+        other_run = ScrapeRun(shop_id=other_shop.id, phase="validate", started_at=datetime.now(UTC), status="completed")
+        session.add(other_run)
+        session.flush()
+
+        vi_mine = ValidationIssue(
+            shop_id=shop.id, shop_book_id=shop_book.id, field="isbn",
+            issue="missing_isbn_scope", url=shop_book.url, lifecycle_state="new",
+            last_seen_run_id=scrape_run.id, first_seen_run_id=scrape_run.id,
+        )
+        other_sb = ShopBook(shop_id=other_shop.id, sku="x-scope", title="X", url="http://x.lt/b-scope")
+        session.add_all([vi_mine, other_sb])
+        session.flush()
+
+        vi_other = ValidationIssue(
+            shop_id=other_shop.id, shop_book_id=other_sb.id, field="isbn",
+            issue="missing_isbn_scope", url=other_sb.url, lifecycle_state="new",
+            last_seen_run_id=other_run.id, first_seen_run_id=other_run.id,
+        )
+        session.add(vi_other)
+        session.flush()
+
+        bulk_acknowledge_issues(session, issue_type="missing_isbn_scope", shop_id=shop.id)
+        session.flush()
+
+        session.refresh(vi_mine)
+        session.refresh(vi_other)
+        assert vi_mine.lifecycle_state == "acknowledged"
+        assert vi_other.lifecycle_state == "new"

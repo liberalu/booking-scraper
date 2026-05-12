@@ -1684,6 +1684,29 @@ def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
     return True
 
 
+def bulk_acknowledge_issues(
+    session: Session,
+    issue_type: str,
+    shop_id: int | None = None,
+) -> int:
+    """Acknowledge all 'new' issues of a given type, optionally scoped to a shop.
+
+    Returns the count of rows updated.
+    """
+    stmt = (
+        update(ValidationIssue)
+        .where(
+            ValidationIssue.issue == issue_type,
+            ValidationIssue.lifecycle_state == "new",
+        )
+        .values(lifecycle_state="acknowledged", acknowledged_at=datetime.now(UTC))
+    )
+    if shop_id is not None:
+        stmt = stmt.where(ValidationIssue.shop_id == shop_id)
+    result = session.execute(stmt)
+    return result.rowcount  # type: ignore[return-value]
+
+
 def acknowledge_validation_issues_bulk(
     session: Session,
     issue_type: str | None = None,
