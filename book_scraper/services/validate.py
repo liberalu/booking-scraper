@@ -34,7 +34,7 @@ import unicodedata
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from book_scraper.db.repo import upsert_validation_issues
+from book_scraper.db.repo import resolve_gone_issues, upsert_validation_issues
 
 # Per-shop discover cadence threshold used by the stale_active check (plan 03).
 # Deferred to v2: per-shop cadence field in DB (CONTEXT.md decision D-defer-1).
@@ -95,6 +95,8 @@ class ValidateService:
 
         if issues:
             upsert_validation_issues(self._session, issues, shop_id=shop_id, run_id=run_id)
+
+        resolve_gone_issues(self._session, shop_id=shop_id, run_id=run_id)
 
         counters: dict[str, int] = {}
         for issue in issues:

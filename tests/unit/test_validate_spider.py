@@ -131,5 +131,25 @@ def test_missing_shop_argument_raises() -> None:
         ValidateSpider()
 
 
+def test_closed_calls_finalize_run_failsafe(stub_db_layer) -> None:
+    """closed() must call finalize_run_failsafe so a crash mid-SQL never
+    leaves the run row in 'running'.  The failsafe's own terminal-state
+    guard (added with the run-424 fix) makes this a no-op when the happy
+    path already completed the run — but the call must still happen."""
+    with patch(
+        "book_scraper.spiders.validate.finalize_run_failsafe"
+    ) as mock_failsafe:
+        spider = _build_spider()
+        spider._run_id = 999
+        spider.settings = MagicMock()
+        spider.settings.get.return_value = "postgresql://fake/url"
+
+        spider.closed(reason="finished")
+
+        mock_failsafe.assert_called_once()
+        _args, kwargs = mock_failsafe.call_args
+        assert kwargs.get("status") == "failed" or _args[2] == "failed"
+
+
 async def _drain(spider: ValidateSpider) -> list:
     return [x async for x in spider.start()]
