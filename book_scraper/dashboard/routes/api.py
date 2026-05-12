@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -77,6 +77,7 @@ from book_scraper.db.repo import (
     bulk_acknowledge_issues,
     reset_failed_items_to_pending,
     reset_retryable_failures,
+    snooze_validation_issue,
     toggle_cron_job,
     update_cron_job,
 )
@@ -2504,6 +2505,27 @@ def api_issue_lifecycle(
         issue.acknowledged_at = None
     session.commit()
     return {"id": issue_id, "lifecycle_state": state}
+
+
+@router.patch("/issues/{issue_id}/snooze")
+def api_snooze_issue(
+    issue_id: int,
+    payload: dict[str, Any],
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """PATCH /issues/{issue_id}/snooze — snooze an issue for N days.
+
+    Body: { "days": 7 }  (or 30 or 90)
+    """
+    days = int(payload.get("days") or 7)
+    if days not in (7, 30, 90):
+        raise HTTPException(status_code=422, detail="days must be 7, 30, or 90")
+    until = datetime.now(UTC) + timedelta(days=days)
+    updated = snooze_validation_issue(session, issue_id=issue_id, until=until)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    session.commit()
+    return {"snoozed_until": until.isoformat(), "days": days}
 
 
 # ─── Prices ──────────────────────────────────────────────────────────────────

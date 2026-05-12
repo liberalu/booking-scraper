@@ -152,6 +152,8 @@ function HFIssues({ nav, goto }) {
 
   const runId = parseInt(runIdInput, 10) > 0 ? parseInt(runIdInput, 10) : null;
   const [showHelp, setShowHelp] = React.useState(false);
+  const [snoozeOpenFor, setSnoozeOpenFor] = React.useState(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
 
   const [shopsList, setShopsList] = React.useState([]);
   React.useEffect(() => {
@@ -228,7 +230,7 @@ function HFIssues({ nav, goto }) {
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tab, page, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter]);
+  }, [tab, page, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter, reloadKey]);
 
   // Mirror all filter state into the URL bar (replaceState — no history entries).
   React.useEffect(() => {
@@ -559,7 +561,31 @@ function HFIssues({ nav, goto }) {
               cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink2)', fontSize:13}}>{v}</span>) },
             { key:'age',  label:'When',     w:'0.8fr', mono:true, muted:true, sortable:true,
               cell:(v, r) => dimIfKnown(r, <span style={{color:'var(--hf-ink3)'}}>{v}</span>) },
-            { key:'_',    label:'',         w:'28px',  align:'right', cell:() => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
+            { key:'_',    label:'',         w:'80px',  align:'right', cell:(_, r) => (
+              <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4}}>
+                <div style={{position:'relative', display:'inline-block'}}>
+                  <button
+                    onClick={e => { e.stopPropagation(); setSnoozeOpenFor(snoozeOpenFor === r.id ? null : r.id); }}
+                    title="Snooze"
+                    style={{padding:'2px 6px', fontSize:'0.8em', borderRadius:'4px', border:'1px solid var(--pico-muted-border-color)', cursor:'pointer', background:'transparent', lineHeight:1.4}}
+                  >💤</button>
+                  {snoozeOpenFor === r.id && (
+                    <div style={{position:'absolute', right:0, top:'100%', background:'var(--hf-surface)', border:'1px solid var(--hf-border-strong)', borderRadius:'6px', padding:'4px', zIndex:100, display:'flex', flexDirection:'column', gap:'2px', minWidth:'80px'}}>
+                      {[7, 30, 90].map(d => (
+                        <button key={d} onClick={e => {
+                          e.stopPropagation();
+                          fetch(`/api/issues/${r.id}/snooze`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({days: d})})
+                            .then(() => { setSnoozeOpenFor(null); setReloadKey(k => k + 1); });
+                        }} style={{padding:'4px 8px', fontSize:'0.8em', cursor:'pointer', border:'none', background:'transparent', textAlign:'left', borderRadius:'4px'}}>
+                          {d}d
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span style={{color:'var(--hf-ink4)', display:'flex'}}>{HF_ICONS.chevron}</span>
+              </div>
+            ) },
           ]}
           rows={allIssues}
         />

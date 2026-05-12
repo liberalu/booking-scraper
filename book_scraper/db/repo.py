@@ -1685,6 +1685,21 @@ def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
     return True
 
 
+def snooze_validation_issue(
+    session: Session,
+    issue_id: int,
+    until: datetime,
+) -> bool:
+    """Snooze an issue until a given datetime. Returns True if updated."""
+    issue = session.get(ValidationIssue, issue_id)
+    if issue is None:
+        return False
+    issue.lifecycle_state = "snoozed"
+    issue.snoozed_until = until
+    session.flush()
+    return True
+
+
 def bulk_acknowledge_issues(
     session: Session,
     issue_type: str,
