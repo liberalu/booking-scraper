@@ -1,6 +1,6 @@
-// Canonical Book detail page.
-// Used in the design prototype (HFBook fetches the first available book when no params.id).
-// In the production dashboard, HFBookDetail (hf-books.jsx) handles the routed case with params.id.
+// Canonical Book detail page — the routed component for /books/:id.
+// The fallback "fetch the first book when no params.id" path remains for the
+// design prototype's pager, which renders this component without a route.
 
 function DataSourceBadge({ value }) {
   const map = {
