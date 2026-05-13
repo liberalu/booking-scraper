@@ -1,0 +1,24 @@
+{
+  "uid": "observability-placeholder",
+  "title": "Observability — placeholder",
+  "tags": ["placeholder", "phase-2"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
+  "annotations": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Phase 2 placeholder",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# Observability — placeholder\n\nPhase 2 (Log Infrastructure) successfully provisioned this dashboard, which means:\n\n- The dashboard provider config at `/etc/grafana/provisioning/dashboards/dashboards.yml` is being read.\n- The bind-mount `./monitoring/grafana/dashboards/` → `/var/lib/grafana/dashboards/` is working.\n- Both data sources (Loki, Postgres) are registered.\n\nPhase 3 will replace this dashboard with the real **Scrape runs overview** — failed-runs SQL panel from Postgres + cross-filterable log panels from Loki.\n\n_If you're seeing this in production, Phase 3 hasn't landed yet._"
+      }
+    }
+  ]
+}
