@@ -2226,7 +2226,7 @@ def _validate_cron(expression: str) -> None:
     croniter.is_valid is permissive about 6/7-field forms; we want strict
     5-field so the value round-trips cleanly through scripts/generate_crontab.py.
     """
-    from croniter import croniter  # type: ignore[import-untyped]
+    from croniter import croniter
 
     parts = expression.strip().split()
     if len(parts) != 5 or not croniter.is_valid(expression.strip()):

@@ -7,23 +7,6 @@ from typing import Any
 from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
-_ISBN_RE = re.compile(r"^(?:\d{9}[\dX]|\d{13})$")
-
-
-def _looks_like_isbn(value: str) -> str | None:
-    """Return the normalized ISBN if the input looks like one, else None.
-
-    Strips dashes/spaces, uppercases X. Accepts ISBN-10 (with optional
-    trailing X) and ISBN-13. Used by /api/books?search= to choose between
-    exact ISBN match and substring title/author match.
-    """
-    if not value:
-        return None
-    normalized = value.replace("-", "").replace(" ", "").upper()
-    if not normalized:
-        return None
-    return normalized if _ISBN_RE.fullmatch(normalized) else None
-
 from book_scraper.dashboard.shop_book_filters import (
     ShopBookFieldFilter,
     apply_shop_book_field_filters,
@@ -45,6 +28,23 @@ from book_scraper.db.models import (
 from book_scraper.settings import RETRY_CAP
 
 logger = logging.getLogger(__name__)
+
+_ISBN_RE = re.compile(r"^(?:\d{9}[\dX]|\d{13})$")
+
+
+def _looks_like_isbn(value: str) -> str | None:
+    """Return the normalized ISBN if the input looks like one, else None.
+
+    Strips dashes/spaces, uppercases X. Accepts ISBN-10 (with optional
+    trailing X) and ISBN-13. Used by /api/books?search= to choose between
+    exact ISBN match and substring title/author match.
+    """
+    if not value:
+        return None
+    normalized = value.replace("-", "").replace(" ", "").upper()
+    if not normalized:
+        return None
+    return normalized if _ISBN_RE.fullmatch(normalized) else None
 
 STALE_HEARTBEAT_MINUTES = 5
 # Coarse "dead" threshold for the run-list page's per-row badge. Kept

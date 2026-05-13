@@ -105,7 +105,9 @@ def test_books_search_by_isbn_exact_match(client, db_session):
     other = Book(data_source="shop_inferred", title="Žiedų valdovas SearchA", year=2021)
     db_session.add_all([target, other])
     db_session.flush()
-    db_session.add(BookIsbn(book_id=target.id, isbn="9786094661099", isbn_type="isbn13"))
+    db_session.add(
+        BookIsbn(book_id=target.id, isbn="9786094661099", isbn_type="isbn13")
+    )
     db_session.commit()
 
     resp = client.get("/api/books?search=9786094661099")
@@ -133,8 +135,14 @@ def test_books_search_by_isbn_with_dashes(client, db_session):
 def test_books_search_by_title_substring(client, db_session):
     from book_scraper.db.models import Book
 
-    db_session.add(Book(data_source="shop_inferred", title="Tolkien biography SearchC", year=2020))
-    db_session.add(Book(data_source="shop_inferred", title="UnrelatedSearchC", year=2020))
+    db_session.add(Book(
+        data_source="shop_inferred",
+        title="Tolkien biography SearchC",
+        year=2020,
+    ))
+    db_session.add(Book(
+        data_source="shop_inferred", title="UnrelatedSearchC", year=2020
+    ))
     db_session.commit()
 
     resp = client.get("/api/books?search=Tolkien biography SearchC")
@@ -160,7 +168,9 @@ def test_books_search_by_author_name(client, db_session):
     )
     db_session.add(author)
     db_session.flush()
-    db_session.add(BookAuthor(book_id=book.id, author_id=author.id, role="author", position=0))
+    db_session.add(BookAuthor(
+        book_id=book.id, author_id=author.id, role="author", position=0,
+    ))
     db_session.commit()
 
     resp = client.get("/api/books?search=Tolkien SearchableD")
@@ -172,7 +182,9 @@ def test_books_search_by_author_name(client, db_session):
 def test_books_search_empty_string_acts_like_no_filter(client, db_session):
     from book_scraper.db.models import Book
 
-    db_session.add(Book(data_source="shop_inferred", title="Some Book SearchE", year=2020))
+    db_session.add(Book(
+        data_source="shop_inferred", title="Some Book SearchE", year=2020,
+    ))
     db_session.commit()
 
     resp_with = client.get("/api/books?search=")
