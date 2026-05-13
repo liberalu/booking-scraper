@@ -21,7 +21,14 @@
 
 **Requirements:** LOGINFRA-01, LOGINFRA-02, LOGINFRA-03, LOGINFRA-04, LOGINFRA-05, LOGINFRA-06, LOGINFRA-07
 
-**Plans:** TBD (created via `/gsd:plan-phase 2`)
+**Plans:** 3 plans, 2 waves
+
+**Wave 1** *(parallel)*
+- [ ] 02-01-PLAN.md — Add Loki/Promtail/Grafana to docker-compose.yml + healthchecks + `monitoring/` dir scaffolding (LOGINFRA-01)
+- [ ] 02-02-PLAN.md — Loki single-binary config (TSDB, 7d retention) + Promtail config (docker_sd + 2 file scrape jobs with regex labels) (LOGINFRA-02, 03, 04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-03-PLAN.md — Grafana provisioning (Loki+Postgres data sources) + placeholder dashboard + CLAUDE.md addendum + end-to-end smoke test (LOGINFRA-05, 06, 07)
 
 **Success Criteria:**
 1. `docker compose up -d` brings up loki, promtail, grafana alongside the existing stack with no manual setup
