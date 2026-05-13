@@ -549,20 +549,55 @@ function HFIssues({ nav, goto }) {
 
       <HFCard>
         <div style={{display:'flex', alignItems:'center', padding:'4px 0 0 0', marginBottom:'12px'}}>
-          <div style={{
-            display:'inline-flex', border:'1px solid var(--hf-border-strong)',
-            borderRadius:'7px', overflow:'hidden', background:'var(--hf-subtle)',
-          }}>
-            {[{id:'list',label:'List'},{id:'by_type',label:'By type'},{id:'by_type_shop',label:'By type × shop'}].map((m, i, arr) =>
-              <button key={m.id} onClick={() => setViewMode(m.id)} style={{
-                padding:'5px 14px', border:'none', cursor:'pointer', fontSize:13, fontWeight: viewMode === m.id ? 500 : 400,
-                borderRight: i < arr.length - 1 ? '1px solid var(--hf-border-strong)' : 'none',
-                background: viewMode === m.id ? 'var(--hf-ink)' : 'transparent',
-                color: viewMode === m.id ? '#fff' : 'var(--hf-ink3)',
-                transition: 'background 120ms, color 120ms',
-              }}>{m.label}</button>
-            )}
-          </div>
+          {(() => {
+            const modes = [
+              { id:'list',         label:'List',          icon:(
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <line x1="1" y1="3" x2="13" y2="3"/><line x1="1" y1="7" x2="13" y2="7"/><line x1="1" y1="11" x2="13" y2="11"/>
+                </svg>
+              )},
+              { id:'by_type',      label:'By type',       icon:(
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="1" width="5" height="5" rx="1.5"/><rect x="8" y="1" width="5" height="5" rx="1.5"/>
+                  <rect x="1" y="8" width="5" height="5" rx="1.5"/><rect x="8" y="8" width="5" height="5" rx="1.5"/>
+                </svg>
+              )},
+              { id:'by_type_shop', label:'By type × shop', icon:(
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="1" width="5" height="3" rx="1"/><rect x="8" y="1" width="5" height="3" rx="1"/>
+                  <rect x="1" y="5.5" width="5" height="3" rx="1"/><rect x="8" y="5.5" width="5" height="3" rx="1"/>
+                  <rect x="1" y="10" width="5" height="3" rx="1"/><rect x="8" y="10" width="5" height="3" rx="1"/>
+                </svg>
+              )},
+            ];
+            return (
+              <div style={{
+                display:'inline-flex', gap:'2px',
+                background:'var(--hf-subtle)', border:'1px solid var(--hf-border)',
+                borderRadius:'9px', padding:'3px',
+              }}>
+                {modes.map(m => (
+                  <button key={m.id} onClick={() => setViewMode(m.id)} style={{
+                    display:'flex', alignItems:'center', gap:'6px',
+                    padding:'4px 12px', border:'none', cursor:'pointer', fontSize:12.5,
+                    fontWeight: viewMode === m.id ? 500 : 400,
+                    borderRadius:'6px',
+                    background: viewMode === m.id
+                      ? 'var(--pico-background-color, #fff)'
+                      : 'transparent',
+                    color: viewMode === m.id ? 'var(--hf-ink)' : 'var(--hf-ink3)',
+                    boxShadow: viewMode === m.id
+                      ? '0 1px 3px rgba(0,0,0,0.10), 0 0 0 1px var(--hf-border)'
+                      : 'none',
+                    transition: 'background 150ms, color 150ms, box-shadow 150ms',
+                  }}>
+                    <span style={{display:'flex', opacity: viewMode === m.id ? 1 : 0.55}}>{m.icon}</span>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {viewMode === 'list' ? (
