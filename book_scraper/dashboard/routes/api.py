@@ -1,14 +1,17 @@
 # book_scraper/dashboard/routes/api.py
 from __future__ import annotations
 
+import logging
 import math
 import os
+import shlex
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.deps import get_db, get_docker_client
@@ -82,6 +85,9 @@ from book_scraper.db.repo import (
     update_cron_job,
 )
 from book_scraper.settings import RETRY_CAP
+from book_scraper.spawn_logging import compute_spawn_log_path
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -594,6 +600,31 @@ def _preflight_checks(
     return shop, existing
 
 
+def _wrap_cmd_for_logging(cmd: list[str], log_path: Path) -> list[str]:
+    """Wrap ``cmd`` in ``sh -c`` so stdout+stderr land in ``log_path``.
+
+    Without this, ``containers[].exec_run(detach=True)`` discards the
+    subprocess's output entirely — a crash between run-row creation and
+    the first heartbeat tick is invisible (the reaper later kills the
+    row with ``heartbeat_timeout`` and no traceback is recoverable,
+    see run #427, 2026-05-12).
+
+    The wrapper ensures the log directory exists in the *target*
+    container (the dashboard cannot create it cross-container) and uses
+    ``exec`` so the spawned scrapy replaces the shell — `detach=True`
+    still works because the shell exits before scrapy does and docker
+    tracks the exec PID through the replacement.
+    """
+    quoted_cmd = " ".join(shlex.quote(p) for p in cmd)
+    quoted_dir = shlex.quote(str(log_path.parent))
+    quoted_log = shlex.quote(str(log_path))
+    return [
+        "sh",
+        "-c",
+        f"mkdir -p {quoted_dir} && exec {quoted_cmd} >> {quoted_log} 2>&1",
+    ]
+
+
 def _spawn_scrapy_in_container(
     *,
     phase: str,
@@ -604,6 +635,11 @@ def _spawn_scrapy_in_container(
     cron_job_id: int | None = None,
 ) -> None:
     """Fire-and-forget a `scrapy crawl` inside the scraper container.
+
+    Stdout+stderr are captured to a per-spawn file under
+    ``/var/log/scrapy_runs/`` so silent crashes leave a trail. The
+    log path is also emitted to the dashboard's own logs at INFO so
+    an operator chasing a failed run can find it without guessing.
 
     Raises HTTPException(503) if the docker client or scraper container
     is unreachable.
@@ -637,8 +673,17 @@ def _spawn_scrapy_in_container(
     if cron_job_id is not None:
         cmd.extend(["-a", f"cron_job_id={cron_job_id}"])
 
+    log_path = compute_spawn_log_path("operator", shop)
+    wrapped = _wrap_cmd_for_logging(cmd, log_path)
+    logger.info(
+        "spawn_scrapy: phase=%s shop=%s log=%s",
+        phase,
+        shop,
+        log_path,
+    )
+
     containers[0].exec_run(
-        cmd,
+        wrapped,
         detach=True,
         workdir="/app",
         environment={
@@ -2441,6 +2486,40 @@ def api_bulk_acknowledge_issues(
     count = bulk_acknowledge_issues(session, issue_type=issue_type, shop_id=shop_id)
     session.commit()
     return {"acknowledged": count}
+
+
+@router.post("/issues/bulk-unacknowledge")
+def api_bulk_unacknowledge_issues(
+    payload: dict[str, Any],
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """POST /issues/bulk-unacknowledge — revert bulk acknowledge (undo).
+
+    Body: { "issue_type": "missing_isbn", "shop": "humanitas" (optional) }
+    """
+    issue_type = str(payload.get("issue_type") or "")
+    if not issue_type:
+        raise HTTPException(status_code=422, detail="issue_type is required")
+
+    shop_id: int | None = None
+    shop_name = str(payload.get("shop") or "")
+    if shop_name:
+        shop_obj = session.execute(select(Shop).where(Shop.name == shop_name)).scalar()
+        shop_id = shop_obj.id if shop_obj else None
+
+    stmt = (
+        sa_update(ValidationIssue)
+        .where(
+            ValidationIssue.issue == issue_type,
+            ValidationIssue.lifecycle_state == "acknowledged",
+        )
+        .values(lifecycle_state="new", acknowledged_at=None)
+    )
+    if shop_id is not None:
+        stmt = stmt.where(ValidationIssue.shop_id == shop_id)
+    result = session.execute(stmt)
+    session.commit()
+    return {"unacknowledged": result.rowcount}
 
 
 @router.get("/issues/{issue_id}")

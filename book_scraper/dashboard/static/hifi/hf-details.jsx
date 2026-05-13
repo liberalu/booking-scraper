@@ -197,6 +197,7 @@ const ISSUE_TITLES = {
 
 function HFIssueRelated({ issue, shop, currentId, goto }) {
   const [related, setRelated] = React.useState(null);
+  const [hoveredIdx, setHoveredIdx] = React.useState(null);
 
   React.useEffect(() => {
     const params = new URLSearchParams({ issue_type: issue, shop, state: 'new', per_page: '6' });
@@ -213,15 +214,21 @@ function HFIssueRelated({ issue, shop, currentId, goto }) {
   if (!related || related.length === 0) return null;
 
   return (
-    <HFCard title={`Other ${issue} issues in ${shop}`} sub={`${related.length} more open issues of this type`}>
+    <HFCard title={`Other ${issue} issues in ${shop}`} sub={`${related.length} more open ${related.length === 1 ? 'issue' : 'issues'} of this type`}>
       <div>
         {related.map((i, idx) => (
-          <div key={i.id} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px var(--hf-card-p)',
-            borderBottom: idx < related.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
-            cursor: 'pointer',
-          }} onClick={() => goto('issue-detail', { id: `ISS-${i.id}` })}>
+          <div key={i.id}
+            onMouseEnter={() => setHoveredIdx(idx)}
+            onMouseLeave={() => setHoveredIdx(null)}
+            onClick={() => goto('issue-detail', { id: `ISS-${i.id}` })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px var(--hf-card-p)',
+              borderBottom: idx < related.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
+              cursor: 'pointer',
+              background: hoveredIdx === idx ? 'var(--hf-subtle)' : 'transparent',
+              transition: 'background 150ms ease',
+            }}>
             <span style={{
               width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
               background: i.severity === 'critical' ? '#e53e3e' : i.severity === 'warning' ? '#d69e2e' : '#718096',

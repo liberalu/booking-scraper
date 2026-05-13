@@ -127,6 +127,14 @@ function HFCron({ nav, goto }) {
 
 // ─────────────────────────────── Issues ───────────────────────────────
 
+const SNOOZE_ICON = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="8" r="6.5"/>
+    <path d="M8 4.5v3.75L10.5 10"/>
+    <path d="M11 2.5 L13.5 2.5 L11 5 L13.5 5" strokeWidth="1.2"/>
+  </svg>
+);
+
 function HFIssues({ nav, goto }) {
   const HF = getHF();
   const PER_PAGE = 30;
@@ -154,6 +162,7 @@ function HFIssues({ nav, goto }) {
   const [showHelp, setShowHelp] = React.useState(false);
   const [snoozeOpenFor, setSnoozeOpenFor] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [undoToast, setUndoToast] = React.useState(null); // {issue_type, shop, count, timerId}
 
   const [shopsList, setShopsList] = React.useState([]);
   React.useEffect(() => {
@@ -511,6 +520,33 @@ function HFIssues({ nav, goto }) {
         </HFCard>
       )}
 
+      {undoToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--hf-ink)', color: '#fff',
+          padding: '10px 20px', borderRadius: '8px',
+          display: 'flex', alignItems: 'center', gap: 16,
+          fontSize: 13, fontWeight: 500, zIndex: 1000,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+        }}>
+          <span>{(undoToast.count || 0).toLocaleString()} issues acknowledged</span>
+          <button onClick={() => {
+            clearTimeout(undoToast.timerId);
+            fetch('/api/issues/bulk-unacknowledge', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ issue_type: undoToast.issue_type, shop: undoToast.shop }),
+            }).then(() => { setUndoToast(null); setGroups([]); setViewMode(v => v); });
+          }} style={{
+            background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff',
+            borderRadius: '4px', padding: '3px 10px', cursor: 'pointer',
+            fontWeight: 600, fontSize: 12,
+          }}>Undo</button>
+          <button onClick={() => { clearTimeout(undoToast.timerId); setUndoToast(null); }}
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>✕</button>
+        </div>
+      )}
+
       <HFCard>
         <div style={{display:'flex', gap:'8px', marginBottom:'12px', alignItems:'center', padding:'4px 0 0 0'}}>
           {[{id:'list',label:'List'},{id:'by_type',label:'By type'},{id:'by_type_shop',label:'By type × shop'}].map(m =>
@@ -575,9 +611,10 @@ function HFIssues({ nav, goto }) {
                 <div style={{position:'relative', display:'inline-block'}}>
                   <button
                     onClick={e => { e.stopPropagation(); setSnoozeOpenFor(snoozeOpenFor === r.id ? null : r.id); }}
-                    title="Snooze"
-                    style={{padding:'2px 6px', fontSize:'0.8em', borderRadius:'4px', border:'1px solid var(--pico-muted-border-color)', cursor:'pointer', background:'transparent', lineHeight:1.4}}
-                  >💤</button>
+                    title="Snooze issue"
+                    aria-label="Snooze issue"
+                    style={{padding:'8px 10px', fontSize:'0.8em', borderRadius:'4px', border:'1px solid var(--pico-muted-border-color)', cursor:'pointer', background:'transparent', lineHeight:1.4, color:'var(--hf-ink3)', display:'flex', alignItems:'center'}}
+                  >{SNOOZE_ICON}</button>
                   {snoozeOpenFor === r.id && (
                     <div style={{position:'absolute', right:0, top:'100%', background:'var(--hf-surface)', border:'1px solid var(--hf-border-strong)', borderRadius:'6px', padding:'4px', zIndex:100, display:'flex', flexDirection:'column', gap:'2px', minWidth:'80px'}}>
                       {[7, 30, 90].map(d => (
@@ -611,20 +648,48 @@ function HFIssues({ nav, goto }) {
                   <span style={{width:'10px',height:'10px',borderRadius:'50%',background:sevColor,flexShrink:0}}/>
                   {viewMode === 'by_type_shop' && <span style={{fontWeight:500,color:'var(--hf-ink3)',fontSize:'0.85em',fontFamily:'var(--hf-mono)'}}>{g.shop_name}</span>}
                   <span style={{flex:1,fontWeight:500,fontFamily:'var(--hf-mono)',fontSize:'0.9em'}}>{g.issue_type}</span>
-                  {(g.by_state && g.by_state.new > 0) && <span style={{background:'#e53e3e',color:'#fff',borderRadius:'12px',padding:'1px 8px',fontSize:'0.8em',fontWeight:600}}>{g.by_state.new} new</span>}
+                  {(g.by_state && g.by_state.new > 0) && (() => {
+                    const badgeColor = g.severity === 'critical' ? '#e53e3e'
+                      : g.severity === 'warning' ? '#d97706'
+                      : '#718096';
+                    return (
+                      <span style={{
+                        background: badgeColor, color: '#fff', borderRadius: '12px',
+                        padding: '1px 8px', fontSize: '0.8em', fontWeight: 600, flexShrink: 0,
+                      }}>{g.by_state.new} new</span>
+                    );
+                  })()}
                   <span style={{color:'var(--hf-ink3)',fontSize:'0.85em'}}>{g.total} total</span>
                   <button onClick={() => {
-                    const body = {issue_type: g.issue_type};
-                    if (viewMode === 'by_type_shop') body.shop = g.shop_name;
-                    else if (shopFilter && shopFilter !== 'all') body.shop = shopFilter;
-                    fetch('/api/issues/bulk-acknowledge', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-                      .then(() => { setViewMode('list'); setTab('acknowledged'); });
-                  }} style={{padding:'3px 10px',borderRadius:'5px',border:'1px solid var(--hf-border-strong)',cursor:'pointer',fontSize:'0.8em',background:'transparent',color:'inherit'}}>Ack all</button>
+                    const payload = {
+                      issue_type: g.issue_type,
+                      shop: viewMode === 'by_type_shop' ? g.shop_name : (shopFilter !== 'all' ? shopFilter : undefined),
+                    };
+                    fetch('/api/issues/bulk-acknowledge', {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify(payload),
+                    }).then(r => r.json()).then(d => {
+                      if (undoToast?.timerId) clearTimeout(undoToast.timerId);
+                      const timerId = setTimeout(() => setUndoToast(null), 5000);
+                      setUndoToast({ ...payload, count: d.acknowledged, timerId });
+                      setFilters && setFilters(f => ({...f}));
+                      setGroups(gs => gs.map(x => x === g ? {...x, by_state: {...(x.by_state||{}), new: 0}} : x));
+                    });
+                  }} style={{
+                    padding: '4px 12px', borderRadius: '5px', border: '1px solid var(--pico-muted-border-color)',
+                    cursor: 'pointer', fontSize: '0.8em', background: 'transparent',
+                    color: 'var(--hf-ink3)',
+                  }}>{`Ack (${(g.by_state?.new || 0).toLocaleString()})`}</button>
                   <button onClick={() => {
                     setIssueType(g.issue_type);
                     if (viewMode === 'by_type_shop') setShopFilter(g.shop_name || 'all');
                     setViewMode('list');
-                  }} style={{padding:'3px 10px',borderRadius:'5px',border:'1px solid var(--hf-border-strong)',cursor:'pointer',fontSize:'0.8em',background:'transparent',color:'inherit'}}>View</button>
+                  }} style={{
+                    padding: '4px 12px', borderRadius: '5px', border: '1px solid var(--hf-accent)',
+                    cursor: 'pointer', fontSize: '0.8em', background: 'var(--hf-accent)',
+                    color: '#fff', fontWeight: 500,
+                  }}>View</button>
                 </div>
               );
             })}
