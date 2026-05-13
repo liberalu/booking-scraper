@@ -2218,6 +2218,22 @@ def api_cron_toggle(job_id: int, session: Session = Depends(get_db)) -> dict[str
     return {"id": job_id, "enabled": new_enabled}
 
 
+def _validate_cron(expression: str) -> None:
+    """Reject cron expressions that aren't valid 5-field cron.
+
+    croniter.is_valid is permissive about 6/7-field forms; we want strict
+    5-field so the value round-trips cleanly through scripts/generate_crontab.py.
+    """
+    from croniter import croniter  # type: ignore[import-untyped]
+
+    parts = expression.strip().split()
+    if len(parts) != 5 or not croniter.is_valid(expression.strip()):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid cron expression: {expression!r} (expected 5 fields)",
+        )
+
+
 def _chain_would_create_cycle(
     session: Any, current_job_id: int | None, chain_to_id: int
 ) -> bool:
