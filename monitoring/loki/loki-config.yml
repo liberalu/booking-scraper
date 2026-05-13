@@ -1,0 +1,63 @@
+# Loki single-binary config for the book-scraper observability stack.
+#
+# Design notes:
+# - Single-binary mode: filesystem chunk store, no S3/MinIO, no Memberlist.
+# - TSDB schema (Loki 3.0+ default).
+# - 7-day retention enabled via the compactor (LOGINFRA-04).
+# - auth_enabled: false — single-tenant deployment on a private compose network.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+  filesystem:
+    directory: /loki/chunks
+
+limits_config:
+  # 7-day retention satisfies LOGINFRA-04.
+  retention_period: 168h
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Single-tenant defaults; keep modest to avoid surprise OOM on a personal machine.
+  ingestion_rate_mb: 4
+  ingestion_burst_size_mb: 6
+  max_entries_limit_per_query: 5000
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: filesystem
+
+# Ruler / alertmanager intentionally absent — alerting deferred per CONTEXT.md.
