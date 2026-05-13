@@ -1,0 +1,14 @@
+# Grafana data source — Loki.
+# Lives on the default compose network; reached by service name.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60

@@ -1,0 +1,19 @@
+# Grafana data source — Postgres (book_scraper DB).
+# Credentials reuse the dev creds from docker-compose.yml. A dedicated
+# read-only role is deferred to a future cleanup.
+apiVersion: 1
+
+datasources:
+  - name: Postgres (book_scraper)
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: postgres
+    secureJsonData:
+      password: postgres
+    jsonData:
+      database: book_scraper
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    editable: false
