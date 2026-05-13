@@ -76,7 +76,78 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - scraper_logs:/var/log:ro
 
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki:/etc/loki:ro
+      - loki_data:/loki
+    # No healthcheck declared — Loki's official image is Distroless (no shell,
+    # no wget) so the standard `CMD-SHELL wget /ready` pattern doesn't work.
+    # Plan smoke test (Task 8) verifies Loki's `/ready` endpoint directly via
+    # curl from the host. Other services use `depends_on: service_started`
+    # to wait for the container to start (not health).
+
+  promtail:
+    image: grafana/promtail:latest
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Host containers dir for the docker_sd_configs __path__ rewrite —
+      # Promtail tails the JSON-file logs Docker writes per container.
+      # Without this mount the `containers` scrape job in
+      # monitoring/promtail/promtail-config.yml resolves __path__ to
+      # /var/lib/docker/containers/<id>/<id>-json.log and gets ENOENT
+      # inside the Promtail container. On macOS Docker Desktop the path
+      # is surfaced from the VM via the bind mount; works the same as
+      # /var/run/docker.sock does for the `dashboard` service.
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - scraper_logs:/var/log:ro
+      - ./monitoring/promtail:/etc/promtail:ro
+    # No healthcheck — Distroless image, same reason as Loki. The Task 8
+    # smoke test verifies end-to-end that lines reach Loki, which proves
+    # Promtail is functional.
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    depends_on:
+      loki:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      # Grafana's official image is Alpine-based and has wget. Probe the
+      # internal /api/health endpoint — it returns {"database":"ok",...}
+      # once the DB connection is established.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health | grep -q '\"database\": \"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
 volumes:
   pgdata:
   pgdata_test:
   scraper_logs:
+  loki_data:
+  grafana_data:
