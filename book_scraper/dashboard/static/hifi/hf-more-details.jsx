@@ -209,6 +209,7 @@ function HFScheduleDetail({ nav, goto, params }) {
   const [loading, setLoading] = React.useState(true);
   const [toggling, setToggling] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [deleteState, setDeleteState] = React.useState({ open: false, dependents: null, error: null, busy: false });
 
   const reload = React.useCallback(() => {
     if (!jobId) { setLoading(false); return; }
@@ -278,6 +279,9 @@ function HFScheduleDetail({ nav, goto, params }) {
         </HFButton>
         <HFButton onClick={() => setEditOpen(true)}>
           <span style={{display:'flex'}}>{HF_ICONS.settings}</span> Edit
+        </HFButton>
+        <HFButton variant="danger" onClick={() => setDeleteState({ open: true, dependents: null, error: null, busy: false })}>
+          Delete
         </HFButton>
         <HFButton variant="primary" onClick={runJobNow}>
           <span style={{display:'flex'}}>{HF_ICONS.play}</span> Run now
@@ -405,6 +409,90 @@ function HFScheduleDetail({ nav, goto, params }) {
           onClose={(saved) => { setEditOpen(false); if (saved) reload(); }}
         />
       )}
+
+      <HFModal open={deleteState.open}
+               onClose={() => setDeleteState(s => ({ ...s, open: false }))}
+               width={520}>
+        <HFModalHead
+          title="Delete schedule"
+          sub={name ? `Confirm deletion of ${name}` : undefined}
+          onClose={() => setDeleteState(s => ({ ...s, open: false }))}
+        />
+        <HFModalBody>
+          {deleteState.dependents && deleteState.dependents.length > 0 ? (
+            <>
+              <div style={{ fontSize: 13, color: 'var(--hf-ink2)', marginBottom: 10 }}>
+                Cannot delete — these schedules chain to this one. Unlink each
+                one first (open it, click Edit, clear the chain), then come
+                back to delete.
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {deleteState.dependents.map(d => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => goto('schedule-detail', { id: d.id })}
+                      style={{
+                        background: 'var(--hf-subtle)', border: '1px solid var(--hf-border)',
+                        borderRadius: 6, padding: '8px 12px', cursor: 'pointer',
+                        width: '100%', textAlign: 'left',
+                        fontFamily: 'var(--hf-mono)', fontSize: 12, color: 'var(--hf-ink)',
+                      }}
+                    >{d.name} →</button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : deleteState.error ? (
+            <div style={{ fontSize: 13, color: 'var(--hf-err-ink)' }}>
+              {deleteState.error}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--hf-ink2)' }}>
+              Delete schedule <strong>{name}</strong>? This cannot be undone.
+            </div>
+          )}
+        </HFModalBody>
+        <HFModalFoot>
+          <HFButton size="sm" variant="ghost"
+                    onClick={() => setDeleteState(s => ({ ...s, open: false }))}>
+            {deleteState.dependents ? 'Close' : 'Cancel'}
+          </HFButton>
+          {!deleteState.dependents && (
+            <HFButton size="sm" variant="danger" disabled={deleteState.busy}
+                      onClick={async () => {
+                        setDeleteState(s => ({ ...s, busy: true, error: null }));
+                        try {
+                          const resp = await fetch(`/api/cron/${jobId}`, { method: 'DELETE' });
+                          if (resp.status === 200) {
+                            window.HF_APP?.toast?.({ tone: 'ok', message: 'Schedule deleted' });
+                            goto('cron');
+                            return;
+                          }
+                          if (resp.status === 409) {
+                            const body = await resp.json().catch(() => ({}));
+                            const detail = body?.detail || {};
+                            setDeleteState({
+                              open: true, busy: false, error: null,
+                              dependents: Array.isArray(detail.dependents) ? detail.dependents : [],
+                            });
+                            return;
+                          }
+                          const body = await resp.json().catch(() => ({}));
+                          setDeleteState(s => ({
+                            ...s, busy: false,
+                            error: (body?.detail && typeof body.detail === 'string')
+                              ? body.detail : `Error ${resp.status}`,
+                          }));
+                        } catch (e) {
+                          setDeleteState(s => ({ ...s, busy: false, error: String(e) }));
+                        }
+                      }}>
+              {deleteState.busy ? 'Deleting…' : 'Delete'}
+            </HFButton>
+          )}
+        </HFModalFoot>
+      </HFModal>
     </HFShell>
   );
 }
