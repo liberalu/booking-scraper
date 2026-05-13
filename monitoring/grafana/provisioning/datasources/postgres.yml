@@ -3,8 +3,13 @@
 # read-only role is deferred to a future cleanup.
 apiVersion: 1
 
+deleteDatasources:
+  - name: Postgres (book_scraper)
+    orgId: 1
+
 datasources:
   - name: Postgres (book_scraper)
+    uid: postgres-bookscraper
     type: postgres
     access: proxy
     url: postgres:5432
