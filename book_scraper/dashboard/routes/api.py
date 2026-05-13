@@ -1825,6 +1825,7 @@ def api_books(
     has_isbn: bool | None = None,
     has_shops: bool | None = None,
     year: int | None = None,
+    search: str | None = None,
     page: int = 1,
     per_page: int = 50,
     session: Session = Depends(get_db),
@@ -1837,6 +1838,7 @@ def api_books(
         has_isbn=has_isbn,
         has_shops=has_shops,
         year=year,
+        search=search,
         page=page,
         per_page=per_page,
     )
