@@ -1625,3 +1625,167 @@ def test_api_create_run_rejects_concurrent_validate(
 
     resp = client.post("/api/runs", json={"shop": "vaga", "phase": "validate"})
     assert resp.status_code == 409
+
+
+# ----- Cron expression validation (Task 2/3) -------------------------------
+
+
+@pytest.mark.integration
+def test_cron_create_rejects_invalid_expression(
+    client: TestClient, db_session: Session
+) -> None:
+    resp = client.post(
+        "/api/cron",
+        json={
+            "shop": "vaga",
+            "phase": "discover",
+            "strategy": "sitemap",
+            "cron_expression": "not a cron",
+        },
+    )
+    assert resp.status_code == 422
+    assert "Invalid cron expression" in resp.json()["detail"]
+
+
+@pytest.mark.integration
+def test_cron_create_rejects_six_field(
+    client: TestClient, db_session: Session
+) -> None:
+    resp = client.post(
+        "/api/cron",
+        json={
+            "shop": "vaga",
+            "phase": "discover",
+            "strategy": "sitemap",
+            "cron_expression": "0 0 2 * * *",
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.integration
+def test_cron_update_rejects_invalid_expression(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db.repo import create_cron_job, get_cron_job
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    job = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.commit()
+
+    resp = client.patch(
+        f"/api/cron/{job.id}",
+        json={"cron_expression": "definitely not cron"},
+    )
+    assert resp.status_code == 422
+
+    db_session.expire_all()
+    saved = get_cron_job(db_session, job.id)
+    assert saved is not None
+    assert saved.cron_expression == "0 2 * * *"  # unchanged
+
+
+@pytest.mark.integration
+def test_cron_update_without_cron_expression_skips_validation(
+    client: TestClient, db_session: Session
+) -> None:
+    """PATCH should not require cron_expression — only validate when present."""
+    from book_scraper.db.repo import create_cron_job
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    job = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.commit()
+
+    resp = client.patch(f"/api/cron/{job.id}", json={"strategy": "categories"})
+    assert resp.status_code == 200
+
+
+# ----- Cron delete with dependents (Task 4) --------------------------------
+
+
+@pytest.mark.integration
+def test_cron_delete_with_dependents_returns_409(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db.repo import create_cron_job, get_cron_job
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    parent = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.flush()
+    child = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 4 * * *", chain_to_job_id=parent.id,
+    )
+    db_session.commit()
+
+    resp = client.delete(f"/api/cron/{parent.id}")
+    assert resp.status_code == 409
+
+    body = resp.json()["detail"]
+    assert "dependents" in body
+    assert len(body["dependents"]) == 1
+    assert body["dependents"][0]["id"] == child.id
+    assert body["dependents"][0]["name"] == "vaga.scan.default"
+
+    # Both jobs still present
+    db_session.expire_all()
+    assert get_cron_job(db_session, parent.id) is not None
+    assert get_cron_job(db_session, child.id) is not None
+
+
+@pytest.mark.integration
+def test_cron_delete_without_dependents_succeeds(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db.repo import create_cron_job, get_cron_job
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    job = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.commit()
+
+    resp = client.delete(f"/api/cron/{job.id}")
+    assert resp.status_code == 200
+
+    db_session.expire_all()
+    assert get_cron_job(db_session, job.id) is None
+
+
+@pytest.mark.integration
+def test_cron_delete_succeeds_after_dependent_unlinked(
+    client: TestClient, db_session: Session
+) -> None:
+    """Operator-flow regression: PATCH clear_chain then DELETE works."""
+    from book_scraper.db.repo import create_cron_job, get_cron_job
+
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+    parent = create_cron_job(
+        db_session, shop_id=shop.id, phase="discover", strategy="sitemap",
+        args="", cron_expression="0 2 * * *",
+    )
+    db_session.flush()
+    child = create_cron_job(
+        db_session, shop_id=shop.id, phase="scan", strategy=None,
+        args="", cron_expression="0 4 * * *", chain_to_job_id=parent.id,
+    )
+    db_session.commit()
+
+    resp = client.patch(f"/api/cron/{child.id}", json={"clear_chain": True})
+    assert resp.status_code == 200
+
+    resp = client.delete(f"/api/cron/{parent.id}")
+    assert resp.status_code == 200
+
+    db_session.expire_all()
+    assert get_cron_job(db_session, parent.id) is None

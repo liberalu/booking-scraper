@@ -2276,6 +2276,7 @@ def api_cron_create(
         raise HTTPException(
             status_code=422, detail="phase must be 'discover' or 'scan'"
         )
+    _validate_cron(body.cron_expression)
     if body.chain_to_id is not None:
         chain_target = get_cron_job(session, body.chain_to_id)
         if chain_target is None:
