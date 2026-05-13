@@ -2315,6 +2315,8 @@ def api_cron_update(
     job = get_cron_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if body.cron_expression is not None:
+        _validate_cron(body.cron_expression)
     fields: dict[str, Any] = {}
     if body.cron_expression is not None:
         fields["cron_expression"] = body.cron_expression
