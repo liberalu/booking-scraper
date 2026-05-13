@@ -84,13 +84,13 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | VAL-01..14 | Phase 1 (v1.1) | Complete |
-| LOGINFRA-01..07 | TBD | Pending |
-| DASH-01..06 | TBD | Pending |
-| CODEOBS-01..08 | TBD | Pending |
+| LOGINFRA-01..07 | Phase 2 (v1.2) | Pending |
+| DASH-01..06 | Phase 3 (v1.2) | Pending |
+| CODEOBS-01..08 | Phase 4 (v1.2) | Pending |
 
 **Coverage:**
 - v1.1 requirements: 14 total, 14 mapped, 0 unmapped ✓
-- v1.2 requirements: 21 total, 0 mapped (roadmap pending) ⚠
+- v1.2 requirements: 21 total, 21 mapped, 0 unmapped ✓
 
 ---
 *Requirements defined: 2026-05-10*
