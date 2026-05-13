@@ -1,10 +1,28 @@
 import logging
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
+
+_ISBN_RE = re.compile(r"^(?:\d{9}[\dX]|\d{13})$")
+
+
+def _looks_like_isbn(value: str) -> str | None:
+    """Return the normalized ISBN if the input looks like one, else None.
+
+    Strips dashes/spaces, uppercases X. Accepts ISBN-10 (with optional
+    trailing X) and ISBN-13. Used by /api/books?search= to choose between
+    exact ISBN match and substring title/author match.
+    """
+    if not value:
+        return None
+    normalized = value.replace("-", "").replace(" ", "").upper()
+    if not normalized:
+        return None
+    return normalized if _ISBN_RE.fullmatch(normalized) else None
 
 from book_scraper.dashboard.shop_book_filters import (
     ShopBookFieldFilter,
@@ -2626,6 +2644,7 @@ def list_books(
     has_isbn: bool | None = None,
     has_shops: bool | None = None,
     year: int | None = None,
+    search: str | None = None,
     page: int = 1,
     per_page: int = 50,
 ) -> dict[str, Any]:
@@ -2661,6 +2680,27 @@ def list_books(
                 select(ShopBook.book_id).where(ShopBook.book_id.is_not(None)).distinct()
             )
         )
+
+    if search and search.strip():
+        as_isbn = _looks_like_isbn(search)
+        if as_isbn:
+            base = base.where(
+                Book.id.in_(
+                    select(BookIsbn.book_id).where(BookIsbn.isbn == as_isbn)
+                )
+            )
+        else:
+            like = f"%{search.strip()}%"
+            base = base.where(
+                or_(
+                    Book.title.ilike(like),
+                    Book.id.in_(
+                        select(BookAuthor.book_id)
+                        .join(Author, Author.id == BookAuthor.author_id)
+                        .where(Author.name.ilike(like))
+                    ),
+                )
+            )
 
     total = session.execute(
         select(func.count()).select_from(base.subquery())

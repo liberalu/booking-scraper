@@ -93,3 +93,90 @@ def test_book_detail_returns_full_record_with_shops(db_session, client):
 def test_book_detail_404_for_unknown(client):
     response = client.get("/api/books/999999999")
     assert response.status_code == 404
+
+
+# ----- Smart search (Task 5/6) ---------------------------------------------
+
+
+def test_books_search_by_isbn_exact_match(client, db_session):
+    from book_scraper.db.models import Book, BookIsbn
+
+    target = Book(data_source="shop_inferred", title="Hobitas SearchA", year=2020)
+    other = Book(data_source="shop_inferred", title="Žiedų valdovas SearchA", year=2021)
+    db_session.add_all([target, other])
+    db_session.flush()
+    db_session.add(BookIsbn(book_id=target.id, isbn="9786094661099", isbn_type="isbn13"))
+    db_session.commit()
+
+    resp = client.get("/api/books?search=9786094661099")
+    assert resp.status_code == 200
+    titles = [b["title"] for b in resp.json()["books"]]
+    assert "Hobitas SearchA" in titles
+    assert "Žiedų valdovas SearchA" not in titles
+
+
+def test_books_search_by_isbn_with_dashes(client, db_session):
+    from book_scraper.db.models import Book, BookIsbn
+
+    book = Book(data_source="shop_inferred", title="Test Dash ISBN SearchB", year=2020)
+    db_session.add(book)
+    db_session.flush()
+    db_session.add(BookIsbn(book_id=book.id, isbn="9786094661080", isbn_type="isbn13"))
+    db_session.commit()
+
+    resp = client.get("/api/books?search=978-609-466-1080")
+    assert resp.status_code == 200
+    titles = [b["title"] for b in resp.json()["books"]]
+    assert "Test Dash ISBN SearchB" in titles
+
+
+def test_books_search_by_title_substring(client, db_session):
+    from book_scraper.db.models import Book
+
+    db_session.add(Book(data_source="shop_inferred", title="Tolkien biography SearchC", year=2020))
+    db_session.add(Book(data_source="shop_inferred", title="UnrelatedSearchC", year=2020))
+    db_session.commit()
+
+    resp = client.get("/api/books?search=Tolkien biography SearchC")
+    assert resp.status_code == 200
+    titles = [b["title"] for b in resp.json()["books"]]
+    assert "Tolkien biography SearchC" in titles
+    assert "UnrelatedSearchC" not in titles
+
+
+def test_books_search_by_author_name(client, db_session):
+    from book_scraper.db.models import Author, Book, BookAuthor
+
+    book = Book(
+        data_source="shop_inferred",
+        title="A title nothing like the author SearchD",
+        year=2020,
+    )
+    db_session.add(book)
+    db_session.flush()
+    author = Author(
+        name="J.R.R. Tolkien SearchableD",
+        normalized_name="j.r.r. tolkien searchabled",
+    )
+    db_session.add(author)
+    db_session.flush()
+    db_session.add(BookAuthor(book_id=book.id, author_id=author.id, role="author", position=0))
+    db_session.commit()
+
+    resp = client.get("/api/books?search=Tolkien SearchableD")
+    assert resp.status_code == 200
+    titles = [b["title"] for b in resp.json()["books"]]
+    assert "A title nothing like the author SearchD" in titles
+
+
+def test_books_search_empty_string_acts_like_no_filter(client, db_session):
+    from book_scraper.db.models import Book
+
+    db_session.add(Book(data_source="shop_inferred", title="Some Book SearchE", year=2020))
+    db_session.commit()
+
+    resp_with = client.get("/api/books?search=")
+    resp_without = client.get("/api/books")
+    assert resp_with.status_code == 200
+    assert resp_without.status_code == 200
+    assert resp_with.json()["total"] == resp_without.json()["total"]
