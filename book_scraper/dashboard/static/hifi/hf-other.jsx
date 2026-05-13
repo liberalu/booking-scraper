@@ -548,15 +548,21 @@ function HFIssues({ nav, goto }) {
       )}
 
       <HFCard>
-        <div style={{display:'flex', gap:'8px', marginBottom:'12px', alignItems:'center', padding:'4px 0 0 0'}}>
-          {[{id:'list',label:'List'},{id:'by_type',label:'By type'},{id:'by_type_shop',label:'By type × shop'}].map(m =>
-            <button key={m.id} onClick={() => setViewMode(m.id)} style={{
-              padding:'4px 12px', borderRadius:'6px', border:'1px solid', cursor:'pointer',
-              background: viewMode === m.id ? 'var(--hf-accent-ink)' : 'transparent',
-              color: viewMode === m.id ? '#fff' : 'inherit',
-              borderColor: viewMode === m.id ? 'var(--hf-accent-ink)' : 'var(--hf-border-strong)',
-            }}>{m.label}</button>
-          )}
+        <div style={{display:'flex', alignItems:'center', padding:'4px 0 0 0', marginBottom:'12px'}}>
+          <div style={{
+            display:'inline-flex', border:'1px solid var(--hf-border-strong)',
+            borderRadius:'7px', overflow:'hidden', background:'var(--hf-subtle)',
+          }}>
+            {[{id:'list',label:'List'},{id:'by_type',label:'By type'},{id:'by_type_shop',label:'By type × shop'}].map((m, i, arr) =>
+              <button key={m.id} onClick={() => setViewMode(m.id)} style={{
+                padding:'5px 14px', border:'none', cursor:'pointer', fontSize:13, fontWeight: viewMode === m.id ? 500 : 400,
+                borderRight: i < arr.length - 1 ? '1px solid var(--hf-border-strong)' : 'none',
+                background: viewMode === m.id ? 'var(--hf-ink)' : 'transparent',
+                color: viewMode === m.id ? '#fff' : 'var(--hf-ink3)',
+                transition: 'background 120ms, color 120ms',
+              }}>{m.label}</button>
+            )}
+          </div>
         </div>
 
         {viewMode === 'list' ? (
