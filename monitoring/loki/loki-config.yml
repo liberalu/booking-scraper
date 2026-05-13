@@ -60,4 +60,8 @@ compactor:
   retention_delete_worker_count: 150
   delete_request_store: filesystem
 
-# Ruler / alertmanager intentionally absent — alerting deferred per CONTEXT.md.
+ruler:
+  # Ruler / alertmanager intentionally disabled — alerting deferred per CONTEXT.md
+  # (v1.2 is visibility-only). Setting enable_api: false explicitly so Loki
+  # doesn't attempt to expose the rules API or warn about missing storage.
+  enable_api: false
