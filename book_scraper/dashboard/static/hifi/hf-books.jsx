@@ -24,23 +24,28 @@ function HFBooks({ nav, goto }) {
   const [data, setData] = React.useState({ books: [], total: 0, pages: 1 });
   const [loading, setLoading] = React.useState(true);
 
+  const [debouncedQ, setDebouncedQ] = React.useState(q);
+  React.useEffect(() => {
+    const id = setTimeout(() => setDebouncedQ(q), 150);
+    return () => clearTimeout(id);
+  }, [q]);
+
   React.useEffect(() => {
     const params = new URLSearchParams();
     if (dataSource !== 'all') params.set('data_source', dataSource);
     if (hasIsbn !== 'any')    params.set('has_isbn', hasIsbn === 'yes' ? 'true' : 'false');
     if (hasShops !== 'any')   params.set('has_shops', hasShops === 'linked' ? 'true' : 'false');
     if (year)                 params.set('year', year);
+    if (debouncedQ.trim())    params.set('search', debouncedQ.trim());
     params.set('page', String(page));
     params.set('per_page', String(PER_PAGE));
     setLoading(true);
     fetch(`/api/books?${params}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); });
-  }, [dataSource, hasIsbn, hasShops, year, page]);
+  }, [dataSource, hasIsbn, hasShops, year, debouncedQ, page]);
 
-  const visible = q
-    ? data.books.filter(b => (b.title || '').toLowerCase().includes(q.toLowerCase()))
-    : data.books;
+  const visible = data.books;
 
   return (
     <HFShell {...nav} goto={goto}>
@@ -50,15 +55,16 @@ function HFBooks({ nav, goto }) {
             {data.total.toLocaleString()} books
           </span>
         </>}>
-          <HFSearch placeholder="Title, ISBN…" width={260} value={q} onChange={setQ} />
+          <HFSearch placeholder="Title, author, ISBN…" width={260} value={q}
+            onChange={v => { setQ(v); setPage(1); }} />
           <HFFilter label="Source"
             value={dataSource}
             options={['all', 'ibiblioteka', 'shop_inferred', 'manual']}
-            onChange={setDataSource} />
+            onChange={v => { setDataSource(v); setPage(1); }} />
           <HFFilter label="ISBN" value={hasIsbn} options={['any', 'yes', 'no']}
-            onChange={setHasIsbn} allLabel="any" />
+            onChange={v => { setHasIsbn(v); setPage(1); }} allLabel="any" />
           <HFFilter label="Shops" value={hasShops} options={['any', 'linked', 'unlinked']}
-            onChange={setHasShops} allLabel="any" />
+            onChange={v => { setHasShops(v); setPage(1); }} allLabel="any" />
         </HFFilterBar>
       </HFCard>
 
