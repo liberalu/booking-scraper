@@ -548,7 +548,7 @@ function HFIssues({ nav, goto }) {
       )}
 
       <HFCard>
-        <div style={{display:'flex', alignItems:'center', padding:'4px 0 0 0', marginBottom:'12px'}}>
+        <div style={{display:'flex', alignItems:'center', padding:'10px var(--hf-card-p) 10px', borderBottom:'1px solid var(--hf-border-faint)', marginBottom:'0'}}>
           {(() => {
             const modes = [
               { id:'list',         label:'List',          icon:(
