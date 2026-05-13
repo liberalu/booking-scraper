@@ -1,0 +1,111 @@
+# Promtail config for the book-scraper observability stack.
+#
+# Three scrape jobs:
+#   1. containers       — container stdout via docker_sd_configs
+#   2. scrapy_spawn_files — /var/log/scrapy_runs/spawn-*.log via static_configs
+#   3. scraper_log_file  — /var/log/scraper.log (cron-output aggregate)
+#
+# LABEL CARDINALITY CONTRACT:
+#   Allowed labels:  service, level, role, shop
+#   Forbidden:       run_id (would explode the index — use `|= "run_id=N"` in LogQL instead)
+#                    container_id, docker_image (low filter value, high cardinality)
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+
+  # ─── 1. Container stdout (Docker service discovery) ───────────────────
+  - job_name: containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      # Use the compose service name as `service` label.
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: service
+      # Drop containers without a compose service label (e.g., one-off `docker run`).
+      - source_labels: [service]
+        regex: '^$'
+        action: drop
+      # Promtail needs `__path__` to know where to read; docker_sd doesn't set it,
+      # so resolve via the standard /var/lib/docker/containers/<id>/<id>-json.log path
+      # that Docker writes by default. Source the container id from the meta label.
+      - source_labels: ['__meta_docker_container_id']
+        target_label: '__path__'
+        replacement: '/var/lib/docker/containers/$1/$1-json.log'
+    pipeline_stages:
+      # Docker writes JSON-per-line; extract the actual log line.
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            timestamp: time
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      - output:
+          source: output
+      # Parse level from common Python / uvicorn / scrapy formats.
+      # Examples we hit: "INFO  [alembic.runtime.migration] ..."
+      #                  "2026-05-12 16:58:58 [scrapy.core.engine] INFO: Spider closed"
+      #                  "ERROR:    Application startup failed"
+      - regex:
+          expression: '(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\b'
+      - labels:
+          level:
+
+  # ─── 2. Per-spawn scrapy log files ────────────────────────────────────
+  # Filenames: spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
+  #   <role>: operator | stall-resume | cron-chain | reconcile-restart
+  #   <shop>: vaga | pegasas | humanitas | knygos | almalittera | tytoalba | ...
+  - job_name: scrapy_spawn_files
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          service: scraper
+          job: scrapy_spawn_files
+          __path__: /var/log/scrapy_runs/spawn-*.log
+    pipeline_stages:
+      # Extract role + shop from the filename:
+      #   spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
+      #   ↑8 digits ↑12 digits (HH+MM+SS=6 + microseconds=6)
+      # `role` is greedy + may contain hyphens (e.g. `stall-resume`).
+      # `shop` is bounded to no-hyphen chars (every current/backlog shop name
+      # is hyphen-free), so the greedy role consumes up to the LAST hyphen
+      # and shop is the trailing chunk.
+      - regex:
+          source: filename
+          expression: '/spawn-\d{8}-\d{12}-(?P<role>[a-z0-9_-]+)-(?P<shop>[a-z0-9_]+)\.log$'
+      - labels:
+          role:
+          shop:
+      - regex:
+          expression: '(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\b'
+      - labels:
+          level:
+
+  # ─── 3. Cron-output aggregate file ────────────────────────────────────
+  - job_name: scraper_log_file
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          service: scraper
+          role: cron
+          job: scraper_log_file
+          __path__: /var/log/scraper.log
+    pipeline_stages:
+      - regex:
+          expression: '(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\b'
+      - labels:
+          level:
