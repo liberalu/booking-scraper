@@ -36,12 +36,12 @@
 
 ### Grafana Dashboard
 
-- [ ] **DASH-01**: A "Scrape runs overview" dashboard is provisioned on first start — no manual import required
-- [ ] **DASH-02**: Recent failed runs panel: SQL panel on Postgres listing run_id, shop, phase, close_reason, started_at, finished_at, sorted descending by `finished_at`, last 24h default
-- [ ] **DASH-03**: Dashboard logs panel filtered by `service=dashboard`, log-level highlighting (ERROR/WARNING)
-- [ ] **DASH-04**: Scraper logs panel filtered by `service=scraper` (cron + reconcile stdout)
-- [ ] **DASH-05**: Per-spawn logs panel filtered by Promtail-parsed `role` and `shop` labels, selectable per shop
-- [ ] **DASH-06**: Dashboard exposes variable selectors for `shop`, `phase`, `run_id`, time range — all panels respect them
+- [x] **DASH-01**: A "Scrape runs overview" dashboard is provisioned on first start — no manual import required
+- [x] **DASH-02**: Recent failed runs panel: SQL panel on Postgres listing run_id, shop, phase, close_reason, started_at, finished_at, sorted descending by `finished_at`, last 24h default
+- [x] **DASH-03**: Dashboard logs panel filtered by `service=dashboard`, log-level highlighting (ERROR/WARNING)
+- [x] **DASH-04**: Scraper logs panel filtered by `service=scraper` (cron + reconcile stdout)
+- [x] **DASH-05**: Per-spawn logs panel filtered by Promtail-parsed `role` and `shop` labels, selectable per shop
+- [x] **DASH-06**: Dashboard exposes variable selectors for `shop`, `phase`, `run_id`, time range — all panels respect them
 
 ### Code-side Observability
 
