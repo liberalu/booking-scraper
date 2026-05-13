@@ -2354,6 +2354,27 @@ def api_cron_delete(job_id: int, session: Session = Depends(get_db)) -> dict[str
     job = get_cron_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    dependents = session.execute(
+        select(CronJob.id, CronJob.phase, CronJob.strategy, Shop.name)
+        .join(Shop, Shop.id == CronJob.shop_id)
+        .where(CronJob.chain_to_job_id == job_id)
+    ).all()
+    if dependents:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Cannot delete: other schedules chain to this one.",
+                "dependents": [
+                    {
+                        "id": d.id,
+                        "name": f"{d.name}.{d.phase}.{d.strategy or 'default'}",
+                    }
+                    for d in dependents
+                ],
+            },
+        )
+
     delete_cron_job(session, job_id)
     session.commit()
     return {"id": job_id}
