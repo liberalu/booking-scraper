@@ -1,0 +1,224 @@
+{
+  "uid": "scrape-runs-overview",
+  "title": "Scrape runs overview",
+  "tags": ["observability", "phase-3"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {"from": "now-24h", "to": "now"},
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "shop",
+        "label": "Shop",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgres-bookscraper"},
+        "query": "SELECT name FROM shops ORDER BY name",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all", "selected": true}
+      },
+      {
+        "name": "phase",
+        "label": "Phase",
+        "type": "custom",
+        "query": "discover_sitemap,discover_categories,discover_full_crawl,discover_graphql,discover_lupasearch,scan,validate,match",
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all", "selected": true}
+      },
+      {
+        "name": "run_id",
+        "label": "Run ID",
+        "type": "textbox",
+        "query": "",
+        "current": {"text": "", "value": ""}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Failed runs (status='failed' OR completed-with-errors). Click a row to drill in.",
+      "description": "Lists runs where status='failed' or status='completed' with error_count>0, within the dashboard time range. Click any row to populate the run_id variable and narrow the time range to that run.",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "postgres", "uid": "postgres-bookscraper"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgres-bookscraper"},
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT r.id AS run_id, s.name AS shop, r.phase::text AS phase, r.status::text AS status, r.close_reason, r.started_at, r.finished_at, r.urls_processed FROM scrape_runs r JOIN shops s ON s.id = r.shop_id WHERE (r.status = 'failed' OR (r.status = 'completed' AND r.error_count > 0)) AND (r.finished_at BETWEEN $__timeFrom() AND $__timeTo() OR r.finished_at IS NULL) AND ('$shop' = '.*' OR s.name = '$shop') AND ('$phase' = '.*' OR r.phase::text = '$phase') ORDER BY r.finished_at DESC NULLS FIRST LIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "displayMode": "auto"},
+          "links": [
+            {
+              "title": "Drill into run ${__data.fields.run_id}",
+              "url": "/d/scrape-runs-overview/scrape-runs-overview?var-run_id=${__data.fields.run_id}&from=${__data.fields.started_at}&to=${__data.fields.finished_at}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "close_reason"},
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"heartbeat_timeout": {"color": "red", "text": "heartbeat_timeout", "index": 0}}},
+                  {"type": "value", "options": {"stall_timeout": {"color": "red", "text": "stall_timeout", "index": 1}}},
+                  {"type": "value", "options": {"manual_kill": {"color": "red", "text": "manual_kill", "index": 2}}},
+                  {"type": "value", "options": {"orphan_on_boot": {"color": "red", "text": "orphan_on_boot", "index": 3}}},
+                  {"type": "value", "options": {"blocked_by_wipe_delete": {"color": "red", "text": "blocked_by_wipe_delete", "index": 4}}},
+                  {"type": "value", "options": {"stopped_by_operator": {"color": "yellow", "text": "stopped_by_operator", "index": 5}}},
+                  {"type": "value", "options": {"stop_timeout": {"color": "yellow", "text": "stop_timeout", "index": 6}}},
+                  {"type": "value", "options": {"stale_pre_scan": {"color": "yellow", "text": "stale_pre_scan", "index": 7}}}
+                ]
+              },
+              {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "gradient"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "run_id"},
+            "properties": [
+              {"id": "custom.width", "value": 80}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "shop"},
+            "properties": [
+              {"id": "custom.width", "value": 110}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "phase"},
+            "properties": [
+              {"id": "custom.width", "value": 130}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "status"},
+            "properties": [
+              {"id": "custom.width", "value": 90}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "urls_processed"},
+            "properties": [
+              {"id": "custom.width", "value": 100},
+              {"id": "custom.align", "value": "right"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "started_at"},
+            "properties": [
+              {"id": "unit", "value": "time:YYYY-MM-DD HH:mm:ss"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "finished_at"},
+            "properties": [
+              {"id": "unit", "value": "time:YYYY-MM-DD HH:mm:ss"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {"show": false, "reducer": ["sum"]},
+        "sortBy": [{"displayName": "finished_at", "desc": true}]
+      }
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Dashboard logs — service=dashboard",
+      "description": "FastAPI / uvicorn output from the dashboard container. Filtered by run_id when one is selected.",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service=\"dashboard\"} |= \"$run_id\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Scraper logs — /var/log/scraper.log (cron + reconcile)",
+      "description": "Cron-job stdout and reconcile_runs.py output. Filtered by run_id when one is selected.",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service=\"scraper\", role=\"cron\"} |= \"$run_id\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Per-spawn logs — /var/log/scrapy_runs/spawn-*.log",
+      "description": "Each scrapy subprocess invocation (operator, stall-resume, cron-chain, reconcile-restart). Filtered by shop and run_id.",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 20},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{service=\"scraper\", role=~\"operator|stall-resume|cron-chain|reconcile-restart\", shop=~\"$shop\"} |= \"$run_id\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}
