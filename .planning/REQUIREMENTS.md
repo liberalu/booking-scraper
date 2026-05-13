@@ -26,13 +26,13 @@
 
 ### Log Infrastructure
 
-- [ ] **LOGINFRA-01**: docker-compose.yml gains Grafana, Loki, Promtail services with healthchecks; survive `docker compose up -d` without manual config
-- [ ] **LOGINFRA-02**: Promtail tails dashboard + scraper container stdout via the Docker socket and tags lines with a `service` label (`dashboard` / `scraper` / `postgres` / `flaresolverr`)
-- [ ] **LOGINFRA-03**: Promtail tails `/var/log/scraper.log` and `/var/log/scrapy_runs/*.log` via the `scraper_logs` volume mounted read-only; spawn-log filename parsed into `role` and `shop` labels
-- [ ] **LOGINFRA-04**: Loki retains logs for at least 7 days under default disk budget
-- [ ] **LOGINFRA-05**: Grafana provisions Loki as a data source on first start (no manual setup)
-- [ ] **LOGINFRA-06**: Grafana provisions Postgres as a data source pointing at the `book_scraper` DB
-- [ ] **LOGINFRA-07**: Grafana available at `http://localhost:3000` with documented admin credentials in CLAUDE.md
+- [x] **LOGINFRA-01**: docker-compose.yml gains Grafana, Loki, Promtail services with healthchecks; survive `docker compose up -d` without manual config
+- [x] **LOGINFRA-02**: Promtail tails dashboard + scraper container stdout via the Docker socket and tags lines with a `service` label (`dashboard` / `scraper` / `postgres` / `flaresolverr`)
+- [x] **LOGINFRA-03**: Promtail tails `/var/log/scraper.log` and `/var/log/scrapy_runs/*.log` via the `scraper_logs` volume mounted read-only; spawn-log filename parsed into `role` and `shop` labels
+- [x] **LOGINFRA-04**: Loki retains logs for at least 7 days under default disk budget
+- [x] **LOGINFRA-05**: Grafana provisions Loki as a data source on first start (no manual setup)
+- [x] **LOGINFRA-06**: Grafana provisions Postgres as a data source pointing at the `book_scraper` DB
+- [x] **LOGINFRA-07**: Grafana available at `http://localhost:3000` with documented admin credentials in CLAUDE.md
 
 ### Grafana Dashboard
 

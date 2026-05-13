@@ -2,7 +2,7 @@
 
 **Milestone:** v1.2 — Observability
 **Created:** 2026-05-13
-**Status:** Phase 2 pending
+**Status:** Phase 2 shipped; Phase 3 pending
 
 ---
 
@@ -24,11 +24,13 @@
 **Plans:** 3 plans, 2 waves
 
 **Wave 1** *(parallel)*
-- [ ] 02-01-PLAN.md — Add Loki/Promtail/Grafana to docker-compose.yml + healthchecks + `monitoring/` dir scaffolding (LOGINFRA-01)
-- [ ] 02-02-PLAN.md — Loki single-binary config (TSDB, 7d retention) + Promtail config (docker_sd + 2 file scrape jobs with regex labels) (LOGINFRA-02, 03, 04)
+- [x] 02-01-PLAN.md — Add Loki/Promtail/Grafana to docker-compose.yml + healthchecks + `monitoring/` dir scaffolding (LOGINFRA-01)
+- [x] 02-02-PLAN.md — Loki single-binary config (TSDB, 7d retention) + Promtail config (docker_sd + 2 file scrape jobs with regex labels) (LOGINFRA-02, 03, 04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-03-PLAN.md — Grafana provisioning (Loki+Postgres data sources) + placeholder dashboard + CLAUDE.md addendum + end-to-end smoke test (LOGINFRA-05, 06, 07)
+- [x] 02-03-PLAN.md — Grafana provisioning (Loki+Postgres data sources) + placeholder dashboard + CLAUDE.md addendum + end-to-end smoke test (LOGINFRA-05, 06, 07)
+
+**Executed:** 2026-05-13 via `docs/superpowers/plans/2026-05-13-observability-log-infrastructure.md` (8 tasks, 9 commits ed7bce8..ad86745). Smoke test results: `.planning/phases/02-log-infrastructure/02-SUMMARY.md`.
 
 **Success Criteria:**
 1. `docker compose up -d` brings up loki, promtail, grafana alongside the existing stack with no manual setup
