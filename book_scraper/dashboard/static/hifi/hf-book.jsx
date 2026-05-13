@@ -2,13 +2,36 @@
 // The fallback "fetch the first book when no params.id" path remains for the
 // design prototype's pager, which renders this component without a route.
 
+// Locale-correct EUR formatting for Lithuanian price display.
+const _eurFormatter = new Intl.NumberFormat('lt-LT', {
+  style: 'currency', currency: 'EUR',
+});
+function formatEur(value) {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  return Number.isFinite(n) ? _eurFormatter.format(n) : '—';
+}
+
+// "Last seen" relative formatting. Falls back to the raw ISO if input is unusable.
+function formatRelative(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const diffSec = Math.round((Date.now() - t) / 1000);
+  if (diffSec < 60) return 'just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString('lt-LT');
+}
+
 function DataSourceBadge({ value }) {
   const map = {
     ibiblioteka:   { label: 'National Library', tone: 'ok' },
     shop_inferred: { label: 'From shops',       tone: 'neutral' },
     manual:        { label: 'Manual',           tone: 'accent' },
   };
-  const cfg = map[value] || { label: value || '—', tone: 'neutral' };
+  const cfg = map[value] || { label: 'Unknown', tone: 'neutral' };
   return <HFPill tone={cfg.tone} soft>{cfg.label}</HFPill>;
 }
 
@@ -86,6 +109,7 @@ function HFBook({ nav, goto, params }) {
     book.year,
     book.publisher,
     book.format,
+    book.language,
     book.pages && `${book.pages} p.`,
     book.duration,
   ].filter(Boolean).join(' · ');
@@ -114,11 +138,13 @@ function HFBook({ nav, goto, params }) {
             <img
               src={book.cover_url}
               alt={book.title}
+              loading="lazy"
               style={{
-                width: 108, height: 'auto', objectFit: 'contain',
+                width: 108, aspectRatio: '2 / 3', objectFit: 'contain',
                 flexShrink: 0, borderRadius: 6,
                 border: '1px solid var(--hf-border)',
                 boxShadow: '0 2px 8px rgba(16,24,40,.08)',
+                background: 'var(--hf-subtle)',
               }}
             />
           )}
@@ -160,12 +186,23 @@ function HFBook({ nav, goto, params }) {
             {(isbns.length > 0 || book.libis_code) && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
                 {isbns.map(i => (
-                  <span key={i.isbn} style={{
-                    fontFamily: 'var(--hf-mono)', fontSize: 11,
-                    padding: '2px 7px', borderRadius: 4,
-                    background: 'var(--hf-subtle)', border: '1px solid var(--hf-border)',
-                    color: 'var(--hf-ink2)',
-                  }}>{i.isbn}</span>
+                  <button
+                    key={i.isbn}
+                    type="button"
+                    aria-label={`Copy ISBN ${i.isbn}`}
+                    onClick={() => {
+                      navigator.clipboard.writeText(i.isbn).then(
+                        () => window.HF_APP?.toast?.({ tone: 'ok', message: `Copied ${i.isbn}` }),
+                        () => window.HF_APP?.toast?.({ tone: 'err', message: 'Copy failed' }),
+                      );
+                    }}
+                    style={{
+                      fontFamily: 'var(--hf-mono)', fontSize: 11,
+                      padding: '3px 8px', borderRadius: 4,
+                      background: 'var(--hf-subtle)', border: '1px solid var(--hf-border)',
+                      color: 'var(--hf-ink2)', cursor: 'pointer',
+                    }}
+                  >{i.isbn}</button>
                 ))}
                 {book.libis_code && (
                   <span style={{
@@ -193,6 +230,7 @@ function HFBook({ nav, goto, params }) {
             marginTop: 14, paddingTop: 14,
             borderTop: (book.subjects || []).length > 0 ? 'none' : '1px solid var(--hf-border-faint)',
             lineHeight: 1.65, fontSize: 13, color: 'var(--hf-ink2)',
+            maxWidth: '70ch',
           }}>
             {book.description}
           </div>
@@ -217,17 +255,31 @@ function HFBook({ nav, goto, params }) {
                 { key: 'price',        label: 'Price',     w: '90px' },
                 { key: 'in_stock',     label: 'Stock',     w: '80px' },
                 { key: 'last_seen_at', label: 'Last seen', w: '1fr' },
-                { key: 'url',          label: 'URL',       w: '60px' },
+                { key: 'url',          label: 'URL',       w: '90px' },
               ]}
               rows={(book.shops || []).map(s => ({
                 ...s,
-                price: s.price ? `€${Number(s.price).toFixed(2)}` : '—',
+                price: formatEur(s.price),
                 in_stock: s.in_stock
                   ? <HFPill tone="ok" soft>In stock</HFPill>
                   : <HFPill tone="warn" soft>Out</HFPill>,
+                last_seen_at: s.last_seen_at
+                  ? <time dateTime={s.last_seen_at}>{formatRelative(s.last_seen_at)}</time>
+                  : '—',
                 url: s.url
-                  ? <a href={s.url} target="_blank" rel="noopener noreferrer"
-                       style={{ color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-mono)', fontSize: 11 }}>↗</a>
+                  ? <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open at ${s.shop} (new tab)`}
+                      title={`Open at ${s.shop}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 32, minHeight: 32, padding: '0 8px',
+                        color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-mono)', fontSize: 11,
+                        textDecoration: 'none',
+                      }}
+                    >Visit ↗</a>
                   : '—',
               }))}
             />
