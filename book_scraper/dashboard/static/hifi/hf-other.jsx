@@ -37,7 +37,7 @@ function HFCron({ nav, goto }) {
   const jobsFlat = (() => {
     const byParent = {};
     jobsRaw.forEach(j => {
-      const parentKey = j.chain_to_id ? (j.chain_to_name || '__orphan__') : '__root__';
+      const parentKey = j.chain_to_id ? j.chain_to_name : '__root__';
       (byParent[parentKey] = byParent[parentKey] || []).push(j);
     });
     const out = [];
