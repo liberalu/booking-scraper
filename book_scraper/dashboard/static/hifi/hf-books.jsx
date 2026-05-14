@@ -73,6 +73,9 @@ function HFBooks({ nav, goto }) {
     if (enrichedFilter === 'enriched')     params.set('data_source', 'ibiblioteka');
     if (enrichedFilter === 'not enriched') params.set('data_source', 'shop_inferred');
     if (shopsFilter === '0 shops')         params.set('has_shops', 'false');
+    if (shopsFilter === '1 shop only')   { params.set('shop_count_min', '1'); params.set('shop_count_max', '1'); }
+    if (shopsFilter === '2-3 shops')     { params.set('shop_count_min', '2'); params.set('shop_count_max', '3'); }
+    if (shopsFilter === '4+ shops')        params.set('shop_count_min', '4');
     if (isbnFilter === 'has ISBN')         params.set('has_isbn', 'true');
     if (isbnFilter === 'missing ISBN')     params.set('has_isbn', 'false');
     if (yearFilter !== 'any')              params.set('year', yearFilter);
@@ -102,9 +105,7 @@ function HFBooks({ nav, goto }) {
   // Client-side filters applied on top of server-filtered rows
   // (shops range bucket — "0 shops" + conflicts are server-side)
   const filteredRows = rows.filter(r => {
-    if (shopsFilter === '1 shop only' && r.shops !== 1)                   return false;
-    if (shopsFilter === '2-3 shops'   && !(r.shops >= 2 && r.shops <= 3)) return false;
-    if (shopsFilter === '4+ shops'    && r.shops < 4)                     return false;
+    // shopsFilter is now server-side via shop_count_min/max; no client-side guard needed
     return true;
   });
 

@@ -2752,6 +2752,8 @@ def list_books(
     has_isbn: bool | None = None,
     has_shops: bool | None = None,
     has_conflicts: bool | None = None,
+    shop_count_min: int | None = None,
+    shop_count_max: int | None = None,
     year: int | None = None,
     search: str | None = None,
     page: int = 1,
@@ -2809,6 +2811,23 @@ def list_books(
             base = base.where(Book.id.in_(conflict_ids))
         else:
             base = base.where(~Book.id.in_(conflict_ids))
+
+    # shop_count range filter: subquery that groups shop_books by book_id
+    if shop_count_min is not None or shop_count_max is not None:
+        sc = (
+            select(
+                ShopBook.book_id.label("bid"),
+                func.count(ShopBook.id).label("n"),
+            )
+            .where(ShopBook.book_id.isnot(None))
+            .group_by(ShopBook.book_id)
+        )
+        if shop_count_min is not None:
+            sc = sc.having(func.count(ShopBook.id) >= shop_count_min)
+        if shop_count_max is not None:
+            sc = sc.having(func.count(ShopBook.id) <= shop_count_max)
+        sc_sub = sc.subquery()
+        base = base.where(Book.id.in_(select(sc_sub.c.bid)))
 
     if search and search.strip():
         as_isbn = _looks_like_isbn(search)
@@ -3056,10 +3075,12 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
             first_matched = min(timestamps).isoformat()
 
     # Build ibiblioteka URLs when this is an ibiblioteka-sourced book.
-    # scraped_url  — the JSON API endpoint we hit during scraping
-    # ibiblioteka_page_url — the human-readable SPA page on ibiblioteka.lt
-    ibiblioteka_row = next((s for s in shops if s.name == "ibiblioteka"), None)
-    scraped_url: str | None = ibiblioteka_row.url if ibiblioteka_row else None
+    # scraped_url  — the JSON API endpoint stored on books.source_url (set by
+    #   the scan pipeline since the ibiblioteka spider emits BookItem, not
+    #   ShopBookItem, so there are no shop_books rows for this shop).
+    # ibiblioteka_page_url — the human-readable SPA page on ibiblioteka.lt,
+    #   constructed from the numeric API id embedded in scraped_url.
+    scraped_url: str | None = book.source_url
     ibiblioteka_page_url: str | None = None
     if scraped_url:
         numeric_id = scraped_url.rstrip("/").split("/")[-1]
