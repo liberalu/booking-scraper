@@ -34,7 +34,27 @@ function HFCron({ nav, goto }) {
   };
 
   const jobsRaw = data.jobs;
-  const jobs = jobsRaw.map(j => ({
+  const jobsFlat = (() => {
+    const byParent = {};
+    jobsRaw.forEach(j => {
+      const parentKey = j.chain_to_id ? (j.chain_to_name || '__orphan__') : '__root__';
+      (byParent[parentKey] = byParent[parentKey] || []).push(j);
+    });
+    const out = [];
+    const visit = (parent, depth) => {
+      (byParent[parent] || []).forEach(j => {
+        out.push({ ...j, depth: Math.min(depth, 1) });
+        visit(j.name, depth + 1);
+      });
+    };
+    visit('__root__', 0);
+    jobsRaw.forEach(j => {
+      if (!out.find(o => o.name === j.name)) out.push({ ...j, depth: 0 });
+    });
+    return out;
+  })();
+
+  const jobs = jobsFlat.map(j => ({
     ...j,
     state: j.enabled ? 'active' : 'disabled',
     lastStatus: j.last_status || 'ok',
