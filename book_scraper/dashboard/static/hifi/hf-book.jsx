@@ -61,7 +61,7 @@ function HFBook({ nav, goto, params }) {
     shopBookId: s.shop_book_id,
     sbStatus: s.is_active ? (s.in_stock ? 'active' : 'out') : 'delisted',
     url: s.url,
-    price: s.price,
+    price: s.price != null ? parseFloat(s.price) : null,
     prev: null,
     currency: 'EUR',
     stock: s.in_stock ? 'in stock' : 'out of stock',
