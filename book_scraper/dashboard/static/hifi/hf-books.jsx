@@ -20,10 +20,18 @@ function HFBooks({ nav, goto }) {
   // Filter state (server-side filters)
   const [q, setQ] = React.useState('');
   const [enrichedFilter, setEnrichedFilter] = React.useState('any');
-  const [linkedFilter, setLinkedFilter] = React.useState('any');
   const [conflictsFilter, setConflictsFilter] = React.useState('any');
   const [isbnFilter, setIsbnFilter] = React.useState('any');
   const [shopsFilter, setShopsFilter] = React.useState('any');
+  const [yearFilter, setYearFilter] = React.useState('any');
+  const [availableYears, setAvailableYears] = React.useState([]);
+
+  React.useEffect(() => {
+    fetch('/api/books/years')
+      .then(r => r.ok ? r.json() : [])
+      .then(ys => setAvailableYears(ys))
+      .catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     setLoading(true);
@@ -33,15 +41,17 @@ function HFBooks({ nav, goto }) {
     if (q) params.set('search', q);
     if (enrichedFilter === 'enriched')     params.set('data_source', 'ibiblioteka');
     if (enrichedFilter === 'not enriched') params.set('data_source', 'shop_inferred');
-    if (linkedFilter === 'linked')         params.set('has_shops', 'true');
-    if (linkedFilter === 'not linked')     params.set('has_shops', 'false');
+    if (shopsFilter === '0 shops')         params.set('has_shops', 'false');
     if (isbnFilter === 'has ISBN')         params.set('has_isbn', 'true');
     if (isbnFilter === 'missing ISBN')     params.set('has_isbn', 'false');
+    if (yearFilter !== 'any')              params.set('year', yearFilter);
+    if (conflictsFilter === 'clean')         params.set('has_conflicts', 'false');
+    if (conflictsFilter === 'has conflicts') params.set('has_conflicts', 'true');
     fetch(`/api/books?${params}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [q, enrichedFilter, linkedFilter, isbnFilter, page]);
+  }, [q, enrichedFilter, isbnFilter, shopsFilter, conflictsFilter, yearFilter, page]);
 
   // Map API rows to JSX shape
   const rows = (data.books || []).map(b => ({
@@ -49,22 +59,21 @@ function HFBooks({ nav, goto }) {
     title:    b.title,
     author:   (b.authors && b.authors[0]) || '',
     isbn:     b.primary_isbn || null,
+    year:     b.year || null,
     shops:    b.shop_count || 0,
-    priceMin: null,
-    priceMax: null,
+    priceMin: b.price_min,
+    priceMax: b.price_max,
     enriched: b.data_source !== 'shop_inferred',
-    conflicts: 0,
+    conflicts: b.has_conflicts ? 1 : 0,
     updated:  '—',
   }));
 
   // Client-side filters applied on top of server-filtered rows
-  // (conflicts + shops range can't be pushed to API — apply locally)
+  // (shops range bucket — "0 shops" + conflicts are server-side)
   const filteredRows = rows.filter(r => {
-    if (conflictsFilter === 'clean'         && r.conflicts !== 0) return false;
-    if (conflictsFilter === 'has conflicts' && r.conflicts === 0) return false;
-    if (shopsFilter === '1 shop only' && r.shops !== 1)                       return false;
-    if (shopsFilter === '2-3 shops'   && !(r.shops >= 2 && r.shops <= 3))     return false;
-    if (shopsFilter === '4+ shops'    && r.shops < 4)                         return false;
+    if (shopsFilter === '1 shop only' && r.shops !== 1)                   return false;
+    if (shopsFilter === '2-3 shops'   && !(r.shops >= 2 && r.shops <= 3)) return false;
+    if (shopsFilter === '4+ shops'    && r.shops < 4)                     return false;
     return true;
   });
 
@@ -91,12 +100,12 @@ function HFBooks({ nav, goto }) {
           const activeCount = [
             q !== '',
             enrichedFilter !== 'any',
-            linkedFilter !== 'any',
             conflictsFilter !== 'any',
             isbnFilter !== 'any',
             shopsFilter !== 'any',
+            yearFilter !== 'any',
           ].filter(Boolean).length;
-          const clearAll = () => { setQ(''); setEnrichedFilter('any'); setLinkedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setPage(1); };
+          const clearAll = () => { setQ(''); setEnrichedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setYearFilter('any'); setPage(1); };
           return (
             <HFFilterBar right={<>
               <span style={{fontSize:11.5, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
@@ -105,11 +114,11 @@ function HFBooks({ nav, goto }) {
               {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
             </>}>
               <HFSearch placeholder="Search title, author, ISBN…" width={320} value={q} onChange={v => { setQ(v); setPage(1); }}/>
-              <HFFilter label="Shops"     value={shopsFilter}     options={['any','1 shop only','2-3 shops','4+ shops']}    onChange={v=>{ setShopsFilter(v); setPage(1); }}     allLabel="any"/>
-              <HFFilter label="Enriched"  value={enrichedFilter}  options={['any','enriched','not enriched']}                onChange={v=>{ setEnrichedFilter(v); setPage(1); }}  allLabel="any"/>
-              <HFFilter label="ISBN"      value={isbnFilter}      options={['any','has ISBN','missing ISBN']}                onChange={v=>{ setIsbnFilter(v); setPage(1); }}      allLabel="any"/>
-              <HFFilter label="Conflicts" value={conflictsFilter} options={['any','clean','has conflicts']}                  onChange={v=>{ setConflictsFilter(v); setPage(1); }} allLabel="any"/>
-              <HFFilter label="Linked"    value={linkedFilter}    options={['any','linked','not linked']}                    onChange={v=>{ setLinkedFilter(v); setPage(1); }}    allLabel="any"/>
+              <HFFilter label="Shops"     value={shopsFilter}     options={['any','0 shops','1 shop only','2-3 shops','4+ shops']}  onChange={v=>{ setShopsFilter(v); setPage(1); }}     allLabel="any"/>
+              <HFFilter label="Year"      value={yearFilter}      options={['any', ...availableYears.map(String)]}                  onChange={v=>{ setYearFilter(v); setPage(1); }}      allLabel="any"/>
+              <HFFilter label="Enriched"  value={enrichedFilter}  options={['any','enriched','not enriched']}                       onChange={v=>{ setEnrichedFilter(v); setPage(1); }}  allLabel="any"/>
+              <HFFilter label="ISBN"      value={isbnFilter}      options={['any','has ISBN','missing ISBN']}                        onChange={v=>{ setIsbnFilter(v); setPage(1); }}      allLabel="any"/>
+              <HFFilter label="Conflicts" value={conflictsFilter} options={['any','clean','has conflicts']}                          onChange={v=>{ setConflictsFilter(v); setPage(1); }} allLabel="any"/>
             </HFFilterBar>
           );
         })()}
@@ -119,7 +128,7 @@ function HFBooks({ nav, goto }) {
         {loading ? (
           <HFEmptyState title="Loading…" sub="Fetching books from the catalog." />
         ) : filteredRows.length === 0 ? (
-          <HFEmptyState title="No books match these filters" sub="Try clearing filters, or adjusting the search." onClear={() => { setQ(''); setEnrichedFilter('any'); setLinkedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setPage(1); }}/>
+          <HFEmptyState title="No books match these filters" sub="Try clearing filters, or adjusting the search." onClear={() => { setQ(''); setEnrichedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setYearFilter('any'); setPage(1); }}/>
         ) : (
         <HFTable
           onRowClick={(r) => goto('book', { id: r.id })}
@@ -141,6 +150,7 @@ function HFBooks({ nav, goto }) {
               </span>
             )},
             { key:'isbn', label:'ISBN', w:'1.1fr', mono:true, sortable:true, cell: v => v ? <span style={{color:HF.ink2}}>{v}</span> : <HFPill tone="warn">missing</HFPill> },
+            { key:'year', label:'Year', w:'0.55fr', mono:true, align:'right', sortable:true, cell: v => v ? <span style={{color:HF.ink2}}>{v}</span> : <span style={{color:HF.ink4}}>—</span> },
             { key:'shops', label:'Shops', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.shops, cell: v => (
               <span style={{display:'inline-flex', alignItems:'center', gap:6, fontVariantNumeric:'tabular-nums'}}>
                 <span style={{color: v >= 4 ? HF.okInk : v >= 2 ? HF.ink2 : HF.warnInk, fontWeight:500}}>{v}</span>

@@ -2120,6 +2120,7 @@ def get_shop_books_page(
     active_filter: str = "",
     has_isbn: bool = False,
     url_unreachable: bool = False,
+    linked_filter: str = "",
     sort_by: str = "",
     sort_order: str = "asc",
     field_filters: dict[str, ShopBookFieldFilter] | None = None,
@@ -2181,6 +2182,10 @@ def get_shop_books_page(
     # "all" or "" — no active/inactive filter applied
     if has_isbn:
         query = query.filter(ShopBook.isbn.isnot(None))
+    if linked_filter == "linked":
+        query = query.filter(ShopBook.book_id.isnot(None))
+    elif linked_filter == "not_linked":
+        query = query.filter(ShopBook.book_id.is_(None))
     if url_unreachable:
         query = query.join(
             DiscoveredUrl,
@@ -2746,6 +2751,7 @@ def list_books(
     data_source: str | None = None,
     has_isbn: bool | None = None,
     has_shops: bool | None = None,
+    has_conflicts: bool | None = None,
     year: int | None = None,
     search: str | None = None,
     page: int = 1,
@@ -2784,6 +2790,26 @@ def list_books(
             )
         )
 
+    # has_conflicts filter — books where shop_books disagree on metadata fields
+    if has_conflicts is True or has_conflicts is False:
+        conflict_ids = (
+            select(ShopBook.book_id)
+            .where(ShopBook.book_id.isnot(None))
+            .group_by(ShopBook.book_id)
+            .having(
+                or_(
+                    func.count(func.distinct(func.lower(ShopBook.title))) > 1,
+                    func.count(func.distinct(func.lower(ShopBook.author))) > 1,
+                    func.count(func.distinct(ShopBook.year)) > 1,
+                    func.count(func.distinct(func.lower(ShopBook.publisher))) > 1,
+                )
+            )
+        )
+        if has_conflicts is True:
+            base = base.where(Book.id.in_(conflict_ids))
+        else:
+            base = base.where(~Book.id.in_(conflict_ids))
+
     if search and search.strip():
         as_isbn = _looks_like_isbn(search)
         if as_isbn:
@@ -2819,6 +2845,45 @@ def list_books(
         .all()
     )
 
+    book_ids = [b.id for b in rows]
+
+    # Batch: price min/max + shop_count per book
+    price_rows = (
+        session.execute(
+            select(
+                ShopBook.book_id,
+                func.min(ShopBook.price).label("price_min"),
+                func.max(ShopBook.price).label("price_max"),
+                func.count(ShopBook.id).label("shop_count"),
+            )
+            .where(ShopBook.book_id.in_(book_ids))
+            .group_by(ShopBook.book_id)
+        ).all()
+        if book_ids
+        else []
+    )
+    price_by_book = {
+        r.book_id: (r.price_min, r.price_max, r.shop_count) for r in price_rows
+    }
+
+    # Batch: which of the book_ids on this page have metadata conflicts
+    conflict_set: set[int] = set()
+    if book_ids:
+        conflict_rows = session.execute(
+            select(ShopBook.book_id)
+            .where(ShopBook.book_id.in_(book_ids))
+            .group_by(ShopBook.book_id)
+            .having(
+                or_(
+                    func.count(func.distinct(func.lower(ShopBook.title))) > 1,
+                    func.count(func.distinct(func.lower(ShopBook.author))) > 1,
+                    func.count(func.distinct(ShopBook.year)) > 1,
+                    func.count(func.distinct(func.lower(ShopBook.publisher))) > 1,
+                )
+            )
+        ).scalars().all()
+        conflict_set = set(conflict_rows)
+
     out = []
     for b in rows:
         pub_name = None
@@ -2839,9 +2904,7 @@ def list_books(
         primary_isbn = session.execute(
             select(BookIsbn.isbn).where(BookIsbn.book_id == b.id).limit(1)
         ).scalar_one_or_none()
-        shop_count = session.execute(
-            select(func.count()).select_from(ShopBook).where(ShopBook.book_id == b.id)
-        ).scalar_one()
+        price_min, price_max, shop_count = price_by_book.get(b.id, (None, None, 0))
         out.append(
             {
                 "id": b.id,
@@ -2853,6 +2916,9 @@ def list_books(
                 "primary_isbn": primary_isbn,
                 "authors": list(authors),
                 "shop_count": shop_count,
+                "price_min": float(price_min) if price_min is not None else None,
+                "price_max": float(price_max) if price_max is not None else None,
+                "has_conflicts": b.id in conflict_set,
             }
         )
 
