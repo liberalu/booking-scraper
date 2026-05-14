@@ -64,7 +64,7 @@ function HFCron({ nav, goto }) {
 
   const shopNames = useShopNames();
   const filters = useHFFilters(jobs, {
-    search: { fields: j => `${j.name} ${j.cron} ${j.shop}` },
+    search: { fields: j => `${j.name} ${j.cron || ''} ${j.shop} ${j.chain_to_name || ''}` },
     filters: [
       { id:'shop',  default:'all', match:(j,v) => j.shop === v },
       { id:'state', default:'all', match:(j,v) => j.state === v },
@@ -73,7 +73,7 @@ function HFCron({ nav, goto }) {
 
   return (
     <HFShell {...nav} activePage="cron"
-      title="Schedules" subtitle="Cron-driven scrape jobs. Disable, edit, or trigger manually."
+      title="Schedules" subtitle="Time-driven and chain-triggered scrape jobs. Disable, edit, or trigger manually."
       breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Schedules</span></>}
       actions={<HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewSchedule()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> New schedule</HFButton>}
     >
@@ -134,17 +134,52 @@ function HFCron({ nav, goto }) {
             { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
             { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
             { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
-            { key:'chain_to_name', label:'Chain', w:'1fr', cell:(v) =>
-              v ? (
-                <span style={{
-                  display:'inline-flex', alignItems:'center', gap:4,
-                  fontSize:12, color:'var(--hf-accent-ink)', fontFamily:'var(--hf-mono)',
-                }}>
-                  <span style={{opacity:0.5}}>→</span> {v}
-                </span>
-              ) : (
-                <span style={{color:'var(--hf-ink5)', fontSize:12}}>—</span>
-              )
+            { key:'_trigger', label:'Trigger', w:'1.4fr',
+              cell:(_, r) => {
+                if (r.chain_to_id) {
+                  return (
+                    <span style={{display:'inline-flex', alignItems:'center', gap:6, minWidth:0}}>
+                      <span style={{
+                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        width:18, height:18, borderRadius:4,
+                        background:'var(--hf-accent-soft)',
+                        border:'1px solid var(--hf-accent-border)',
+                        color:'var(--hf-accent-ink)', flexShrink:0,
+                      }}>
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                          <path d="M6.5 9.5 L9.5 6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                          <path d="M6 6 L4 8 Q2 10 4 12 Q6 14 8 12 L10 10"
+                                stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                          <path d="M10 10 L12 8 Q14 6 12 4 Q10 2 8 4 L6 6"
+                                stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                        </svg>
+                      </span>
+                      <span style={{fontSize:12, color:'var(--hf-ink3)'}}>chain</span>
+                    </span>
+                  );
+                }
+                return (
+                  <span style={{display:'inline-flex', alignItems:'center', gap:6, minWidth:0}}>
+                    <span style={{
+                      display:'inline-flex', alignItems:'center', justifyContent:'center',
+                      width:18, height:18, borderRadius:4,
+                      background:'var(--hf-bg)',
+                      border:'1px solid var(--hf-border-faint)',
+                      color:'var(--hf-ink3)', flexShrink:0,
+                    }}>
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.6"/>
+                        <path d="M8 5.5 V8 L10 9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                      </svg>
+                    </span>
+                    <span style={{
+                      fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)',
+                      fontSize:12, fontVariantNumeric:'tabular-nums',
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                    }}>{r.cron || '—'}</span>
+                  </span>
+                );
+              }
             },
             { key:'enabled', label:'', w:'0.5fr', align:'right', cell:(v, r) => (
               <span
