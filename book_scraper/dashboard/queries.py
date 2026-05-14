@@ -2856,10 +2856,18 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
     shops = session.execute(
         select(
             Shop.name,
+            ShopBook.id.label("shop_book_id"),
             ShopBook.url,
             ShopBook.price,
             ShopBook.in_stock,
             ShopBook.last_seen_at,
+            ShopBook.title.label("shop_title"),
+            ShopBook.author.label("shop_author"),
+            ShopBook.year.label("shop_year"),
+            ShopBook.isbn.label("shop_isbn"),
+            ShopBook.publisher.label("shop_publisher"),
+            ShopBook.format.label("shop_format"),
+            ShopBook.match_method,
         )
         .join(ShopBook, ShopBook.shop_id == Shop.id)
         .where(ShopBook.book_id == book_id)
@@ -2892,12 +2900,20 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         "authors": [{"name": n, "role": r} for n, r in authors],
         "shops": [
             {
-                "shop": shop,
-                "url": url,
-                "price": str(price) if price is not None else None,
-                "in_stock": in_stock,
-                "last_seen_at": last_seen.isoformat() if last_seen else None,
+                "shop":         row.name,
+                "shop_book_id": row.shop_book_id,
+                "url":          row.url,
+                "price":        str(row.price) if row.price is not None else None,
+                "in_stock":     row.in_stock,
+                "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
+                "title":        row.shop_title,
+                "author":       row.shop_author,
+                "year":         row.shop_year,
+                "isbn":         row.shop_isbn,
+                "publisher":    row.shop_publisher,
+                "format":       row.shop_format,
+                "match_method": row.match_method,
             }
-            for shop, url, price, in_stock, last_seen in shops
+            for row in shops
         ],
     }

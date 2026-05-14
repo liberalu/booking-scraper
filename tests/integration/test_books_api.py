@@ -371,3 +371,52 @@ def test_create_manual_book_isbn_with_dashes_normalized(client, db_session):
 def test_create_manual_book_invalid_isbn_rejected(client):
     resp = client.post("/api/books", json={"title": "Bad ISBN", "isbn": "notanisbn"})
     assert resp.status_code == 422
+
+
+def test_book_detail_shops_include_metadata_fields(client, db_session):
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from book_scraper.db.models import Book, Shop, ShopBook
+
+    shop = db_session.execute(
+        select(Shop).where(Shop.name == "vaga")
+    ).scalar_one_or_none()
+    if shop is None:
+        shop = Shop(name="vaga", base_url="https://vaga.lt")
+        db_session.add(shop)
+        db_session.flush()
+
+    book = Book(data_source="shop_inferred", title="Meta Test Book", year=2022)
+    db_session.add(book)
+    db_session.flush()
+
+    sb = ShopBook(
+        shop_id=shop.id,
+        url="https://vaga.lt/meta-test",
+        title="Meta Test Book",
+        author="Test Author",
+        isbn="9780062316097",
+        publisher="Test Press",
+        year=2022,
+        format="Paperback",
+        price=Decimal("15.00"),
+        in_stock=True,
+        book_id=book.id,
+    )
+    db_session.add(sb)
+    db_session.commit()
+
+    resp = client.get(f"/api/books/{book.id}")
+    assert resp.status_code == 200
+    shops = resp.json()["shops"]
+    assert len(shops) == 1
+    s = shops[0]
+    assert s["title"] == "Meta Test Book"
+    assert s["author"] == "Test Author"
+    assert s["isbn"] == "9780062316097"
+    assert s["publisher"] == "Test Press"
+    assert s["year"] == 2022
+    assert s["format"] == "Paperback"
+    assert "shop_book_id" in s
