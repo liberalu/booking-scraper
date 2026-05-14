@@ -4,10 +4,25 @@
 function HFBooks({ nav, goto }) {
   const HF = getHF();
 
+  // Filter+pagination state is mirrored to the URL as ?page=&q=&enriched=…
+  // so the view is reloadable and shareable.
+  const _initialParams = React.useMemo(() => {
+    const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    return {
+      page: Math.max(1, parseInt(sp.get('page') || '1', 10) || 1),
+      q: sp.get('q') || '',
+      enriched: sp.get('enriched') || 'any',
+      conflicts: sp.get('conflicts') || 'any',
+      isbn: sp.get('isbn') || 'any',
+      shops: sp.get('shops') || 'any',
+      year: sp.get('year') || 'any',
+    };
+  }, []);
+
   // Remote data state
   const [data, setData] = React.useState({ books: [], total: 0, pages: 1 });
   const [loading, setLoading] = React.useState(true);
-  const [page, setPage] = React.useState(1);
+  const [page, setPage] = React.useState(_initialParams.page);
   const [stats, setStats] = React.useState(null);
 
   React.useEffect(() => {
@@ -18,12 +33,12 @@ function HFBooks({ nav, goto }) {
   }, []);
 
   // Filter state (server-side filters)
-  const [q, setQ] = React.useState('');
-  const [enrichedFilter, setEnrichedFilter] = React.useState('any');
-  const [conflictsFilter, setConflictsFilter] = React.useState('any');
-  const [isbnFilter, setIsbnFilter] = React.useState('any');
-  const [shopsFilter, setShopsFilter] = React.useState('any');
-  const [yearFilter, setYearFilter] = React.useState('any');
+  const [q, setQ] = React.useState(_initialParams.q);
+  const [enrichedFilter, setEnrichedFilter] = React.useState(_initialParams.enriched);
+  const [conflictsFilter, setConflictsFilter] = React.useState(_initialParams.conflicts);
+  const [isbnFilter, setIsbnFilter] = React.useState(_initialParams.isbn);
+  const [shopsFilter, setShopsFilter] = React.useState(_initialParams.shops);
+  const [yearFilter, setYearFilter] = React.useState(_initialParams.year);
   const [availableYears, setAvailableYears] = React.useState([]);
 
   React.useEffect(() => {
@@ -32,6 +47,22 @@ function HFBooks({ nav, goto }) {
       .then(ys => setAvailableYears(ys))
       .catch(() => {});
   }, []);
+
+  // Sync state → URL query params (replaceState so back/forward isn't littered)
+  React.useEffect(() => {
+    const sp = new URLSearchParams();
+    if (page > 1)                       sp.set('page', String(page));
+    if (q)                              sp.set('q', q);
+    if (enrichedFilter !== 'any')       sp.set('enriched', enrichedFilter);
+    if (conflictsFilter !== 'any')      sp.set('conflicts', conflictsFilter);
+    if (isbnFilter !== 'any')           sp.set('isbn', isbnFilter);
+    if (shopsFilter !== 'any')          sp.set('shops', shopsFilter);
+    if (yearFilter !== 'any')           sp.set('year', yearFilter);
+    const qs = sp.toString();
+    const url = '/books' + (qs ? '?' + qs : '');
+    const cur = window.location.pathname + window.location.search;
+    if (url !== cur) window.history.replaceState(null, '', url);
+  }, [page, q, enrichedFilter, conflictsFilter, isbnFilter, shopsFilter, yearFilter]);
 
   React.useEffect(() => {
     setLoading(true);
