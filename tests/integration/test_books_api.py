@@ -192,3 +192,115 @@ def test_books_search_empty_string_acts_like_no_filter(client, db_session):
     assert resp_with.status_code == 200
     assert resp_without.status_code == 200
     assert resp_with.json()["total"] == resp_without.json()["total"]
+
+
+# ----- Price history (Task 1/2) --------------------------------------------
+
+
+def test_book_prices_empty_for_book_without_shops(client, db_session):
+    from book_scraper.db.models import Book
+
+    book = Book(data_source="shop_inferred", title="PriceTest NoShop A", year=2020)
+    db_session.add(book)
+    db_session.commit()
+
+    resp = client.get(f"/api/books/{book.id}/prices")
+    assert resp.status_code == 200
+    assert resp.json()["series"] == []
+
+
+def test_book_prices_returns_series_for_linked_shop_books(client, db_session):
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from book_scraper.db.models import Book, Price, Shop, ShopBook
+
+    shop = db_session.execute(
+        select(Shop).where(Shop.name == "vaga")
+    ).scalar_one_or_none()
+    if shop is None:
+        shop = Shop(name="vaga", base_url="https://vaga.lt")
+        db_session.add(shop)
+        db_session.flush()
+
+    book = Book(data_source="shop_inferred", title="PriceTest WithShop B", year=2020)
+    db_session.add(book)
+    db_session.flush()
+
+    sb = ShopBook(
+        shop_id=shop.id, url="https://vaga.lt/ptb",
+        title="PriceTest WithShop B", price=Decimal("19.90"),
+        in_stock=True, book_id=book.id,
+    )
+    db_session.add(sb)
+    db_session.flush()
+
+    db_session.add(Price(
+        shop_book_id=sb.id, price=Decimal("19.90"), in_stock=True,
+        scraped_at=datetime.now(UTC) - timedelta(days=1),
+    ))
+    db_session.add(Price(
+        shop_book_id=sb.id, price=Decimal("18.50"), in_stock=True,
+        scraped_at=datetime.now(UTC) - timedelta(days=2),
+    ))
+    db_session.commit()
+
+    resp = client.get(f"/api/books/{book.id}/prices")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["series"]) == 1
+    assert data["series"][0]["shop"] == "vaga"
+    assert len(data["series"][0]["series"]) == 2  # two distinct days
+
+
+def test_book_prices_404_for_unknown_book(client):
+    resp = client.get("/api/books/999999999/prices")
+    assert resp.status_code == 404
+
+
+def test_book_prices_excludes_data_older_than_30_days(client, db_session):
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from book_scraper.db.models import Book, Price, Shop, ShopBook
+
+    shop = db_session.execute(
+        select(Shop).where(Shop.name == "vaga")
+    ).scalar_one_or_none()
+    if shop is None:
+        shop = Shop(name="vaga", base_url="https://vaga.lt")
+        db_session.add(shop)
+        db_session.flush()
+
+    book = Book(data_source="shop_inferred", title="PriceTest OldData C", year=2020)
+    db_session.add(book)
+    db_session.flush()
+
+    sb = ShopBook(
+        shop_id=shop.id, url="https://vaga.lt/ptc",
+        title="PriceTest OldData C", price=Decimal("15.00"),
+        in_stock=True, book_id=book.id,
+    )
+    db_session.add(sb)
+    db_session.flush()
+
+    db_session.add(Price(
+        shop_book_id=sb.id, price=Decimal("15.00"), in_stock=True,
+        scraped_at=datetime.now(UTC) - timedelta(days=5),   # recent
+    ))
+    db_session.add(Price(
+        shop_book_id=sb.id, price=Decimal("12.00"), in_stock=True,
+        scraped_at=datetime.now(UTC) - timedelta(days=45),  # old, excluded
+    ))
+    db_session.commit()
+
+    resp = client.get(f"/api/books/{book.id}/prices")
+    assert resp.status_code == 200
+    series = resp.json()["series"][0]["series"]
+    prices = [p["price"] for p in series]
+    assert 12.0 not in prices
+    assert 15.0 in prices

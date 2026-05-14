@@ -1858,6 +1858,18 @@ def api_book_detail(book_id: int, session: Session = Depends(get_db)) -> dict[st
     return detail
 
 
+@router.get("/books/{book_id}/prices")
+def api_book_prices(
+    book_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import book_detail, get_book_price_history
+
+    if book_detail(session, book_id) is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    series = get_book_price_history(session, book_id)
+    return {"book_id": book_id, "series": series}
+
+
 @router.get("/shops")
 def api_shops(session: Session = Depends(get_db)) -> dict[str, Any]:
     shops = get_all_shops(session)

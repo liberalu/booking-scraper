@@ -1909,6 +1909,49 @@ def get_price_history(session: Session, shop_book_id: int) -> list[Price]:
     )
 
 
+def get_book_price_history(
+    session: Session, book_id: int, days: int = 30
+) -> list[dict[str, Any]]:
+    """Return 30-day daily price series for every shop linked to book_id.
+
+    Returns [{"shop": str, "series": [{"date": "YYYY-MM-DD", "price": float}]}].
+    Series sorted ascending by date. Days with no scrape are omitted (sparse is fine).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func, select
+
+    from book_scraper.db.models import Price, Shop, ShopBook
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    rows = session.execute(
+        select(
+            Shop.name.label("shop"),
+            func.date_trunc("day", Price.scraped_at).label("day"),
+            func.max(Price.price).label("price"),
+        )
+        .join(ShopBook, Price.shop_book_id == ShopBook.id)
+        .join(Shop, ShopBook.shop_id == Shop.id)
+        .where(ShopBook.book_id == book_id)
+        .where(Price.scraped_at >= cutoff)
+        .group_by(Shop.name, func.date_trunc("day", Price.scraped_at))
+        .order_by(Shop.name, func.date_trunc("day", Price.scraped_at))
+    ).all()
+
+    series: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        shop = row.shop
+        if shop not in series:
+            series[shop] = []
+        series[shop].append({
+            "date": row.day.strftime("%Y-%m-%d"),
+            "price": float(row.price),
+        })
+
+    return [{"shop": shop, "series": pts} for shop, pts in series.items()]
+
+
 def get_price_changes(
     session: Session,
     days: int = 7,
