@@ -43,12 +43,17 @@ function HFBook({ nav, goto, params }) {
     binding: data.format,
     cover_url: data.cover_url,
     description: data.description,
-    firstMatched: '—',
+    firstMatched: data.first_matched_at
+      ? new Date(data.first_matched_at).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'})
+      : '—',
     author: data.authors?.find(a => a.role === 'author')?.name || '',
     contributors: (data.authors || []).map(a => ({
       role: a.role.charAt(0).toUpperCase() + a.role.slice(1).replace('_', ' '),
       name: a.name,
     })),
+    dataSource: data.data_source,
+    ibibliotekaPageUrl: data.ibiblioteka_page_url || null,
+    scrapedUrl: data.scraped_url || null,
   };
 
   function fmtRelative(iso) {
@@ -87,14 +92,18 @@ function HFBook({ nav, goto, params }) {
   const shops = (data.shops || []).map(s => ({
     shop: s.shop,
     shopBookId: s.shop_book_id,
-    sbStatus: s.in_stock ? 'active' : 'out',
+    sbStatus: s.is_active === false ? 'delisted'
+            : s.match_status === 'pending' ? 'pending'
+            : s.in_stock ? 'active' : 'out',
     url: s.url,
     price: s.price != null ? parseFloat(s.price) : null,
     prev: prevPriceFor(s.shop),
     currency: 'EUR',
     stock: s.in_stock ? 'in stock' : 'out of stock',
     lastSeen: fmtRelative(s.last_seen_at),
-    matchedAt: '—',
+    matchedAt: s.first_seen_at
+      ? new Date(s.first_seen_at).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'})
+      : '—',
     method: s.match_method || '—',
     confidence: null,
     by: 'auto',

@@ -1884,6 +1884,23 @@ def api_book_stats(session: Session = Depends(get_db)) -> dict[str, Any]:
     return get_book_stats(session)
 
 
+@router.get("/books/years")
+def api_book_years(session: Session = Depends(get_db)) -> list[int]:
+    from book_scraper.db.models import Book
+
+    rows = (
+        session.execute(
+            select(Book.year)
+            .where(Book.year.is_not(None))
+            .distinct()
+            .order_by(Book.year.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [r for r in rows]
+
+
 @router.get("/books/{book_id}")
 def api_book_detail(book_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     from book_scraper.dashboard.queries import book_detail
@@ -2675,6 +2692,18 @@ def api_bulk_unacknowledge_issues(
     result = session.execute(stmt)
     session.commit()
     return {"unacknowledged": int(getattr(result, "rowcount", 0) or 0)}
+
+
+@router.get("/issues/trend")
+def api_issues_trend(
+    days: int = 14,
+    state: str | None = "new",
+    session: Session = Depends(get_db),
+) -> dict[str, list[int]]:
+    """GET /issues/trend — per-day issue counts for each issue type."""
+    from book_scraper.dashboard.queries import get_issues_trend
+
+    return get_issues_trend(session, days=days, state=state if state else None)
 
 
 @router.get("/issues/{issue_id}")

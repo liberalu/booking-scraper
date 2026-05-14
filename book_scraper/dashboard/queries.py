@@ -4,7 +4,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import case, func, or_, select, text
+from sqlalchemy import Date, case, cast, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.shop_book_filters import (
@@ -2566,6 +2566,47 @@ def get_issues_groups(
     ]
 
 
+def get_issues_trend(
+    session: Session, days: int = 14, state: str | None = "new"
+) -> dict[str, list[int]]:
+    """Return per-day issue counts for each issue type over the last N days.
+
+    Returns {issue_type: [count_day_-N, ..., count_day_0]} suitable for sparklines.
+    Counts ValidationIssue rows by day, using the last_seen_run's started_at
+    as the timestamp (ValidationIssue itself has no created_at column).
+    """
+    end = datetime.now(UTC).date()
+    start = end - timedelta(days=days - 1)
+    start_dt = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
+
+    q = (
+        select(
+            ValidationIssue.issue.label("issue_type"),
+            cast(ScrapeRun.started_at, Date).label("day"),
+            func.count().label("cnt"),
+        )
+        .join(ScrapeRun, ScrapeRun.id == ValidationIssue.last_seen_run_id)
+        .where(ScrapeRun.started_at >= start_dt)
+    )
+    if state:
+        q = q.where(ValidationIssue.lifecycle_state == state)
+    q = q.group_by(ValidationIssue.issue, cast(ScrapeRun.started_at, Date))
+
+    rows = session.execute(q).all()
+
+    by_key = {(r.issue_type, r.day): r.cnt for r in rows}
+    types = {r.issue_type for r in rows}
+
+    result: dict[str, list[int]] = {}
+    for t in types:
+        series = []
+        for i in range(days):
+            d = start + timedelta(days=i)
+            series.append(by_key.get((t, d), 0))
+        result[t] = series
+    return result
+
+
 DISCOVERED_URL_SORT_COLUMNS = {
     "url": DiscoveredUrl.url,
     "fails": DiscoveredUrl.fail_count,
@@ -2848,6 +2889,26 @@ def get_book_stats(session: Session) -> dict[str, Any]:
     total_listings = sum(n for _, n in book_shop_counts)
     avg_shops = total_listings / len(book_shop_counts) if book_shop_counts else 0
 
+    # Conflict detection: books where shops disagree on metadata.
+    # A book is in conflict if its linked shop_books have >1 distinct non-null
+    # value for any of: title, author, year, publisher (case-insensitive strings).
+    conflicts_query = (
+        select(ShopBook.book_id)
+        .where(ShopBook.book_id.isnot(None))
+        .group_by(ShopBook.book_id)
+        .having(
+            or_(
+                func.count(func.distinct(func.lower(ShopBook.title))) > 1,
+                func.count(func.distinct(func.lower(ShopBook.author))) > 1,
+                func.count(func.distinct(ShopBook.year)) > 1,
+                func.count(func.distinct(func.lower(ShopBook.publisher))) > 1,
+            )
+        )
+    )
+    conflicts = session.execute(
+        select(func.count()).select_from(conflicts_query.subquery())
+    ).scalar_one()
+
     return {
         "total": total,
         "enriched": enriched,
@@ -2855,6 +2916,7 @@ def get_book_stats(session: Session) -> dict[str, Any]:
         "multi_shop": multi_shop,
         "single_shop": single_shop,
         "avg_shops": round(avg_shops, 1),
+        "conflicts": conflicts,
     }
 
 
@@ -2904,6 +2966,9 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
             ShopBook.price,
             ShopBook.in_stock,
             ShopBook.last_seen_at,
+            ShopBook.first_seen_at,
+            ShopBook.is_active,
+            ShopBook.match_status,
             ShopBook.title.label("shop_title"),
             ShopBook.author.label("shop_author"),
             ShopBook.year.label("shop_year"),
@@ -2916,6 +2981,26 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         .where(ShopBook.book_id == book_id)
         .order_by(Shop.name)
     ).all()
+
+    # Earliest first_seen_at across all shops linked to this book.
+    first_matched = None
+    if shops:
+        timestamps = [s.first_seen_at for s in shops if s.first_seen_at]
+        if timestamps:
+            first_matched = min(timestamps).isoformat()
+
+    # Build ibiblioteka URLs when this is an ibiblioteka-sourced book.
+    # scraped_url  — the JSON API endpoint we hit during scraping
+    # ibiblioteka_page_url — the human-readable SPA page on ibiblioteka.lt
+    ibiblioteka_row = next((s for s in shops if s.name == "ibiblioteka"), None)
+    scraped_url: str | None = ibiblioteka_row.url if ibiblioteka_row else None
+    ibiblioteka_page_url: str | None = None
+    if scraped_url:
+        numeric_id = scraped_url.rstrip("/").split("/")[-1]
+        if numeric_id.isdigit():
+            ibiblioteka_page_url = (
+                f"https://ibiblioteka.lt/metis/publication/{numeric_id}"
+            )
 
     return {
         "id": book.id,
@@ -2941,21 +3026,27 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
         "audience": book.audience,
         "isbns": [{"isbn": isbn, "type": typ} for isbn, typ in isbns],
         "authors": [{"name": n, "role": r} for n, r in authors],
+        "first_matched_at": first_matched,
+        "scraped_url": scraped_url,
+        "ibiblioteka_page_url": ibiblioteka_page_url,
         "shops": [
             {
-                "shop":         row.name,
-                "shop_book_id": row.shop_book_id,
-                "url":          row.url,
-                "price":        str(row.price) if row.price is not None else None,
-                "in_stock":     row.in_stock,
-                "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
-                "title":        row.shop_title,
-                "author":       row.shop_author,
-                "year":         row.shop_year,
-                "isbn":         row.shop_isbn,
-                "publisher":    row.shop_publisher,
-                "format":       row.shop_format,
-                "match_method": row.match_method,
+                "shop":           row.name,
+                "shop_book_id":   row.shop_book_id,
+                "url":            row.url,
+                "price":          str(row.price) if row.price is not None else None,
+                "in_stock":       row.in_stock,
+                "last_seen_at":   row.last_seen_at.isoformat() if row.last_seen_at else None,
+                "first_seen_at":  row.first_seen_at.isoformat() if row.first_seen_at else None,
+                "is_active":      row.is_active,
+                "match_status":   row.match_status,
+                "title":          row.shop_title,
+                "author":         row.shop_author,
+                "year":           row.shop_year,
+                "isbn":           row.shop_isbn,
+                "publisher":      row.shop_publisher,
+                "format":         row.shop_format,
+                "match_method":   row.match_method,
             }
             for row in shops
         ],

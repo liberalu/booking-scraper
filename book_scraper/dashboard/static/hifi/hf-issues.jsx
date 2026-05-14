@@ -243,6 +243,22 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, []);
 
+  // Per-type 14-day trend, keyed by issue_type
+  const [trendData, setTrendData] = React.useState({});
+  React.useEffect(() => {
+    fetch('/api/issues/trend?days=14&state=new')
+      .then(r => r.json())
+      .then(d => setTrendData(d || {}))
+      .catch(() => {});
+  }, []);
+
+  // Aggregated 14-day trend across all types — used by the lifecycle "new" KPI tile.
+  const newTrend = Object.values(trendData).reduce((acc, series) => {
+    if (!Array.isArray(series)) return acc;
+    if (acc.length === 0) return [...series];
+    return acc.map((v, i) => v + (series[i] || 0));
+  }, []);
+
   // Fetch groups when in by_type or waves view
   React.useEffect(() => {
     if (view !== 'by_type' && view !== 'waves') return;
@@ -290,7 +306,12 @@ function HFIssues({ nav, goto }) {
     const ack = (row.by_state?.acknowledged ?? row.cnt_acknowledged) || 0;
     const newCount = (row.by_state?.new ?? row.cnt_new) || 0;
     const priority = sevRank[meta.sev || 'low'] * Math.log10(Math.max(2, newCount));
-    return { ...meta, type: row.issue_type, total, ack, newCount, trend: [], priority, direction: 'flat', deltaPct: 0 };
+    const trend = trendData[row.issue_type] || [];
+    const recent = trend.slice(-7).reduce((a, b) => a + b, 0);
+    const prev = trend.slice(-14, -7).reduce((a, b) => a + b, 0);
+    const deltaPct = prev > 0 ? Math.round((recent - prev) / prev * 100) : 0;
+    const direction = recent > prev * 1.1 ? 'up' : recent < prev * 0.9 ? 'down' : 'flat';
+    return { ...meta, type: row.issue_type, total, ack, newCount, trend, priority, direction, deltaPct };
   }).sort((a, b) => {
     if (byTypeSort === 'priority') return b.priority - a.priority;
     if (byTypeSort === 'count')    return b.total - a.total;
