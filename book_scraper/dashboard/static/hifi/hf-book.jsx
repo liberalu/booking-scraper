@@ -70,13 +70,23 @@ function HFBook({ nav, goto, params }) {
     method: s.match_method || '—',
     confidence: null,
     by: 'auto',
+    // Per-shop metadata fields (for Metadata matrix + Contributors)
+    shopAuthor: s.shop_author,
+    shopTitle: s.shop_title,
+    shopIsbn: s.shop_isbn,
+    shopYear: s.shop_year,
+    shopPublisher: s.shop_publisher,
+    shopFormat: s.shop_format,
   }));
 
-  const prices = shops.map(s => s.price).filter(p => p != null);
-  const lowest = Math.min(...prices);
-  const highest = Math.max(...prices);
-  const spread = (highest - lowest).toFixed(2);
-  const spreadPct = (((highest - lowest) / highest) * 100).toFixed(1);
+  const prices = shops.map(s => s.price).filter(p => p != null && !isNaN(p));
+  const hasPrices = prices.length > 0;
+  const lowest = hasPrices ? Math.min(...prices) : null;
+  const highest = hasPrices ? Math.max(...prices) : null;
+  const spread = hasPrices && lowest != null && highest != null ? (highest - lowest).toFixed(2) : null;
+  const spreadPct = hasPrices && lowest != null && highest != null && highest > 0 ? (((highest - lowest) / highest) * 100).toFixed(1) : null;
+  const lowestShop = hasPrices ? shops.find(s => s.price === lowest)?.shop : null;
+  const highestShop = hasPrices ? shops.find(s => s.price === highest)?.shop : null;
   const matched = shops.filter(s => s.sbStatus !== 'pending').length;
   const pending = shops.filter(s => s.sbStatus === 'pending').length;
 
@@ -111,10 +121,10 @@ function HFBook({ nav, goto, params }) {
     >
       <HFKpiStrip items={[
         { label:'Shops matched', value:`${matched}`, delta:<span style={{color:HF.ink3}}>of {shops.length} listings</span> },
-        { label:'Lowest price',  value:`€${lowest.toFixed(2)}`, delta:<span style={{color:HF.okInk}}>knygos.lt</span>, tone:'ok' },
-        { label:'Highest price', value:`€${highest.toFixed(2)}`, delta:<span style={{color:HF.ink3}}>krisostomus</span> },
-        { label:'Spread',        value:`€${spread}`, delta:<span style={{color:HF.warnInk}}>{spreadPct}% range</span>, tone:'warn' },
-        { label:'Last matched',  value:'2d ago', delta:<span style={{color:HF.ink3}}>mintis · 0.81</span> },
+        { label:'Lowest price',  value: lowest != null ? `€${lowest.toFixed(2)}` : '—', delta: lowestShop ? <span style={{color:HF.okInk}}>{lowestShop}</span> : null, tone:'ok' },
+        { label:'Highest price', value: highest != null ? `€${highest.toFixed(2)}` : '—', delta: highestShop ? <span style={{color:HF.ink3}}>{highestShop}</span> : null },
+        { label:'Spread',        value: spread != null ? `€${spread}` : '—', delta: spreadPct != null ? <span style={{color:HF.warnInk}}>{spreadPct}% range</span> : null, tone: spreadPct != null ? 'warn' : undefined },
+        { label:'Last matched',  value: shops[0]?.lastSeen ?? '—', delta: shops[0] ? <span style={{color:HF.ink3}}>{shops[0].shop}</span> : null },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap}}>
@@ -128,7 +138,7 @@ function HFBook({ nav, goto, params }) {
       </HFCard>
 
       {tab === 'overview' && <HFBookListings HF={HF} shops={shops} goto={goto} methodTone={methodTone} sbTone={sbTone} lowest={lowest}/>}
-      {tab === 'prices'   && <HFBookPrices   HF={HF} shops={shops} lowest={lowest}/>}
+      {tab === 'prices'   && <HFBookPrices   HF={HF} shops={shops} lowest={lowest} bookId={bookId}/>}
       {tab === 'metadata' && <HFBookMetadata HF={HF} book={book} shops={shops}/>}
     </HFShell>
   );
@@ -199,18 +209,45 @@ function HFBookListings({ HF, shops, goto, methodTone, sbTone, lowest }) {
 
 // ─────────────────────── Prices tab ───────────────────────
 
-function HFBookPrices({ HF, shops, lowest }) {
-  // Synthetic 30-day price series per shop (constant + small wobble around current)
-  const series = shops.filter(s => s.price != null).map((s, i) => {
-    const base = s.price;
-    const seed = (s.shop.charCodeAt(0) + i*7) % 17;
-    const data = Array.from({length:30}, (_,k) => {
-      const wob = Math.sin((k+seed)*0.6) * Math.min(1.2, base*0.05);
-      const drop = (k > 12 && k < 20 && i === 1) ? -0.8 : 0;
-      return Math.max(1, +(base + wob + drop).toFixed(2));
-    });
-    return { shop:s.shop, data, current:s.price };
+function HFBookPrices({ HF, shops, lowest, bookId }) {
+  const [history, setHistory] = React.useState(null);
+  React.useEffect(() => {
+    if (!bookId) return;
+    fetch(`/api/books/${bookId}/prices`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setHistory(d.series || []); })
+      .catch(() => {});
+  }, [bookId]);
+
+  if (shops.length === 0 || shops.every(s => s.price == null)) {
+    return <HFCard><div style={{padding:40, textAlign:'center', color:HF.ink4}}>No price data available.</div></HFCard>;
+  }
+
+  // Build per-shop series from real history when present; fall back to a flat
+  // single-point line at the current price when the shop has no recorded history.
+  const historyByShop = {};
+  (history || []).forEach(h => { historyByShop[h.shop] = h.series || []; });
+
+  const series = shops.filter(s => s.price != null).map(s => {
+    const hist = historyByShop[s.shop] || [];
+    const data = hist.length > 0
+      ? hist.map(p => parseFloat(p.price)).filter(p => !isNaN(p))
+      : [s.price];
+    return { shop: s.shop, data, current: s.price, history: hist };
   });
+
+  // All-time low across all shops' real history
+  const allHistoryPrices = (history || []).flatMap(h => (h.series || []).map(p => ({ shop: h.shop, price: parseFloat(p.price), date: p.date })))
+    .filter(p => !isNaN(p.price));
+  const allTimeLow = allHistoryPrices.length > 0
+    ? allHistoryPrices.reduce((min, p) => p.price < min.price ? p : min, allHistoryPrices[0])
+    : null;
+
+  // Average price across all current shop prices
+  const currentPrices = shops.map(s => s.price).filter(p => p != null);
+  const avgPrice = currentPrices.length > 0
+    ? currentPrices.reduce((a, b) => a + b, 0) / currentPrices.length
+    : null;
 
   return (
     <>
@@ -236,28 +273,27 @@ function HFBookPrices({ HF, shops, lowest }) {
         <HFCard title="Cheapest right now" sub="best deal across matched shops">
           <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
             <div style={{display:'flex', alignItems:'baseline', gap:8}}>
-              <span style={{fontSize:28, fontWeight:700, color:HF.okInk, fontFamily:HF.mono}}>€{lowest.toFixed(2)}</span>
-              <span style={{color:HF.ink3, fontSize:13}}>knygos.lt</span>
+              <span style={{fontSize:28, fontWeight:700, color:HF.okInk, fontFamily:HF.mono}}>{lowest != null ? `€${lowest.toFixed(2)}` : '—'}</span>
+              <span style={{color:HF.ink3, fontSize:13}}>{shops.find(s => s.price === lowest)?.shop ?? ''}</span>
             </div>
-            <span style={{fontSize:12, color:HF.ink3}}>€{(Math.max(...shops.map(s=>s.price||0))-lowest).toFixed(2)} cheaper than the most expensive listing.</span>
+            <span style={{fontSize:12, color:HF.ink3}}>{lowest != null ? `€${(Math.max(...shops.map(s=>s.price||0))-lowest).toFixed(2)} cheaper than the most expensive listing.` : ''}</span>
           </div>
         </HFCard>
         <HFCard title="All-time low" sub="across all shops, since first match">
           <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
             <div style={{display:'flex', alignItems:'baseline', gap:8}}>
-              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>€17.20</span>
-              <span style={{color:HF.ink3, fontSize:13}}>knygos.lt</span>
+              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>{allTimeLow ? `€${allTimeLow.price.toFixed(2)}` : '—'}</span>
+              <span style={{color:HF.ink3, fontSize:13}}>{allTimeLow?.shop ?? ''}</span>
             </div>
-            <span style={{fontSize:12, color:HF.ink3}}>Mar 22, 2025 · flash sale · lasted 4h</span>
+            <span style={{fontSize:12, color:HF.ink3}}>{allTimeLow?.date ?? (history === null ? 'Loading…' : 'No history yet')}</span>
           </div>
         </HFCard>
-        <HFCard title="Average price" sub="all shops, last 30 days">
+        <HFCard title="Average price" sub="current price across all shops">
           <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
             <div style={{display:'flex', alignItems:'baseline', gap:8}}>
-              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>€20.46</span>
-              <span style={{color:HF.errInk, fontSize:12, fontWeight:500}}>▲ 1.2% vs prev 30d</span>
+              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>{avgPrice != null ? `€${avgPrice.toFixed(2)}` : '—'}</span>
             </div>
-            <span style={{fontSize:12, color:HF.ink3}}>5 shops contributing · 1 pending excluded</span>
+            <span style={{fontSize:12, color:HF.ink3}}>{currentPrices.length} shop{currentPrices.length===1?'':'s'} contributing</span>
           </div>
         </HFCard>
       </div>
@@ -268,26 +304,31 @@ function HFBookPrices({ HF, shops, lowest }) {
 // ─────────────────────── Metadata tab ───────────────────────
 
 function HFBookMetadata({ HF, book, shops }) {
-  const order = ['vaga','knygos.lt','patogu','krisostomus','humanitas','mintis'];
+  const order = shops.map(s => s.shop);
   return (
     <>
       <HFContributorsCard HF={HF} book={book} shops={shops} order={order}/>
-      <HFMetadataMatrix HF={HF} book={book} order={order}/>
+      <HFMetadataMatrix HF={HF} book={book} shops={shops} order={order}/>
     </>
   );
 }
 
 function HFContributorsCard({ HF, book, shops, order }) {
-  // For each contributor, fabricate which shops report them and any disagreements.
-  const contributors = [
-    { role:'Author',       canonical:'Yuval Noah Harari', cells:{ vaga:'Yuval Noah Harari', 'knygos.lt':'Yuval Noah Harari', patogu:'Yuval Noah Harari', krisostomus:'Yuval Noah Harari', humanitas:'Yuval Noah Harari', mintis:{v:'Y. N. Harari', conflict:true} } },
-    { role:'Translator',   canonical:'Tadas Naujokaitis', cells:{ vaga:'Tadas Naujokaitis', 'knygos.lt':'Tadas Naujokaitis', patogu:'Tadas Naujokaitis', krisostomus:null, humanitas:'T. Naujokaitis', mintis:null } },
-    { role:'Editor',       canonical:'Giedrė Kmieliauskaitė', cells:{ vaga:'Giedrė Kmieliauskaitė', 'knygos.lt':'Giedrė Kmieliauskaitė', patogu:null, krisostomus:null, humanitas:null, mintis:null } },
-    { role:'Cover artist', canonical:'Marija Mockutė', cells:{ vaga:'Marija Mockutė', 'knygos.lt':null, patogu:null, krisostomus:{v:'Vaida Stankūnaitė', conflict:true}, humanitas:null, mintis:null } },
-    { role:'Illustrator',  canonical:'Lina Sergejeva', cells:{ vaga:'Lina Sergejeva', 'knygos.lt':null, patogu:null, krisostomus:null, humanitas:null, mintis:null } },
-    { role:'Producer',     canonical:'Kitos knygos studio', cells:{ vaga:'Kitos knygos studio', 'knygos.lt':'Kitos knygos', patogu:'Kitos knygos', krisostomus:'Kitos knygos', humanitas:'Kitos knygos', mintis:null } },
-    { role:'Narrator',     canonical:'— (no audiobook)', cells:{ vaga:null, 'knygos.lt':null, patogu:null, krisostomus:null, humanitas:null, mintis:null } },
-  ];
+  // Build per-role rows from canonical contributors. API only exposes a
+  // single shop_author per shop (not per-role), so only the Author row has
+  // per-shop cells; other roles show canonical-only.
+  const contributors = (book.contributors || []).map(c => ({
+    role: c.role,
+    canonical: c.name,
+    cells: order.reduce((acc, shopName) => {
+      const shopObj = shops.find(s => s.shop === shopName);
+      const shopAuthor = shopObj?.shopAuthor;
+      acc[shopName] = (c.role === 'Author' && shopAuthor) ? shopAuthor : null;
+      return acc;
+    }, {}),
+  }));
+
+  if (!contributors.length) return null;
 
   return (
     <HFCard title="Contributors" sub="people credited on this book — author, translator, editor, cover artist, illustrator, producer, narrator"
@@ -315,7 +356,7 @@ function HFContributorsCard({ HF, book, shops, order }) {
               fontSize:12,
             }}>
               <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{c.role}</span>
-              <span style={{color: c.canonical.startsWith('—')? HF.ink4 : HF.ink, fontWeight:500, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.canonical}</span>
+              <span style={{color: (typeof c.canonical === 'string' && c.canonical.startsWith('—')) ? HF.ink4 : HF.ink, fontWeight:500, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.canonical}</span>
               {order.map(n => {
                 const v = c.cells[n];
                 if (v == null) return <span key={n} style={{color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>—</span>;
@@ -335,43 +376,56 @@ function HFContributorsCard({ HF, book, shops, order }) {
   );
 }
 
-function HFMetadataMatrix({ HF, book, order }) {
-  // Per-field per-shop matrix. Each cell is one of:
+function HFMetadataMatrix({ HF, book, shops, order }) {
+  // Per-field per-shop matrix derived from real API data.
+  // Each cell is:
   //   { v: '<value>' }              → shop reported this value (matches canonical → green check)
   //   { v: '<value>', conflict:true } → shop reported a different value (warning)
   //   { missing:true }              → shop did not provide this field
-  const matrix = [
-    { field:'Title',      canonical: book.title,            source:'consensus',
-      cells: { 'vaga':{v:book.title}, 'knygos.lt':{v:book.title}, 'patogu':{v:'Sapiens. Trumpa žmonijos istorija', conflict:true},
-               'krisostomus':{v:book.title}, 'humanitas':{v:book.title}, 'mintis':{v:book.title} } },
-    { field:'Author',     canonical: book.author,           source:'consensus',
-      cells: { 'vaga':{v:book.author}, 'knygos.lt':{v:book.author}, 'patogu':{v:book.author},
-               'krisostomus':{v:book.author}, 'humanitas':{v:book.author}, 'mintis':{v:'Y. N. Harari', conflict:true} } },
-    { field:'ISBN-13',    canonical: book.isbn,             source:'5 of 6 · 1 missing',
-      cells: { 'vaga':{v:book.isbn}, 'knygos.lt':{v:book.isbn}, 'patogu':{v:book.isbn},
-               'krisostomus':{v:book.isbn}, 'humanitas':{v:book.isbn}, 'mintis':{missing:true} } },
-    { field:'ISBN-10',    canonical: book.isbn10,           source:'derived',
-      cells: { 'vaga':{v:book.isbn10}, 'knygos.lt':{missing:true}, 'patogu':{missing:true},
-               'krisostomus':{v:book.isbn10}, 'humanitas':{missing:true}, 'mintis':{missing:true} } },
-    { field:'Publisher',  canonical: book.publisher,        source:'consensus',
-      cells: { 'vaga':{v:book.publisher}, 'knygos.lt':{v:book.publisher}, 'patogu':{v:book.publisher},
-               'krisostomus':{v:book.publisher}, 'humanitas':{v:book.publisher}, 'mintis':{missing:true} } },
-    { field:'Year',       canonical: String(book.year),     source:'5 of 6 · 1 conflict',
-      cells: { 'vaga':{v:'2019'}, 'knygos.lt':{v:'2019'}, 'patogu':{v:'2019'},
-               'krisostomus':{v:'2019'}, 'humanitas':{v:'2014', conflict:true}, 'mintis':{v:'2019'} } },
-    { field:'Pages',      canonical: String(book.pages),    source:'4 of 6 · 2 missing',
-      cells: { 'vaga':{v:'464'}, 'knygos.lt':{v:'464'}, 'patogu':{missing:true},
-               'krisostomus':{v:'464'}, 'humanitas':{v:'464'}, 'mintis':{missing:true} } },
-    { field:'Language',   canonical: book.language,         source:'consensus',
-      cells: { 'vaga':{v:'EN'}, 'knygos.lt':{v:'EN'}, 'patogu':{v:'EN'},
-               'krisostomus':{v:'EN'}, 'humanitas':{v:'EN'}, 'mintis':{v:'EN'} } },
-    { field:'Binding',    canonical: book.binding,          source:'4 of 6 · 1 conflict · 1 missing',
-      cells: { 'vaga':{v:'Paperback'}, 'knygos.lt':{v:'Paperback'}, 'patogu':{v:'Minkšti viršeliai'},
-               'krisostomus':{v:'Hardcover', conflict:true}, 'humanitas':{v:'Paperback'}, 'mintis':{missing:true} } },
-    { field:'Categories', canonical: 'History · Non-fiction', source:'merged from 5 shops',
-      cells: { 'vaga':{v:'History, Non-fiction'}, 'knygos.lt':{v:'Istorija'}, 'patogu':{v:'Mokslas, istorija'},
-               'krisostomus':{v:'History'}, 'humanitas':{v:'Non-fiction'}, 'mintis':{missing:true} } },
+  const fields = [
+    { field:'ISBN',       canonical: book.isbn,      perShop: s => s.shopIsbn },
+    { field:'Title',      canonical: book.title,     perShop: s => s.shopTitle },
+    { field:'Author',     canonical: book.author,    perShop: s => s.shopAuthor },
+    { field:'Year',       canonical: book.year != null ? String(book.year) : null, perShop: s => s.shopYear != null ? String(s.shopYear) : null },
+    { field:'Publisher',  canonical: book.publisher, perShop: s => s.shopPublisher },
+    { field:'Format',     canonical: book.binding,   perShop: s => s.shopFormat },
+    { field:'Language',   canonical: book.language,  perShop: () => null },
+    { field:'Pages',      canonical: book.pages != null ? String(book.pages) : null, perShop: () => null },
   ];
+
+  const matrix = fields.map(row => {
+    const cells = {};
+    let provided = 0, conflicts = 0, missing = 0;
+    for (const s of shops) {
+      const raw = row.perShop(s);
+      if (raw == null || raw === '') {
+        cells[s.shop] = { missing:true };
+        missing++;
+      } else {
+        const v = String(raw);
+        const matches = row.canonical != null && v === String(row.canonical);
+        cells[s.shop] = matches ? { v } : { v, conflict:true };
+        provided++;
+        if (!matches) conflicts++;
+      }
+    }
+    const total = shops.length;
+    let source;
+    if (total === 0) source = 'no shop data';
+    else if (conflicts === 0 && missing === 0) source = 'consensus';
+    else {
+      const parts = [`${provided} of ${total}`];
+      if (conflicts) parts.push(`${conflicts} conflict${conflicts>1?'s':''}`);
+      if (missing) parts.push(`${missing} missing`);
+      source = parts.join(' · ');
+    }
+    return {
+      field: row.field,
+      canonical: row.canonical != null && row.canonical !== '' ? String(row.canonical) : '—',
+      source,
+      cells,
+    };
+  });
 
   // Conflicts list — every shop × field where the shop value disagrees with canonical.
 
@@ -414,7 +468,7 @@ function HFMetadataMatrix({ HF, book, order }) {
                 </div>
                 <span style={{color:HF.ink, fontWeight:500, fontSize:12.5, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.canonical}</span>
                 {order.map(name => {
-                  const c = row.cells[name];
+                  const c = row.cells[name] || { missing:true };
                   if (c.missing) {
                     return (
                       <span key={name} style={{display:'flex', alignItems:'center', gap:6, color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>
