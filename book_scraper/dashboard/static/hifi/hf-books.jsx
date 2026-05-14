@@ -88,6 +88,24 @@ function HFBooks({ nav, goto }) {
       .catch(() => setLoading(false));
   }, [q, enrichedFilter, isbnFilter, shopsFilter, conflictsFilter, yearFilter, page]);
 
+  const onExport = () => {
+    const params = new URLSearchParams();
+    if (q) params.set('search', q);
+    if (enrichedFilter === 'enriched')     params.set('data_source', 'ibiblioteka');
+    if (enrichedFilter === 'not enriched') params.set('data_source', 'shop_inferred');
+    if (shopsFilter === '0 shops')         params.set('has_shops', 'false');
+    if (shopsFilter === '1+ shops')        params.set('has_shops', 'true');
+    if (shopsFilter === '1 shop only')   { params.set('shop_count_min', '1'); params.set('shop_count_max', '1'); }
+    if (shopsFilter === '2-3 shops')     { params.set('shop_count_min', '2'); params.set('shop_count_max', '3'); }
+    if (shopsFilter === '4+ shops')        params.set('shop_count_min', '4');
+    if (isbnFilter === 'has ISBN')         params.set('has_isbn', 'true');
+    if (isbnFilter === 'missing ISBN')     params.set('has_isbn', 'false');
+    if (yearFilter !== 'any')              params.set('year', yearFilter);
+    if (conflictsFilter === 'clean')         params.set('has_conflicts', 'false');
+    if (conflictsFilter === 'has conflicts') params.set('has_conflicts', 'true');
+    window.location.href = `/api/books/export?${params}`;
+  };
+
   // Map API rows to JSX shape
   const rows = (data.books || []).map(b => ({
     id:       b.id,
@@ -115,7 +133,7 @@ function HFBooks({ nav, goto }) {
       title="Books" subtitle={`Canonical catalog · ${data.total.toLocaleString()} unique titles aggregated from 5 shops + ISBN DB. ↓ Each book maps to N Shop Books.`}
       breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Books</span></>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>
+        <HFButton onClick={onExport}><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Re-aggregate</HFButton>
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openAddBook()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add book</HFButton>
       </>}
@@ -125,7 +143,7 @@ function HFBooks({ nav, goto }) {
         { label:'Enriched (ISBN-DB)', value: stats ? stats.enriched.toLocaleString() : '—', delta: stats ? <span style={{color:HF.ink3}}>{stats.enriched_pct}%</span> : null },
         { label:'Multi-shop',       value: stats ? stats.multi_shop.toLocaleString() : '—', delta: stats ? <span style={{color:HF.ink3}}>{stats.avg_shops} shops avg</span> : null },
         { label:'Single-shop',      value: stats ? stats.single_shop.toLocaleString() : '—', delta: stats && stats.total ? <span style={{color:HF.ink3}}>{Math.round(stats.single_shop / stats.total * 100)}%</span> : null },
-        { label:'Conflicts',        value:'—', delta:<span style={{color:HF.ink3}}>n/a</span> },
+        { label:'Conflicts',        value: stats ? stats.conflicts.toLocaleString() : '—', delta: stats ? <span style={{color: stats.conflicts > 0 ? HF.warnInk : HF.ink3}}>{stats.conflicts > 0 ? 'need review' : 'all clean'}</span> : null },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap, overflow:'visible'}} padding={12}>

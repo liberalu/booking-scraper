@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
@@ -235,6 +235,8 @@ def _parse_phase(phase: str) -> tuple[str, str]:
     """Split 'discover_sitemap' → ('discover', 'sitemap'); 'scan' → ('scan', 'delta')."""  # noqa: E501
     if phase.startswith("discover_"):
         return "discover", phase[len("discover_") :]
+    if phase in ("match", "validate"):
+        return phase, ""
     return "scan", "delta"
 
 
@@ -1907,6 +1909,87 @@ def api_book_years(session: Session = Depends(get_db)) -> list[int]:
         .all()
     )
     return [r for r in rows]
+
+
+@router.get("/books/export")
+def api_books_export(
+    data_source: str | None = None,
+    has_isbn: bool | None = None,
+    has_shops: bool | None = None,
+    has_conflicts: bool | None = None,
+    shop_count_min: int | None = None,
+    shop_count_max: int | None = None,
+    year: int | None = None,
+    search: str | None = None,
+    session: Session = Depends(get_db),
+) -> Response:
+    """Stream a CSV of all books matching the current filters."""
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    from book_scraper.dashboard.queries import list_books
+
+    def gen():
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(
+            [
+                "id",
+                "title",
+                "author",
+                "isbn",
+                "year",
+                "publisher",
+                "shop_count",
+                "price_min",
+                "price_max",
+                "data_source",
+                "has_conflicts",
+            ]
+        )
+        yield out.getvalue()
+        page = 1
+        per_page = 500
+        while True:
+            d = list_books(
+                session,
+                data_source=data_source,
+                has_isbn=has_isbn,
+                has_shops=has_shops,
+                has_conflicts=has_conflicts,
+                shop_count_min=shop_count_min,
+                shop_count_max=shop_count_max,
+                year=year,
+                search=search,
+                page=page,
+                per_page=per_page,
+            )
+            for b in d["books"]:
+                buf = io.StringIO()
+                csv.writer(buf).writerow(
+                    [
+                        b["id"],
+                        b["title"],
+                        (b["authors"][0] if b["authors"] else ""),
+                        b["primary_isbn"] or "",
+                        b["year"] or "",
+                        b["publisher"] or "",
+                        b["shop_count"],
+                        b["price_min"] or "",
+                        b["price_max"] or "",
+                        b["data_source"] or "",
+                        "yes" if b["has_conflicts"] else "no",
+                    ]
+                )
+                yield buf.getvalue()
+            if page >= d["pages"]:
+                break
+            page += 1
+
+    headers = {"Content-Disposition": 'attachment; filename="books.csv"'}
+    return StreamingResponse(gen(), media_type="text/csv", headers=headers)
 
 
 @router.get("/books/{book_id}")

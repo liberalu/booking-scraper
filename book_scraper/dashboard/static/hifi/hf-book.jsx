@@ -12,6 +12,7 @@ function HFBook({ nav, goto, params }) {
   const [notFound, setNotFound] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   const [history, setHistory] = React.useState(null);
+  const [rescrapingAll, setRescrapingAll] = React.useState(false);
 
   React.useEffect(() => {
     if (!bookId) { setLoading(false); return; }
@@ -169,9 +170,37 @@ function HFBook({ nav, goto, params }) {
         <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{book.isbn}</span>
       </>}
       actions={<>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Re-scrape all</HFButton>
-        <HFButton><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add shop listing</HFButton>
-        <HFButton variant="primary">Edit book</HFButton>
+        <HFButton disabled={rescrapingAll} onClick={async () => {
+          if (rescrapingAll || !shops.length) return;
+          setRescrapingAll(true);
+          try {
+            for (const s of shops) {
+              const r = await fetch('/api/runs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shop: s.shop, phase: 'scan', mode: 'full', urls: s.url }),
+              });
+              if (!r.ok) {
+                const msg = `Failed to re-scrape ${s.shop} (HTTP ${r.status})`;
+                if (window.HF_APP?.toast) window.HF_APP.toast({ kind: 'err', text: msg });
+                setRescrapingAll(false);
+                return;
+              }
+            }
+            goto('runs');
+          } catch (e) {
+            if (window.HF_APP?.toast) window.HF_APP.toast({ kind: 'err', text: `Re-scrape failed: ${e.message}` });
+            setRescrapingAll(false);
+          }
+        }}>
+          <span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Re-scrape all{rescrapingAll ? '…' : ''}
+        </HFButton>
+        <HFButton onClick={() => window.HF_APP?.toast?.({ kind:'info', text:'Add shop listing — dialog coming soon' })}>
+          <span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add shop listing
+        </HFButton>
+        <HFButton variant="primary" onClick={() => window.HF_APP?.toast?.({ kind:'info', text:'Edit book — dialog coming soon' })}>
+          Edit book
+        </HFButton>
       </>}
     >
       <HFKpiStrip items={[

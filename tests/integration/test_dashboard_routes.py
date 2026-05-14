@@ -1794,3 +1794,128 @@ def test_cron_delete_succeeds_after_dependent_unlinked(
 
     db_session.expire_all()
     assert get_cron_job(db_session, parent.id) is None
+
+
+# ── /api/books/stats, /api/books/export, books filters ───────────────────────
+
+
+@pytest.mark.integration
+def test_books_stats_returns_aggregate_counts(
+    client: TestClient, db_session: Session
+) -> None:
+    """GET /api/books/stats returns total/enriched/multi_shop/single_shop/conflicts/avg_shops."""
+    r = client.get("/api/books/stats")
+    assert r.status_code == 200
+    d = r.json()
+    assert {
+        "total",
+        "enriched",
+        "enriched_pct",
+        "multi_shop",
+        "single_shop",
+        "avg_shops",
+        "conflicts",
+    } <= d.keys()
+    assert d["total"] >= 0
+    assert isinstance(d["conflicts"], int)
+
+
+@pytest.mark.integration
+def test_books_export_returns_csv(client: TestClient) -> None:
+    r = client.get("/api/books/export?per_page=1")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    body = r.content.decode("utf-8")
+    assert body.startswith(
+        "id,title,author,isbn,year,publisher,shop_count,price_min,price_max,data_source,has_conflicts"
+    )
+
+
+@pytest.mark.integration
+def test_books_list_accepts_has_conflicts_filter(client: TestClient) -> None:
+    r = client.get("/api/books?has_conflicts=false&per_page=1")
+    assert r.status_code == 200
+    d = r.json()
+    assert "books" in d and "total" in d
+    if d["books"]:
+        assert d["books"][0]["has_conflicts"] is False
+
+
+@pytest.mark.integration
+def test_books_list_accepts_shop_count_range(client: TestClient) -> None:
+    r = client.get("/api/books?shop_count_min=1&shop_count_max=1&per_page=3")
+    assert r.status_code == 200
+    for b in r.json()["books"]:
+        assert b["shop_count"] == 1
+
+
+@pytest.mark.integration
+def test_book_prices_returns_series_per_shop(
+    client: TestClient, db_session: Session
+) -> None:
+    from book_scraper.db.models import Book
+
+    book = db_session.query(Book).first()
+    if not book:
+        return
+    r = client.get(f"/api/books/{book.id}/prices")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["book_id"] == book.id
+    assert "series" in d
+    for s in d["series"]:
+        assert "shop" in s and "series" in s
+
+
+@pytest.mark.integration
+def test_issues_detail_returns_single_issue(
+    client: TestClient, db_session: Session
+) -> None:
+    vi = db_session.query(ValidationIssue).first()
+    if not vi:
+        return
+    r = client.get(f"/api/issues/{vi.id}")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["id"] == vi.id
+    assert "issue" in d and "lifecycle_state" in d
+
+
+@pytest.mark.integration
+def test_issues_detail_returns_404_for_missing(client: TestClient) -> None:
+    r = client.get("/api/issues/999999999")
+    assert r.status_code == 404
+
+
+@pytest.mark.integration
+def test_issues_trend_returns_per_type_series(client: TestClient) -> None:
+    r = client.get("/api/issues/trend?days=14")
+    assert r.status_code == 200
+    d = r.json()
+    assert isinstance(d, dict)
+    for _k, v in d.items():
+        assert isinstance(v, list)
+        assert len(v) == 14
+        assert all(isinstance(x, int) for x in v)
+
+
+@pytest.mark.integration
+def test_issues_groups_by_type(client: TestClient) -> None:
+    r = client.get("/api/issues/groups?group_by=type")
+    assert r.status_code == 200
+    d = r.json()
+    assert "groups" in d
+    if d["groups"]:
+        g = d["groups"][0]
+        assert "issue_type" in g and "total" in g
+
+
+@pytest.mark.integration
+def test_issues_groups_by_type_shop(client: TestClient) -> None:
+    r = client.get("/api/issues/groups?group_by=type_shop")
+    assert r.status_code == 200
+    d = r.json()
+    assert "groups" in d
+    if d["groups"]:
+        g = d["groups"][0]
+        assert "issue_type" in g and "shop_name" in g
