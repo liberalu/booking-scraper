@@ -20,11 +20,12 @@ class StallDetector:  # pragma: no cover
     60–150 s without producing a signal.
     """
 
-    def __init__(self, crawler: Crawler, stall_timeout: float):
+    def __init__(self, crawler: Crawler, stall_timeout: float, check_interval: float = 10.0):
         self.crawler = crawler
         self.stall_timeout = stall_timeout
         self._last_activity = time.monotonic()
-        self._check_interval = 10.0
+        self._last_response_url: str | None = None
+        self._check_interval = check_interval
         self._task: Any = None
         # Auto-resume bookkeeping: when a stall fires, _check_stall
         # records the spawn params here, and `spider_closed` does the
@@ -58,8 +59,12 @@ class StallDetector:  # pragma: no cover
             self._check_interval, self._check_stall
         )
 
-    def response_received(self, **kwargs: Any) -> None:
+    def response_received(self, response: Any = None, **kwargs: Any) -> None:
         self._last_activity = time.monotonic()
+        try:
+            self._last_response_url = response.url
+        except AttributeError:
+            self._last_response_url = None
 
     def item_scraped(self, **kwargs: Any) -> None:
         self._last_activity = time.monotonic()
@@ -109,9 +114,15 @@ class StallDetector:  # pragma: no cover
                     )
                     return
 
+            stats = self._collect_stall_diagnostics()
             logger.warning(
-                "Spider stalled for %.0fs — forcing shutdown",
+                "Spider stalled for %.0fs — forcing shutdown "
+                "(request_count=%d last_url=%s in_flight_by_domain=%s scheduler_queue=%d)",
                 elapsed,
+                stats["request_count"],
+                stats["last_url"],
+                stats["in_flight_by_domain"],
+                stats["scheduler_queue"],
             )
             spider = self.crawler.spider
             if spider is None:
@@ -156,6 +167,49 @@ class StallDetector:  # pragma: no cover
         self._task = reactor.callLater(  # type: ignore[attr-defined]
             self._check_interval, self._check_stall
         )
+
+    def _collect_stall_diagnostics(self) -> dict[str, object]:
+        """Snapshot scheduler + downloader state at the moment of a stall.
+
+        Returns a flat dict for the stall log line (CODEOBS-04):
+          - request_count: total responses received (from Scrapy stats)
+          - last_url: URL of the most recent response
+          - in_flight_by_domain: {domain: count} dict of active downloads
+          - scheduler_queue: pending request count (-1 if unavailable)
+        """
+        request_count = 0
+        try:
+            request_count = int(
+                self.crawler.stats.get_value("response_received_count", 0)
+            )
+        except Exception:
+            pass
+
+        in_flight: dict[str, int] = {}
+        scheduler_queue = -1
+        engine = getattr(self.crawler, "engine", None)
+        if engine is not None:
+            downloader = getattr(engine, "downloader", None)
+            if downloader is not None:
+                for domain, slot in downloader.slots.items():
+                    n = len(slot.active)
+                    if n > 0:
+                        in_flight[domain] = n
+            scheduler_slot = getattr(engine, "slot", None)
+            if scheduler_slot is not None:
+                sched = getattr(scheduler_slot, "scheduler", None)
+                if sched is not None:
+                    try:
+                        scheduler_queue = len(sched)
+                    except Exception:
+                        scheduler_queue = -1
+
+        return {
+            "request_count": request_count,
+            "last_url": self._last_response_url or "<none>",
+            "in_flight_by_domain": in_flight,
+            "scheduler_queue": scheduler_queue,
+        }
 
     def _finalize_run_failed(self, run_id: int, reason: str) -> None:
         """Mark a stalled run failed via a fresh DB session.
