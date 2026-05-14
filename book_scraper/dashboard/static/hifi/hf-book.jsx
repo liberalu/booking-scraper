@@ -253,16 +253,176 @@ function HFBookMetadata({ book, authorsByRole }) {
   );
 }
 
-function HFBookPricesStub() {
+function MultiLineChart({ series, h, shopColors }) {
+  if (!series || !series.length) return null;
+
+  const allDates = [...new Set(series.flatMap(s => s.series.map(p => p.date)))].sort();
+  if (!allDates.length) return null;
+
+  const allPrices = series.flatMap(s => s.series.map(p => p.price));
+  const minP = Math.min(...allPrices);
+  const maxP = Math.max(...allPrices);
+  const priceRange = maxP - minP || 1;
+
+  const W = 100;
+  const PAD_L = 8, PAD_R = 4, PAD_T = 8, PAD_B = 20;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = h - PAD_T - PAD_B;
+
+  const xOf = date => PAD_L + (allDates.indexOf(date) / Math.max(allDates.length - 1, 1)) * chartW;
+  const yOf = price => PAD_T + (1 - (price - minP) / priceRange) * chartH;
+
   return (
-    <HFCard title="Price history" sub="Coming in a future release">
-      <div style={{ padding: 32 }}>
-        <HFEmptyState
-          title="Price history not yet available"
-          sub="Once the price history endpoint is added, this tab will show per-shop price trends over time."
-        />
-      </div>
-    </HFCard>
+    <svg viewBox={`0 0 ${W} ${h}`}
+         style={{ width: '100%', height: h, overflow: 'visible' }}
+         preserveAspectRatio="none">
+      {/* Gridlines + Y-axis labels */}
+      {[0, 0.25, 0.5, 0.75, 1].map(t => {
+        const y = PAD_T + t * chartH;
+        const price = maxP - t * priceRange;
+        return (
+          <g key={t}>
+            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
+                  stroke="var(--hf-border-faint)" strokeWidth="0.3"/>
+            <text x={PAD_L - 1} y={y + 1} textAnchor="end"
+                  style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+              {price.toFixed(2)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* One line per shop */}
+      {series.map((s, i) => {
+        const raw = shopColors[i % shopColors.length];
+        const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
+        const pts = s.series.filter(p => allDates.includes(p.date));
+        if (pts.length < 2) return null;
+        const d = pts.map((p, j) =>
+          `${j === 0 ? 'M' : 'L'}${xOf(p.date).toFixed(2)},${yOf(p.price).toFixed(2)}`
+        ).join(' ');
+        return (
+          <path key={s.shop} d={d} fill="none"
+                stroke={color} strokeWidth="0.8"
+                strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
+        );
+      })}
+
+      {/* X-axis: first + last date */}
+      {allDates.length > 1 && <>
+        <text x={PAD_L} y={h - 2} textAnchor="start"
+              style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+          {allDates[0]}
+        </text>
+        <text x={W - PAD_R} y={h - 2} textAnchor="end"
+              style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+          {allDates[allDates.length - 1]}
+        </text>
+      </>}
+    </svg>
+  );
+}
+
+function HFBookPrices({ book }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch(`/api/books/${book.id}/prices`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [book.id]);
+
+  if (loading) {
+    return (
+      <HFCard title="Price history" sub="Last 30 days">
+        <div style={{ padding: 20 }}><HFSkeleton h={200} /></div>
+      </HFCard>
+    );
+  }
+
+  const series = data?.series || [];
+  const allPrices = series.flatMap(s => s.series.map(p => p.price));
+
+  if (!series.length || !allPrices.length) {
+    return (
+      <HFCard title="Price history" sub="Last 30 days">
+        <div style={{ padding: 32 }}>
+          <HFEmptyState
+            title="No price history yet"
+            sub="Prices will appear here once scraping has run for this book."
+          />
+        </div>
+      </HFCard>
+    );
+  }
+
+  const fmt = new Intl.NumberFormat('lt-LT', { style: 'currency', currency: 'EUR' });
+  const currentPrices = (book.shops || [])
+    .map(s => Number(s.price))
+    .filter(p => Number.isFinite(p) && p > 0);
+  const lowestNow = currentPrices.length ? Math.min(...currentPrices) : null;
+  const lowestShop = lowestNow != null
+    ? (book.shops || []).find(s => Math.abs(Number(s.price) - lowestNow) < 0.001)?.shop
+    : null;
+  const allTime = Math.min(...allPrices);
+  const avg30d = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
+
+  return (
+    <>
+      <HFKpiStrip items={[
+        {
+          label: 'Lowest now',
+          value: lowestNow != null ? fmt.format(lowestNow) : '—',
+          delta: lowestShop
+            ? <span style={{ color: 'var(--hf-ok-ink)' }}>{lowestShop}</span>
+            : null,
+          tone: 'ok',
+        },
+        {
+          label: '30d average',
+          value: fmt.format(avg30d),
+          delta: <span style={{ color: 'var(--hf-ink3)' }}>
+            {series.length} shop{series.length !== 1 ? 's' : ''}
+          </span>,
+        },
+        {
+          label: 'All-time low',
+          value: fmt.format(allTime),
+          delta: <span style={{ color: 'var(--hf-ink3)' }}>in window</span>,
+        },
+      ]} />
+
+      <HFCard
+        title="30-day price comparison"
+        sub="one line per shop · daily max price"
+        style={{ marginBottom: 'var(--hf-gap)' }}
+      >
+        <div style={{ padding: 'var(--hf-card-p)' }}>
+          <MultiLineChart series={series} h={240} shopColors={SHOP_COLORS} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
+            {series.map((s, i) => {
+              const raw = SHOP_COLORS[i % SHOP_COLORS.length];
+              const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
+              return (
+                <span key={s.shop} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, color: 'var(--hf-ink2)',
+                }}>
+                  <span style={{
+                    width: 12, height: 3, borderRadius: 2,
+                    background: color,
+                    display: 'inline-block', flexShrink: 0,
+                  }} />
+                  {s.shop}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </HFCard>
+    </>
   );
 }
 
@@ -485,7 +645,7 @@ function HFBook({ nav, goto, params }) {
 
       {tab === 'listings'  && <HFBookListings  book={book} shopNames={shopNames} lowestPrice={lowestPrice} goto={goto} />}
       {tab === 'metadata'  && <HFBookMetadata  book={book} authorsByRole={authorsByRole} />}
-      {tab === 'prices'    && <HFBookPricesStub />}
+      {tab === 'prices'    && <HFBookPrices book={book} />}
       {tab === 'conflicts' && <HFBookConflictsStub />}
     </HFShell>
   );
