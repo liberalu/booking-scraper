@@ -977,35 +977,124 @@ function HFAddShopDialog({ open, onClose, goto }) {
 // ══════════════════════════════ Add Book dialog ══════════════════════════════
 function HFAddBookDialog({ open, onClose }) {
   const HF = getHF();
-  const [isbn, setIsbn] = React.useState('');
-  const [title, setTitle] = React.useState('');
-  const [author, setAuthor] = React.useState('');
+  const [isbn, setIsbn]           = React.useState('');
+  const [title, setTitle]         = React.useState('');
+  const [author, setAuthor]       = React.useState('');
+  const [publisher, setPublisher] = React.useState('');
+  const [year, setYear]           = React.useState('');
+  const [saving, setSaving]       = React.useState(false);
+  const [error, setError]         = React.useState(null);
+
+  const reset = () => {
+    setIsbn(''); setTitle(''); setAuthor('');
+    setPublisher(''); setYear(''); setError(null);
+  };
+
+  const handleClose = () => { reset(); onClose(false); };
+
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    setSaving(true); setError(null);
+    try {
+      const resp = await fetch('/api/books', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          isbn: isbn.trim() || null,
+          author: author.trim() || null,
+          publisher: publisher.trim() || null,
+          year: year ? parseInt(year, 10) : null,
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        window.HF_APP?.toast?.({ tone: 'ok', message: `Book "${data.title}" created` });
+        reset();
+        onClose(true);
+        window.HF_APP?.goto?.('book-detail', { id: data.id });
+        return;
+      }
+      const body = await resp.json().catch(() => ({}));
+      if (resp.status === 409 && body?.detail?.existing_book_id) {
+        setError({
+          type: 'collision',
+          message: body.detail.message,
+          existing_book_id: body.detail.existing_book_id,
+        });
+      } else {
+        setError({
+          type: 'generic',
+          message: (typeof body?.detail === 'string')
+            ? body.detail
+            : `Error ${resp.status}`,
+        });
+      }
+    } catch (e) {
+      setError({ type: 'generic', message: String(e) });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <HFModal open={open} onClose={onClose} width={520}>
-      <HFModalHead title="Add book" sub="Manual entry — books are usually added automatically by scrapes" onClose={onClose} icon={HF_ICONS.books}/>
+    <HFModal open={open} onClose={handleClose} width={520}>
+      <HFModalHead title="Add book"
+                   sub="Manual entry — books are usually added automatically by scrapes"
+                   onClose={handleClose} icon={HF_ICONS.books}/>
       <HFModalBody>
-        <HFField label="ISBN" required hint="ISBN-10 or ISBN-13">
-          <HFInput value={isbn} onChange={setIsbn} placeholder="9780062316097" mono autoFocus/>
-        </HFField>
         <HFField label="Title" required>
-          <HFInput value={title} onChange={setTitle} placeholder="Sapiens: A Brief History of Humankind"/>
+          <HFInput value={title} onChange={setTitle}
+                   placeholder="Book title" autoFocus/>
+        </HFField>
+        <HFField label="ISBN" hint="ISBN-10 or ISBN-13 — leave blank if unknown">
+          <HFInput value={isbn}
+                   onChange={v => { setIsbn(v); setError(null); }}
+                   placeholder="9780062316097" mono/>
         </HFField>
         <HFField label="Author">
-          <HFInput value={author} onChange={setAuthor} placeholder="Yuval Noah Harari"/>
+          <HFInput value={author} onChange={setAuthor}
+                   placeholder="Firstname Lastname"/>
         </HFField>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12 }}>
           <HFField label="Publisher">
-            <HFInput value="" onChange={() => {}}/>
+            <HFInput value={publisher} onChange={setPublisher}
+                     placeholder="Publisher name"/>
           </HFField>
           <HFField label="Year">
-            <HFInput value="" onChange={() => {}} mono placeholder="2014"/>
+            <HFInput value={year} onChange={setYear} mono placeholder="2024"/>
           </HFField>
         </div>
+        {error && (
+          <div style={{
+            marginTop: 8, padding: '8px 12px', borderRadius: 6,
+            background: 'var(--hf-err-soft)', border: '1px solid var(--hf-err-border)',
+            fontSize: 13, color: 'var(--hf-err-ink)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span>{error.message}</span>
+            {error.type === 'collision' && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  window.HF_APP?.goto?.('book-detail', { id: error.existing_book_id });
+                }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--hf-err-ink)', fontWeight: 600, fontSize: 13,
+                  whiteSpace: 'nowrap', marginLeft: 12,
+                }}>View book →</button>
+            )}
+          </div>
+        )}
       </HFModalBody>
       <HFModalFoot>
-        <HFButton onClick={onClose}>Cancel</HFButton>
-        <HFButton variant="primary" onClick={onClose} disabled={!isbn || !title}>Create book</HFButton>
+        <HFButton onClick={handleClose}>Cancel</HFButton>
+        <HFButton variant="primary" onClick={handleCreate}
+                  disabled={!title.trim() || saving}>
+          {saving ? 'Creating…' : 'Create book'}
+        </HFButton>
       </HFModalFoot>
     </HFModal>
   );
