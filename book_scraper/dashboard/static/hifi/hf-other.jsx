@@ -131,9 +131,6 @@ function HFCron({ nav, goto }) {
             },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'shop', label:'Shop', w:'0.6fr', sortable:true },
-            { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
-            { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
-            { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
             { key:'_trigger', label:'Trigger', w:'1.4fr',
               cell:(_, r) => {
                 if (r.chain_to_id) {
@@ -181,6 +178,9 @@ function HFCron({ nav, goto }) {
                 );
               }
             },
+            { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
+            { key:'next', label:'Next run', w:'0.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{r.enabled? v : 'disabled'}</span> },
+            { key:'avgDur', label:'Avg duration', w:'0.7fr', mono:true, muted:true, align:'right', sortable:true },
             { key:'enabled', label:'', w:'0.5fr', align:'right', cell:(v, r) => (
               <span
                 onClick={(e) => { e.stopPropagation(); toggleJob(r); }}
