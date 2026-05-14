@@ -54,13 +54,16 @@ curl -s 'http://localhost:12345/-/ready'                             # Alloy rea
 > (e.g. `fd07:b51a:cc66:f0::/64`) into container env vars. `httpx.AsyncClient` chokes on
 > these during spider init (treats the CIDR as a port). The spider-side fix is
 > `trust_env=False` (already applied). For `docker compose build` the proxy vars also break
-> `apt-get` inside the build context — prefix the build command to clear them:
+> `apt-get` inside the build context — use the Make targets which clear the proxy vars:
 >
 > ```bash
-> HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy="" docker compose build scraper
-> # or for all services:
-> HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy="" docker compose build
+> make compose-build-scraper      # rebuild scraper
+> make compose-build-dashboard    # rebuild dashboard
+> make compose-build              # rebuild everything
 > ```
+>
+> The Makefile wraps each command with `HTTP_PROXY="" ... docker compose build`. Avoid
+> bare `docker compose build`; it silently produces an image with missing apt packages.
 
 ## Architecture
 
