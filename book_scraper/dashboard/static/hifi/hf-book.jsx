@@ -140,6 +140,119 @@ function HFBookListings({ book, shopNames, lowestPrice, goto }) {
   );
 }
 
+function HFBookMetadata({ book, authorsByRole }) {
+  const ROLE_LABELS = {
+    author:       'Author',
+    translator:   'Translated by',
+    narrator:     'Narrated by',
+    editor:       'Edited by',
+    illustrator:  'Illustrated by',
+    cover_artist: 'Cover by',
+    producer:     'Produced by',
+  };
+
+  const roleOrder = ['author', 'translator', 'narrator', 'editor',
+                     'illustrator', 'cover_artist', 'producer'];
+  const extraRoles = Object.keys(authorsByRole).filter(r => !roleOrder.includes(r));
+  const allRoles = [...roleOrder, ...extraRoles].filter(r => (authorsByRole[r] || []).length > 0);
+
+  const fields = [
+    ['Year',           book.year],
+    ['Publisher',      book.publisher],
+    ['Format',         book.format],
+    ['Language',       book.language],
+    ['Pages',          book.pages ? `${book.pages} p.` : null],
+    ['Duration',       book.duration],
+    ['Type',           book.type],
+    ['Audience',       book.audience],
+    ['Series',         book.series],
+    ['Release place',  book.release_place],
+    ['UDC codes',      (book.udc_codes || []).join(', ') || null],
+    ['Translated from',book.translated_from],
+    ['Dimensions',     book.dimensions],
+    ['LIBIS code',     book.libis_code],
+    ['Data source',    book.data_source],
+    ['Subjects',       (book.subjects || []).join(' · ') || null],
+    ['Description',    book.description],
+  ].filter(([, v]) => v != null && v !== '');
+
+  return (
+    <>
+      <HFCard
+        title="Contributors"
+        sub="author, translator, narrator, editor, and other credited roles"
+        style={{ marginBottom: 'var(--hf-gap)' }}
+      >
+        {allRoles.length === 0 ? (
+          <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
+            No contributor data.
+          </div>
+        ) : (
+          <div style={{ padding: '4px 0' }}>
+            {allRoles.map((role, i) => (
+              <div key={role} style={{
+                display: 'grid',
+                gridTemplateColumns: '160px 1fr',
+                padding: '10px 20px',
+                borderBottom: i < allRoles.length - 1
+                  ? '1px solid var(--hf-border-faint)' : 'none',
+                fontSize: 13,
+                alignItems: 'baseline',
+              }}>
+                <span style={{ color: 'var(--hf-ink3)', fontWeight: 500 }}>
+                  {ROLE_LABELS[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </span>
+                <span style={{ color: 'var(--hf-ink)' }}>
+                  {authorsByRole[role].join(', ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </HFCard>
+
+      <HFCard title="Metadata" sub="fields from the canonical record">
+        {fields.length === 0 ? (
+          <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
+            No metadata.
+          </div>
+        ) : (
+          <div style={{ padding: '4px 0' }}>
+            {fields.map(([label, value], i) => (
+              <div key={label} style={{
+                display: 'grid',
+                gridTemplateColumns: '160px 1fr',
+                padding: '10px 20px',
+                borderBottom: i < fields.length - 1
+                  ? '1px solid var(--hf-border-faint)' : 'none',
+                fontSize: 13,
+                alignItems: 'baseline',
+                background: i % 2 === 0 ? 'transparent' : 'var(--hf-subtle)',
+              }}>
+                <span style={{ color: 'var(--hf-ink3)', fontWeight: 500 }}>{label}</span>
+                <span style={{ color: 'var(--hf-ink)', lineHeight: 1.5 }}>
+                  {label === 'LIBIS code'
+                    ? <span style={{
+                        fontFamily: 'var(--hf-mono)', fontSize: 11,
+                        padding: '2px 7px', borderRadius: 4,
+                        background: 'var(--hf-subtle)',
+                        border: '1px solid var(--hf-border)',
+                        color: 'var(--hf-ink3)',
+                      }}>{value}</span>
+                    : label === 'Data source'
+                      ? <DataSourceBadge value={book.data_source} />
+                      : String(value)
+                  }
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </HFCard>
+    </>
+  );
+}
+
 function HFBookPricesStub() {
   return (
     <HFCard title="Price history" sub="Coming in a future release">
