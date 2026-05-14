@@ -1,0 +1,140 @@
+// Grafana Alloy config — log shipping to Loki.
+// Replaces monitoring/promtail/promtail-config.yml (Promtail EOL March 2026).
+//
+// Three log sources:
+//   1. containers     — Docker container stdout via loki.source.docker
+//                       (reads from the Docker daemon socket directly; no
+//                        /var/lib/docker/containers host-path mount needed)
+//   2. spawn_files    — /var/log/scrapy_runs/spawn-*.log with role+shop labels
+//                       extracted from the filename
+//   3. scraper_log    — /var/log/scraper.log (cron + reconcile aggregate)
+//
+// LABEL CARDINALITY CONTRACT:
+//   Allowed labels:  service, level, role, shop
+//   Forbidden:       run_id (unbounded — filter via |= "run_id=N" in LogQL)
+
+// ─── 1. Container stdout ─────────────────────────────────────────────────────
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Promote the compose service name to a `service` label.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Drop containers not managed by compose (no service label).
+  rule {
+    source_labels = ["service"]
+    regex         = "^$"
+    action        = "drop"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.containers.receiver]
+  labels     = {}
+}
+
+loki.process "containers" {
+  // Drop the `service_name` label that Alloy auto-injects from OpenTelemetry
+  // conventions — it duplicates `service` and violates the label-cardinality
+  // contract (only service/level/role/shop are allowed per CLAUDE.md).
+  stage.label_drop {
+    values = ["service_name"]
+  }
+  // Parse log level from Python/uvicorn/Scrapy log formats:
+  //   "INFO  [alembic.runtime.migration] ..."
+  //   "2026-05-12 ... [scrapy.core.engine] INFO: Spider closed"
+  //   "ERROR:    Application startup failed"
+  stage.regex {
+    expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+// ─── 2. Per-spawn scrapy log files ───────────────────────────────────────────
+// Filenames: spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
+//   <role>: operator | stall-resume | cron-chain | reconcile-restart
+//   <shop>: vaga | pegasas | humanitas | knygos | almalittera | tytoalba | ...
+
+local.file_match "spawn_files" {
+  path_targets = [{
+    __path__ = "/var/log/scrapy_runs/spawn-*.log",
+    service  = "scraper",
+    job      = "scrapy_spawn_files",
+  }]
+}
+
+loki.source.file "spawn_files" {
+  targets    = local.file_match.spawn_files.targets
+  forward_to = [loki.process.spawn_labels.receiver]
+}
+
+loki.process "spawn_labels" {
+  // Extract role+shop from filename:
+  //   spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
+  //   ↑8 digits  ↑12 digits (HH+MM+SS=6 + microseconds=6)
+  // role is greedy (may contain hyphens, e.g. stall-resume).
+  // shop excludes hyphens — every current/backlog shop name is hyphen-free,
+  // so the greedy role captures up to the LAST hyphen correctly.
+  stage.regex {
+    source     = "filename"
+    expression = "/spawn-\\d{8}-\\d{12}-(?P<role>[a-z0-9_-]+)-(?P<shop>[a-z0-9_]+)\\.log$"
+  }
+  stage.labels {
+    values = { role = "", shop = "" }
+  }
+  stage.regex {
+    expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+// ─── 3. Cron-output aggregate file ───────────────────────────────────────────
+
+local.file_match "scraper_log" {
+  path_targets = [{
+    __path__ = "/var/log/scraper.log",
+    service  = "scraper",
+    role     = "cron",
+    job      = "scraper_log_file",
+  }]
+}
+
+loki.source.file "scraper_log" {
+  targets    = local.file_match.scraper_log.targets
+  forward_to = [loki.process.scraper_log.receiver]
+}
+
+loki.process "scraper_log" {
+  stage.regex {
+    expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+// ─── Loki output ──────────────────────────────────────────────────────────────
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

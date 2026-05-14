@@ -42,10 +42,12 @@ docker compose up -d dashboard                # Restart dashboard container
 uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after deploy
 # Observability (v1.2)
 open http://localhost:3000                                           # Grafana — login admin/admin (change on first use)
-docker compose up -d loki promtail grafana                          # bring observability stack up after compose changes
+docker compose up -d loki alloy grafana                             # bring observability stack up after compose changes
 docker compose restart grafana                                       # reload Grafana provisioning (data sources, dashboards)
+docker compose restart alloy                                         # reload Alloy config (monitoring/alloy/config.alloy)
 curl -s 'http://localhost:3100/loki/api/v1/labels' | jq             # list active Loki labels (sanity check)
 curl -s 'http://localhost:3100/loki/api/v1/query?query={service="dashboard"}&limit=5' | jq  # last 5 dashboard lines
+curl -s 'http://localhost:12345/-/ready'                             # Alloy readiness probe
 ```
 
 > **OrbStack build gotcha:** OrbStack injects `NO_PROXY` entries containing IPv6 CIDR blocks
@@ -162,7 +164,7 @@ After completing any task that changes code, suggest to the user:
    STALL_AUTO_RESUME_MAX restarts). To grandfather stale failures as
    exhausted before the first run, run:
    `UPDATE scrape_url_items SET attempts=3 WHERE status='failed';`
-5. **Observability stack changes** (`monitoring/`, Grafana provisioning, Promtail config, Loki config): no rebuild — just `docker compose up -d loki promtail grafana` (or `docker compose restart grafana` for provisioning-only edits). Upstream images are pulled, not built.
+5. **Observability stack changes** (`monitoring/`, Grafana provisioning, Alloy config, Loki config): no rebuild — just `docker compose up -d loki alloy grafana` (or `docker compose restart grafana` for provisioning-only edits, `docker compose restart alloy` for Alloy config changes). Upstream images are pulled, not built.
 
 ### Observability label cardinality (Loki)
 
