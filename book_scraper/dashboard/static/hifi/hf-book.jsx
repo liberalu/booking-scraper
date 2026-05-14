@@ -10,6 +10,7 @@ function HFBook({ nav, goto, params }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
+  const [tab, setTab] = React.useState('overview');
 
   React.useEffect(() => {
     if (!bookId) { setLoading(false); return; }
@@ -81,8 +82,6 @@ function HFBook({ nav, goto, params }) {
 
   const methodTone = { isbn:'ok', 'title+author':'warn', manual:'accent', slug:'neutral' };
   const sbTone     = { active:'ok', out:'warn', pending:'neutral', delisted:'neutral' };
-
-  const [tab, setTab] = React.useState('overview');
 
   return (
     <HFShell {...nav} activePage="shop-books"
