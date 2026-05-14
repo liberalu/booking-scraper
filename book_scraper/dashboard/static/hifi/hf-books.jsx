@@ -73,6 +73,7 @@ function HFBooks({ nav, goto }) {
     if (enrichedFilter === 'enriched')     params.set('data_source', 'ibiblioteka');
     if (enrichedFilter === 'not enriched') params.set('data_source', 'shop_inferred');
     if (shopsFilter === '0 shops')         params.set('has_shops', 'false');
+    if (shopsFilter === '1+ shops')        params.set('has_shops', 'true');
     if (shopsFilter === '1 shop only')   { params.set('shop_count_min', '1'); params.set('shop_count_max', '1'); }
     if (shopsFilter === '2-3 shops')     { params.set('shop_count_min', '2'); params.set('shop_count_max', '3'); }
     if (shopsFilter === '4+ shops')        params.set('shop_count_min', '4');
@@ -146,7 +147,7 @@ function HFBooks({ nav, goto }) {
               {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
             </>}>
               <HFSearch placeholder="Search title, author, ISBN…" width={320} value={q} onChange={v => { setQ(v); setPage(1); }}/>
-              <HFFilter label="Shops"     value={shopsFilter}     options={['any','0 shops','1 shop only','2-3 shops','4+ shops']}  onChange={v=>{ setShopsFilter(v); setPage(1); }}     allLabel="any"/>
+              <HFFilter label="Shops"     value={shopsFilter}     options={['any','0 shops','1+ shops','1 shop only','2-3 shops','4+ shops']}  onChange={v=>{ setShopsFilter(v); setPage(1); }}     allLabel="any"/>
               <HFFilter label="Year"      value={yearFilter}      options={['any', ...availableYears.map(String)]}                  onChange={v=>{ setYearFilter(v); setPage(1); }}      allLabel="any"/>
               <HFFilter label="Enriched"  value={enrichedFilter}  options={['any','enriched','not enriched']}                       onChange={v=>{ setEnrichedFilter(v); setPage(1); }}  allLabel="any"/>
               <HFFilter label="ISBN"      value={isbnFilter}      options={['any','has ISBN','missing ISBN']}                        onChange={v=>{ setIsbnFilter(v); setPage(1); }}      allLabel="any"/>
