@@ -35,11 +35,28 @@ function DataSourceBadge({ value }) {
   return <HFPill tone={cfg.tone} soft>{cfg.label}</HFPill>;
 }
 
+const SHOP_COLORS = ['var(--hf-accent)', '#0e7490', '#b45309', '#7c3aed', '#16a34a', '#6b7280'];
+
+function ShopMark({ name, allShops }) {
+  const idx = allShops ? allShops.indexOf(name) : 0;
+  const color = SHOP_COLORS[Math.max(0, idx) % SHOP_COLORS.length];
+  return (
+    <span style={{
+      display: 'inline-block',
+      width: 10, height: 10,
+      borderRadius: '50%',
+      background: color,
+      flexShrink: 0,
+    }} aria-hidden="true" />
+  );
+}
+
 function HFBook({ nav, goto, params }) {
   const HF = getHF();
   const [book, setBook] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
+  const [tab, setTab] = React.useState('listings');
 
   const bookId = params && params.id;
 
@@ -104,6 +121,10 @@ function HFBook({ nav, goto, params }) {
   for (const a of (book.authors || [])) {
     (authorsByRole[a.role] = authorsByRole[a.role] || []).push(a.name);
   }
+
+  const shopNames = (book.shops || []).map(s => s.shop);
+  const prices = (book.shops || []).map(s => s.price).filter(p => p != null).map(Number);
+  const lowestPrice = prices.length ? Math.min(...prices) : null;
 
   const meta = [
     book.year,
@@ -217,74 +238,27 @@ function HFBook({ nav, goto, params }) {
           </div>
         </div>
 
-        {/* Subjects */}
-        {(book.subjects || []).length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--hf-border-faint)' }}>
-            {book.subjects.map(s => <HFPill key={s} tone="neutral" soft>{s}</HFPill>)}
-          </div>
-        )}
-
-        {/* Description */}
-        {book.description && (
-          <div style={{
-            marginTop: 14, paddingTop: 14,
-            borderTop: (book.subjects || []).length > 0 ? 'none' : '1px solid var(--hf-border-faint)',
-            lineHeight: 1.65, fontSize: 13, color: 'var(--hf-ink2)',
-            maxWidth: '70ch',
-          }}>
-            {book.description}
-          </div>
-        )}
       </HFCard>
 
-      {/* Shop listings */}
-      <HFCard
-        title="Available at"
-        sub={(book.shops || []).length > 0 ? `${book.shops.length} shop${book.shops.length !== 1 ? 's' : ''}` : undefined}
-      >
-        {(book.shops || []).length === 0
-          ? <div style={{ padding: 20 }}>
-              <HFEmptyState
-                title="Not listed anywhere we track"
-                sub="No shop listings have been linked to this canonical book yet."
-              />
-            </div>
-          : <HFTable
-              columns={[
-                { key: 'shop',         label: 'Shop',      w: '120px' },
-                { key: 'price',        label: 'Price',     w: '90px' },
-                { key: 'in_stock',     label: 'Stock',     w: '80px' },
-                { key: 'last_seen_at', label: 'Last seen', w: '1fr' },
-                { key: 'url',          label: 'URL',       w: '90px' },
-              ]}
-              rows={(book.shops || []).map(s => ({
-                ...s,
-                price: formatEur(s.price),
-                in_stock: s.in_stock
-                  ? <HFPill tone="ok" soft>In stock</HFPill>
-                  : <HFPill tone="warn" soft>Out</HFPill>,
-                last_seen_at: s.last_seen_at
-                  ? <time dateTime={s.last_seen_at}>{formatRelative(s.last_seen_at)}</time>
-                  : '—',
-                url: s.url
-                  ? <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open at ${s.shop} (new tab)`}
-                      title={`Open at ${s.shop}`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 32, minHeight: 32, padding: '0 8px',
-                        color: 'var(--hf-accent-ink)', fontFamily: 'var(--hf-mono)', fontSize: 11,
-                        textDecoration: 'none',
-                      }}
-                    >Visit ↗</a>
-                  : '—',
-              }))}
-            />
-        }
+      <HFCard style={{ marginBottom: 'var(--hf-gap)' }} padding={0}>
+        <div style={{ padding: `0 var(--hf-card-p, 16px)` }}>
+          <HFTabs
+            active={tab}
+            onChange={setTab}
+            tabs={[
+              { id: 'listings',  label: 'Listings',  count: (book.shops || []).length },
+              { id: 'metadata',  label: 'Metadata' },
+              { id: 'prices',    label: 'Prices' },
+              { id: 'conflicts', label: 'Conflicts' },
+            ]}
+          />
+        </div>
       </HFCard>
+
+      {tab === 'listings'  && <HFBookListings  book={book} shopNames={shopNames} lowestPrice={lowestPrice} goto={goto} />}
+      {tab === 'metadata'  && <HFBookMetadata  book={book} authorsByRole={authorsByRole} />}
+      {tab === 'prices'    && <HFBookPricesStub />}
+      {tab === 'conflicts' && <HFBookConflictsStub />}
     </HFShell>
   );
 }
