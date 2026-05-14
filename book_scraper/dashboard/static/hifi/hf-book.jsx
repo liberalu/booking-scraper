@@ -141,6 +141,24 @@ function HFBookListings({ book, shopNames, lowestPrice, goto }) {
 }
 
 function HFBookMetadata({ book, authorsByRole }) {
+  const shops = book.shops || [];
+  const shopNames = shops.map(s => s.shop);
+
+  // Conflict detection helpers (case-insensitive, trimmed)
+  const norm = s => (s == null ? '' : String(s).trim().toLowerCase());
+  const hasConflict = (shopVal, canonVal) =>
+    shopVal != null && shopVal !== '' &&
+    canonVal != null && canonVal !== '' &&
+    norm(shopVal) !== norm(String(canonVal));
+  const isMissing = v => v == null || v === '';
+
+  // Primary canonical author name (for cross-shop comparison)
+  const canonicalAuthor = (authorsByRole.author || [])[0] || null;
+
+  // Canonical ISBN-13
+  const canonicalIsbn13 = (book.isbns || []).find(i => String(i.isbn).length === 13)?.isbn || null;
+
+  // Roles to show in Contributors card
   const ROLE_LABELS = {
     author:       'Author',
     translator:   'Translated by',
@@ -150,104 +168,217 @@ function HFBookMetadata({ book, authorsByRole }) {
     cover_artist: 'Cover by',
     producer:     'Produced by',
   };
-
   const roleOrder = ['author', 'translator', 'narrator', 'editor',
                      'illustrator', 'cover_artist', 'producer'];
   const extraRoles = Object.keys(authorsByRole).filter(r => !roleOrder.includes(r));
-  const allRoles = [...roleOrder, ...extraRoles].filter(r => (authorsByRole[r] || []).length > 0);
+  const allRoles = [...roleOrder, ...extraRoles]
+    .filter(r => (authorsByRole[r] || []).length > 0);
 
-  const fields = [
-    ['Year',           book.year],
-    ['Publisher',      book.publisher],
-    ['Format',         book.format],
-    ['Language',       book.language],
-    ['Pages',          book.pages ? `${book.pages} p.` : null],
-    ['Duration',       book.duration],
-    ['Type',           book.type],
-    ['Audience',       book.audience],
-    ['Series',         book.series],
-    ['Release place',  book.release_place],
-    ['UDC codes',      (book.udc_codes || []).join(', ') || null],
-    ['Translated from',book.translated_from],
-    ['Dimensions',     book.dimensions],
-    ['LIBIS code',     book.libis_code],
-    ['Data source',    book.data_source],
-    ['Subjects',       (book.subjects || []).join(' · ') || null],
-    ['Description',    book.description],
-  ].filter(([, v]) => v != null && v !== '');
+  // Metadata matrix rows: only rows where canonical value exists
+  const matrixRows = [
+    { label: 'Title',    canonical: book.title,     shopVal: s => s.title,
+      conflict: s => hasConflict(s.title, book.title) },
+    { label: 'Author',   canonical: canonicalAuthor, shopVal: s => s.author,
+      conflict: s => hasConflict(s.author, canonicalAuthor) },
+    { label: 'Year',     canonical: book.year,       shopVal: s => s.year,
+      conflict: s => s.year != null && book.year != null && s.year !== book.year },
+    { label: 'Publisher',canonical: book.publisher,  shopVal: s => s.publisher,
+      conflict: s => hasConflict(s.publisher, book.publisher) },
+    { label: 'ISBN-13',  canonical: canonicalIsbn13, shopVal: s => s.isbn,
+      conflict: s => s.isbn != null && canonicalIsbn13 != null &&
+                     s.isbn.replace(/-/g,'') !== canonicalIsbn13.replace(/-/g,'') },
+    { label: 'Format',   canonical: book.format,    shopVal: s => s.format,
+      conflict: s => hasConflict(s.format, book.format) },
+  ].filter(row => row.canonical != null && row.canonical !== '');
+
+  const colW = 140;
+  const headerStyle = {
+    display: 'grid',
+    gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
+    padding: '8px 20px',
+    background: 'var(--hf-subtle)',
+    borderBottom: '1px solid var(--hf-border)',
+    fontSize: 11, fontWeight: 600, color: 'var(--hf-ink3)',
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    position: 'sticky', top: 0, zIndex: 1,
+  };
+  const shopHeaderStyle = {
+    display: 'flex', alignItems: 'center', gap: 6,
+    textTransform: 'none', letterSpacing: 0, fontWeight: 600,
+    color: 'var(--hf-ink2)', fontSize: 11.5,
+    overflow: 'hidden',
+  };
 
   return (
     <>
+      {/* Card 1 — Contributors */}
       <HFCard
         title="Contributors"
-        sub="author, translator, narrator, editor, and other credited roles"
+        sub="author, translator, narrator and other credited roles — shops only provide raw author string"
         style={{ marginBottom: 'var(--hf-gap)' }}
+        flush
       >
-        {allRoles.length === 0 ? (
-          <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
-            No contributor data.
-          </div>
-        ) : (
-          <div style={{ padding: '4px 0' }}>
-            {allRoles.map((role, i) => (
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ minWidth: 160 + 200 + shopNames.length * colW }}>
+            {/* Header */}
+            <div style={headerStyle}>
+              <span>Role</span>
+              <span>Canonical</span>
+              {shopNames.map((name) => (
+                <span key={name} style={shopHeaderStyle}>
+                  <ShopMark name={name} allShops={shopNames} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                </span>
+              ))}
+            </div>
+
+            {/* Role rows */}
+            {allRoles.length === 0 ? (
+              <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
+                No contributor data.
+              </div>
+            ) : allRoles.map((role, i) => (
               <div key={role} style={{
                 display: 'grid',
-                gridTemplateColumns: '160px 1fr',
-                padding: '10px 20px',
-                borderBottom: i < allRoles.length - 1
-                  ? '1px solid var(--hf-border-faint)' : 'none',
-                fontSize: 13,
-                alignItems: 'baseline',
+                gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
+                padding: '9px 20px',
+                borderBottom: i < allRoles.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
+                fontSize: 12, alignItems: 'center',
               }}>
-                <span style={{ color: 'var(--hf-ink3)', fontWeight: 500 }}>
+                <span style={{ color: 'var(--hf-ink)', fontWeight: 600, fontSize: 12.5 }}>
                   {ROLE_LABELS[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </span>
-                <span style={{ color: 'var(--hf-ink)' }}>
+                <span style={{ color: 'var(--hf-ink2)', fontWeight: 500,
+                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                               paddingRight: 12 }}>
                   {authorsByRole[role].join(', ')}
                 </span>
+                {shopNames.map(name => {
+                  const shop = shops.find(s => s.shop === name);
+                  if (role !== 'author') {
+                    return <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>;
+                  }
+                  const val = shop?.author;
+                  if (isMissing(val)) {
+                    return <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>;
+                  }
+                  const conflict = hasConflict(val, canonicalAuthor);
+                  return (
+                    <span key={name} title={val} style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      color: conflict ? 'var(--hf-warn-ink)' : 'var(--hf-ink2)',
+                      fontSize: 11.5, overflow: 'hidden',
+                    }}>
+                      {conflict && (
+                        <span style={{
+                          width: 14, height: 14, borderRadius: 3,
+                          background: 'var(--hf-warn-soft)', border: '1px solid var(--hf-warn-border)',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, fontWeight: 700, flexShrink: 0,
+                        }}>!</span>
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
+                    </span>
+                  );
+                })}
               </div>
             ))}
           </div>
-        )}
+        </div>
       </HFCard>
 
-      <HFCard title="Metadata" sub="fields from the canonical record">
-        {fields.length === 0 ? (
-          <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
-            No metadata.
-          </div>
-        ) : (
-          <div style={{ padding: '4px 0' }}>
-            {fields.map(([label, value], i) => (
-              <div key={label} style={{
-                display: 'grid',
-                gridTemplateColumns: '160px 1fr',
-                padding: '10px 20px',
-                borderBottom: i < fields.length - 1
-                  ? '1px solid var(--hf-border-faint)' : 'none',
-                fontSize: 13,
-                alignItems: 'baseline',
-                background: i % 2 === 0 ? 'transparent' : 'var(--hf-subtle)',
-              }}>
-                <span style={{ color: 'var(--hf-ink3)', fontWeight: 500 }}>{label}</span>
-                <span style={{ color: 'var(--hf-ink)', lineHeight: 1.5 }}>
-                  {label === 'LIBIS code'
-                    ? <span style={{
-                        fontFamily: 'var(--hf-mono)', fontSize: 11,
-                        padding: '2px 7px', borderRadius: 4,
-                        background: 'var(--hf-subtle)',
-                        border: '1px solid var(--hf-border)',
-                        color: 'var(--hf-ink3)',
-                      }}>{value}</span>
-                    : label === 'Data source'
-                      ? <DataSourceBadge value={book.data_source} />
-                      : String(value)
-                  }
+      {/* Card 2 — Metadata matrix */}
+      <HFCard
+        title="Canonical metadata · per shop"
+        sub="each row is a field · ✓ = matches canonical · ⚠ = conflict · — = not provided"
+        flush
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ minWidth: 160 + 200 + shopNames.length * colW }}>
+            {/* Header */}
+            <div style={headerStyle}>
+              <span>Field</span>
+              <span>Canonical</span>
+              {shopNames.map((name) => (
+                <span key={name} style={shopHeaderStyle}>
+                  <ShopMark name={name} allShops={shopNames} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 </span>
+              ))}
+            </div>
+
+            {matrixRows.length === 0 ? (
+              <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
+                No metadata.
               </div>
-            ))}
+            ) : matrixRows.map((row, i) => {
+              const conflictCount = shops.filter(s => row.conflict(s)).length;
+              const missingCount  = shops.filter(s => isMissing(row.shopVal(s))).length;
+              const providedCount = shops.length - missingCount;
+              const summaryParts  = [`${providedCount} of ${shops.length}`];
+              if (missingCount > 0)  summaryParts.push(`${missingCount} missing`);
+              if (conflictCount > 0) summaryParts.push(`${conflictCount} conflict`);
+
+              return (
+                <div key={row.label} style={{
+                  display: 'grid',
+                  gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
+                  padding: '10px 20px',
+                  borderBottom: i < matrixRows.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
+                  fontSize: 12, alignItems: 'center',
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: 'var(--hf-ink)', fontWeight: 600, fontSize: 12.5 }}>{row.label}</span>
+                    <span style={{
+                      fontSize: 10.5, fontFamily: 'var(--hf-mono)',
+                      color: conflictCount > 0 ? 'var(--hf-warn-ink)' : 'var(--hf-ink4)',
+                    }}>
+                      {summaryParts.join(' · ')}
+                    </span>
+                  </div>
+                  <span style={{
+                    color: 'var(--hf-ink)', fontWeight: 500,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    paddingRight: 12, fontSize: 12.5,
+                  }}>
+                    {String(row.canonical)}
+                  </span>
+                  {shopNames.map(name => {
+                    const shop = shops.find(s => s.shop === name);
+                    const val  = shop ? row.shopVal(shop) : null;
+                    if (isMissing(val)) {
+                      return (
+                        <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>
+                      );
+                    }
+                    const conflict = shop && row.conflict(shop);
+                    return (
+                      <span key={name} title={String(val)} style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        color: conflict ? 'var(--hf-warn-ink)' : 'var(--hf-ink3)',
+                        fontSize: 11.5, overflow: 'hidden',
+                      }}>
+                        {conflict ? (
+                          <span style={{
+                            width: 14, height: 14, borderRadius: 3,
+                            background: 'var(--hf-warn-soft)', border: '1px solid var(--hf-warn-border)',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 9, fontWeight: 700, flexShrink: 0,
+                          }}>!</span>
+                        ) : (
+                          <span style={{ color: 'var(--hf-ok-ink)', fontWeight: 600, fontSize: 10, flexShrink: 0 }}>✓</span>
+                        )}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {conflict ? String(val) : 'match'}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </HFCard>
     </>
   );
