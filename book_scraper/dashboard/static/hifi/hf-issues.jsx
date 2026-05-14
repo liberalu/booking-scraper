@@ -24,66 +24,6 @@ const HF_ISSUE_TYPES = [
   { type:'product_url_non_book',  sev:'low',      tone:'neutral', description:'A URL classified as a product page resolved to something that is not a book.' },
 ];
 
-const HF_ISSUE_SCALE = {
-  missing_price: 36242,
-  match_isbn_drift: 9995,
-  invalid_isbn: 6660,
-  non_product_active: 5107,
-  price_spike: 2929,
-  discover_fetch_failed: 2591,
-  unmatched_has_isbn: 2200,
-  scrape_run_failed: 1218,
-  product_url_non_book: 779,
-};
-// Trend curves: 14 daily counts ending today. Encodes whether the type is
-// growing (regression!), flat (known), or shrinking (being fixed).
-const HF_ISSUE_TREND = {
-  missing_price:         [200, 220, 210, 230, 215, 240, 260, 280, 310, 350, 420, 600, 1900, 4200],   // spike
-  match_isbn_drift:      [710, 720, 715, 710, 705, 700, 695, 700, 708, 712, 705, 700, 698, 690],     // flat
-  invalid_isbn:          [820, 800, 780, 760, 720, 700, 680, 660, 640, 620, 600, 580, 560, 540],     // shrinking
-  non_product_active:    [340, 350, 360, 365, 370, 380, 385, 390, 395, 400, 405, 410, 415, 420],     // gentle rise
-  price_spike:           [180, 190, 200, 210, 220, 230, 220, 215, 210, 205, 200, 195, 190, 185],     // hump
-  discover_fetch_failed: [60,  65,  62,  70,  75,  80,  78,  82,  90,  120, 140, 180, 220, 260],     // spike
-  unmatched_has_isbn:    [170, 165, 168, 170, 172, 168, 170, 172, 175, 170, 168, 172, 170, 168],     // flat
-  scrape_run_failed:     [85,  88,  90,  92,  95,  98,  100, 102, 105, 108, 110, 112, 115, 118],     // creep
-  product_url_non_book:  [55,  58,  56,  60,  62,  58,  55,  52,  50,  48,  45,  42,  40,  38],     // shrinking
-};
-const HF_ISSUE_ACK = { match_isbn_drift: 4 };
-const HF_ISSUE_LIFECYCLE_COUNTS = { new: 67721, acknowledged: 4, snoozed: 0, resolved: 0, all: 67725 };
-const HF_NEW_TREND = [62000, 62300, 62700, 63100, 63600, 64100, 64600, 65000, 65500, 66100, 66400, 66700, 67100, 67721];
-
-// Hand-authored waves. type × shop × run. Splits into item-level vs run-level.
-const HF_ISSUE_WAVES = [
-  { id:'W-407-missing_price-patogupirkti',     type:'missing_price',         shop:'patogupirkti', run:407, count:36242, ack:0,
-    firstSeen:'4d ago',   lastSeen:'4d ago',   span:'parser hit at 07:14, 36,242 URLs by 09:42', sample:'/knyga/arturas-ir-maltazaro-kerstas-dvd' },
-  { id:'W-406-match_isbn_drift-vaga',          type:'match_isbn_drift',      shop:'vaga',         run:406, count:9995, ack:4,
-    firstSeen:'5d ago',   lastSeen:'5d ago',   span:'mid-run · ISBN selector drift on /knyga/* template', sample:'/knyga/sapiens' },
-  { id:'W-407-invalid_isbn-knygos',            type:'invalid_isbn',          shop:'knygos.lt',    run:407, count:6660, ack:0,
-    firstSeen:'4d ago',   lastSeen:'4d ago',   span:'all 6,660 from a single batch', sample:'/sapiens' },
-  { id:'W-405-non_product_active-vaga',        type:'non_product_active',    shop:'vaga',         run:405, count:5107, ack:0,
-    firstSeen:'7d ago',   lastSeen:'2d ago',   span:'recurring since classifier v2.13 rollout', sample:'/autoriai/yuval-noah-harari' },
-  { id:'W-407-price_spike-vaga',               type:'price_spike',           shop:'vaga',         run:407, count:2929, ack:0,
-    firstSeen:'4d ago',   lastSeen:'4d ago',   span:'site-wide promo banner picked up as list price', sample:'/knyga/atomic-habits' },
-  { id:'W-408-discover_fetch_failed-knygos',   type:'discover_fetch_failed', shop:'knygos.lt',    run:408, count:2591, ack:0,
-    firstSeen:'3d ago',   lastSeen:'3d ago',   span:'sitemap section /old-pages now returns 404', sample:'/sitemap-old.xml' },
-  { id:'W-406-unmatched_has_isbn-patogupirkti',type:'unmatched_has_isbn',    shop:'patogupirkti', run:406, count:2200, ack:0,
-    firstSeen:'5d ago',   lastSeen:'5d ago',   span:'matcher missed canonical books with diacritic-stripped titles', sample:'/knyga/baltoji-gulbe' },
-  { id:'W-407-product_url_non_book-vaga',      type:'product_url_non_book',  shop:'vaga',         run:407, count:779, ack:0,
-    firstSeen:'4d ago',   lastSeen:'4d ago',   span:'DVDs + stationery picked up by /knyga/* product matcher', sample:'/knyga/lietuva-sieninis-kalendorius' },
-  // Run-failure waves are singular events — rendered in their own section.
-  { id:'W-429-scrape_run_failed', type:'scrape_run_failed', shop:null, run:429, count:1, ack:0,
-    firstSeen:'1d ago', lastSeen:'1d ago', span:'phase=scan · failed at 67% · timeout', sample:null, runFailure:true },
-  { id:'W-427-scrape_run_failed', type:'scrape_run_failed', shop:null, run:427, count:1, ack:0,
-    firstSeen:'1d ago', lastSeen:'1d ago', span:'phase=discover · failed at 12% · auth_required', sample:null, runFailure:true },
-];
-
-// Reconcile wave totals with global lifecycle counts.
-(() => {
-  const sum = HF_ISSUE_WAVES.reduce((s, w) => s + w.count, 0);
-  const diff = HF_ISSUE_LIFECYCLE_COUNTS.new + HF_ISSUE_LIFECYCLE_COUNTS.acknowledged - sum;
-  if (diff > 0) HF_ISSUE_WAVES[0].count += diff;
-})();
-
 const HF_LIFECYCLE_HELP = {
   new:          'Automatically generated, not yet reviewed by anyone.',
   acknowledged: 'Operator has seen it and accepted it as a real problem to work on.',
@@ -259,19 +199,25 @@ function HFIssues({ nav, goto }) {
     return acc.map((v, i) => v + (series[i] || 0));
   }, []);
 
-  // Fetch groups when in by_type or waves view
+  // Fetch by-type groups whenever the tab changes — used by the by_type view
+  // and by the inline-expand "Part of a wave of N" label in the list view.
   React.useEffect(() => {
-    if (view !== 'by_type' && view !== 'waves') return;
-    const gb = view === 'waves' ? 'type_shop' : 'type';
-    const params = new URLSearchParams({ group_by: gb });
+    const params = new URLSearchParams({ group_by: 'type' });
     if (tab !== 'all') params.set('state', tab);
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
-      .then(d => {
-        const rows = Array.isArray(d) ? d : (d.groups || []);
-        if (view === 'waves') setWavesData(rows);
-        else setGroupsData(rows);
-      })
+      .then(d => setGroupsData(Array.isArray(d) ? d : (d.groups || [])))
+      .catch(() => {});
+  }, [tab]);
+
+  // Fetch type×shop groups for the waves view
+  React.useEffect(() => {
+    if (view !== 'waves') return;
+    const params = new URLSearchParams({ group_by: 'type_shop' });
+    if (tab !== 'all') params.set('state', tab);
+    fetch(`/api/issues/groups?${params}`)
+      .then(r => r.json())
+      .then(d => setWavesData(Array.isArray(d) ? d : (d.groups || [])))
       .catch(() => {});
   }, [view, tab]);
 
@@ -902,7 +848,7 @@ function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleS
                     ))}
                   </div>
                   <div style={{fontSize:11.5, color:HF.ink3, lineHeight:1.5, marginTop:4}}>
-                    Part of a wave of <b style={{color:HF.ink}}>{(HF_ISSUE_SCALE[r.type] || 0).toLocaleString()}</b> {r.type} issues
+                    Part of a wave of <b style={{color:HF.ink}}>{((groupsData.find(g => g.issue_type === r.type)?.total) || 0).toLocaleString()}</b> {r.type} issues
                     {r.shop ? <> in <b style={{color:HF.ink}}>{r.shop}</b></> : ''}
                     {r.runRef ? <> · run <a href="#" onClick={(e)=>{e.preventDefault(); e.stopPropagation(); goto('run-detail', {id:r.runRef});}} style={{color:HF.accentInk, textDecoration:'none', fontFamily:HF.mono}}>#{r.runRef}</a></> : ''}.
                   </div>
