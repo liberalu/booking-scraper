@@ -313,7 +313,7 @@ def get_run_health(run: ScrapeRun) -> str:
     return "healthy"
 
 
-def mark_stale_runs(session: Session) -> int:
+def mark_stale_runs(session: Session) -> list[dict[str, Any]]:
     """Mark runs with no heartbeat for over DEAD_RUN_SECONDS as failed.
 
     Reaped runs are flagged ``resumable_after_failure`` so the next
@@ -326,6 +326,9 @@ def mark_stale_runs(session: Session) -> int:
     `closed()` callback never ran (process crash mid-shutdown). The
     error reason is recorded as `stop_timeout` so the postmortem
     distinguishes it from ordinary heartbeat death.
+
+    Returns a list of dicts with per-run metadata for each killed run
+    (CODEOBS-02). Each dict has keys: run_id, shop, phase, close_reason.
     """
     from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (
@@ -343,7 +346,7 @@ def mark_stale_runs(session: Session) -> int:
         .filter(ScrapeRun.status.in_(("running", "stopping")))
         .all()
     )
-    marked = 0
+    killed: list[dict[str, Any]] = []
     for run in stale:
         last_activity = run.last_heartbeat or run.started_at
         if last_activity and last_activity < cutoff:
@@ -367,11 +370,16 @@ def mark_stale_runs(session: Session) -> int:
                 actor=run_event_types.ACTOR_SYSTEM,
             )
             logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
-            marked += 1
+            killed.append({
+                "run_id": run.id,
+                "shop": run.shop.name if run.shop else "<unknown>",
+                "phase": str(run.phase),
+                "close_reason": reason,
+            })
     cleaned = sweep_orphaned_processing_items(session)
-    if marked or cleaned:
+    if killed or cleaned:
         session.commit()
-    return marked
+    return killed
 
 
 def get_overview_stats(session: Session) -> dict[str, Any]:

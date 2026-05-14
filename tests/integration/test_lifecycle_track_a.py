@@ -185,7 +185,7 @@ def test_mark_stale_runs_uses_seconds_threshold(db_session):
 
     marked = mark_stale_runs(db_session)
     db_session.refresh(run)
-    assert marked == 1
+    assert len(marked) == 1
     assert run.status == "failed"
     assert run.resumable_after_failure is True
     assert run.finished_at is not None
@@ -202,7 +202,7 @@ def test_mark_stale_runs_leaves_fresh_runs_alone(db_session):
 
     marked = mark_stale_runs(db_session)
     db_session.refresh(run)
-    assert marked == 0
+    assert len(marked) == 0
     assert run.status == "running"
     assert run.resumable_after_failure is False
 

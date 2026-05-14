@@ -17,14 +17,25 @@ REAPER_INTERVAL_SECONDS = int(os.environ.get("REAPER_INTERVAL_SECONDS", "30"))
 
 
 async def reaper_loop() -> None:
-    """Run mark_stale_runs every REAPER_INTERVAL_SECONDS until cancelled."""
+    """Run mark_stale_runs every REAPER_INTERVAL_SECONDS until cancelled.
+
+    Per killed run, emits one WARNING log line carrying run_id, shop, phase,
+    close_reason (CODEOBS-02). The Phase 3 Grafana "Scrape runs overview"
+    dashboard surfaces these via the dashboard-logs panel — operators can
+    grep `Reaper killed run` to find every reaping in the time range.
+    """
     while True:
         try:
             session = _session_factory()
             try:
-                marked = mark_stale_runs(session)
-                if marked:
-                    logger.info("Reaper marked %d stale run(s) failed", marked)
+                killed = mark_stale_runs(session)
+                for k in killed:
+                    logger.warning(
+                        "Reaper killed run #%d shop=%s phase=%s close_reason=%s",
+                        k["run_id"], k["shop"], k["phase"], k["close_reason"],
+                    )
+                if killed:
+                    logger.info("Reaper iteration: %d run(s) killed", len(killed))
             finally:
                 session.close()
         except Exception:

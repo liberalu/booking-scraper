@@ -112,7 +112,7 @@ def test_mark_stale_runs_emits_failed(db_session):
     run.last_heartbeat = datetime.now(UTC) - timedelta(seconds=600)
     db_session.commit()
     marked = mark_stale_runs(db_session)
-    assert marked >= 1
+    assert len(marked) >= 1
     db_session.expire_all()
     types = [e.event_type for e in _events_of(db_session, run.id)]
     assert types == [run_event_types.STARTED, run_event_types.FAILED]

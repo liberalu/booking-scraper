@@ -82,7 +82,7 @@ def test_reaper_marks_stuck_stopping_run_failed(db_session: Session):
     db_session.commit()
 
     marked = mark_stale_runs(db_session)
-    assert marked == 1
+    assert len(marked) == 1
     db_session.refresh(run)
     assert run.status == "failed"
     assert run.resumable_after_failure is True
