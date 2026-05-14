@@ -35,19 +35,30 @@ function DataSourceBadge({ value }) {
   return <HFPill tone={cfg.tone} soft>{cfg.label}</HFPill>;
 }
 
-const SHOP_COLORS = ['var(--hf-accent)', '#0e7490', '#b45309', '#7c3aed', '#16a34a', '#6b7280'];
+// SHOP_COLORS — hex palette used for SVG chart lines. Index 0 is resolved
+// at runtime from getHF().accent so chart lines match the active accent theme.
+const SHOP_COLORS_HEX = ['#0e7490', '#b45309', '#7c3aed', '#16a34a', '#6b7280'];
 
-function ShopMark({ name, allShops }) {
-  const idx = allShops ? allShops.indexOf(name) : 0;
-  const color = SHOP_COLORS[Math.max(0, idx) % SHOP_COLORS.length];
+function shopColorFor(name) {
+  const HF = getHF();
+  const palette = [HF.accent, ...SHOP_COLORS_HEX];
+  const i = (name.charCodeAt(0) + name.charCodeAt(name.length - 1)) % palette.length;
+  return palette[i];
+}
+
+// 22×22 rounded badge with 2-letter abbreviation, matching the hifi design.
+// Color is derived by hashing the shop name so it's stable regardless of order.
+function ShopMark({ name }) {
+  const c = shopColorFor(name);
   return (
     <span style={{
-      display: 'inline-block',
-      width: 10, height: 10,
-      borderRadius: '50%',
-      background: color,
+      width: 22, height: 22, borderRadius: 5,
+      background: `${c}1A`, color: c,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 10, fontWeight: 700, letterSpacing: -0.3,
+      border: `1px solid ${c}33`,
       flexShrink: 0,
-    }} aria-hidden="true" />
+    }}>{name.slice(0, 2).toUpperCase()}</span>
   );
 }
 
@@ -76,7 +87,7 @@ function HFBookListings({ book, shopNames, lowestPrice, goto }) {
         columns={[
           { key: 'shop', label: 'Shop', w: '1.1fr', cell: (v) => (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <ShopMark name={v} allShops={shopNames} />
+              <ShopMark name={v}  />
               <span style={{ color: 'var(--hf-ink)', fontWeight: 500 }}>{v}</span>
             </span>
           )},
@@ -226,7 +237,7 @@ function HFBookMetadata({ book, authorsByRole }) {
               <span>Canonical</span>
               {shopNames.map((name) => (
                 <span key={name} style={shopHeaderStyle}>
-                  <ShopMark name={name} allShops={shopNames} />
+                  <ShopMark name={name}  />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 </span>
               ))}
@@ -301,7 +312,7 @@ function HFBookMetadata({ book, authorsByRole }) {
               <span>Canonical</span>
               {shopNames.map((name) => (
                 <span key={name} style={shopHeaderStyle}>
-                  <ShopMark name={name} allShops={shopNames} />
+                  <ShopMark name={name}  />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 </span>
               ))}
@@ -384,7 +395,7 @@ function HFBookMetadata({ book, authorsByRole }) {
   );
 }
 
-function MultiLineChart({ series, h, shopColors }) {
+function MultiLineChart({ series, h, colorFn }) {
   const containerRef = React.useRef(null);
   const [W, setW] = React.useState(600);
 
@@ -435,8 +446,7 @@ function MultiLineChart({ series, h, shopColors }) {
 
         {/* Lines + single-point dots */}
         {series.map((s, i) => {
-          const raw = shopColors[i % shopColors.length];
-          const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
+          const color = colorFn ? colorFn(s.shop) : '#6b7280';
           const pts = s.series.filter(p => allDates.includes(p.date));
 
           if (pts.length === 1) {
@@ -551,11 +561,10 @@ function HFBookPrices({ book }) {
         style={{ marginBottom: 'var(--hf-gap)' }}
       >
         <div style={{ padding: 'var(--hf-card-p)' }}>
-          <MultiLineChart series={series} h={240} shopColors={SHOP_COLORS} />
+          <MultiLineChart series={series} h={240} colorFn={shopColorFor} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-            {series.filter(s => s.series.length >= 1).map((s, i) => {
-              const raw = SHOP_COLORS[i % SHOP_COLORS.length];
-              const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
+            {series.filter(s => s.series.length >= 1).map((s) => {
+              const color = shopColorFor(s.shop);
               return (
                 <span key={s.shop} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
