@@ -1,149 +1,176 @@
-// Canonical Book detail page — the routed component for /books/:id.
-// The fallback "fetch the first book when no params.id" path remains for the
-// design prototype's pager, which renders this component without a route.
+// Hi-fi Book page — logical book aggregating ShopBook entries across multiple shops.
+// "Book" is the canonical entity (identified by ISBN); each shop has its own ShopBook
+// row pointing at it. This page shows: which shop listings are matched, when they
+// were matched, how they were matched, and prices side-by-side.
 
-// Locale-correct EUR formatting for Lithuanian price display.
-const _eurFormatter = new Intl.NumberFormat('lt-LT', {
-  style: 'currency', currency: 'EUR',
-});
-function formatEur(value) {
-  if (value == null || value === '') return '—';
-  const n = Number(value);
-  return Number.isFinite(n) ? _eurFormatter.format(n) : '—';
-}
-
-// "Last seen" relative formatting. Falls back to the raw ISO if input is unusable.
-function formatRelative(iso) {
-  if (!iso) return '—';
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return iso;
-  const diffSec = Math.round((Date.now() - t) / 1000);
-  if (diffSec < 60) return 'just now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString('lt-LT');
-}
-
-function DataSourceBadge({ value }) {
-  const map = {
-    ibiblioteka:   { label: 'National Library', tone: 'ok' },
-    shop_inferred: { label: 'From shops',       tone: 'neutral' },
-    manual:        { label: 'Manual',           tone: 'accent' },
-  };
-  const cfg = map[value] || { label: 'Unknown', tone: 'neutral' };
-  return <HFPill tone={cfg.tone} soft>{cfg.label}</HFPill>;
-}
-
-// SHOP_COLORS — hex palette used for SVG chart lines. Index 0 is resolved
-// at runtime from getHF().accent so chart lines match the active accent theme.
-const SHOP_COLORS_HEX = ['#0e7490', '#b45309', '#7c3aed', '#16a34a', '#6b7280'];
-
-function shopColorFor(name) {
+function HFBook({ nav, goto, params }) {
   const HF = getHF();
-  const palette = [HF.accent, ...SHOP_COLORS_HEX];
-  const i = (name.charCodeAt(0) + name.charCodeAt(name.length - 1)) % palette.length;
-  return palette[i];
-}
+  const isbn = params?.isbn || '9789955134572';
 
-// 22×22 rounded badge with 2-letter abbreviation, matching the hifi design.
-// Color is derived by hashing the shop name so it's stable regardless of order.
-function ShopMark({ name }) {
-  const c = shopColorFor(name);
+  const book = {
+    title: 'Sapiens: A Brief History of Humankind',
+    author: 'Yuval Noah Harari',
+    isbn: isbn,
+    isbn10: '9955134577',
+    publisher: 'Kitos knygos',
+    year: 2019,
+    pages: 464,
+    language: 'EN',
+    binding: 'Paperback',
+    firstMatched: 'Feb 18, 2025',
+    contributors: [
+      { role:'Author',       name:'Yuval Noah Harari' },
+      { role:'Translator',   name:'Tadas Naujokaitis' },
+      { role:'Editor',       name:'Giedrė Kmieliauskaitė' },
+      { role:'Cover artist', name:'Marija Mockutė' },
+      { role:'Illustrator',  name:'Lina Sergejeva' },
+      { role:'Producer',     name:'Kitos knygos studio' },
+      { role:'Narrator',     name:'— (no audiobook)' },
+    ],
+  };
+
+  // One row per shop that lists this book.
+  const shops = [
+    { shop:'vaga',         shopBookId:10234, sbStatus:'active',  url:'/knygos/sapiens-yuval-noah-harari',
+      price:19.90, prev:21.00, currency:'EUR', stock:'in stock',     lastSeen:'12m ago',
+      matchedAt:'Feb 18, 2025 14:02', method:'isbn',        confidence:1.00, by:'auto · run #1422' },
+    { shop:'knygos.lt',    shopBookId:10832, sbStatus:'active',  url:'/sapiens-trumpa-zmonijos-istorija',
+      price:18.49, prev:18.49, currency:'EUR', stock:'in stock',     lastSeen:'1h ago',
+      matchedAt:'Feb 18, 2025 14:02', method:'isbn',        confidence:1.00, by:'auto · run #1422' },
+    { shop:'patogu',       shopBookId:11041, sbStatus:'active',  url:'/produktas/sapiens-y-n-harari',
+      price:21.50, prev:19.90, currency:'EUR', stock:'in stock',     lastSeen:'34m ago',
+      matchedAt:'Mar 04, 2025 09:14', method:'title+author', confidence:0.94, by:'auto · run #1518' },
+    { shop:'krisostomus',  shopBookId:11209, sbStatus:'active',  url:'/en/sapiens-yuval-noah-harari-paperback',
+      price:22.90, prev:22.90, currency:'EUR', stock:'in stock',     lastSeen:'2h ago',
+      matchedAt:'Mar 21, 2025 11:48', method:'manual',      confidence:1.00, by:'aurelija@gpswox.com' },
+    { shop:'humanitas',    shopBookId:11458, sbStatus:'out',     url:'/sapiens-paperback',
+      price:20.00, prev:20.00, currency:'EUR', stock:'out of stock', lastSeen:'4h ago',
+      matchedAt:'Apr 02, 2025 16:30', method:'isbn',        confidence:1.00, by:'auto · run #1742' },
+    { shop:'mintis',       shopBookId:11602, sbStatus:'pending', url:'/knygos/sapiens',
+      price:null,  prev:null,  currency:'EUR', stock:'out of stock', lastSeen:'—',
+      matchedAt:'May 06, 2026 18:02', method:'title+author', confidence:0.81, by:'auto · run #2104 · needs review' },
+  ];
+
+  const prices = shops.map(s => s.price).filter(p => p != null);
+  const lowest = Math.min(...prices);
+  const highest = Math.max(...prices);
+  const spread = (highest - lowest).toFixed(2);
+  const spreadPct = (((highest - lowest) / highest) * 100).toFixed(1);
+  const matched = shops.filter(s => s.sbStatus !== 'pending').length;
+  const pending = shops.filter(s => s.sbStatus === 'pending').length;
+
+  const methodTone = { isbn:'ok', 'title+author':'warn', manual:'accent', slug:'neutral' };
+  const sbTone     = { active:'ok', out:'warn', pending:'neutral', delisted:'neutral' };
+
+  const [tab, setTab] = React.useState('overview');
+
   return (
-    <span style={{
-      width: 22, height: 22, borderRadius: 5,
-      background: `${c}1A`, color: c,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 10, fontWeight: 700, letterSpacing: -0.3,
-      border: `1px solid ${c}33`,
-      flexShrink: 0,
-    }}>{name.slice(0, 2).toUpperCase()}</span>
+    <HFShell {...nav} activePage="shop-books"
+      title={<span style={{display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap'}}>
+        <span>{book.title}</span>
+        <HFPill tone="accent">matched · {matched} shops</HFPill>
+        {pending > 0 && <HFPill tone="warn">{pending} pending review</HFPill>}
+      </span>}
+      subtitle={<span style={{fontSize:13}}>
+        by <span style={{color:HF.ink2, fontWeight:500}}>{book.author}</span>
+        {' · '}<span style={{fontFamily:HF.mono, color:HF.ink3}}>ISBN {book.isbn}</span>
+        {' · '}{book.publisher} · {book.year}
+        {' · '}<span style={{color:HF.ink3}}>first matched {book.firstMatched}</span>
+      </span>}
+      breadcrumb={<>
+        <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-books');}} style={{color:HF.ink3, textDecoration:'none'}}>Catalog</a>
+        <span style={{color:HF.ink5}}>/</span>
+        <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-books');}} style={{color:HF.ink3, textDecoration:'none'}}>Books</a>
+        <span style={{color:HF.ink5}}>/</span>
+        <span style={{color:HF.ink, fontWeight:500, fontFamily:HF.mono}}>{book.isbn}</span>
+      </>}
+      actions={<>
+        <HFButton><span style={{display:'flex'}}>{HF_ICONS.refresh}</span> Re-scrape all</HFButton>
+        <HFButton><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add shop listing</HFButton>
+        <HFButton variant="primary">Edit book</HFButton>
+      </>}
+    >
+      <HFKpiStrip items={[
+        { label:'Shops matched', value:`${matched}`, delta:<span style={{color:HF.ink3}}>of {shops.length} listings</span> },
+        { label:'Lowest price',  value:`€${lowest.toFixed(2)}`, delta:<span style={{color:HF.okInk}}>knygos.lt</span>, tone:'ok' },
+        { label:'Highest price', value:`€${highest.toFixed(2)}`, delta:<span style={{color:HF.ink3}}>krisostomus</span> },
+        { label:'Spread',        value:`€${spread}`, delta:<span style={{color:HF.warnInk}}>{spreadPct}% range</span>, tone:'warn' },
+        { label:'Last matched',  value:'2d ago', delta:<span style={{color:HF.ink3}}>mintis · 0.81</span> },
+      ]}/>
+
+      <HFCard style={{marginBottom:HF.gap}}>
+        <div style={{padding:`0 ${HF.cardP}px`}}>
+          <HFTabs active={tab} onChange={setTab} tabs={[
+            { id:'overview',  label:'Listings', count: shops.length },
+            { id:'prices',    label:'Prices' },
+            { id:'metadata',  label:'Metadata' },
+          ]}/>
+        </div>
+      </HFCard>
+
+      {tab === 'overview' && <HFBookListings HF={HF} shops={shops} goto={goto} methodTone={methodTone} sbTone={sbTone} lowest={lowest}/>}
+      {tab === 'prices'   && <HFBookPrices   HF={HF} shops={shops} lowest={lowest}/>}
+      {tab === 'metadata' && <HFBookMetadata HF={HF} book={book} shops={shops}/>}
+    </HFShell>
   );
 }
 
-function HFBookListings({ book, shopNames, lowestPrice, goto }) {
-  const shops = book.shops || [];
+// ─────────────────────── Listings tab (single, unified) ───────────────────────
+// One row per shop — combines price, stock, match method, confidence,
+// matched-at, matched-by, last scrape, and per-row actions in one place.
 
-  if (shops.length === 0) {
-    return (
-      <HFCard>
-        <div style={{ padding: 20 }}>
-          <HFEmptyState
-            title="Not listed anywhere we track"
-            sub="No shop listings have been linked to this canonical book yet."
-          />
-        </div>
-      </HFCard>
-    );
-  }
-
+function HFBookListings({ HF, shops, goto, methodTone, sbTone, lowest }) {
   return (
-    <HFCard
-      title="Listings across shops"
-      sub={`${shops.length} shop${shops.length !== 1 ? 's' : ''} · price, stock, last scrape`}
-    >
+    <HFCard title="Listings across shops"
+            sub={`${shops.length} shop books point to this canonical book — price, stock, match info, and last scrape`}
+            action={<HFButton size="sm"><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add match manually</HFButton>}
+            flush>
       <HFTable
+        onRowClick={r => goto('shop-book-detail', { id:r.shopBookId })}
         columns={[
-          { key: 'shop', label: 'Shop', w: '1.1fr', cell: (v) => (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <ShopMark name={v}  />
-              <span style={{ color: 'var(--hf-ink)', fontWeight: 500 }}>{v}</span>
+          { key:'shop', label:'Shop', w:'1.1fr', sortable:true, cell:(v,r) => (
+            <span style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+              <ShopMark name={v} HF={HF}/>
+              <span style={{display:'flex', flexDirection:'column', minWidth:0}}>
+                <span style={{color:HF.ink, fontWeight:500}}>{v}</span>
+                <span style={{fontFamily:HF.mono, fontSize:11, color:HF.ink4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>#{r.shopBookId}</span>
+              </span>
             </span>
           )},
-          { key: 'price', label: 'Price', w: '0.9fr', align: 'right', cell: (_, r) => {
-            if (r.price == null) return <span style={{ color: 'var(--hf-ink4)' }}>—</span>;
-            const n = Number(r.price);
-            const isBest = lowestPrice != null && Math.abs(n - lowestPrice) < 0.001;
-            return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, justifyContent: 'flex-end' }}>
-                <span style={{
-                  fontFamily: 'var(--hf-mono)',
-                  color: isBest ? 'var(--hf-ok-ink)' : 'var(--hf-ink)',
-                  fontWeight: isBest ? 600 : 500,
-                }}>
-                  {new Intl.NumberFormat('lt-LT', { style: 'currency', currency: 'EUR' }).format(n)}
+          { key:'sbStatus', label:'Listing', w:'0.6fr',
+            cell:v => <HFPill tone={sbTone[v]}>{v}</HFPill> },
+          { key:'price', label:'Price', w:'0.7fr', mono:true, align:'right', sortable:true,
+            sortVal:r=>r.price ?? 999,
+            cell:(v) => v == null
+              ? <span style={{color:HF.ink4}}>—</span>
+              : <span style={{display:'inline-flex', alignItems:'baseline', gap:6, justifyContent:'flex-end'}}>
+                  <span style={{color: v===lowest? HF.okInk : HF.ink, fontWeight: v===lowest? 600 : 500}}>€{v.toFixed(2)}</span>
+                  {v===lowest && <span style={{fontSize:10, color:HF.okInk, fontWeight:600, letterSpacing:0.4}}>BEST</span>}
                 </span>
-                {isBest && (
-                  <span style={{
-                    fontSize: 10, color: 'var(--hf-ok-ink)',
-                    fontWeight: 600, letterSpacing: 0.4,
-                  }}>BEST</span>
-                )}
-              </span>
-            );
-          }},
-          { key: 'delta', label: 'Δ 30d', w: '0.55fr', align: 'right',
-            cell: () => <span style={{ color: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>—</span>
           },
-          { key: 'in_stock', label: 'Stock', w: '0.7fr', cell: (v) => (
-            v
-              ? <HFPill tone="ok" soft>In stock</HFPill>
-              : <HFPill tone="warn" soft>Out</HFPill>
-          )},
-          { key: 'last_seen_at', label: 'Last scrape', w: '0.85fr', cell: (v) =>
-            v
-              ? <time dateTime={v}>{formatRelative(v)}</time>
-              : <span style={{ color: 'var(--hf-ink4)' }}>—</span>
+          { key:'delta', label:'Δ 30d', w:'0.55fr', mono:true, align:'right',
+            cell:(_,r) => {
+              if (r.price == null || r.prev == null) return <span style={{color:HF.ink4}}>—</span>;
+              const d = r.price - r.prev;
+              if (Math.abs(d) < 0.01) return <span style={{color:HF.ink4}}>0.00</span>;
+              return <span style={{color: d<0? HF.okInk : HF.errInk, fontWeight:500}}>{d<0?'▼':'▲'} €{Math.abs(d).toFixed(2)}</span>;
+            }
           },
-          { key: 'url', label: '', w: '90px', align: 'right', cell: (v, r) =>
-            v
-              ? <a
-                  href={v}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open at ${r.shop} (new tab)`}
-                  title={`Open at ${r.shop}`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    minWidth: 32, minHeight: 32, padding: '0 8px',
-                    color: 'var(--hf-accent-ink)',
-                    fontFamily: 'var(--hf-mono)', fontSize: 11,
-                    textDecoration: 'none',
-                  }}
-                >Visit ↗</a>
-              : '—'
+          { key:'stock', label:'Stock', w:'0.6fr',
+            cell:v => <HFPill tone={v==='in stock'?'ok':'warn'}>{v==='in stock'?'on':'out'}</HFPill>
           },
+          { key:'method', label:'Match', w:'0.9fr',
+            cell:v => <HFPill tone={methodTone[v]}>{v}</HFPill>
+          },
+          { key:'matchedAt', label:'Matched', w:'1fr', muted:true, mono:true, sortable:true,
+            cell:v => <span style={{color:HF.ink3, fontSize:11.5}}>{v}</span>
+          },
+          { key:'lastSeen', label:'Last scrape', w:'0.7fr', muted:true, mono:true, align:'right', sortable:true },
+          { key:'_', label:'', w:'160px', align:'right',
+            cell:() => <div style={{display:'flex', gap:4, justifyContent:'flex-end'}}>
+              <button className="hf-btn" style={btnSm(HF)} onClick={(e)=>e.stopPropagation()}>Re-match</button>
+              <button className="hf-btn" style={{...btnSm(HF), color:HF.errInk, borderColor:HF.errBorder}} onClick={(e)=>e.stopPropagation()}>Unlink</button>
+            </div> },
         ]}
         rows={shops}
       />
@@ -151,144 +178,247 @@ function HFBookListings({ book, shopNames, lowestPrice, goto }) {
   );
 }
 
-function HFBookMetadata({ book, authorsByRole }) {
-  const shops = book.shops || [];
-  const shopNames = shops.map(s => s.shop);
+// ─────────────────────── Prices tab ───────────────────────
 
-  // Conflict detection helpers (case-insensitive, trimmed)
-  const norm = s => (s == null ? '' : String(s).trim().toLowerCase());
-  const hasConflict = (shopVal, canonVal) =>
-    shopVal != null && shopVal !== '' &&
-    canonVal != null && canonVal !== '' &&
-    norm(shopVal) !== norm(String(canonVal));
-  const isMissing = v => v == null || v === '';
-
-  // Primary canonical author name (for cross-shop comparison)
-  const canonicalAuthor = (authorsByRole.author || [])[0] || null;
-
-  // Canonical ISBN-13
-  const canonicalIsbn13 = (book.isbns || []).find(i => String(i.isbn).length === 13)?.isbn || null;
-
-  // Roles to show in Contributors card
-  const ROLE_LABELS = {
-    author:       'Author',
-    translator:   'Translated by',
-    narrator:     'Narrated by',
-    editor:       'Edited by',
-    illustrator:  'Illustrated by',
-    cover_artist: 'Cover by',
-    producer:     'Produced by',
-  };
-  const roleOrder = ['author', 'translator', 'narrator', 'editor',
-                     'illustrator', 'cover_artist', 'producer'];
-  const extraRoles = Object.keys(authorsByRole).filter(r => !roleOrder.includes(r));
-  const allRoles = [...roleOrder, ...extraRoles]
-    .filter(r => (authorsByRole[r] || []).length > 0);
-
-  // Metadata matrix rows: only rows where canonical value exists
-  const matrixRows = [
-    { label: 'Title',    canonical: book.title,     shopVal: s => s.title,
-      conflict: s => hasConflict(s.title, book.title) },
-    { label: 'Author',   canonical: canonicalAuthor, shopVal: s => s.author,
-      conflict: s => hasConflict(s.author, canonicalAuthor) },
-    { label: 'Year',     canonical: book.year,       shopVal: s => s.year,
-      conflict: s => s.year != null && book.year != null && s.year !== book.year },
-    { label: 'Publisher',canonical: book.publisher,  shopVal: s => s.publisher,
-      conflict: s => hasConflict(s.publisher, book.publisher) },
-    { label: 'ISBN-13',  canonical: canonicalIsbn13, shopVal: s => s.isbn,
-      conflict: s => s.isbn != null && canonicalIsbn13 != null &&
-                     s.isbn.replace(/-/g,'') !== canonicalIsbn13.replace(/-/g,'') },
-    { label: 'Format',   canonical: book.format,    shopVal: s => s.format,
-      conflict: s => hasConflict(s.format, book.format) },
-  ].filter(row => row.canonical != null && row.canonical !== '');
-
-  const colW = 140;
-  const headerStyle = {
-    display: 'grid',
-    gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
-    padding: '8px 20px',
-    background: 'var(--hf-subtle)',
-    borderBottom: '1px solid var(--hf-border)',
-    fontSize: 11, fontWeight: 600, color: 'var(--hf-ink3)',
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    position: 'sticky', top: 0, zIndex: 1,
-  };
-  const shopHeaderStyle = {
-    display: 'flex', alignItems: 'center', gap: 6,
-    textTransform: 'none', letterSpacing: 0, fontWeight: 600,
-    color: 'var(--hf-ink2)', fontSize: 11.5,
-    overflow: 'hidden',
-  };
+function HFBookPrices({ HF, shops, lowest }) {
+  // Synthetic 30-day price series per shop (constant + small wobble around current)
+  const series = shops.filter(s => s.price != null).map((s, i) => {
+    const base = s.price;
+    const seed = (s.shop.charCodeAt(0) + i*7) % 17;
+    const data = Array.from({length:30}, (_,k) => {
+      const wob = Math.sin((k+seed)*0.6) * Math.min(1.2, base*0.05);
+      const drop = (k > 12 && k < 20 && i === 1) ? -0.8 : 0;
+      return Math.max(1, +(base + wob + drop).toFixed(2));
+    });
+    return { shop:s.shop, data, current:s.price };
+  });
 
   return (
     <>
-      {/* Card 1 — Contributors */}
-      <HFCard
-        title="Contributors"
-        sub="author, translator, narrator and other credited roles — shops only provide raw author string"
-        style={{ marginBottom: 'var(--hf-gap)' }}
-        flush
-      >
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 160 + 200 + shopNames.length * colW }}>
-            {/* Header */}
-            <div style={headerStyle}>
-              <span>Role</span>
+      <HFCard title="30-day price comparison" sub="every shop overlaid · click a shop to isolate"
+              style={{marginBottom:HF.gap}}>
+        <div style={{padding:HF.cardP}}>
+          <MultiLineChart HF={HF} series={series} h={260}/>
+          <div style={{display:'flex', flexWrap:'wrap', gap:14, marginTop:14, paddingTop:12, borderTop:`1px solid ${HF.borderFaint}`}}>
+            {series.map((s, i) => (
+              <div key={s.shop} style={{display:'flex', alignItems:'center', gap:6, fontSize:12}}>
+                <span style={{width:10, height:10, borderRadius:2, background: shopColor(i, HF)}}/>
+                <span style={{color:HF.ink, fontWeight:500}}>{s.shop}</span>
+                <span style={{fontFamily:HF.mono, color: s.current===lowest? HF.okInk : HF.ink3, fontWeight: s.current===lowest? 600 : 400}}>
+                  €{s.current.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </HFCard>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:HF.gap}}>
+        <HFCard title="Cheapest right now" sub="best deal across matched shops">
+          <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
+            <div style={{display:'flex', alignItems:'baseline', gap:8}}>
+              <span style={{fontSize:28, fontWeight:700, color:HF.okInk, fontFamily:HF.mono}}>€{lowest.toFixed(2)}</span>
+              <span style={{color:HF.ink3, fontSize:13}}>knygos.lt</span>
+            </div>
+            <span style={{fontSize:12, color:HF.ink3}}>€{(Math.max(...shops.map(s=>s.price||0))-lowest).toFixed(2)} cheaper than the most expensive listing.</span>
+          </div>
+        </HFCard>
+        <HFCard title="All-time low" sub="across all shops, since first match">
+          <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
+            <div style={{display:'flex', alignItems:'baseline', gap:8}}>
+              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>€17.20</span>
+              <span style={{color:HF.ink3, fontSize:13}}>knygos.lt</span>
+            </div>
+            <span style={{fontSize:12, color:HF.ink3}}>Mar 22, 2025 · flash sale · lasted 4h</span>
+          </div>
+        </HFCard>
+        <HFCard title="Average price" sub="all shops, last 30 days">
+          <div style={{padding:HF.cardP, display:'flex', flexDirection:'column', gap:6}}>
+            <div style={{display:'flex', alignItems:'baseline', gap:8}}>
+              <span style={{fontSize:28, fontWeight:700, color:HF.ink, fontFamily:HF.mono}}>€20.46</span>
+              <span style={{color:HF.errInk, fontSize:12, fontWeight:500}}>▲ 1.2% vs prev 30d</span>
+            </div>
+            <span style={{fontSize:12, color:HF.ink3}}>5 shops contributing · 1 pending excluded</span>
+          </div>
+        </HFCard>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────── Metadata tab ───────────────────────
+
+function HFBookMetadata({ HF, book, shops }) {
+  const order = ['vaga','knygos.lt','patogu','krisostomus','humanitas','mintis'];
+  return (
+    <>
+      <HFContributorsCard HF={HF} book={book} shops={shops} order={order}/>
+      <HFMetadataMatrix HF={HF} book={book} order={order}/>
+    </>
+  );
+}
+
+function HFContributorsCard({ HF, book, shops, order }) {
+  // For each contributor, fabricate which shops report them and any disagreements.
+  const contributors = [
+    { role:'Author',       canonical:'Yuval Noah Harari', cells:{ vaga:'Yuval Noah Harari', 'knygos.lt':'Yuval Noah Harari', patogu:'Yuval Noah Harari', krisostomus:'Yuval Noah Harari', humanitas:'Yuval Noah Harari', mintis:{v:'Y. N. Harari', conflict:true} } },
+    { role:'Translator',   canonical:'Tadas Naujokaitis', cells:{ vaga:'Tadas Naujokaitis', 'knygos.lt':'Tadas Naujokaitis', patogu:'Tadas Naujokaitis', krisostomus:null, humanitas:'T. Naujokaitis', mintis:null } },
+    { role:'Editor',       canonical:'Giedrė Kmieliauskaitė', cells:{ vaga:'Giedrė Kmieliauskaitė', 'knygos.lt':'Giedrė Kmieliauskaitė', patogu:null, krisostomus:null, humanitas:null, mintis:null } },
+    { role:'Cover artist', canonical:'Marija Mockutė', cells:{ vaga:'Marija Mockutė', 'knygos.lt':null, patogu:null, krisostomus:{v:'Vaida Stankūnaitė', conflict:true}, humanitas:null, mintis:null } },
+    { role:'Illustrator',  canonical:'Lina Sergejeva', cells:{ vaga:'Lina Sergejeva', 'knygos.lt':null, patogu:null, krisostomus:null, humanitas:null, mintis:null } },
+    { role:'Producer',     canonical:'Kitos knygos studio', cells:{ vaga:'Kitos knygos studio', 'knygos.lt':'Kitos knygos', patogu:'Kitos knygos', krisostomus:'Kitos knygos', humanitas:'Kitos knygos', mintis:null } },
+    { role:'Narrator',     canonical:'— (no audiobook)', cells:{ vaga:null, 'knygos.lt':null, patogu:null, krisostomus:null, humanitas:null, mintis:null } },
+  ];
+
+  return (
+    <HFCard title="Contributors" sub="people credited on this book — author, translator, editor, cover artist, illustrator, producer, narrator"
+            style={{marginBottom:HF.gap}} flush>
+      <div style={{overflowX:'auto'}} className="hf-scroll">
+        <div style={{minWidth: 200 + order.length*140}}>
+          <div style={{
+            display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
+            padding:`8px ${HF.cardP}px`, alignItems:'center',
+            background:HF.subtle, borderBottom:`1px solid ${HF.border}`,
+            fontSize:11, fontWeight:600, color:HF.ink3, textTransform:'uppercase', letterSpacing:0.5,
+          }}>
+            <span>Role</span><span>Canonical</span>
+            {order.map(n => (
+              <span key={n} style={{display:'flex', alignItems:'center', gap:6, textTransform:'none', letterSpacing:0, fontWeight:600, color:HF.ink2, fontSize:11.5}}>
+                <ShopMark name={n} HF={HF}/><span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{n}</span>
+              </span>
+            ))}
+          </div>
+          {contributors.map((c, i) => (
+            <div key={c.role} style={{
+              display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
+              padding:`9px ${HF.cardP}px`, alignItems:'center',
+              borderBottom: i < contributors.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+              fontSize:12,
+            }}>
+              <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{c.role}</span>
+              <span style={{color: c.canonical.startsWith('—')? HF.ink4 : HF.ink, fontWeight:500, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.canonical}</span>
+              {order.map(n => {
+                const v = c.cells[n];
+                if (v == null) return <span key={n} style={{color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>—</span>;
+                if (typeof v === 'object' && v.conflict) {
+                  return <span key={n} title={v.v} style={{display:'flex', alignItems:'center', gap:6, color:HF.warnInk, fontSize:11.5, minWidth:0}}>
+                    <span style={{width:14, height:14, borderRadius:3, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700}}>!</span>
+                    <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v.v}</span>
+                  </span>;
+                }
+                return <span key={n} style={{color: v===c.canonical? HF.ink2 : HF.warnInk, fontSize:11.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>;
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </HFCard>
+  );
+}
+
+function HFMetadataMatrix({ HF, book, order }) {
+  // Per-field per-shop matrix. Each cell is one of:
+  //   { v: '<value>' }              → shop reported this value (matches canonical → green check)
+  //   { v: '<value>', conflict:true } → shop reported a different value (warning)
+  //   { missing:true }              → shop did not provide this field
+  const matrix = [
+    { field:'Title',      canonical: book.title,            source:'consensus',
+      cells: { 'vaga':{v:book.title}, 'knygos.lt':{v:book.title}, 'patogu':{v:'Sapiens. Trumpa žmonijos istorija', conflict:true},
+               'krisostomus':{v:book.title}, 'humanitas':{v:book.title}, 'mintis':{v:book.title} } },
+    { field:'Author',     canonical: book.author,           source:'consensus',
+      cells: { 'vaga':{v:book.author}, 'knygos.lt':{v:book.author}, 'patogu':{v:book.author},
+               'krisostomus':{v:book.author}, 'humanitas':{v:book.author}, 'mintis':{v:'Y. N. Harari', conflict:true} } },
+    { field:'ISBN-13',    canonical: book.isbn,             source:'5 of 6 · 1 missing',
+      cells: { 'vaga':{v:book.isbn}, 'knygos.lt':{v:book.isbn}, 'patogu':{v:book.isbn},
+               'krisostomus':{v:book.isbn}, 'humanitas':{v:book.isbn}, 'mintis':{missing:true} } },
+    { field:'ISBN-10',    canonical: book.isbn10,           source:'derived',
+      cells: { 'vaga':{v:book.isbn10}, 'knygos.lt':{missing:true}, 'patogu':{missing:true},
+               'krisostomus':{v:book.isbn10}, 'humanitas':{missing:true}, 'mintis':{missing:true} } },
+    { field:'Publisher',  canonical: book.publisher,        source:'consensus',
+      cells: { 'vaga':{v:book.publisher}, 'knygos.lt':{v:book.publisher}, 'patogu':{v:book.publisher},
+               'krisostomus':{v:book.publisher}, 'humanitas':{v:book.publisher}, 'mintis':{missing:true} } },
+    { field:'Year',       canonical: String(book.year),     source:'5 of 6 · 1 conflict',
+      cells: { 'vaga':{v:'2019'}, 'knygos.lt':{v:'2019'}, 'patogu':{v:'2019'},
+               'krisostomus':{v:'2019'}, 'humanitas':{v:'2014', conflict:true}, 'mintis':{v:'2019'} } },
+    { field:'Pages',      canonical: String(book.pages),    source:'4 of 6 · 2 missing',
+      cells: { 'vaga':{v:'464'}, 'knygos.lt':{v:'464'}, 'patogu':{missing:true},
+               'krisostomus':{v:'464'}, 'humanitas':{v:'464'}, 'mintis':{missing:true} } },
+    { field:'Language',   canonical: book.language,         source:'consensus',
+      cells: { 'vaga':{v:'EN'}, 'knygos.lt':{v:'EN'}, 'patogu':{v:'EN'},
+               'krisostomus':{v:'EN'}, 'humanitas':{v:'EN'}, 'mintis':{v:'EN'} } },
+    { field:'Binding',    canonical: book.binding,          source:'4 of 6 · 1 conflict · 1 missing',
+      cells: { 'vaga':{v:'Paperback'}, 'knygos.lt':{v:'Paperback'}, 'patogu':{v:'Minkšti viršeliai'},
+               'krisostomus':{v:'Hardcover', conflict:true}, 'humanitas':{v:'Paperback'}, 'mintis':{missing:true} } },
+    { field:'Categories', canonical: 'History · Non-fiction', source:'merged from 5 shops',
+      cells: { 'vaga':{v:'History, Non-fiction'}, 'knygos.lt':{v:'Istorija'}, 'patogu':{v:'Mokslas, istorija'},
+               'krisostomus':{v:'History'}, 'humanitas':{v:'Non-fiction'}, 'mintis':{missing:true} } },
+  ];
+
+  // Conflicts list — every shop × field where the shop value disagrees with canonical.
+
+  return (
+    <>
+      <HFCard title="Canonical metadata · per shop"
+              sub="each row is a field; each column is a shop. ✓ = shop value matches canonical, ⚠ = conflict, — = not provided"
+              style={{marginBottom:HF.gap}} flush>
+        <div style={{overflowX:'auto'}} className="hf-scroll">
+          <div style={{minWidth: 200 + order.length*140}}>
+            {/* Header row */}
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:`140px 200px repeat(${order.length}, 1fr)`,
+              padding:`8px ${HF.cardP}px`, alignItems:'center',
+              background:HF.subtle, borderBottom:`1px solid ${HF.border}`,
+              fontSize:11, fontWeight:600, color:HF.ink3, textTransform:'uppercase', letterSpacing:0.5,
+            }}>
+              <span>Field</span>
               <span>Canonical</span>
-              {shopNames.map((name) => (
-                <span key={name} style={shopHeaderStyle}>
-                  <ShopMark name={name}  />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+              {order.map(name => (
+                <span key={name} style={{display:'flex', alignItems:'center', gap:6, textTransform:'none', letterSpacing:0, fontWeight:600, color:HF.ink2, fontSize:11.5}}>
+                  <ShopMark name={name} HF={HF}/>
+                  <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{name}</span>
                 </span>
               ))}
             </div>
-
-            {/* Role rows */}
-            {allRoles.length === 0 ? (
-              <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
-                No contributor data.
-              </div>
-            ) : allRoles.map((role, i) => (
-              <div key={role} style={{
-                display: 'grid',
-                gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
-                padding: '9px 20px',
-                borderBottom: i < allRoles.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
-                fontSize: 12, alignItems: 'center',
+            {/* Rows */}
+            {matrix.map((row, i) => (
+              <div key={row.field} style={{
+                display:'grid',
+                gridTemplateColumns:`140px 200px repeat(${order.length}, 1fr)`,
+                padding:`10px ${HF.cardP}px`, alignItems:'center',
+                borderBottom: i < matrix.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+                fontSize:12,
               }}>
-                <span style={{ color: 'var(--hf-ink)', fontWeight: 600, fontSize: 12.5 }}>
-                  {ROLE_LABELS[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                </span>
-                <span style={{ color: 'var(--hf-ink2)', fontWeight: 500,
-                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                               paddingRight: 12 }}>
-                  {authorsByRole[role].join(', ')}
-                </span>
-                {shopNames.map(name => {
-                  const shop = shops.find(s => s.shop === name);
-                  if (role !== 'author') {
-                    return <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>;
+                <div style={{display:'flex', flexDirection:'column', gap:2}}>
+                  <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{row.field}</span>
+                  <span style={{color: row.source.includes('conflict')? HF.warnInk : HF.ink4, fontSize:10.5, fontFamily:HF.mono}}>{row.source}</span>
+                </div>
+                <span style={{color:HF.ink, fontWeight:500, fontSize:12.5, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.canonical}</span>
+                {order.map(name => {
+                  const c = row.cells[name];
+                  if (c.missing) {
+                    return (
+                      <span key={name} style={{display:'flex', alignItems:'center', gap:6, color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>
+                        <span style={{width:14, display:'inline-flex', justifyContent:'center'}}>—</span>
+                        <span>not provided</span>
+                      </span>
+                    );
                   }
-                  const val = shop?.author;
-                  if (isMissing(val)) {
-                    return <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>;
+                  const matches = c.v === row.canonical;
+                  if (c.conflict || !matches) {
+                    return (
+                      <span key={name} title={c.v} style={{display:'flex', alignItems:'center', gap:6, color:HF.warnInk, fontSize:11.5, minWidth:0}}>
+                        <span style={{width:14, height:14, borderRadius:3, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700}}>!</span>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.v}</span>
+                      </span>
+                    );
                   }
-                  const conflict = hasConflict(val, canonicalAuthor);
                   return (
-                    <span key={name} title={val} style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      color: conflict ? 'var(--hf-warn-ink)' : 'var(--hf-ink2)',
-                      fontSize: 11.5, overflow: 'hidden',
-                    }}>
-                      {conflict && (
-                        <span style={{
-                          width: 14, height: 14, borderRadius: 3,
-                          background: 'var(--hf-warn-soft)', border: '1px solid var(--hf-warn-border)',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 9, fontWeight: 700, flexShrink: 0,
-                        }}>!</span>
-                      )}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
+                    <span key={name} style={{display:'flex', alignItems:'center', gap:6, color:HF.okInk, fontSize:11.5}}>
+                      <span style={{width:14, height:14, borderRadius:3, background:HF.okSoft, border:`1px solid ${HF.okBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4 L3.5 6 L6.5 2" stroke={HF.okInk} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </span>
+                      <span style={{color:HF.ink2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>match</span>
                     </span>
                   );
                 })}
@@ -298,515 +428,398 @@ function HFBookMetadata({ book, authorsByRole }) {
         </div>
       </HFCard>
 
-      {/* Card 2 — Metadata matrix */}
-      <HFCard
-        title="Canonical metadata · per shop"
-        sub="each row is a field · ✓ = matches canonical · ⚠ = conflict · — = not provided"
-        flush
-      >
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 160 + 200 + shopNames.length * colW }}>
-            {/* Header */}
-            <div style={headerStyle}>
-              <span>Field</span>
-              <span>Canonical</span>
-              {shopNames.map((name) => (
-                <span key={name} style={shopHeaderStyle}>
-                  <ShopMark name={name}  />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                </span>
-              ))}
-            </div>
-
-            {matrixRows.length === 0 ? (
-              <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--hf-ink3)' }}>
-                No metadata.
+      <HFCard title="Conflicts to resolve" sub="fields where a shop disagrees with the canonical value" flush>
+        <div style={{padding:`6px 0`}}>
+          {matrix.flatMap(row =>
+            order.filter(name => row.cells[name]?.conflict).map(name => ({ field: row.field, canonical: row.canonical, name, value: row.cells[name].v }))
+          ).map((c, i, arr) => (
+            <div key={`${c.field}-${c.name}`} style={{
+              padding:`12px ${HF.cardP}px`,
+              borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+              display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:16, alignItems:'center', fontSize:12.5,
+            }}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <ShopMark name={c.name} HF={HF}/>
+                <span style={{color:HF.ink, fontWeight:600}}>{c.name}</span>
+                <span style={{color:HF.ink3}}>disagrees on</span>
+                <HFPill tone="warn">{c.field}</HFPill>
               </div>
-            ) : matrixRows.map((row, i) => {
-              const conflictCount = shops.filter(s => row.conflict(s)).length;
-              const missingCount  = shops.filter(s => isMissing(row.shopVal(s))).length;
-              const providedCount = shops.length - missingCount;
-              const summaryParts  = [`${providedCount} of ${shops.length}`];
-              if (missingCount > 0)  summaryParts.push(`${missingCount} missing`);
-              if (conflictCount > 0) summaryParts.push(`${conflictCount} conflict`);
-
-              return (
-                <div key={row.label} style={{
-                  display: 'grid',
-                  gridTemplateColumns: `160px 200px repeat(${shopNames.length}, ${colW}px)`,
-                  padding: '10px 20px',
-                  borderBottom: i < matrixRows.length - 1 ? '1px solid var(--hf-border-faint)' : 'none',
-                  fontSize: 12, alignItems: 'center',
-                }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--hf-ink)', fontWeight: 600, fontSize: 12.5 }}>{row.label}</span>
-                    <span style={{
-                      fontSize: 10.5, fontFamily: 'var(--hf-mono)',
-                      color: conflictCount > 0 ? 'var(--hf-warn-ink)' : 'var(--hf-ink4)',
-                    }}>
-                      {summaryParts.join(' · ')}
-                    </span>
-                  </div>
-                  <span style={{
-                    color: 'var(--hf-ink)', fontWeight: 500,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    paddingRight: 12, fontSize: 12.5,
-                  }}>
-                    {String(row.canonical)}
-                  </span>
-                  {shopNames.map(name => {
-                    const shop = shops.find(s => s.shop === name);
-                    const val  = shop ? row.shopVal(shop) : null;
-                    if (isMissing(val)) {
-                      return (
-                        <span key={name} style={{ color: 'var(--hf-ink5)', fontSize: 11.5, fontFamily: 'var(--hf-mono)' }}>—</span>
-                      );
-                    }
-                    const conflict = shop && row.conflict(shop);
-                    return (
-                      <span key={name} title={String(val)} style={{
-                        display: 'flex', alignItems: 'center', gap: 5,
-                        color: conflict ? 'var(--hf-warn-ink)' : 'var(--hf-ink3)',
-                        fontSize: 11.5, overflow: 'hidden',
-                      }}>
-                        {conflict ? (
-                          <span style={{
-                            width: 14, height: 14, borderRadius: 3,
-                            background: 'var(--hf-warn-soft)', border: '1px solid var(--hf-warn-border)',
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 9, fontWeight: 700, flexShrink: 0,
-                          }}>!</span>
-                        ) : (
-                          <span style={{ color: 'var(--hf-ok-ink)', fontWeight: 600, fontSize: 10, flexShrink: 0 }}>✓</span>
-                        )}
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {conflict ? String(val) : 'match'}
-                        </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+              <div style={{display:'flex', flexDirection:'column', gap:2, fontSize:11.5}}>
+                <span style={{color:HF.ink4, fontFamily:HF.mono, fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4}}>canonical</span>
+                <span style={{color:HF.ink2, fontWeight:500}}>{c.canonical}</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap:2, fontSize:11.5}}>
+                <span style={{color:HF.warnInk, fontFamily:HF.mono, fontSize:10.5, textTransform:'uppercase', letterSpacing:0.4}}>shop value</span>
+                <span style={{color:HF.warnInk, fontWeight:600}}>{c.value}</span>
+              </div>
+              <div style={{display:'flex', gap:6}}>
+                <button className="hf-btn" style={btnSm(HF)}>Use shop</button>
+                <button className="hf-btn" style={btnSm(HF)}>Keep canonical</button>
+              </div>
+            </div>
+          ))}
         </div>
       </HFCard>
     </>
   );
 }
 
-function MultiLineChart({ series, h, colorFn }) {
-  const containerRef = React.useRef(null);
-  const [W, setW] = React.useState(600);
+// ─────────────────────── Helper components ───────────────────────
 
-  React.useEffect(() => {
-    if (!containerRef.current) return;
-    const obs = new ResizeObserver(entries => {
-      if (entries[0]) setW(Math.round(entries[0].contentRect.width));
-    });
-    obs.observe(containerRef.current);
-    return () => obs.disconnect();
-  }, []);
+const SHOP_COLORS = ['accent','#0e7490','#b45309','#7c3aed','#16a34a','#6b7280'];
+function shopColor(i, HF) {
+  const map = [HF.accent, '#0e7490', '#b45309', '#7c3aed', '#16a34a', '#6b7280'];
+  return map[i % map.length];
+}
 
-  if (!series || !series.length) return <div ref={containerRef} style={{ height: h }} />;
-
-  const allDates = [...new Set(series.flatMap(s => s.series.map(p => p.date)))].sort();
-  if (!allDates.length) return <div ref={containerRef} style={{ height: h }} />;
-
-  const allPrices = series.flatMap(s => s.series.map(p => p.price));
-  const minP = Math.min(...allPrices);
-  const maxP = Math.max(...allPrices);
-  const priceRange = maxP - minP || 1;
-
-  const PAD_L = 52, PAD_R = 12, PAD_T = 10, PAD_B = 24;
-  const chartW = W - PAD_L - PAD_R;
-  const chartH = h - PAD_T - PAD_B;
-
-  const xOf = date => PAD_L + (allDates.indexOf(date) / Math.max(allDates.length - 1, 1)) * chartW;
-  const yOf = price => PAD_T + (1 - (price - minP) / priceRange) * chartH;
-
+function ShopMark({ name, HF }) {
+  const i = (name.charCodeAt(0) + name.charCodeAt(name.length-1)) % 6;
+  const c = shopColor(i, HF);
   return (
-    <div ref={containerRef} style={{ width: '100%' }}>
-      <svg width={W} height={h} style={{ display: 'block', overflow: 'visible' }}>
-        {/* Gridlines + Y-axis price labels */}
-        {[0, 0.25, 0.5, 0.75, 1].map(t => {
-          const y = PAD_T + t * chartH;
-          const price = maxP - t * priceRange;
-          return (
-            <g key={t}>
-              <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
-                    stroke="var(--hf-border-faint)" strokeWidth="0.5"/>
-              <text x={PAD_L - 6} y={y + 4} textAnchor="end"
-                    style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-                {price.toFixed(2)}
-              </text>
-            </g>
-          );
-        })}
+    <span style={{
+      width:22, height:22, borderRadius:5,
+      background:`${c}1A`, color:c,
+      display:'flex', alignItems:'center', justifyContent:'center',
+      fontSize:10, fontWeight:700, letterSpacing:-0.3,
+      fontFamily:HF.sans, border:`1px solid ${c}33`,
+      flexShrink:0,
+    }}>{name.slice(0,2).toUpperCase()}</span>
+  );
+}
 
-        {/* Lines + single-point dots */}
-        {series.map((s, i) => {
-          const color = colorFn ? colorFn(s.shop) : '#6b7280';
-          const pts = s.series.filter(p => allDates.includes(p.date));
+function ConfidenceBar({ v, HF }) {
+  const c = v >= 0.95 ? HF.ok : v >= 0.85 ? HF.warn : HF.err;
+  return (
+    <span style={{display:'inline-flex', alignItems:'center', gap:6, justifyContent:'flex-end'}}>
+      <span style={{width:48, height:5, background:HF.subtle, borderRadius:3, overflow:'hidden', display:'inline-block'}}>
+        <span style={{display:'block', height:'100%', width:`${v*100}%`, background:c, borderRadius:3}}/>
+      </span>
+      <span style={{color: v>=0.95? HF.ink2 : HF.warnInk, fontWeight: v>=0.95? 500 : 600}}>{v.toFixed(2)}</span>
+    </span>
+  );
+}
 
-          if (pts.length === 1) {
-            return (
-              <circle key={s.shop}
-                cx={xOf(pts[0].date)} cy={yOf(pts[0].price)} r={3}
-                fill={color} opacity={0.9}/>
-            );
-          }
-          if (pts.length < 1) return null;
-
-          const d = pts.map((p, j) =>
-            `${j === 0 ? 'M' : 'L'}${xOf(p.date).toFixed(1)},${yOf(p.price).toFixed(1)}`
-          ).join(' ');
-          return (
-            <path key={s.shop} d={d} fill="none"
-                  stroke={color} strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
-          );
-        })}
-
-        {/* X-axis: first + last date */}
-        {allDates.length > 1 && <>
-          <text x={PAD_L} y={h - 6} textAnchor="start"
-                style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-            {allDates[0]}
-          </text>
-          <text x={W - PAD_R} y={h - 6} textAnchor="end"
-                style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-            {allDates[allDates.length - 1]}
-          </text>
-        </>}
-      </svg>
+function PriceBars({ HF, shops, lowest }) {
+  const max = Math.max(...shops.map(s => s.price || 0));
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:11}}>
+      {shops.map(s => {
+        const p = s.price;
+        const w = p ? (p / max) * 100 : 0;
+        const isMin = p === lowest;
+        return (
+          <div key={s.shop} style={{display:'grid', gridTemplateColumns:'90px 1fr 70px', alignItems:'center', gap:10, fontSize:12.5}}>
+            <span style={{color:HF.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.shop}</span>
+            <div style={{height:18, background:HF.subtle, borderRadius:4, position:'relative', overflow:'hidden'}}>
+              {p == null ? (
+                <span style={{position:'absolute', inset:0, display:'flex', alignItems:'center', paddingLeft:8, fontSize:11, color:HF.ink4, fontFamily:HF.mono}}>no price</span>
+              ) : (
+                <div style={{
+                  height:'100%', width:`${w}%`,
+                  background: isMin ? `linear-gradient(90deg, ${HF.ok}, #15803d)` : `linear-gradient(90deg, ${HF.accent}, ${HF.accentHover})`,
+                  borderRadius:4,
+                }}/>
+              )}
+            </div>
+            <span style={{fontFamily:HF.mono, color: p==null? HF.ink4 : isMin? HF.okInk : HF.ink, fontWeight: isMin?600:500, textAlign:'right'}}>
+              {p == null ? '—' : `€${p.toFixed(2)}`}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function HFBookPrices({ book }) {
-  const [data, setData] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    fetch(`/api/books/${book.id}/prices`)
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [book.id]);
-
-  if (loading) {
-    return (
-      <HFCard title="Price history" sub="Last 30 days">
-        <div style={{ padding: 20 }}><HFSkeleton h={200} /></div>
-      </HFCard>
-    );
-  }
-
-  const series = data?.series || [];
-  const allPrices = series.flatMap(s => s.series.map(p => p.price));
-
-  if (!series.length || !allPrices.length) {
-    return (
-      <HFCard title="Price history" sub="Last 30 days">
-        <div style={{ padding: 32 }}>
-          <HFEmptyState
-            title="No price history yet"
-            sub="Prices will appear here once scraping has run for this book."
-          />
+function MatchTimeline({ HF, shops, methodTone }) {
+  const sorted = [...shops].sort((a,b) => new Date(a.matchedAt) - new Date(b.matchedAt));
+  return (
+    <div style={{padding:`8px 0`}}>
+      {sorted.map((s, i, a) => (
+        <div key={s.shop} style={{
+          display:'grid', gridTemplateColumns:'14px 1fr',
+          padding:`10px ${HF.cardP}px 10px 0`, marginLeft:HF.cardP,
+          gap:14, alignItems:'flex-start', position:'relative',
+        }}>
+          <div style={{display:'flex', flexDirection:'column', alignItems:'center', paddingTop:4}}>
+            <span style={{
+              width:8, height:8, borderRadius:'50%',
+              background: s.sbStatus==='pending'? HF.warn : HF.accent,
+              boxShadow: `0 0 0 3px ${s.sbStatus==='pending'? HF.warnSoft : HF.accentSoft}`,
+            }}/>
+            {i < a.length-1 && <span style={{flex:1, width:1, background:HF.borderFaint, marginTop:6, minHeight:18}}/>}
+          </div>
+          <div style={{display:'flex', flexDirection:'column', gap:3, paddingBottom: i<a.length-1? 4 : 0}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12.5, flexWrap:'wrap'}}>
+              <ShopMark name={s.shop} HF={HF}/>
+              <span style={{color:HF.ink, fontWeight:600}}>{s.shop}</span>
+              <span style={{color:HF.ink3}}>matched via</span>
+              <HFPill tone={methodTone[s.method]}>{s.method}</HFPill>
+              <span style={{fontFamily:HF.mono, fontSize:11, color: s.confidence>=0.95? HF.ink3 : HF.warnInk}}>conf {s.confidence.toFixed(2)}</span>
+            </div>
+            <div style={{fontSize:11.5, color:HF.ink3, display:'flex', gap:10, flexWrap:'wrap'}}>
+              <span style={{fontFamily:HF.mono}}>{s.matchedAt}</span>
+              <span style={{color:HF.ink4}}>·</span>
+              <span>{s.by}</span>
+            </div>
+          </div>
         </div>
-      </HFCard>
-    );
-  }
+      ))}
+    </div>
+  );
+}
 
-  const fmt = new Intl.NumberFormat('lt-LT', { style: 'currency', currency: 'EUR' });
-  const currentPrices = (book.shops || [])
-    .map(s => Number(s.price))
-    .filter(p => Number.isFinite(p) && p > 0);
-  const lowestNow = currentPrices.length ? Math.min(...currentPrices) : null;
-  const lowestShop = lowestNow != null
-    ? (book.shops || []).find(s => Math.abs(Number(s.price) - lowestNow) < 0.001)?.shop
-    : null;
-  const allTime = Math.min(...allPrices);
-  const avg30d = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
+function MatchStrategy({ HF, shops }) {
+  const counts = shops.reduce((acc, s) => { acc[s.method] = (acc[s.method]||0)+1; return acc; }, {});
+  const order = ['isbn','title+author','manual','slug'];
+  const labels = {
+    isbn:          ['ISBN exact',       'highest-confidence path · lookup by ISBN-13'],
+    'title+author':['Title + author',   'fuzzy match when ISBN missing or invalid'],
+    manual:        ['Manual link',      'matched by an operator from review queue'],
+    slug:          ['URL slug',         'last-resort by canonical URL slug'],
+  };
+  const total = shops.length;
+  return (
+    <div style={{padding:`4px 0`}}>
+      {order.filter(k => counts[k]).map((k, i, a) => {
+        const n = counts[k];
+        const pct = (n/total)*100;
+        const tone = k==='isbn'? HF.ok : k==='title+author'? HF.warn : k==='manual'? HF.accent : HF.ink4;
+        return (
+          <div key={k} style={{
+            padding:`10px ${HF.cardP}px`,
+            borderBottom: i < a.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+            display:'flex', flexDirection:'column', gap:6,
+          }}>
+            <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:10}}>
+              <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{labels[k][0]}</span>
+              <span style={{fontFamily:HF.mono, fontSize:12, color:HF.ink2, fontWeight:500}}>{n} of {total}</span>
+            </div>
+            <div style={{height:4, background:HF.subtle, borderRadius:2, overflow:'hidden'}}>
+              <div style={{height:'100%', width:`${pct}%`, background:tone, borderRadius:2}}/>
+            </div>
+            <span style={{fontSize:11.5, color:HF.ink3, lineHeight:1.5}}>{labels[k][1]}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MultiLineChart({ HF, series, h }) {
+  const w = 720;
+  const padL = 36, padR = 12, padT = 12, padB = 22;
+  const all = series.flatMap(s => s.data);
+  const min = Math.min(...all) - 0.5;
+  const max = Math.max(...all) + 0.5;
+  const n = series[0]?.data.length || 30;
+  const xs = i => padL + (i/(n-1))*(w - padL - padR);
+  const ys = v => padT + (1 - (v-min)/(max-min))*(h - padT - padB);
+
+  const yTicks = 4;
+  const ticks = Array.from({length:yTicks+1}, (_,i) => min + (i/yTicks)*(max-min));
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%', height:'auto', display:'block'}} preserveAspectRatio="none">
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line x1={padL} x2={w-padR} y1={ys(t)} y2={ys(t)} stroke={HF.chartGrid} strokeWidth={1}/>
+          <text x={padL-8} y={ys(t)+3} textAnchor="end" fontSize="10" fill={HF.ink4} fontFamily={HF.mono}>€{t.toFixed(0)}</text>
+        </g>
+      ))}
+      {[0, Math.floor(n/3), Math.floor(2*n/3), n-1].map(i => (
+        <text key={i} x={xs(i)} y={h-6} textAnchor="middle" fontSize="10" fill={HF.ink4} fontFamily={HF.mono}>D-{n-1-i}</text>
+      ))}
+      {series.map((s, idx) => {
+        const c = shopColor(idx, HF);
+        const path = s.data.map((v,i) => `${i===0?'M':'L'} ${xs(i)} ${ys(v)}`).join(' ');
+        return (
+          <g key={s.shop}>
+            <path d={path} fill="none" stroke={c} strokeWidth={1.7} strokeLinejoin="round" strokeLinecap="round"/>
+            <circle cx={xs(n-1)} cy={ys(s.data[n-1])} r={3} fill={c} stroke={HF.surface} strokeWidth={1.5}/>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function btnSm(HF) {
+  return {
+    padding:'3px 8px', fontSize:11.5, height:24,
+    background:HF.surface, border:`1px solid ${HF.borderStrong}`,
+    color:HF.ink2, borderRadius:5, cursor:'pointer',
+    fontFamily:HF.sans,
+  };
+}
+
+// ─────────────────────── Conflicts tab ───────────────────────
+
+function HFBookConflicts({ HF, book, shops }) {
+  // Each shop's per-dimension agreement with canonical. Y/N/?/~ semantics:
+  //   true  → matches canonical
+  //   false → conflicts with canonical
+  //   null  → not provided / unknown
+  //   'fuzzy' → close but not exact (e.g., title diacritic / author abbreviation)
+  const dims = ['isbn','title','author','year','binding','translator','cover'];
+  const dimLabel = { isbn:'ISBN', title:'Title', author:'Author', year:'Year', binding:'Binding', translator:'Translator', cover:'Cover artist' };
+
+  const rows = [
+    { shop:'vaga',         method:'isbn',         confidence:1.00,
+      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:true,  translator:true,  cover:true   } },
+    { shop:'knygos.lt',    method:'isbn',         confidence:1.00,
+      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:true,  translator:true,  cover:null   } },
+    { shop:'patogu',       method:'title+author', confidence:0.94,
+      dim:{ isbn:true,  title:'fuzzy', author:true,    year:true,  binding:'fuzzy', translator:true, cover:null  } },
+    { shop:'krisostomus',  method:'manual',       confidence:1.00,
+      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:false, translator:null,  cover:false  } },
+    { shop:'humanitas',    method:'isbn',         confidence:1.00,
+      dim:{ isbn:true,  title:true,    author:true,    year:false, binding:true,  translator:'fuzzy', cover:null } },
+    { shop:'mintis',       method:'title+author', confidence:0.81,
+      dim:{ isbn:null,  title:true,    author:'fuzzy', year:true,  binding:null,  translator:null,  cover:null   } },
+  ];
+
+  // Buckets: classify each shop by which combination of dims agreed/conflicted.
+  const buckets = [
+    {
+      id:'isbn-but-not-binding',
+      title:'Matched by ISBN — but binding disagrees',
+      desc:'Same ISBN-13, but the shop reports a different physical edition (e.g. hardcover vs paperback).',
+      tone:'warn', icon:'⚠',
+      test: r => r.dim.isbn === true && r.dim.binding === false,
+      action:'Likely a different edition reusing the ISBN. Decide: split into a new book, or accept as a variant.',
+    },
+    {
+      id:'isbn-but-not-cover',
+      title:'Matched by ISBN — but cover artist disagrees',
+      desc:'ISBN matches, but credited cover artist differs from canonical.',
+      tone:'warn', icon:'⚠',
+      test: r => r.dim.isbn === true && r.dim.cover === false,
+      action:'Cover may have been re-illustrated for a regional reprint. Verify with the shop page.',
+    },
+    {
+      id:'isbn-but-not-year',
+      title:'Matched by ISBN — but year disagrees',
+      desc:'ISBN matches, but the shop reports a different publication year.',
+      tone:'warn', icon:'⚠',
+      test: r => r.dim.isbn === true && r.dim.year === false,
+      action:'Often a re-print sharing the ISBN. Accept the canonical year, or escalate if it is a true different edition.',
+    },
+    {
+      id:'fuzzy-title-author',
+      title:'Matched by title + author — fuzzy on either',
+      desc:'No ISBN was used; we matched on title and/or author with fuzzy similarity below 1.0.',
+      tone:'accent', icon:'~',
+      test: r => r.method === 'title+author' && (r.dim.title === 'fuzzy' || r.dim.author === 'fuzzy'),
+      action:'Inspect the shop title — diacritics, translated subtitle, or initials (e.g. "Y. N. Harari") are common.',
+    },
+    {
+      id:'manual-no-isbn-confirm',
+      title:'Manual match — fields ambiguous',
+      desc:'An operator linked this shop manually. Some fields the operator did not verify still differ from canonical.',
+      tone:'accent', icon:'M',
+      test: r => r.method === 'manual' && Object.values(r.dim).some(v => v === false),
+      action:'Sanity-check the operator-confirmed fields against any conflicts flagged here.',
+    },
+    {
+      id:'isbn-missing',
+      title:'No ISBN provided by shop',
+      desc:'Shop omits ISBN entirely; match relies on title+author similarity.',
+      tone:'warn', icon:'?',
+      test: r => r.dim.isbn == null,
+      action:'Lower-confidence match. Consider routing to the review queue if confidence < 0.85.',
+    },
+  ];
+
+  const tagged = buckets.map(b => ({ ...b, hits: rows.filter(b.test).map(r => r.shop) }));
 
   return (
     <>
       <HFKpiStrip items={[
-        {
-          label: 'Lowest now',
-          value: lowestNow != null ? fmt.format(lowestNow) : '—',
-          delta: lowestShop
-            ? <span style={{ color: 'var(--hf-ok-ink)' }}>{lowestShop}</span>
-            : null,
-          tone: 'ok',
-        },
-        {
-          label: '30d average',
-          value: fmt.format(avg30d),
-          delta: <span style={{ color: 'var(--hf-ink3)' }}>
-            {series.length} shop{series.length !== 1 ? 's' : ''}
-          </span>,
-        },
-        {
-          label: 'All-time low',
-          value: fmt.format(allTime),
-          delta: <span style={{ color: 'var(--hf-ink3)' }}>in window</span>,
-        },
-      ]} />
+        { label:'Conflict types',  value:String(tagged.filter(b => b.hits.length).length), delta:<span style={{color:HF.ink3}}>distinct buckets</span> },
+        { label:'Shops affected',  value:String(new Set(tagged.flatMap(b => b.hits)).size), delta:<span style={{color:HF.warnInk}}>at least one issue</span>, tone:'warn' },
+        { label:'ISBN-but-other',  value:String(tagged.filter(b => b.id.startsWith('isbn-but')).reduce((n,b)=>n+b.hits.length,0)), delta:<span style={{color:HF.errInk}}>could be wrong edition</span>, tone:'err' },
+        { label:'Fuzzy / manual',  value:String(tagged.filter(b => b.id.includes('fuzzy') || b.id.startsWith('manual')).reduce((n,b)=>n+b.hits.length,0)), delta:<span style={{color:HF.ink3}}>review-worthy</span> },
+        { label:'Below 0.85',      value:String(rows.filter(r=>r.confidence < 0.85).length), delta:<span style={{color:HF.warnInk}}>auto-flagged</span>, tone:'warn' },
+      ]}/>
 
-      <HFCard
-        title="30-day price comparison"
-        sub="one line per shop · daily max price"
-        style={{ marginBottom: 'var(--hf-gap)' }}
-      >
-        <div style={{ padding: 'var(--hf-card-p)' }}>
-          <MultiLineChart series={series} h={240} colorFn={shopColorFor} />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-            {series.filter(s => s.series.length >= 1).map((s) => {
-              const color = shopColorFor(s.shop);
-              return (
-                <span key={s.shop} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 12, color: 'var(--hf-ink2)',
-                }}>
-                  <span style={{
-                    width: 12, height: 3, borderRadius: 2,
-                    background: color,
-                    display: 'inline-block', flexShrink: 0,
-                  }} />
-                  {s.shop}
-                </span>
-              );
-            })}
-          </div>
+      <div style={{
+        marginTop: HF.gap,
+        padding: `12px ${HF.cardP}px`,
+        background: HF.surface,
+        border: `1px solid ${HF.border}`,
+        borderLeft: `3px solid ${HF.accent}`,
+        borderRadius: 6,
+        fontSize: 12.5, color: HF.ink2, lineHeight: 1.55,
+      }}>
+        Field-by-field values are on the <b style={{color:HF.ink}}>Metadata</b> tab. This view groups shops by <i>which combination of dimensions disagrees</i> with the canonical book — so you can decide whether a mismatch is a re-print, a wrong edition, or a bad match.
+      </div>
+
+      <HFCard title="Conflict types" sub="grouped by which combination of dimensions disagrees" style={{marginTop:HF.gap}} flush>
+        <div>
+          {tagged.filter(b => b.hits.length > 0).map((b, i, arr) => (
+            <div key={b.id} style={{
+              padding:`14px ${HF.cardP}px`,
+              borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+              display:'grid', gridTemplateColumns:'auto 1fr auto', gap:14, alignItems:'flex-start',
+            }}>
+              <span style={{
+                width:30, height:30, borderRadius:7,
+                background: b.tone==='warn'? HF.warnSoft : b.tone==='err'? HF.errSoft : HF.accentSoft,
+                border:`1px solid ${b.tone==='warn'? HF.warnBorder : b.tone==='err'? HF.errBorder : HF.accentBorder}`,
+                color: b.tone==='warn'? HF.warnInk : b.tone==='err'? HF.errInk : HF.accentInk,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:14, fontWeight:700, fontFamily:HF.mono,
+              }}>{b.icon}</span>
+              <div style={{display:'flex', flexDirection:'column', gap:6, minWidth:0}}>
+                <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                  <span style={{color:HF.ink, fontWeight:600, fontSize:13}}>{b.title}</span>
+                  <HFPill tone={b.tone}>{b.hits.length} {b.hits.length===1?'shop':'shops'}</HFPill>
+                </div>
+                <span style={{fontSize:12, color:HF.ink3, lineHeight:1.5}}>{b.desc}</span>
+                <div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:2}}>
+                  {b.hits.map(s => (
+                    <span key={s} style={{display:'inline-flex', alignItems:'center', gap:6, padding:'3px 7px 3px 4px', border:`1px solid ${HF.border}`, borderRadius:5, background:HF.surface, fontSize:11.5}}>
+                      <ShopMark name={s} HF={HF}/>
+                      <span style={{color:HF.ink, fontWeight:500}}>{s}</span>
+                    </span>
+                  ))}
+                </div>
+                <span style={{fontSize:11.5, color:HF.ink3, fontStyle:'italic', marginTop:2}}>→ {b.action}</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap:5}}>
+                <HFButton size="sm">Review</HFButton>
+                <HFButton size="sm" variant="subtle">Dismiss</HFButton>
+              </div>
+            </div>
+          ))}
         </div>
       </HFCard>
     </>
   );
 }
 
-function HFBookConflictsStub() {
-  return (
-    <HFCard title="Conflicts" sub="Coming in a future release">
-      <div style={{ padding: 32 }}>
-        <HFEmptyState
-          title="Conflict detection not yet available"
-          sub="This tab will highlight fields that differ between the canonical record and individual shop listings."
-        />
-      </div>
-    </HFCard>
-  );
+function DimCell({ v, HF }) {
+  if (v === true) {
+    return <span style={{display:'flex', justifyContent:'center'}}>
+      <span style={{width:18, height:18, borderRadius:4, background:HF.okSoft, border:`1px solid ${HF.okBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>
+        <svg width="10" height="10" viewBox="0 0 8 8" fill="none"><path d="M1.5 4 L3.5 6 L6.5 2" stroke={HF.okInk} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </span>
+    </span>;
+  }
+  if (v === false) {
+    return <span style={{display:'flex', justifyContent:'center'}}>
+      <span style={{width:18, height:18, borderRadius:4, background:HF.errSoft, border:`1px solid ${HF.errBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.errInk, fontSize:11, fontWeight:700}}>✗</span>
+    </span>;
+  }
+  if (v === 'fuzzy') {
+    return <span style={{display:'flex', justifyContent:'center'}}>
+      <span style={{width:18, height:18, borderRadius:4, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.warnInk, fontSize:11, fontWeight:700, fontFamily:HF.mono}}>~</span>
+    </span>;
+  }
+  return <span style={{display:'flex', justifyContent:'center'}}>
+    <span style={{width:18, height:18, borderRadius:4, background:HF.subtle, border:`1px solid ${HF.borderFaint}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:11, fontFamily:HF.mono}}>—</span>
+  </span>;
 }
 
-function HFBook({ nav, goto, params }) {
-  const HF = getHF();
-  const [book, setBook] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
-  const [tab, setTab] = React.useState('listings');
-
-  const bookId = params && params.id;
-
-  React.useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    const load = bookId
-      ? fetch(`/api/books/${bookId}`).then(r => r.ok ? r.json() : Promise.reject(r.status))
-      : fetch('/api/books?per_page=1&has_isbn=true')
-          .then(r => r.json())
-          .then(d => {
-            const first = d.books && d.books[0];
-            if (!first) return fetch('/api/books?per_page=1').then(r => r.json()).then(dd => {
-              const f2 = dd.books && dd.books[0];
-              if (!f2) throw new Error('no-books');
-              return fetch(`/api/books/${f2.id}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
-            });
-            return fetch(`/api/books/${first.id}`).then(r => r.ok ? r.json() : Promise.reject(r.status));
-          });
-
-    load
-      .then(d => { setBook(d); setLoading(false); })
-      .catch(e => { setError(String(e)); setLoading(false); });
-  }, [bookId]);
-
-  if (loading) {
-    return (
-      <HFShell {...nav} goto={goto} activePage="books" title="Book">
-        <HFCard padding={20} style={{ marginBottom: 'var(--hf-gap)' }}>
-          <div style={{ display: 'flex', gap: 20 }}>
-            <HFSkeleton w={100} h={140} br={6} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <HFSkeleton w="60%" h={24} />
-              <HFSkeleton w="40%" h={14} />
-              <HFSkeleton w="30%" h={13} />
-              <HFSkeleton w="50%" h={13} />
-            </div>
-          </div>
-        </HFCard>
-        <HFCard><HFSkeleton h={160} /></HFCard>
-      </HFShell>
-    );
-  }
-
-  if (error || !book) {
-    return (
-      <HFShell {...nav} goto={goto} activePage="books" title="Book">
-        <HFCard padding={32}>
-          <HFEmptyState
-            title={error === 'no-books' ? 'No books yet' : 'Book not found'}
-            sub={error === 'no-books'
-              ? 'Run an ibiblioteka discovery to populate the canonical catalogue.'
-              : `Could not load book (${error}).`}
-          />
-        </HFCard>
-      </HFShell>
-    );
-  }
-
-  const authorsByRole = {};
-  for (const a of (book.authors || [])) {
-    (authorsByRole[a.role] = authorsByRole[a.role] || []).push(a.name);
-  }
-
-  const shopNames = (book.shops || []).map(s => s.shop);
-  const prices = (book.shops || []).map(s => s.price).filter(p => p != null).map(Number);
-  const lowestPrice = prices.length ? Math.min(...prices) : null;
-
-  const meta = [
-    book.year,
-    book.publisher,
-    book.format,
-    book.language,
-    book.pages && `${book.pages} p.`,
-    book.duration,
-  ].filter(Boolean).join(' · ');
-
-  const isbns = book.isbns || [];
-
-  return (
-    <HFShell
-      {...nav}
-      goto={goto}
-      activePage="books"
-      title={book.title}
-      subtitle={meta || undefined}
-      breadcrumb={
-        <>
-          <HFBreadcrumbLink page="books" goto={goto}>Books</HFBreadcrumbLink>
-          <span>/</span>
-          <span>{book.title}</span>
-        </>
-      }
-    >
-      {/* Hero card */}
-      <HFCard padding={20} style={{ marginBottom: 'var(--hf-gap)' }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-          {book.cover_url && (
-            <img
-              src={book.cover_url}
-              alt={book.title}
-              loading="lazy"
-              style={{
-                width: 108, aspectRatio: '2 / 3', objectFit: 'contain',
-                flexShrink: 0, borderRadius: 6,
-                border: '1px solid var(--hf-border)',
-                boxShadow: '0 2px 8px rgba(16,24,40,.08)',
-                background: 'var(--hf-subtle)',
-              }}
-            />
-          )}
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
-              <div style={{ minWidth: 0 }}>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, lineHeight: 1.3, color: 'var(--hf-ink)', letterSpacing: -0.3 }}>
-                  {book.title}
-                </h2>
-                {book.title_full && book.title_full !== book.title && (
-                  <div style={{ color: 'var(--hf-ink3)', fontSize: 13, marginTop: 3 }}>{book.title_full}</div>
-                )}
-              </div>
-              <DataSourceBadge value={book.data_source} />
-            </div>
-
-            {(authorsByRole.author || []).length > 0 && (
-              <div style={{ fontSize: 14, color: 'var(--hf-ink)', marginBottom: 3 }}>
-                {authorsByRole.author.join(', ')}
-              </div>
-            )}
-            {(authorsByRole.translator || []).length > 0 && (
-              <div style={{ fontSize: 13, color: 'var(--hf-ink3)', marginBottom: 3 }}>
-                Translated by {authorsByRole.translator.join(', ')}
-              </div>
-            )}
-            {(authorsByRole.narrator || []).length > 0 && (
-              <div style={{ fontSize: 13, color: 'var(--hf-ink3)', marginBottom: 3 }}>
-                Narrated by {authorsByRole.narrator.join(', ')}
-              </div>
-            )}
-
-            {meta && (
-              <div style={{ fontSize: 13, color: 'var(--hf-ink3)', marginTop: 6 }}>{meta}</div>
-            )}
-
-            {/* ISBNs + LIBIS */}
-            {(isbns.length > 0 || book.libis_code) && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {isbns.map(i => (
-                  <button
-                    key={i.isbn}
-                    type="button"
-                    aria-label={`Copy ISBN ${i.isbn}`}
-                    onClick={() => {
-                      navigator.clipboard.writeText(i.isbn).then(
-                        () => window.HF_APP?.toast?.({ tone: 'ok', message: `Copied ${i.isbn}` }),
-                        () => window.HF_APP?.toast?.({ tone: 'err', message: 'Copy failed' }),
-                      );
-                    }}
-                    style={{
-                      fontFamily: 'var(--hf-mono)', fontSize: 11,
-                      padding: '3px 8px', borderRadius: 4,
-                      background: 'var(--hf-subtle)', border: '1px solid var(--hf-border)',
-                      color: 'var(--hf-ink2)', cursor: 'pointer',
-                    }}
-                  >{i.isbn}</button>
-                ))}
-                {book.libis_code && (
-                  <span style={{
-                    fontFamily: 'var(--hf-mono)', fontSize: 11,
-                    padding: '2px 7px', borderRadius: 4,
-                    background: 'var(--hf-subtle)', border: '1px solid var(--hf-border)',
-                    color: 'var(--hf-ink3)',
-                  }}>LIBIS {book.libis_code}</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-      </HFCard>
-
-      <HFCard style={{ marginBottom: 'var(--hf-gap)' }} padding={0}>
-        <div style={{ padding: `0 var(--hf-card-p, 16px)` }}>
-          <HFTabs
-            active={tab}
-            onChange={setTab}
-            tabs={[
-              { id: 'listings',  label: 'Listings',  count: (book.shops || []).length },
-              { id: 'metadata',  label: 'Metadata' },
-              { id: 'prices',    label: 'Prices' },
-              { id: 'conflicts', label: 'Conflicts' },
-            ]}
-          />
-        </div>
-      </HFCard>
-
-      {tab === 'listings'  && <HFBookListings  book={book} shopNames={shopNames} lowestPrice={lowestPrice} goto={goto} />}
-      {tab === 'metadata'  && <HFBookMetadata  book={book} authorsByRole={authorsByRole} />}
-      {tab === 'prices'    && <HFBookPrices book={book} />}
-      {tab === 'conflicts' && <HFBookConflictsStub />}
-    </HFShell>
-  );
-}
+Object.assign(window, { HFBook });
