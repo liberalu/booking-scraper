@@ -2,7 +2,7 @@
 
 **Milestone:** v1.2 — Observability
 **Created:** 2026-05-13
-**Status:** Phase 2 + Phase 3 shipped; Phase 4 pending
+**Status:** Phases 2, 3, 4 shipped — v1.2 Observability milestone COMPLETE
 
 ---
 

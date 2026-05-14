@@ -45,14 +45,14 @@
 
 ### Code-side Observability
 
-- [ ] **CODEOBS-01**: `reconcile_runs._spawn_restart` writes stdout/stderr via `open_spawn_log("reconcile-restart", shop)` (replaces `subprocess.DEVNULL`); container-boot resumes leave a per-spawn log file
-- [ ] **CODEOBS-02**: Dashboard reaper logs each killed run individually with `run_id`, `shop`, `phase`, `close_reason` — not just an aggregate count
-- [ ] **CODEOBS-03**: `HeartbeatExtension._write_heartbeat` returning None (row vanished) triggers a WARNING log and tears down the spider via `_signal_stop`
-- [ ] **CODEOBS-04**: `StallDetector._check_stall` warning line includes request count, last URL, in-flight count broken down by domain, scheduler queue size
-- [ ] **CODEOBS-05**: `_spawn_scrapy_in_container` log line carries the source `run_id` when invoked from rerun / retry-failures / continue endpoints
-- [ ] **CODEOBS-06**: `CronChainTrigger.spider_closed` emits a `chain_skipped` event to `scrape_run_events` when parent reason ≠ "finished"
-- [ ] **CODEOBS-07**: Cron health-check window shortened to 6h and runs 4×/day (was 24h, 1×/day) so silent overnight failures surface within ≤6h
-- [ ] **CODEOBS-08**: SQLAlchemy engine emits pool telemetry (overflow / wait / checkout-timeout events) at WARNING via event listeners
+- [x] **CODEOBS-01**: `reconcile_runs._spawn_restart` writes stdout/stderr via `open_spawn_log("reconcile-restart", shop)` (replaces `subprocess.DEVNULL`); container-boot resumes leave a per-spawn log file
+- [x] **CODEOBS-02**: Dashboard reaper logs each killed run individually with `run_id`, `shop`, `phase`, `close_reason` — not just an aggregate count
+- [x] **CODEOBS-03**: `HeartbeatExtension._write_heartbeat` returning None (row vanished) triggers a WARNING log and tears down the spider via `_signal_stop`
+- [x] **CODEOBS-04**: `StallDetector._check_stall` warning line includes request count, last URL, in-flight count broken down by domain, scheduler queue size
+- [x] **CODEOBS-05**: `_spawn_scrapy_in_container` log line carries the source `run_id` when invoked from rerun / retry-failures / continue endpoints
+- [x] **CODEOBS-06**: `CronChainTrigger.spider_closed` emits a `chain_skipped` event to `scrape_run_events` when parent reason ≠ "finished"
+- [x] **CODEOBS-07**: Cron health-check window shortened to 6h and runs 4×/day (was 24h, 1×/day) so silent overnight failures surface within ≤6h
+- [x] **CODEOBS-08**: SQLAlchemy engine emits pool telemetry (overflow / wait / checkout-timeout events) at WARNING via event listeners
 
 ## Future Requirements (post-v1.2)
 
