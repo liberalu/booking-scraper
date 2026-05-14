@@ -1870,6 +1870,60 @@ def api_book_prices(
     return {"book_id": book_id, "series": series}
 
 
+class _CreateBookBody(BaseModel):
+    title: str
+    isbn: str | None = None
+    author: str | None = None
+    publisher: str | None = None
+    year: int | None = None
+
+
+@router.post("/books")
+def api_create_book(
+    body: _CreateBookBody, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import _looks_like_isbn
+    from book_scraper.db.repo import create_manual_book
+
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="title is required")
+
+    isbn: str | None = None
+    if body.isbn and body.isbn.strip():
+        isbn = _looks_like_isbn(body.isbn.strip())
+        if isbn is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid ISBN format (expected 10 or 13 digits)",
+            )
+
+    try:
+        book = create_manual_book(
+            session,
+            title=title,
+            isbn=isbn,
+            author=body.author,
+            publisher=body.publisher,
+            year=body.year,
+        )
+        session.commit()
+    except ValueError as exc:
+        msg = str(exc)
+        if msg.startswith("isbn_collision:"):
+            existing_id = int(msg.split(":")[1])
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "ISBN already belongs to another book.",
+                    "existing_book_id": existing_id,
+                },
+            ) from exc
+        raise HTTPException(status_code=422, detail=msg) from exc
+
+    return {"id": book.id, "title": book.title}
+
+
 @router.get("/shops")
 def api_shops(session: Session = Depends(get_db)) -> dict[str, Any]:
     shops = get_all_shops(session)

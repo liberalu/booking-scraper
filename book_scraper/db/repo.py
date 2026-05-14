@@ -2286,6 +2286,81 @@ def update_cron_job_last_run(
     session.flush()
 
 
+def create_manual_book(
+    session: Session,
+    *,
+    title: str,
+    isbn: str | None = None,
+    author: str | None = None,
+    publisher: str | None = None,
+    year: int | None = None,
+) -> Any:
+    """Create a canonical book with data_source='manual'.
+
+    `isbn` must already be normalised (digits only, uppercase X).
+    Raises ValueError("isbn_collision:<existing_book_id>") if the ISBN
+    already exists on another book — the caller maps this to HTTP 409.
+    """
+    from book_scraper.db.models import (
+        Author,
+        Book,
+        BookAuthor,
+        BookIsbn,
+        Publisher,
+    )
+
+    # ISBN uniqueness check
+    if isbn:
+        existing = session.execute(
+            select(BookIsbn).where(BookIsbn.isbn == isbn)
+        ).scalar_one_or_none()
+        if existing:
+            raise ValueError(f"isbn_collision:{existing.book_id}")
+
+    # Publisher: find-or-create by name
+    pub_id = None
+    if publisher and publisher.strip():
+        pub_name = publisher.strip()
+        pub = session.execute(
+            select(Publisher).where(Publisher.name == pub_name)
+        ).scalar_one_or_none()
+        if pub is None:
+            pub = Publisher(name=pub_name)
+            session.add(pub)
+            session.flush()
+        pub_id = pub.id
+
+    # Create Book
+    book = Book(
+        data_source="manual",
+        title=title.strip(),
+        year=year,
+        publisher_id=pub_id,
+    )
+    session.add(book)
+    session.flush()
+
+    # ISBN
+    if isbn:
+        isbn_type = "isbn13" if len(isbn) == 13 else "isbn10"
+        session.add(BookIsbn(book_id=book.id, isbn=isbn, isbn_type=isbn_type))
+
+    # Author: find-or-create by normalised name
+    if author and author.strip():
+        norm = _normalize_author(author.strip())
+        au = session.execute(
+            select(Author).where(Author.normalized_name == norm)
+        ).scalar_one_or_none()
+        if au is None:
+            au = Author(name=author.strip(), normalized_name=norm)
+            session.add(au)
+            session.flush()
+        session.add(BookAuthor(book_id=book.id, author_id=au.id,
+                               role="author", position=0))
+
+    return book
+
+
 def mark_cron_job_ran_if_matches(
     session: Session,
     shop_id: int,

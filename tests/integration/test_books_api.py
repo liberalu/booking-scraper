@@ -304,3 +304,70 @@ def test_book_prices_excludes_data_older_than_30_days(client, db_session):
     prices = [p["price"] for p in series]
     assert 12.0 not in prices
     assert 15.0 in prices
+
+
+# ----- Manual book creation (Phase 3) -------------------------------------
+
+
+def test_create_manual_book_minimal(client, db_session):
+    resp = client.post("/api/books", json={"title": "My Manual Book"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "My Manual Book"
+    assert "id" in data
+
+
+def test_create_manual_book_with_all_fields(client, db_session):
+    resp = client.post("/api/books", json={
+        "title": "Full Manual Book",
+        "isbn": "9780062316097",
+        "author": "Test Author",
+        "publisher": "Test Publisher",
+        "year": 2024,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Full Manual Book"
+
+    detail = client.get(f"/api/books/{data['id']}").json()
+    assert detail["publisher"] == "Test Publisher"
+    assert any(i["isbn"] == "9780062316097" for i in detail["isbns"])
+    assert any(a["name"] == "Test Author" for a in detail["authors"])
+
+
+def test_create_manual_book_blank_title_rejected(client):
+    resp = client.post("/api/books", json={"title": ""})
+    assert resp.status_code == 422
+
+
+def test_create_manual_book_isbn_collision_returns_409(client, db_session):
+    from book_scraper.db.models import Book, BookIsbn
+
+    existing = Book(data_source="shop_inferred", title="Existing Book Coll", year=2020)
+    db_session.add(existing)
+    db_session.flush()
+    db_session.add(BookIsbn(book_id=existing.id, isbn="9780062316010", isbn_type="isbn13"))
+    db_session.commit()
+
+    resp = client.post("/api/books", json={
+        "title": "Duplicate ISBN Book",
+        "isbn": "9780062316010",
+    })
+    assert resp.status_code == 409
+    body = resp.json()["detail"]
+    assert body["existing_book_id"] == existing.id
+
+
+def test_create_manual_book_isbn_with_dashes_normalized(client, db_session):
+    resp = client.post("/api/books", json={
+        "title": "Dash ISBN Book",
+        "isbn": "978-0-06-231601-0",
+    })
+    assert resp.status_code == 200
+    detail = client.get(f"/api/books/{resp.json()['id']}").json()
+    assert any(i["isbn"] == "9780062316010" for i in detail["isbns"])
+
+
+def test_create_manual_book_invalid_isbn_rejected(client):
+    resp = client.post("/api/books", json={"title": "Bad ISBN", "isbn": "notanisbn"})
+    assert resp.status_code == 422
