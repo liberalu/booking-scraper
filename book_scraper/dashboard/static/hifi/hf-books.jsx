@@ -48,7 +48,12 @@ function HFBooks({ nav, goto }) {
   const visible = data.books;
 
   return (
-    <HFShell {...nav} goto={goto}>
+    <HFShell {...nav} goto={goto} activePage="books"
+      title="Books"
+      subtitle="Canonical catalogue · one record per logical book"
+      breadcrumb={<><span>BookScraper</span><span style={{color:'var(--hf-ink5)'}}>/</span><span style={{color:'var(--hf-ink)', fontWeight:500}}>Books</span></>}
+      actions={<HFButton variant="primary" onClick={() => window.HF_APP?.openAddBook?.()}><span style={{display:'flex'}}>{HF_ICONS.plus}</span> Add book</HFButton>}
+    >
       <HFCard style={{ marginBottom: 'var(--hf-gap)', overflow: 'visible' }} padding={12}>
         <HFFilterBar right={<>
           <span style={{ fontSize: 12, color: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
