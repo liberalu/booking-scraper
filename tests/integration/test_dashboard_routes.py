@@ -420,7 +420,12 @@ def _mock_spawn(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     calls: list[dict] = []
 
     def _fake(
-        *, phase: str, shop: str, strategy: str = "", mode: str = "delta"
+        *,
+        phase: str,
+        shop: str,
+        strategy: str = "",
+        mode: str = "delta",
+        source_run_id: int | None = None,
     ) -> None:
         calls.append({"phase": phase, "shop": shop, "strategy": strategy, "mode": mode})
 

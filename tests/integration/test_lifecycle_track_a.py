@@ -68,7 +68,9 @@ def test_engine_has_fail_fast_connect_args():
         # Return a stub — this test only verifies what get_engine passed.
         return MagicMock()
 
-    with patch("book_scraper.db.session.create_engine", side_effect=capture):
+    with patch("book_scraper.db.session.create_engine", side_effect=capture), patch(
+        "book_scraper.db.session.event"
+    ):
         get_engine(TEST_DATABASE_URL)
 
     connect_args = captured.get("connect_args", {})
