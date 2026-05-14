@@ -191,7 +191,7 @@ class MatchService:
             """),
             {"shop_name": shop_name},
         )
-        n = result.rowcount or 0
+        n = int(getattr(result, "rowcount", 0) or 0)
         logger.info("MatchService step 1: %d shop_books linked for %s", n, shop_name)
         return n
 
@@ -217,6 +217,6 @@ class MatchService:
             """),
             {"shop_name": shop_name},
         )
-        n = result.rowcount or 0
+        n = int(getattr(result, "rowcount", 0) or 0)
         logger.info("MatchService step 2: %d shop_authors linked for %s", n, shop_name)
         return n

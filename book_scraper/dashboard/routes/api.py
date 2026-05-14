@@ -2562,7 +2562,7 @@ def api_bulk_unacknowledge_issues(
         stmt = stmt.where(ValidationIssue.shop_id == shop_id)
     result = session.execute(stmt)
     session.commit()
-    return {"unacknowledged": result.rowcount}
+    return {"unacknowledged": int(getattr(result, "rowcount", 0) or 0)}
 
 
 @router.get("/issues/{issue_id}")

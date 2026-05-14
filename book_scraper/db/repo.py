@@ -1671,7 +1671,7 @@ def resolve_gone_issues(session: Session, shop_id: int, run_id: int) -> int:
         )
         .values(lifecycle_state="resolved", resolved_at=now)
     )
-    return result.rowcount  # type: ignore[return-value]
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 def acknowledge_validation_issue(session: Session, issue_id: int) -> bool:
@@ -1720,7 +1720,7 @@ def bulk_acknowledge_issues(
     if shop_id is not None:
         stmt = stmt.where(ValidationIssue.shop_id == shop_id)
     result = session.execute(stmt)
-    return result.rowcount  # type: ignore[return-value]
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 def acknowledge_validation_issues_bulk(
