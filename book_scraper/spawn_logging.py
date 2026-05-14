@@ -58,6 +58,20 @@ def _slug(value: str) -> str:
     return _SLUG_RE.sub("_", value.lower()).strip("_") or "unknown"
 
 
+def compute_spawn_log_path(role: str, shop: str) -> Path:
+    """Return the per-spawn log path for ``role`` + ``shop``.
+
+    Pure path computation — does not create the directory or open the
+    file. Used by callers that spawn the subprocess in a different
+    container (e.g. dashboard → scraper via ``docker exec``) and need
+    the path beforehand so they can redirect the spawnee's stdout to
+    it via a shell wrapper.
+    """
+    timestamp = dt.datetime.now(tz=dt.UTC).strftime("%Y%m%d-%H%M%S%f")
+    name = f"spawn-{timestamp}-{_slug(role)}-{_slug(shop)}.log"
+    return SPAWN_LOG_DIR / name
+
+
 def open_spawn_log(role: str, shop: str) -> tuple[IO[bytes], Path]:
     """Open a per-spawn log file and return ``(handle, path)``.
 
@@ -82,9 +96,7 @@ def open_spawn_log(role: str, shop: str) -> tuple[IO[bytes], Path]:
         )
         return _open_devnull()
 
-    timestamp = dt.datetime.now(tz=dt.UTC).strftime("%Y%m%d-%H%M%S%f")
-    name = f"spawn-{timestamp}-{_slug(role)}-{_slug(shop)}.log"
-    path = SPAWN_LOG_DIR / name
+    path = compute_spawn_log_path(role, shop)
     try:
         handle: IO[bytes] = open(path, "wb", buffering=0)  # noqa: SIM115
     except OSError as exc:

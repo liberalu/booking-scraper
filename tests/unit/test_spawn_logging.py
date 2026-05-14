@@ -85,3 +85,22 @@ def test_open_spawn_log_uses_microsecond_timestamp_for_uniqueness(
     finally:
         h1.close()
         h2.close()
+
+
+def test_compute_spawn_log_path_is_pure_and_matches_open_naming(
+    tmp_path: Path,
+) -> None:
+    """``compute_spawn_log_path`` returns a path without touching the
+    filesystem — the dashboard uses it to predict the log path inside
+    the scraper container before issuing ``docker exec``."""
+    with patch.object(spawn_logging, "SPAWN_LOG_DIR", tmp_path / "missing"):
+        path = spawn_logging.compute_spawn_log_path("operator", "vaga")
+    # Same convention as open_spawn_log so logs from both paths sort
+    # together in `ls`.
+    assert path.name.startswith("spawn-")
+    assert path.name.endswith(".log")
+    assert "operator" in path.name
+    assert "vaga" in path.name
+    # Pure function: no directory was created even though we pointed at
+    # a non-existent parent.
+    assert not path.parent.exists()

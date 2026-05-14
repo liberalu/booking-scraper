@@ -11,7 +11,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select, update as sa_update
+from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session, joinedload
 
 from book_scraper.dashboard.deps import get_db, get_docker_client
@@ -22,6 +23,8 @@ from book_scraper.dashboard.queries import (
     get_data_completeness,
     get_discovered_urls_page,
     get_discovered_urls_stats,
+    get_issue_counts,
+    get_issues_groups,
     get_issues_page,
     get_overview_stats,
     get_price_changes,
@@ -52,8 +55,6 @@ from book_scraper.dashboard.queries import (
     get_shop_field_stats,
     get_shop_runs,
     get_shop_stats,
-    get_issue_counts,
-    get_issues_groups,
     get_url_detail,
     get_validation_lifecycle_counts,
     get_validation_summary,
@@ -72,12 +73,12 @@ from book_scraper.db.models import (
     ValidationIssue,
 )
 from book_scraper.db.repo import (
+    bulk_acknowledge_issues,
     create_cron_job,
     delete_cron_job,
     emit_scrape_run_event,
     get_cron_job,
     list_cron_jobs,
-    bulk_acknowledge_issues,
     reset_failed_items_to_pending,
     reset_retryable_failures,
     snooze_validation_issue,
