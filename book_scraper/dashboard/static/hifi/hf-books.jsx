@@ -4,46 +4,65 @@
 function HFBooks({ nav, goto }) {
   const HF = getHF();
 
-  // Canonical rows. Each book has: shops_count (how many shops list it),
-  // price_min / price_max (range across shops), enriched (ISBN-DB metadata applied).
-  const rows = [
-    { id:1841, title:'Sapiens: A Brief History of Humankind', author:'Yuval Noah Harari',  isbn:'9789955134572', shops:5, priceMin:18.50, priceMax:21.00, enriched:true,  conflicts:0, updated:'12m ago' },
-    { id:1842, title:'Atomic Habits',                         author:'James Clear',        isbn:'9781847941831', shops:4, priceMin:13.40, priceMax:18.90, enriched:true,  conflicts:0, updated:'12m ago' },
-    { id:1843, title:'Klara ir Saulė',                        author:'Kazuo Ishiguro',     isbn:'9786094661808', shops:3, priceMin:16.90, priceMax:18.50, enriched:true,  conflicts:1, updated:'1h ago' },
-    { id:1844, title:'Thinking, Fast and Slow',               author:'Daniel Kahneman',    isbn:'9780141033570', shops:4, priceMin:19.50, priceMax:24.00, enriched:true,  conflicts:0, updated:'1h ago' },
-    { id:1845, title:'Lietuvos istorija jaunimui',            author:'Edvardas Gudavičius',isbn:null,            shops:2, priceMin:11.20, priceMax:14.50, enriched:false, conflicts:0, updated:'18m ago' },
-    { id:1846, title:'Mažasis princas',                       author:'Antoine de Saint-Exupéry', isbn:'9786094661105', shops:5, priceMin:8.90,  priceMax:12.99, enriched:true,  conflicts:2, updated:'12m ago' },
-    { id:1847, title:'1984',                                  author:'George Orwell',      isbn:'9780451524935', shops:5, priceMin:11.50, priceMax:15.99, enriched:true,  conflicts:0, updated:'12m ago' },
-    { id:1848, title:'The Lean Startup',                      author:'Eric Ries',          isbn:'9780307887894', shops:3, priceMin:15.80, priceMax:19.50, enriched:true,  conflicts:0, updated:'1h ago' },
-    { id:1849, title:'Dune',                                  author:'Frank Herbert',      isbn:'9780441013593', shops:4, priceMin:12.20, priceMax:16.40, enriched:true,  conflicts:0, updated:'12m ago' },
-    { id:1850, title:'Hobitas',                               author:'J.R.R. Tolkien',     isbn:'9786094660914', shops:3, priceMin:14.99, priceMax:17.50, enriched:true,  conflicts:0, updated:'18m ago' },
-    { id:1851, title:'Kafka on the Shore',                    author:'Haruki Murakami',    isbn:'9781400079278', shops:2, priceMin:13.40, priceMax:16.90, enriched:true,  conflicts:0, updated:'18m ago' },
-    { id:1852, title:'Anykščių šilelis',                      author:'Antanas Baranauskas',isbn:'9786094660921', shops:3, priceMin:6.50,  priceMax:9.40,  enriched:false, conflicts:0, updated:'4h ago' },
-    { id:1853, title:'Rugiuose prie bedugnes',                author:'J.D. Salinger',      isbn:'9780316769174', shops:2, priceMin:11.20, priceMax:13.40, enriched:true,  conflicts:0, updated:'1d ago' },
-    { id:1854, title:'Educated',                              author:'Tara Westover',      isbn:'9780399590504', shops:3, priceMin:12.90, priceMax:15.50, enriched:true,  conflicts:0, updated:'18m ago' },
-    { id:1855, title:'Project Hail Mary',                     author:'Andy Weir',          isbn:'9780593135204', shops:0, priceMin:0,     priceMax:0,     enriched:true,  conflicts:0, updated:'just added' },
-    { id:1856, title:'Tyrimo metodologija',                   author:'Vytautas Pranckūnas',isbn:null,            shops:0, priceMin:0,     priceMax:0,     enriched:false, conflicts:0, updated:'2d ago' },
-  ];
+  // Remote data state
+  const [data, setData] = React.useState({ books: [], total: 0, pages: 1 });
+  const [loading, setLoading] = React.useState(true);
+  const [page, setPage] = React.useState(1);
 
-  const filters = useHFFilters(rows, {
-    search: { fields: r => `${r.id} ${r.title} ${r.author} ${r.isbn||''}` },
-    filters: [
-      { id:'shops',     default:'any', options:['any','1 shop only','2-3 shops','4+ shops'],
-        match:(r,v) => v==='1 shop only'? r.shops===1 : v==='2-3 shops'? r.shops>=2 && r.shops<=3 : r.shops>=4 },
-      { id:'enriched',  default:'any', options:['any','enriched','not enriched'],
-        match:(r,v) => v==='enriched' ? r.enriched : !r.enriched },
-      { id:'isbn',      default:'any', options:['any','has ISBN','missing ISBN'],
-        match:(r,v) => v==='has ISBN' ? !!r.isbn : !r.isbn },
-      { id:'conflicts', default:'any', options:['any','clean','has conflicts'],
-        match:(r,v) => v==='clean' ? r.conflicts===0 : r.conflicts>0 },
-      { id:'linked',    default:'any', options:['any','linked','not linked'],
-        match:(r,v) => v==='linked' ? r.shops > 0 : r.shops === 0 },
-    ],
+  // Filter state (server-side filters)
+  const [q, setQ] = React.useState('');
+  const [enrichedFilter, setEnrichedFilter] = React.useState('any');
+  const [linkedFilter, setLinkedFilter] = React.useState('any');
+  const [conflictsFilter, setConflictsFilter] = React.useState('any');
+  const [isbnFilter, setIsbnFilter] = React.useState('any');
+  const [shopsFilter, setShopsFilter] = React.useState('any');
+
+  React.useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    params.set('per_page', '50');
+    params.set('page', String(page));
+    if (q) params.set('search', q);
+    if (enrichedFilter === 'enriched')     params.set('data_source', 'ibiblioteka');
+    if (enrichedFilter === 'not enriched') params.set('data_source', 'shop_inferred');
+    if (linkedFilter === 'linked')         params.set('has_shops', 'true');
+    if (linkedFilter === 'not linked')     params.set('has_shops', 'false');
+    if (isbnFilter === 'has ISBN')         params.set('has_isbn', 'true');
+    if (isbnFilter === 'missing ISBN')     params.set('has_isbn', 'false');
+    fetch(`/api/books?${params}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [q, enrichedFilter, linkedFilter, isbnFilter, page]);
+
+  // Map API rows to JSX shape
+  const rows = (data.books || []).map(b => ({
+    id:       b.id,
+    title:    b.title,
+    author:   (b.authors && b.authors[0]) || '',
+    isbn:     b.primary_isbn || null,
+    shops:    b.shop_count || 0,
+    priceMin: null,
+    priceMax: null,
+    enriched: b.data_source !== 'shop_inferred',
+    conflicts: 0,
+    updated:  '—',
+  }));
+
+  // Client-side filters applied on top of server-filtered rows
+  // (conflicts + shops range can't be pushed to API — apply locally)
+  const filteredRows = rows.filter(r => {
+    if (conflictsFilter === 'clean'         && r.conflicts !== 0) return false;
+    if (conflictsFilter === 'has conflicts' && r.conflicts === 0) return false;
+    if (shopsFilter === '1 shop only' && r.shops !== 1)                       return false;
+    if (shopsFilter === '2-3 shops'   && !(r.shops >= 2 && r.shops <= 3))     return false;
+    if (shopsFilter === '4+ shops'    && r.shops < 4)                         return false;
+    return true;
   });
 
   return (
     <HFShell {...nav} activePage="books"
-      title="Books" subtitle="Canonical catalog · 6,133 unique titles aggregated from 5 shops + ISBN DB. ↓ Each book maps to N Shop Books."
+      title="Books" subtitle={`Canonical catalog · ${data.total.toLocaleString()} unique titles aggregated from 5 shops + ISBN DB. ↓ Each book maps to N Shop Books.`}
       breadcrumb={<><span>BookScraper</span><span style={{color:HF.ink5}}>/</span><span style={{color:HF.ink, fontWeight:500}}>Books</span></>}
       actions={<>
         <HFButton><span style={{display:'flex'}}>{HF_ICONS.download}</span> Export</HFButton>
@@ -52,7 +71,7 @@ function HFBooks({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total titles',     value:'6,133', delta:<span style={{color:HF.okInk}}>▲ 38 today</span> },
+        { label:'Total titles',     value:data.total.toLocaleString(), delta:<span style={{color:HF.okInk}}>▲ 38 today</span> },
         { label:'Enriched (ISBN-DB)', value:'5,210', delta:<span style={{color:HF.ink3}}>85.0%</span> },
         { label:'Multi-shop',       value:'4,287', delta:<span style={{color:HF.ink3}}>69.9% in 2+ shops</span> },
         { label:'Missing ISBN',     value:'923',  delta:<span style={{color:HF.warnInk}}>15.0%</span>, tone:'warn' },
@@ -60,24 +79,39 @@ function HFBooks({ nav, goto }) {
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap, overflow:'visible'}} padding={12}>
-        <HFFilterBar right={<>
-          <span style={{fontSize:11.5, color: filters.activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: filters.activeCount? 500 : 400}}>
-            {filters.filtered.length} of {rows.length}
-          </span>
-          {filters.activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={filters.clearAll}>Clear ({filters.activeCount})</HFButton>}
-        </>}>
-          <HFSearch placeholder="Search title, author, ISBN…" width={320} value={filters.q} onChange={filters.setQ}/>
-          <HFFilter label="Shops"     value={filters.vals.shops}     options={['any','1 shop only','2-3 shops','4+ shops']}    onChange={v=>filters.setVal('shops',v)}     allLabel="any"/>
-          <HFFilter label="Enriched"  value={filters.vals.enriched}  options={['any','enriched','not enriched']}                onChange={v=>filters.setVal('enriched',v)}  allLabel="any"/>
-          <HFFilter label="ISBN"      value={filters.vals.isbn}      options={['any','has ISBN','missing ISBN']}                onChange={v=>filters.setVal('isbn',v)}      allLabel="any"/>
-          <HFFilter label="Conflicts" value={filters.vals.conflicts} options={['any','clean','has conflicts']}                  onChange={v=>filters.setVal('conflicts',v)} allLabel="any"/>
-          <HFFilter label="Linked"    value={filters.vals.linked}    options={['any','linked','not linked']}                    onChange={v=>filters.setVal('linked',v)}    allLabel="any"/>
-        </HFFilterBar>
+        {(() => {
+          const activeCount = [
+            q !== '',
+            enrichedFilter !== 'any',
+            linkedFilter !== 'any',
+            conflictsFilter !== 'any',
+            isbnFilter !== 'any',
+            shopsFilter !== 'any',
+          ].filter(Boolean).length;
+          const clearAll = () => { setQ(''); setEnrichedFilter('any'); setLinkedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setPage(1); };
+          return (
+            <HFFilterBar right={<>
+              <span style={{fontSize:11.5, color: activeCount? HF.accentInk : HF.ink4, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
+                {loading ? '…' : `${filteredRows.length} of ${data.total.toLocaleString()}`}
+              </span>
+              {activeCount > 0 && <HFButton size="sm" variant="subtle" onClick={clearAll}>Clear ({activeCount})</HFButton>}
+            </>}>
+              <HFSearch placeholder="Search title, author, ISBN…" width={320} value={q} onChange={v => { setQ(v); setPage(1); }}/>
+              <HFFilter label="Shops"     value={shopsFilter}     options={['any','1 shop only','2-3 shops','4+ shops']}    onChange={v=>{ setShopsFilter(v); setPage(1); }}     allLabel="any"/>
+              <HFFilter label="Enriched"  value={enrichedFilter}  options={['any','enriched','not enriched']}                onChange={v=>{ setEnrichedFilter(v); setPage(1); }}  allLabel="any"/>
+              <HFFilter label="ISBN"      value={isbnFilter}      options={['any','has ISBN','missing ISBN']}                onChange={v=>{ setIsbnFilter(v); setPage(1); }}      allLabel="any"/>
+              <HFFilter label="Conflicts" value={conflictsFilter} options={['any','clean','has conflicts']}                  onChange={v=>{ setConflictsFilter(v); setPage(1); }} allLabel="any"/>
+              <HFFilter label="Linked"    value={linkedFilter}    options={['any','linked','not linked']}                    onChange={v=>{ setLinkedFilter(v); setPage(1); }}    allLabel="any"/>
+            </HFFilterBar>
+          );
+        })()}
       </HFCard>
 
       <HFCard>
-        {filters.filtered.length === 0 ? (
-          <HFEmptyState title="No books match these filters" sub="Try clearing filters, or adjusting the search." onClear={filters.clearAll}/>
+        {loading ? (
+          <HFEmptyState title="Loading…" sub="Fetching books from the catalog." />
+        ) : filteredRows.length === 0 ? (
+          <HFEmptyState title="No books match these filters" sub="Try clearing filters, or adjusting the search." onClear={() => { setQ(''); setEnrichedFilter('any'); setLinkedFilter('any'); setConflictsFilter('any'); setIsbnFilter('any'); setShopsFilter('any'); setPage(1); }}/>
         ) : (
         <HFTable
           onRowClick={(r) => goto('book', { id: r.id })}
@@ -106,36 +140,55 @@ function HFBooks({ nav, goto }) {
               </span>
             )},
             { key:'priceRange', label:'Price range', w:'1.2fr', mono:true, align:'right', sortable:true, sortVal:r=>r.priceMin, cell: (_, r) => (
-              <span style={{display:'inline-flex', alignItems:'baseline', gap:6, fontVariantNumeric:'tabular-nums'}}>
-                <span style={{color:HF.okInk, fontWeight:600}}>€{r.priceMin.toFixed(2)}</span>
-                <span style={{color:HF.ink4}}>—</span>
-                <span style={{color:HF.ink2}}>€{r.priceMax.toFixed(2)}</span>
-                {r.priceMax > r.priceMin && (
-                  <span style={{color:HF.ink4, fontSize:11}}>({Math.round((r.priceMax/r.priceMin - 1) * 100)}%)</span>
-                )}
-              </span>
+              r.priceMin == null
+                ? <span style={{color:HF.ink4}}>—</span>
+                : <span style={{display:'inline-flex', alignItems:'baseline', gap:6, fontVariantNumeric:'tabular-nums'}}>
+                    <span style={{color:HF.okInk, fontWeight:600}}>€{r.priceMin.toFixed(2)}</span>
+                    <span style={{color:HF.ink4}}>—</span>
+                    <span style={{color:HF.ink2}}>€{r.priceMax.toFixed(2)}</span>
+                    {r.priceMax > r.priceMin && (
+                      <span style={{color:HF.ink4, fontSize:11}}>({Math.round((r.priceMax/r.priceMin - 1) * 100)}%)</span>
+                    )}
+                  </span>
             )},
             { key:'conflicts', label:'Conflicts', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>r.conflicts, cell: v => v ? <span style={{color:HF.errInk, fontWeight:500, fontVariantNumeric:'tabular-nums'}}>{v}</span> : <span style={{color:HF.ink4}}>—</span> },
             { key:'updated', label:'Updated', w:'0.8fr', muted:true, mono:true, sortable:true },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:HF.ink4, display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
-          rows={filters.filtered}
+          rows={filteredRows}
         />
         )}
       </HFCard>
 
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
-        <span>Showing 1–14 of 6,133</span>
-        <div style={{display:'flex', gap:6}}>
-          <HFButton size="sm" variant="ghost">‹ Prev</HFButton>
-          <HFButton size="sm" variant="accent">1</HFButton>
-          <HFButton size="sm">2</HFButton>
-          <HFButton size="sm">3</HFButton>
-          <span style={{padding:'6px 4px', color:HF.ink4}}>…</span>
-          <HFButton size="sm">438</HFButton>
-          <HFButton size="sm">Next ›</HFButton>
-        </div>
-      </div>
+      {(() => {
+        const totalPages = data.pages || 1;
+        const perPage = 50;
+        const start = (page - 1) * perPage + 1;
+        const end = Math.min(page * perPage, data.total);
+        // Build visible page buttons: always show first, last, current ±1, with ellipsis gaps
+        const pageNums = [];
+        const addPage = n => { if (n >= 1 && n <= totalPages && !pageNums.includes(n)) pageNums.push(n); };
+        addPage(1); addPage(page - 1); addPage(page); addPage(page + 1); addPage(totalPages);
+        pageNums.sort((a,b) => a - b);
+        const buttons = [];
+        pageNums.forEach((n, i) => {
+          if (i > 0 && n > pageNums[i-1] + 1) buttons.push('…');
+          buttons.push(n);
+        });
+        return (
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:12.5, color:HF.ink3}}>
+            <span>{loading ? '…' : `Showing ${start}–${end} of ${data.total.toLocaleString()}`}</span>
+            <div style={{display:'flex', gap:6}}>
+              <HFButton size="sm" variant="ghost" onClick={() => setPage(p => Math.max(1, p-1))} disabled={page <= 1}>‹ Prev</HFButton>
+              {buttons.map((b, i) => b === '…'
+                ? <span key={`ellipsis-${i}`} style={{padding:'6px 4px', color:HF.ink4}}>…</span>
+                : <HFButton key={b} size="sm" variant={b === page ? 'accent' : undefined} onClick={() => setPage(b)}>{b}</HFButton>
+              )}
+              <HFButton size="sm" onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page >= totalPages}>Next ›</HFButton>
+            </div>
+          </div>
+        );
+      })()}
     </HFShell>
   );
 }

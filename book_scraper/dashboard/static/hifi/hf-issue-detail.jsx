@@ -8,15 +8,40 @@
 
 function HFIssueDetail({ nav, goto, params }) {
   const HF = getHF();
-  const id        = params?.id        || 'ISS-266206';
-  const type      = params?.type      || 'missing_price';
-  const sev       = params?.sev       || 'critical';
-  const lifecycle = params?.lifecycle || 'new';
-  const shop      = params?.shop      || 'patogupirkti';
-  const book      = params?.book      || 'Arturas ir Maltazaro kerštas (DVD)';
-  const url       = params?.url       || 'https://patogupirkti.lt/knyga/arturas-ir-maltazaro-kerstas-dvd';
-  const age       = params?.age       || '4d ago';
-  const runId     = params?.runId     || 407;
+
+  // Fetch from API when params.id is a numeric issue ID; fall back to mock
+  // params for hifi-preview mode (where params carry display fields directly).
+  const issueId = params?.id && /^\d+$/.test(String(params.id)) ? params.id : null;
+  const [apiData, setApiData] = React.useState(null);
+  const [apiLoading, setApiLoading] = React.useState(!!issueId);
+  const [apiNotFound, setApiNotFound] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!issueId) { setApiLoading(false); return; }
+    setApiLoading(true);
+    setApiNotFound(false);
+    fetch(`/api/issues/${issueId}`)
+      .then(r => {
+        if (r.status === 404) { setApiNotFound(true); setApiLoading(false); return null; }
+        return r.json();
+      })
+      .then(d => { if (d) { setApiData(d); setApiLoading(false); } })
+      .catch(() => setApiLoading(false));
+  }, [issueId]);
+
+  if (apiLoading) return <div style={{padding:40, color: getHF().ink3, fontFamily: getHF().sans}}>Loading…</div>;
+  if (apiNotFound) return <div style={{padding:40, color: getHF().errInk, fontFamily: getHF().sans}}>Issue not found.</div>;
+
+  // Resolve display fields: prefer live API data, fall back to params (hifi preview).
+  const id        = apiData ? `ISS-${apiData.id}` : (params?.id        || 'ISS-266206');
+  const type      = apiData?.issue             || params?.type      || 'missing_price';
+  const sev       = apiData?.severity          || params?.sev       || 'critical';
+  const lifecycle = apiData?.lifecycle_state   || params?.lifecycle || 'new';
+  const shop      = apiData?.shop_name         || params?.shop      || 'patogupirkti';
+  const book      = apiData?.shop_book_title   || params?.book      || 'Arturas ir Maltazaro kerštas (DVD)';
+  const url       = apiData?.url               || params?.url       || 'https://patogupirkti.lt/knyga/arturas-ir-maltazaro-kerstas-dvd';
+  const age       = apiData?.added_ago         || params?.age       || '4d ago';
+  const runId     = apiData?.scrape_run_id     || params?.runId     || 407;
 
   const FIELD_BY_TYPE = {
     missing_price:         'price',

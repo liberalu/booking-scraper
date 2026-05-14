@@ -175,6 +175,18 @@ function hfIssueDetailLine(type, book, i) {
   }
 }
 
+// Relative age from ISO timestamp string.
+function formatRelativeAge(isoStr) {
+  if (!isoStr) return '—';
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 // Sparkline — 14 daily counts → tiny SVG. Tone-aware fill.
 function HFIssueSparkline({ data, tone = 'neutral', w = 88, h = 24 }) {
   const HF = getHF();
@@ -208,56 +220,103 @@ function HFIssues({ nav, goto }) {
   const [selected, setSelected] = React.useState(new Set());
   const [expanded, setExpanded] = React.useState(null);
 
-  const seed = React.useMemo(() => makeHFIssueSeed(), []);
-  const tabSource = React.useMemo(() => tab === 'all' ? seed : seed.filter(r => r.lifecycle === tab), [seed, tab]);
+  // API state
+  const [lifecycleCounts, setLifecycleCounts] = React.useState({ new: 0, acknowledged: 0, snoozed: 0, resolved: 0, total: 0 });
+  const [groupsData, setGroupsData] = React.useState([]);
+  const [wavesData, setWavesData] = React.useState([]);
+  const [listData, setListData] = React.useState({ issues: [], total: 0 });
+  const [listLoading, setListLoading] = React.useState(false);
+  const [listPage, setListPage] = React.useState(1);
 
-  const filters = useHFFilters(tabSource, {
-    search: { fields: i => `${i.id} ${i.type} ${i.book || ''} ${i.url || ''} ${i.detail} ${i.shop || ''}` },
-    filters: [
-      { id: 'shop',     default: 'all', match: (i, v) => i.shop === v },
-      { id: 'sev',      default: 'all', match: (i, v) => i.sev === v },
-      { id: 'type',     default: 'all', match: (i, v) => i.type === v },
-      { id: 'urlType',  default: 'all', match: (i, v) => i.urlType === v },
-      { id: 'bookType', default: 'all', match: (i, v) => i.bookType === v },
-      { id: 'run',      default: 'any', match: (i, v) => v === 'any' ? true : (i.runRef && String(i.runRef) === v) },
-    ],
-  });
+  // Filter state for list view (managed locally; API-driven when view===list)
+  const [shopFilter, setShopFilter] = React.useState('all');
+  const [sevFilter, setSevFilter] = React.useState('all');
+  const [typeFilter, setTypeFilter] = React.useState('all');
+  const [searchQ, setSearchQ] = React.useState('');
+  const [runFilter, setRunFilter] = React.useState('any');
+
+  // Fetch lifecycle counts on mount (and whenever tab changes to keep counts fresh)
+  React.useEffect(() => {
+    fetch('/api/issues?per_page=1')
+      .then(r => r.json())
+      .then(d => { if (d.counts) setLifecycleCounts(d.counts); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch groups when in by_type or waves view
+  React.useEffect(() => {
+    if (view !== 'by_type' && view !== 'waves') return;
+    const gb = view === 'waves' ? 'type_shop' : 'type';
+    const params = new URLSearchParams({ group_by: gb });
+    if (tab !== 'all') params.set('state', tab);
+    fetch(`/api/issues/groups?${params}`)
+      .then(r => r.json())
+      .then(d => {
+        const rows = Array.isArray(d) ? d : (d.groups || []);
+        if (view === 'waves') setWavesData(rows);
+        else setGroupsData(rows);
+      })
+      .catch(() => {});
+  }, [view, tab]);
+
+  // Fetch list when in list view
+  React.useEffect(() => {
+    if (view !== 'list') return;
+    setListLoading(true);
+    const params = new URLSearchParams({ page: listPage, per_page: 50 });
+    if (tab !== 'all') params.set('state', tab);
+    if (shopFilter !== 'all') params.set('shop', shopFilter);
+    if (typeFilter !== 'all') params.set('issue_type', typeFilter);
+    if (sevFilter !== 'all') params.set('severity', sevFilter);
+    if (searchQ) params.set('q', searchQ);
+    if (runFilter !== 'any') params.set('run_id', runFilter);
+    fetch(`/api/issues?${params}`)
+      .then(r => r.json())
+      .then(d => { setListData(d); setListLoading(false); })
+      .catch(() => { setListLoading(false); });
+  }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter, listPage]);
+
+  // Reset page and selection when tab/view/filters change
+  React.useEffect(() => { setListPage(1); setSelected(new Set()); }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter]);
 
   React.useEffect(() => { setSelected(new Set()); }, [view, tab]);
 
   const sevTone = { critical: 'err', high: 'warn', medium: 'warn', low: 'neutral' };
   const sevRank = { critical: 4, high: 3, medium: 2, low: 1 };
 
-  const byTypeRows = HF_ISSUE_TYPES.map(t => {
-    const total = HF_ISSUE_SCALE[t.type] || 0;
-    const ack = HF_ISSUE_ACK[t.type] || 0;
-    const trend = HF_ISSUE_TREND[t.type] || [];
-    // Priority = severity × open count (with mild log scaling so 36K doesn't bury everything)
-    const priority = sevRank[t.sev] * Math.log10(Math.max(2, total - ack));
-    // Trend direction
-    const head = trend.slice(-7).reduce((s, v) => s + v, 0) / 7;
-    const tail = trend.slice(0, 7).reduce((s, v) => s + v, 0) / 7;
-    const direction = head > tail * 1.15 ? 'up' : head < tail * 0.85 ? 'down' : 'flat';
-    const deltaPct = tail > 0 ? Math.round(((head - tail) / tail) * 100) : 0;
-    return { ...t, total, ack, newCount: total - ack, trend, priority, direction, deltaPct };
+  const byTypeRows = groupsData.map(row => {
+    const meta = HF_ISSUE_TYPES.find(t => t.type === row.issue_type) || { sev: 'low', tone: 'neutral' };
+    const total = row.total || 0;
+    const ack = (row.by_state?.acknowledged ?? row.cnt_acknowledged) || 0;
+    const newCount = (row.by_state?.new ?? row.cnt_new) || 0;
+    const priority = sevRank[meta.sev || 'low'] * Math.log10(Math.max(2, newCount));
+    return { ...meta, type: row.issue_type, total, ack, newCount, trend: [], priority, direction: 'flat', deltaPct: 0 };
   }).sort((a, b) => {
     if (byTypeSort === 'priority') return b.priority - a.priority;
     if (byTypeSort === 'count')    return b.total - a.total;
     return a.type.localeCompare(b.type);
   });
 
-  const SHOPS_FOR_VIEW = ['vaga', 'knygos.lt', 'patogupirkti', 'krisostomus'];
-  const SHARE = [0.42, 0.28, 0.20, 0.10];
-  const byTypeShopRows = byTypeRows.flatMap(t =>
-    SHOPS_FOR_VIEW.map((shop, i) => ({
-      ...t, shop,
-      total: Math.round(t.total * SHARE[i]),
-      ack:   Math.round(t.ack   * SHARE[i]),
-    })).filter(r => r.total > 0)
-  );
-
-  const itemWaves = HF_ISSUE_WAVES.filter(w => !w.runFailure);
-  const runFailureWaves = HF_ISSUE_WAVES.filter(w => w.runFailure);
+  // Map API list rows to the shape expected by ListRows
+  const listRows = (listData.issues || []).map(issue => {
+    const meta = HF_ISSUE_TYPES.find(t => t.type === issue.issue) || { sev: 'low', tone: 'neutral' };
+    return {
+      id: String(issue.id),
+      type: issue.issue,
+      sev: meta.sev,
+      tone: meta.tone,
+      shop: issue.shop_name || null,
+      book: issue.shop_book_title || null,
+      url: issue.url || null,
+      urlType: 'product',
+      bookType: 'book',
+      detail: hfIssueDetailLine(issue.issue, issue.shop_book_title, 0),
+      run: issue.scrape_run_id ? `run:${issue.scrape_run_id}` : null,
+      runRef: issue.scrape_run_id || null,
+      age: issue.added_at ? formatRelativeAge(issue.added_at) : '—',
+      lifecycle: issue.lifecycle_state || 'new',
+    };
+  });
 
   // Bulk selection helpers
   const toggleOne = (id) => setSelected(prev => {
@@ -266,7 +325,7 @@ function HFIssues({ nav, goto }) {
     return next;
   });
   const toggleAllVisible = () => {
-    const visible = filters.filtered.map(r => r.id);
+    const visible = listRows.map(r => r.id);
     const allOn = visible.every(id => selected.has(id));
     setSelected(prev => {
       const next = new Set(prev);
@@ -275,8 +334,8 @@ function HFIssues({ nav, goto }) {
     });
   };
   const selectedCount = selected.size;
-  const allVisibleSelected = filters.filtered.length > 0 && filters.filtered.every(r => selected.has(r.id));
-  const someVisibleSelected = filters.filtered.some(r => selected.has(r.id));
+  const allVisibleSelected = listRows.length > 0 && listRows.every(r => selected.has(r.id));
+  const someVisibleSelected = listRows.some(r => selected.has(r.id));
 
   // Type-specific "Fix this" actions
   const fixActionsFor = (type) => {
@@ -315,6 +374,61 @@ function HFIssues({ nav, goto }) {
     }
   };
 
+  // Dead-code stubs for disabled {false && ...} render blocks
+  const itemWaves = wavesData
+    .filter(w => w.issue_type !== 'scrape_run_failed')
+    .map(w => ({
+      id: `${w.issue_type}-${w.shop_name || 'all'}`,
+      type: w.issue_type,
+      shop: w.shop_name || '—',
+      count: w.total || 0,
+      ack: (w.by_state?.acknowledged ?? 0),
+      firstSeen: '—', lastSeen: '—', span: '', sample: null, runFailure: false,
+    }));
+  const runFailureWaves = wavesData
+    .filter(w => w.issue_type === 'scrape_run_failed')
+    .map(w => ({
+      id: `${w.issue_type}-${w.shop_name || 'all'}`,
+      type: w.issue_type,
+      shop: w.shop_name || '—',
+      count: w.total || 0,
+      ack: (w.by_state?.acknowledged ?? 0),
+      firstSeen: '—', lastSeen: '—', span: '', sample: null, runFailure: true,
+    }));
+  const byTypeShopRows = [];
+
+  // Bulk-acknowledge: POST with optional type+shop filters derived from selected rows
+  const bulkAcknowledge = () => {
+    // Derive a common type/shop if all selected rows share one (enables server-side batch)
+    const selectedRows = listRows.filter(r => selected.has(r.id));
+    const types = [...new Set(selectedRows.map(r => r.type).filter(Boolean))];
+    const shops = [...new Set(selectedRows.map(r => r.shop).filter(Boolean))];
+    const body = {};
+    if (types.length === 1) body.issue_type = types[0];
+    if (shops.length === 1) body.shop = shops[0];
+    fetch('/api/issues/bulk-acknowledge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setSelected(new Set());
+        // Refresh counts and list
+        fetch('/api/issues?per_page=1').then(r => r.json()).then(d => { if (d.counts) setLifecycleCounts(d.counts); }).catch(() => {});
+        setListPage(p => p); // trigger list re-fetch via effect dep noop — force by toggling
+        setListLoading(true);
+        const params = new URLSearchParams({ page: listPage, per_page: 50 });
+        if (tab !== 'all') params.set('state', tab);
+        if (shopFilter !== 'all') params.set('shop', shopFilter);
+        if (typeFilter !== 'all') params.set('issue_type', typeFilter);
+        if (sevFilter !== 'all') params.set('severity', sevFilter);
+        if (searchQ) params.set('q', searchQ);
+        fetch(`/api/issues?${params}`).then(r => r.json()).then(d => { setListData(d); setListLoading(false); }).catch(() => { setListLoading(false); });
+      })
+      .catch(() => {});
+  };
+
   return (
     <HFShell {...nav} activePage="issues"
       title="Issues" subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
@@ -329,11 +443,11 @@ function HFIssues({ nav, goto }) {
       <HFCard style={{marginBottom:HF.gap, overflow:'visible'}}>
         <div style={{padding:`0 ${HF.cardP}px`, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
-            { id:'new',          label:'New',          count: HF_ISSUE_LIFECYCLE_COUNTS.new },
-            { id:'acknowledged', label:'Acknowledged', count: HF_ISSUE_LIFECYCLE_COUNTS.acknowledged },
-            { id:'snoozed',      label:'Snoozed',      count: HF_ISSUE_LIFECYCLE_COUNTS.snoozed },
-            { id:'resolved',     label:'Resolved',     count: HF_ISSUE_LIFECYCLE_COUNTS.resolved },
-            { id:'all',          label:'All',          count: HF_ISSUE_LIFECYCLE_COUNTS.all },
+            { id:'new',          label:'New',          count: lifecycleCounts.new },
+            { id:'acknowledged', label:'Acknowledged', count: lifecycleCounts.acknowledged },
+            { id:'snoozed',      label:'Snoozed',      count: lifecycleCounts.snoozed },
+            { id:'resolved',     label:'Resolved',     count: lifecycleCounts.resolved },
+            { id:'all',          label:'All',          count: lifecycleCounts.total },
           ]}/>
           <span title={HF_LIFECYCLE_HELP[tab]} style={{
             fontSize:11.5, color:HF.ink3, fontStyle:'italic', cursor:'help', paddingRight:4,
@@ -354,7 +468,7 @@ function HFIssues({ nav, goto }) {
               {selectedCount === 1 ? '1 issue' : `${selectedCount.toLocaleString()} issues`} selected
             </span>
             <span style={{flex:1}}/>
-            <HFButton size="sm" variant="primary">Mark acknowledged</HFButton>
+            <HFButton size="sm" variant="primary" onClick={bulkAcknowledge}>Mark acknowledged</HFButton>
             <HFButton size="sm">Snooze 7d…</HFButton>
             <HFButton size="sm">Assign…</HFButton>
             <HFButton size="sm">Mark resolved</HFButton>
@@ -365,21 +479,22 @@ function HFIssues({ nav, goto }) {
         <HFCard style={{marginBottom:HF.gap, overflow:'visible'}} padding={12}>
           <HFFilterBar right={<>
             <span style={{fontSize:11.5, color: HF.ink3, fontFamily:HF.mono, fontVariantNumeric:'tabular-nums'}}>
-              {(HF_ISSUE_LIFECYCLE_COUNTS[tab] ?? HF_ISSUE_LIFECYCLE_COUNTS.all).toLocaleString()} total
+              {view === 'list'
+                ? (listData.total ?? 0).toLocaleString()
+                : (tab === 'all' ? lifecycleCounts.total : (lifecycleCounts[tab] ?? 0)).toLocaleString()
+              } total
             </span>
           </>}>
-            <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={filters.q} onChange={filters.setQ}/>
-            <HFFilter label="Shop"      value={filters.vals.shop}     options={['all','vaga','knygos.lt','patogupirkti','krisostomus']} onChange={v=>filters.setVal('shop',v)}/>
-            <HFFilter label="Severity"  value={filters.vals.sev}      options={['all','critical','high','medium','low']}                 onChange={v=>filters.setVal('sev',v)}/>
-            <HFFilter label="Type"      value={filters.vals.type}     options={['all', ...HF_ISSUE_TYPES.map(t=>t.type)]}                onChange={v=>filters.setVal('type',v)}/>
-            <HFFilter label="URL type"  value={filters.vals.urlType}  options={['all','product','category','sitemap']}                   onChange={v=>filters.setVal('urlType',v)}/>
-            <HFFilter label="Book type" value={filters.vals.bookType} options={['all','book','dvd','stationery']}                        onChange={v=>filters.setVal('bookType',v)}/>
+            <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={searchQ} onChange={setSearchQ}/>
+            <HFFilter label="Shop"      value={shopFilter}  options={['all','vaga','knygos.lt','patogupirkti','krisostomus']} onChange={setShopFilter}/>
+            <HFFilter label="Severity"  value={sevFilter}   options={['all','critical','high','medium','low']}                 onChange={setSevFilter}/>
+            <HFFilter label="Type"      value={typeFilter}  options={['all', ...HF_ISSUE_TYPES.map(t=>t.type)]}                onChange={setTypeFilter}/>
             <span style={{display:'inline-flex', alignItems:'center', gap:6}}>
               <span style={{fontSize:12.5, color:HF.ink3}}>Run</span>
               <input
                 type="text" placeholder="any"
-                value={filters.vals.run === 'any' ? '' : filters.vals.run}
-                onChange={e => filters.setVal('run', e.target.value || 'any')}
+                value={runFilter === 'any' ? '' : runFilter}
+                onChange={e => setRunFilter(e.target.value || 'any')}
                 style={{
                   width: 80, height: 30, padding:'4px 8px',
                   border:`1px solid ${HF.borderStrong}`, borderRadius:6,
@@ -493,7 +608,7 @@ function HFIssues({ nav, goto }) {
                   </div>
                   <div style={{display:'flex', gap:6, alignItems:'center'}}>
                     <HFButton size="sm" variant="primary">Ack wave</HFButton>
-                    <HFButton size="sm" onClick={() => { setView('list'); filters.setVal('type', w.type); if (w.shop) filters.setVal('shop', w.shop); filters.setVal('run', String(w.run)); }}>View</HFButton>
+                    <HFButton size="sm" onClick={() => { setTypeFilter(w.type); if (w.shop) setShopFilter(w.shop); setRunFilter(String(w.run)); setView('list'); }}>View</HFButton>
                   </div>
                 </div>
               );
@@ -565,7 +680,7 @@ function HFIssues({ nav, goto }) {
                 <span style={{color: HF.ink3, minWidth:60, textAlign:'right'}}>{r.total.toLocaleString()} total</span>
                 <span style={{color: HF.ink4, minWidth:60, textAlign:'right'}}>Ack ({r.ack.toLocaleString()})</span>
               </div>
-              <HFButton size="sm" variant="primary" onClick={() => { setView('list'); filters.setVal('type', r.type); }}>View</HFButton>
+              <HFButton size="sm" variant="primary" onClick={() => { setTypeFilter(r.type); setView('list'); }}>View</HFButton>
             </div>
           ))}
         </HFCard>
@@ -608,7 +723,9 @@ function HFIssues({ nav, goto }) {
 
       {view === 'list' && (
         <HFCard flush>
-          {filters.filtered.length === 0 ? (
+          {listLoading ? (
+            <div style={{padding:'32px 0', textAlign:'center', color:HF.ink3, fontSize:13}}>Loading…</div>
+          ) : listRows.length === 0 ? (
             <HFEmptyState
               title={
                 tab === 'resolved' ? 'No resolved issues yet' :
@@ -622,12 +739,12 @@ function HFIssues({ nav, goto }) {
                 tab === 'acknowledged' ? 'Tick rows in List view and click "Mark acknowledged" to move them here.' :
                 'Try clearing filters or switching tabs.'
               }
-              onClear={filters.activeCount > 0 ? filters.clearAll : undefined}
             />
           ) : (
+          <>
           <ListRows
             HF={HF}
-            rows={filters.filtered}
+            rows={listRows}
             selected={selected}
             toggleOne={toggleOne}
             toggleAllVisible={toggleAllVisible}
@@ -639,6 +756,16 @@ function HFIssues({ nav, goto }) {
             fixActionsFor={fixActionsFor}
             goto={goto}
           />
+          {listData.total > 50 && (
+            <div style={{padding:'12px 16px', display:'flex', alignItems:'center', gap:8, borderTop:`1px solid ${HF.border}`, justifyContent:'flex-end'}}>
+              <HFButton size="sm" disabled={listPage <= 1} onClick={() => setListPage(p => Math.max(1, p - 1))}>← Prev</HFButton>
+              <span style={{fontSize:12.5, color:HF.ink3, fontFamily:HF.mono}}>
+                {listPage} / {Math.ceil(listData.total / 50)}
+              </span>
+              <HFButton size="sm" disabled={listPage >= Math.ceil(listData.total / 50)} onClick={() => setListPage(p => p + 1)}>Next →</HFButton>
+            </div>
+          )}
+          </>
           )}
         </HFCard>
       )}

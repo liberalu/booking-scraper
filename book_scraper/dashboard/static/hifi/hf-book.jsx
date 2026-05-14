@@ -5,51 +5,71 @@
 
 function HFBook({ nav, goto, params }) {
   const HF = getHF();
-  const isbn = params?.isbn || '9789955134572';
+  const bookId = params?.id;
+
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [notFound, setNotFound] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!bookId) { setLoading(false); return; }
+    setLoading(true);
+    setNotFound(false);
+    fetch(`/api/books/${bookId}`)
+      .then(r => { if (r.status === 404) { setNotFound(true); setLoading(false); return null; } return r.json(); })
+      .then(d => { if (d) { setData(d); setLoading(false); } });
+  }, [bookId]);
+
+  if (loading) return <div style={{padding:40, color: HF.ink3, fontFamily: HF.sans}}>Loading…</div>;
+  if (notFound || !data) return <div style={{padding:40, color: HF.ink3, fontFamily: HF.sans}}>Book not found.</div>;
+
+  const primaryIsbn = data.isbns?.find(i => i.isbn_type === 'isbn13')?.isbn || data.isbns?.[0]?.isbn || '—';
 
   const book = {
-    title: 'Sapiens: A Brief History of Humankind',
-    author: 'Yuval Noah Harari',
-    isbn: isbn,
-    isbn10: '9955134577',
-    publisher: 'Kitos knygos',
-    year: 2019,
-    pages: 464,
-    language: 'EN',
-    binding: 'Paperback',
-    firstMatched: 'Feb 18, 2025',
-    contributors: [
-      { role:'Author',       name:'Yuval Noah Harari' },
-      { role:'Translator',   name:'Tadas Naujokaitis' },
-      { role:'Editor',       name:'Giedrė Kmieliauskaitė' },
-      { role:'Cover artist', name:'Marija Mockutė' },
-      { role:'Illustrator',  name:'Lina Sergejeva' },
-      { role:'Producer',     name:'Kitos knygos studio' },
-      { role:'Narrator',     name:'— (no audiobook)' },
-    ],
+    title: data.title,
+    title_full: data.title_full,
+    isbn: primaryIsbn,
+    publisher: data.publisher,
+    year: data.year,
+    pages: data.pages,
+    language: data.language,
+    binding: data.format,
+    cover_url: data.cover_url,
+    description: data.description,
+    firstMatched: '—',
+    author: data.authors?.find(a => a.role === 'author')?.name || '',
+    contributors: (data.authors || []).map(a => ({
+      role: a.role.charAt(0).toUpperCase() + a.role.slice(1).replace('_', ' '),
+      name: a.name,
+    })),
   };
 
+  function fmtRelative(iso) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
   // One row per shop that lists this book.
-  const shops = [
-    { shop:'vaga',         shopBookId:10234, sbStatus:'active',  url:'/knygos/sapiens-yuval-noah-harari',
-      price:19.90, prev:21.00, currency:'EUR', stock:'in stock',     lastSeen:'12m ago',
-      matchedAt:'Feb 18, 2025 14:02', method:'isbn',        confidence:1.00, by:'auto · run #1422' },
-    { shop:'knygos.lt',    shopBookId:10832, sbStatus:'active',  url:'/sapiens-trumpa-zmonijos-istorija',
-      price:18.49, prev:18.49, currency:'EUR', stock:'in stock',     lastSeen:'1h ago',
-      matchedAt:'Feb 18, 2025 14:02', method:'isbn',        confidence:1.00, by:'auto · run #1422' },
-    { shop:'patogu',       shopBookId:11041, sbStatus:'active',  url:'/produktas/sapiens-y-n-harari',
-      price:21.50, prev:19.90, currency:'EUR', stock:'in stock',     lastSeen:'34m ago',
-      matchedAt:'Mar 04, 2025 09:14', method:'title+author', confidence:0.94, by:'auto · run #1518' },
-    { shop:'krisostomus',  shopBookId:11209, sbStatus:'active',  url:'/en/sapiens-yuval-noah-harari-paperback',
-      price:22.90, prev:22.90, currency:'EUR', stock:'in stock',     lastSeen:'2h ago',
-      matchedAt:'Mar 21, 2025 11:48', method:'manual',      confidence:1.00, by:'aurelija@gpswox.com' },
-    { shop:'humanitas',    shopBookId:11458, sbStatus:'out',     url:'/sapiens-paperback',
-      price:20.00, prev:20.00, currency:'EUR', stock:'out of stock', lastSeen:'4h ago',
-      matchedAt:'Apr 02, 2025 16:30', method:'isbn',        confidence:1.00, by:'auto · run #1742' },
-    { shop:'mintis',       shopBookId:11602, sbStatus:'pending', url:'/knygos/sapiens',
-      price:null,  prev:null,  currency:'EUR', stock:'out of stock', lastSeen:'—',
-      matchedAt:'May 06, 2026 18:02', method:'title+author', confidence:0.81, by:'auto · run #2104 · needs review' },
-  ];
+  const shops = (data.shops || []).map(s => ({
+    shop: s.name,
+    shopBookId: s.shop_book_id,
+    sbStatus: s.is_active ? (s.in_stock ? 'active' : 'out') : 'delisted',
+    url: s.url,
+    price: s.price,
+    prev: null,
+    currency: 'EUR',
+    stock: s.in_stock ? 'in stock' : 'out of stock',
+    lastSeen: fmtRelative(s.last_seen_at),
+    matchedAt: '—',
+    method: s.match_method || '—',
+    confidence: null,
+    by: 'auto',
+  }));
 
   const prices = shops.map(s => s.price).filter(p => p != null);
   const lowest = Math.min(...prices);
