@@ -92,7 +92,8 @@ class FlaresolverrMiddleware:  # pragma: no cover
         # 5–10 s and ramp to 30+ s under load.
         self._client = httpx.AsyncClient(
             timeout=self._fs_max_timeout_ms / 1000.0 + 30,
-            trust_env=False,  # same OrbStack IPv6-CIDR NO_PROXY issue as HttpxMiddleware
+            # same OrbStack IPv6-CIDR NO_PROXY issue as HttpxMiddleware
+            trust_env=False,
         )
         logger.info(
             "FlaresolverrMiddleware: enabled for %s endpoint=%s "

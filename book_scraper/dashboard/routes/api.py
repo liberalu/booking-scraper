@@ -23,7 +23,6 @@ from book_scraper.dashboard.queries import (
     get_data_completeness,
     get_discovered_urls_page,
     get_discovered_urls_stats,
-    get_issue_counts,
     get_issues_groups,
     get_issues_page,
     get_overview_stats,

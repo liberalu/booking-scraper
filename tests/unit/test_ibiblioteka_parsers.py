@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from book_scraper.spiders.ibiblioteka.parsers import (
     parse_ibiblioteka_search_response,
     parse_product_page,
@@ -175,7 +173,6 @@ def test_parse_product_page_audio_no_pages():
 def test_ibiblioteka_url_round_trip():
     from book_scraper.spiders.ibiblioteka_api_urls import (
         advance_ibiblioteka_url,
-        build_ibiblioteka_post_request_kwargs,
         parse_ibiblioteka_url_params,
     )
 
@@ -200,6 +197,7 @@ def test_ibiblioteka_url_round_trip():
 
 def test_ibiblioteka_post_body_contains_year_range():
     import json as json_mod
+
     from book_scraper.spiders.ibiblioteka_api_urls import (
         build_ibiblioteka_post_request_kwargs,
     )

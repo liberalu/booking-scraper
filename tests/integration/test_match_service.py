@@ -2,7 +2,14 @@
 from sqlalchemy import select
 
 from book_scraper.db.models import (
-    Author, Book, BookAuthor, BookIsbn, ShopAuthor, ShopBook, ShopBookAuthor, Shop,
+    Author,
+    Book,
+    BookAuthor,
+    BookIsbn,
+    Shop,
+    ShopAuthor,
+    ShopBook,
+    ShopBookAuthor,
 )
 from book_scraper.services.match import MatchService
 
@@ -160,7 +167,6 @@ def test_step2_does_not_pair_translator_at_position_0(db_session):
 
 def test_step3_synthesizes_shop_inferred_after_two_shops(db_session):
     """Two shops carry the same ISBN, no canonical match -> create shop_inferred book."""
-    from book_scraper.db.models import Publisher
 
     sv = _make_shop(db_session, "vaga")
     sp = _make_shop(db_session, "pegasas")
@@ -194,6 +200,7 @@ def test_step3_publisher_is_first_writer_not_highest_trust(db_session):
     """Sticky publisher: the FIRST shop's publisher persists even when
     a higher-trust shop also has the ISBN."""
     import datetime
+
     from book_scraper.db.models import Publisher
 
     sp = _make_shop(db_session, "pegasas")
@@ -203,14 +210,14 @@ def test_step3_publisher_is_first_writer_not_highest_trust(db_session):
     sb_p = ShopBook(
         shop_id=sp.id, url="https://pegasas.lt/p/sb", title="P",
         isbn=isbn, publisher="Pegasas Publisher",
-        first_seen_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc),
+        first_seen_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
     )
     db_session.add(sb_p)
     db_session.commit()
     sb_v = ShopBook(
         shop_id=sv.id, url="https://vaga.lt/p/sb", title="V",
         isbn=isbn, publisher="Vaga Publisher",
-        first_seen_at=datetime.datetime(2024, 6, 1, tzinfo=datetime.timezone.utc),
+        first_seen_at=datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC),
     )
     db_session.add(sb_v)
     db_session.commit()

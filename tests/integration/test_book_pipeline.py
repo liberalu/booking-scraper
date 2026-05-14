@@ -46,8 +46,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from book_scraper.db.models import Author, Book, BookAuthor, BookIsbn, Publisher
 from book_scraper.items import BookItem
-from book_scraper.db.models import Book, BookAuthor, BookIsbn, Author, Publisher
 
 
 @pytest.fixture

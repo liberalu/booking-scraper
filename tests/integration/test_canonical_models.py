@@ -3,7 +3,12 @@ import pytest
 from sqlalchemy import select
 
 from book_scraper.db.models import (
-    Author, Book, BookAuthor, BookIsbn, Publisher, Series,
+    Author,
+    Book,
+    BookAuthor,
+    BookIsbn,
+    Publisher,
+    Series,
 )
 
 

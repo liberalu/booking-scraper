@@ -45,6 +45,12 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
 "book_scraper/dashboard/routes/*.py" = ["B008"]
+# Long descriptive strings in ISSUE_DESCRIPTIONS dict — wrap-breaking would
+# hurt readability of operator-facing copy.
+"book_scraper/dashboard/queries.py" = ["E501"]
+# Tests commonly do `sys.path.insert(...)` before importing local modules
+# (E402) and use `with pytest.raises(Exception)` for negative coverage (B017).
+"tests/**/*.py" = ["E501", "E402", "B017", "N805", "F841"]
 
 [tool.mypy]
 strict = true

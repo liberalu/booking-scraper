@@ -375,7 +375,9 @@ class PostgresPipeline:
         if self.shop_cache:
             shop_id = next(iter(self.shop_cache.values()))
         if issues and shop_id is not None and run_id is not None:
-            upsert_validation_issues(self.session, issues, shop_id=shop_id, run_id=run_id)
+            upsert_validation_issues(
+                self.session, issues, shop_id=shop_id, run_id=run_id
+            )
 
     _SPIKE_THRESHOLD = Decimal("0.5")  # 50%
 

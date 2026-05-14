@@ -94,7 +94,9 @@ class ValidateService:
         issues.extend(self.check_relationship_integrity(shop_id, run_id))
 
         if issues:
-            upsert_validation_issues(self._session, issues, shop_id=shop_id, run_id=run_id)
+            upsert_validation_issues(
+                self._session, issues, shop_id=shop_id, run_id=run_id
+            )
 
         resolve_gone_issues(self._session, shop_id=shop_id, run_id=run_id)
 
