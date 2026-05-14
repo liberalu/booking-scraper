@@ -743,8 +743,43 @@ class CronChainTrigger:  # pragma: no cover
         except (TypeError, ValueError):
             self._cron_job_id = None
 
+    def _emit_chain_skipped(self, spider: Any, parent_reason: str) -> None:
+        """Record a `chain_skipped` event so cron-chain gaps are auditable."""
+        from book_scraper.db import scrape_run_events as run_event_types
+        from book_scraper.db.repo import emit_scrape_run_event
+        from book_scraper.db.session import get_session_factory
+
+        run_id = getattr(spider, "_run_id", None)
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if run_id is None or not database_url:
+            return
+        try:
+            session = get_session_factory(database_url)()
+            try:
+                emit_scrape_run_event(
+                    session,
+                    run_id,
+                    run_event_types.CHAIN_SKIPPED,
+                    payload={
+                        "parent_reason": parent_reason,
+                        "cron_job_id": self._cron_job_id,
+                    },
+                )
+                session.commit()
+            finally:
+                session.close()
+        except Exception:
+            logger.exception(
+                "CronChainTrigger: failed to record chain_skipped event "
+                "for run %d (parent_reason=%s)",
+                run_id,
+                parent_reason,
+            )
+
     def spider_closed(self, spider: Any, reason: str) -> None:
         if reason != "finished":
+            if self._cron_job_id is not None:
+                self._emit_chain_skipped(spider, reason)
             return
         if self._cron_job_id is None:
             return

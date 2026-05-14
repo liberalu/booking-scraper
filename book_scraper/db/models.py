@@ -528,7 +528,7 @@ class ScrapeRunEvent(Base):
             "event_type IN ("
             "'started','paused','resumed','stop_requested','retry_failures',"
             "'rerun','continued','resumed_after_failure','restarted',"
-            "'completed','failed','subdivided'"
+            "'completed','failed','subdivided','chain_skipped'"
             ")",
             name="ck_scrape_run_events_event_type",
         ),

@@ -25,6 +25,10 @@ SUBDIVIDED: Final = "subdivided"
 # timeout, boot reconcile). Operator-triggered restarts continue to use
 # CONTINUED.
 RESTARTED: Final = "restarted"
+# Recorded on the parent run when a cron-chain fails to fire because the
+# parent spider did not finish cleanly (stall, crash, operator stop, etc.).
+# Makes chain gaps auditable without requiring operators to infer silence.
+CHAIN_SKIPPED: Final = "chain_skipped"
 
 EVENT_TYPES: Final[frozenset[str]] = frozenset(
     {
@@ -40,6 +44,7 @@ EVENT_TYPES: Final[frozenset[str]] = frozenset(
         COMPLETED,
         FAILED,
         SUBDIVIDED,
+        CHAIN_SKIPPED,
     }
 )
 
