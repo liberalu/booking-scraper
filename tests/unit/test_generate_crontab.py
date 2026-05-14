@@ -121,5 +121,5 @@ def test_build_crontab_lines_appends_system_health_check():
     lines = build_crontab_lines(jobs)
     health_lines = [line for line in lines if "cron_health_check.py" in line]
     assert len(health_lines) == 1, "exactly one health-check entry expected"
-    assert health_lines[0].startswith("0 9 * * *")
+    assert health_lines[0].startswith("0 3,9,15,21 * * *")
     assert ">> /var/log/scraper.log 2>&1" in health_lines[0]
