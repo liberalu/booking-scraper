@@ -238,6 +238,23 @@ def _parse_phase(phase: str) -> tuple[str, str]:
     return "scan", "delta"
 
 
+def _fetch_rescrape_flags(session: Session, run_ids: list[int]) -> dict[int, bool]:
+    """Return {run_id: True} for scan runs whose STARTED event has rescrape=true."""
+    if not run_ids:
+        return {}
+    from sqlalchemy import text
+
+    rows = session.execute(
+        text(
+            "SELECT run_id, (payload->>'rescrape')::boolean "
+            "FROM scrape_run_events "
+            "WHERE event_type = 'started' AND run_id = ANY(:ids)"
+        ),
+        {"ids": run_ids},
+    ).all()
+    return {row[0]: True for row in rows if row[1]}
+
+
 _DISCOVER_STRATEGIES = frozenset(
     ("sitemap", "categories", "full_crawl", "graphql", "lupasearch")
 )
@@ -263,6 +280,7 @@ def _run_dict(
     vi_count: int = 0,
     items_added: int | None = None,
     items_updated: int | None = None,
+    rescrape: bool = False,
 ) -> dict[str, Any]:
     started_h = 0.0
     if run.started_at:
@@ -271,6 +289,8 @@ def _run_dict(
             start = start.replace(tzinfo=UTC)
         started_h = (datetime.now(UTC) - start).total_seconds() / 3600
     phase_type, phase_mode = _parse_phase(run.phase)
+    if phase_type == "scan" and rescrape:
+        phase_mode = "full"
     _added = items_added if items_added is not None else run.items_added
     _updated = items_updated if items_updated is not None else run.items_updated
     return {
@@ -392,11 +412,13 @@ def api_overview(session: Session = Depends(get_db)) -> dict[str, Any]:
         )
 
     terminal = _run_terminal_counts(session, [r.id for r in recent_runs])
+    rescrape_flags = _fetch_rescrape_flags(session, [r.id for r in recent_runs])
     return {
         "stats": {**stats, "open_issues": open_issues},
         "completeness": [{"field": c["field"], "pct": c["pct"]} for c in completeness],
         "recent_runs": [
-            _run_dict(r, terminal_count=terminal.get(r.id)) for r in recent_runs
+            _run_dict(r, terminal_count=terminal.get(r.id), rescrape=rescrape_flags.get(r.id, False))  # noqa: E501
+            for r in recent_runs
         ],
         "issue_clusters": issue_clusters[:6],
         "shops": shop_cards,
@@ -521,6 +543,7 @@ def api_runs(
     terminal = _run_terminal_counts(session, run_ids)
     vi_counts = _run_vi_counts(session, run_ids)
     real_counts = _run_real_item_counts(session, run_ids)
+    rescrape_flags = _fetch_rescrape_flags(session, run_ids)
     return {
         "runs": [
             _run_dict(
@@ -529,6 +552,7 @@ def api_runs(
                 vi_count=vi_counts.get(r.id, 0),
                 items_added=real_counts.get(r.id, {}).get("items_added"),
                 items_updated=real_counts.get(r.id, {}).get("items_updated"),
+                rescrape=rescrape_flags.get(r.id, False),
             )
             for r in runs
         ],
@@ -1266,6 +1290,7 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
     terminal = _run_terminal_counts(session, [run_id]).get(run_id)
     close_reason = get_run_close_reason(session, run)
     item_counts = get_run_item_counts(session, run_id)
+    rescrape = _fetch_rescrape_flags(session, [run_id]).get(run_id, False)
     pending_count = (
         session.query(func.count(ScrapeUrlItem.id))
         .filter(
@@ -1275,7 +1300,7 @@ def api_run_detail(run_id: int, session: Session = Depends(get_db)) -> dict[str,
         .scalar()
         or 0
     )
-    base = _run_dict(run, terminal_count=terminal)
+    base = _run_dict(run, terminal_count=terminal, rescrape=rescrape)
     base.update(item_counts)
     base["items"] = item_counts["items_added"] + item_counts["items_updated"]
     events = get_scrape_run_events(session, run_id)
@@ -1642,7 +1667,11 @@ def api_shop_book_detail(
             .all()
         )
         t_map = _run_terminal_counts(session, [r.id for r in runs_q])
-        recent_runs = [_run_dict(r, terminal_count=t_map.get(r.id)) for r in runs_q]
+        rf_map = _fetch_rescrape_flags(session, [r.id for r in runs_q])
+        recent_runs = [
+            _run_dict(r, terminal_count=t_map.get(r.id), rescrape=rf_map.get(r.id, False))  # noqa: E501
+            for r in runs_q
+        ]
 
     # URL reachability + classification — join by shop_book_id FK
     linked_url = (
@@ -1961,6 +1990,7 @@ def api_shop_detail(
     runs = get_shop_runs(session, shop.id, limit=20)
     last_run = runs[0] if runs else None
     terminal = _run_terminal_counts(session, [r.id for r in runs])
+    rescrape_flags = _fetch_rescrape_flags(session, [r.id for r in runs])
     rate_settings = {s.key: s.value for s in shop.settings}
     return {
         "id": shop.id,
@@ -1971,7 +2001,10 @@ def api_shop_detail(
         "last_run_ago": _rel(last_run.started_at if last_run else None),
         "last_run_status": last_run.status if last_run else "—",
         "field_stats": field_stats,
-        "recent_runs": [_run_dict(r, terminal_count=terminal.get(r.id)) for r in runs],
+        "recent_runs": [
+            _run_dict(r, terminal_count=terminal.get(r.id), rescrape=rescrape_flags.get(r.id, False))  # noqa: E501
+            for r in runs
+        ],
         "rate_settings": rate_settings,
         "discover_strategies": _configured_discover_strategies(shop.name),
     }
