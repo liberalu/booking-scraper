@@ -51,6 +51,121 @@ function ShopMark({ name, allShops }) {
   );
 }
 
+function HFBookListings({ book, shopNames, lowestPrice, goto }) {
+  const shops = book.shops || [];
+
+  if (shops.length === 0) {
+    return (
+      <HFCard>
+        <div style={{ padding: 20 }}>
+          <HFEmptyState
+            title="Not listed anywhere we track"
+            sub="No shop listings have been linked to this canonical book yet."
+          />
+        </div>
+      </HFCard>
+    );
+  }
+
+  return (
+    <HFCard
+      title="Listings across shops"
+      sub={`${shops.length} shop${shops.length !== 1 ? 's' : ''} · price, stock, last scrape`}
+    >
+      <HFTable
+        columns={[
+          { key: 'shop', label: 'Shop', w: '1.1fr', cell: (v) => (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <ShopMark name={v} allShops={shopNames} />
+              <span style={{ color: 'var(--hf-ink)', fontWeight: 500 }}>{v}</span>
+            </span>
+          )},
+          { key: 'price', label: 'Price', w: '0.9fr', align: 'right', cell: (_, r) => {
+            if (r.price == null) return <span style={{ color: 'var(--hf-ink4)' }}>—</span>;
+            const n = Number(r.price);
+            const isBest = lowestPrice != null && Math.abs(n - lowestPrice) < 0.001;
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, justifyContent: 'flex-end' }}>
+                <span style={{
+                  fontFamily: 'var(--hf-mono)',
+                  color: isBest ? 'var(--hf-ok-ink)' : 'var(--hf-ink)',
+                  fontWeight: isBest ? 600 : 500,
+                }}>
+                  {new Intl.NumberFormat('lt-LT', { style: 'currency', currency: 'EUR' }).format(n)}
+                </span>
+                {isBest && (
+                  <span style={{
+                    fontSize: 10, color: 'var(--hf-ok-ink)',
+                    fontWeight: 600, letterSpacing: 0.4,
+                  }}>BEST</span>
+                )}
+              </span>
+            );
+          }},
+          { key: 'delta', label: 'Δ 30d', w: '0.55fr', align: 'right',
+            cell: () => <span style={{ color: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>—</span>
+          },
+          { key: 'in_stock', label: 'Stock', w: '0.7fr', cell: (v) => (
+            v
+              ? <HFPill tone="ok" soft>In stock</HFPill>
+              : <HFPill tone="warn" soft>Out</HFPill>
+          )},
+          { key: 'last_seen_at', label: 'Last scrape', w: '0.85fr', cell: (v) =>
+            v
+              ? <time dateTime={v}>{formatRelative(v)}</time>
+              : <span style={{ color: 'var(--hf-ink4)' }}>—</span>
+          },
+          { key: 'url', label: '', w: '90px', align: 'right', cell: (v, r) =>
+            v
+              ? <a
+                  href={v}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open at ${r.shop} (new tab)`}
+                  title={`Open at ${r.shop}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    minWidth: 32, minHeight: 32, padding: '0 8px',
+                    color: 'var(--hf-accent-ink)',
+                    fontFamily: 'var(--hf-mono)', fontSize: 11,
+                    textDecoration: 'none',
+                  }}
+                >Visit ↗</a>
+              : '—'
+          },
+        ]}
+        rows={shops}
+      />
+    </HFCard>
+  );
+}
+
+function HFBookPricesStub() {
+  return (
+    <HFCard title="Price history" sub="Coming in a future release">
+      <div style={{ padding: 32 }}>
+        <HFEmptyState
+          title="Price history not yet available"
+          sub="Once the price history endpoint is added, this tab will show per-shop price trends over time."
+        />
+      </div>
+    </HFCard>
+  );
+}
+
+function HFBookConflictsStub() {
+  return (
+    <HFCard title="Conflicts" sub="Coming in a future release">
+      <div style={{ padding: 32 }}>
+        <HFEmptyState
+          title="Conflict detection not yet available"
+          sub="This tab will highlight fields that differ between the canonical record and individual shop listings."
+        />
+      </div>
+    </HFCard>
+  );
+}
+
 function HFBook({ nav, goto, params }) {
   const HF = getHF();
   const [book, setBook] = React.useState(null);
