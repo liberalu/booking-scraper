@@ -633,6 +633,7 @@ def _spawn_scrapy_in_container(
     mode: str = "delta",
     urls: str = "",
     cron_job_id: int | None = None,
+    source_run_id: int | None = None,
 ) -> None:
     """Fire-and-forget a `scrapy crawl` inside the scraper container.
 
@@ -676,10 +677,11 @@ def _spawn_scrapy_in_container(
     log_path = compute_spawn_log_path("operator", shop)
     wrapped = _wrap_cmd_for_logging(cmd, log_path)
     logger.info(
-        "spawn_scrapy: phase=%s shop=%s log=%s",
+        "spawn_scrapy: phase=%s shop=%s log=%s source_run_id=%s",
         phase,
         shop,
         log_path,
+        source_run_id if source_run_id is not None else "-",
     )
 
     containers[0].exec_run(
@@ -880,7 +882,8 @@ def api_rerun_run(run_id: int, session: Session = Depends(get_db)) -> dict[str, 
         strategy = ""
 
     _spawn_scrapy_in_container(
-        phase=phase, shop=run.shop.name, strategy=strategy, mode="delta"
+        phase=phase, shop=run.shop.name, strategy=strategy, mode="delta",
+        source_run_id=run_id,
     )
     return {"status": "started", "rerun_of": run_id, "shop": run.shop.name}
 
@@ -976,7 +979,8 @@ def api_continue_run(run_id: int, session: Session = Depends(get_db)) -> dict[st
 
     try:
         _spawn_scrapy_in_container(
-            phase=cont_phase, shop=shop_name, strategy=cont_strategy, mode="delta"
+            phase=cont_phase, shop=shop_name, strategy=cont_strategy, mode="delta",
+            source_run_id=run_id,
         )
     except Exception:
         session.query(ScrapeRun).filter(ScrapeRun.id == run_id).update(
@@ -1158,7 +1162,8 @@ def api_retry_run_failures(
     try:
         assert shop_name is not None  # guarded above for is_terminal branch
         _spawn_scrapy_in_container(
-            phase="scan", shop=shop_name, strategy="", mode="delta"
+            phase="scan", shop=shop_name, strategy="", mode="delta",
+            source_run_id=run_id,
         )
     except Exception:
         session.query(ScrapeRun).filter(ScrapeRun.id == run_id).update(
