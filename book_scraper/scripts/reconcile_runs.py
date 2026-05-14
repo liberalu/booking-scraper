@@ -38,7 +38,15 @@ RECONCILE_STAGGER_SECONDS = 5.0
 
 
 def _spawn_restart(shop: str, phase: str) -> None:
-    """Spawn a detached scrapy process inside the current container."""
+    """Spawn a detached scrapy process inside the current container.
+
+    Stdout+stderr are captured to /var/log/scrapy_runs/spawn-<ts>-reconcile-restart-<shop>.log
+    via book_scraper.spawn_logging.open_spawn_log. Before this fix (CODEOBS-01),
+    both streams went to DEVNULL — any crash before the first heartbeat tick was
+    invisible (same bug-class as run #427 and patogupirkti runs 363–366).
+    """
+    from book_scraper.spawn_logging import open_spawn_log
+
     if phase.startswith("discover_"):
         crawl_phase = "discover"
         strategy = phase[len("discover_") :]
@@ -53,15 +61,19 @@ def _spawn_restart(shop: str, phase: str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = "/app"
 
-    subprocess.Popen(
-        cmd,
-        cwd="/app",
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    print(f"  Spawned restart: {' '.join(cmd)}")
+    log_fd, log_path = open_spawn_log("reconcile-restart", shop)
+    try:
+        subprocess.Popen(
+            cmd,
+            cwd="/app",
+            env=env,
+            stdout=log_fd,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        log_fd.close()
+    print(f"  Spawned restart: {' '.join(cmd)} (log: {log_path})")
 
 
 def _select_spawns(
