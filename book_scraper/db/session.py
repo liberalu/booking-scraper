@@ -1,11 +1,15 @@
-from sqlalchemy import Engine, create_engine
+import logging
+
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
+
+_pool_logger = logging.getLogger("book_scraper.db.pool")
 
 
 def get_engine(database_url: str) -> Engine:
     # Use sync engine for Scrapy pipelines (Scrapy runs in Twisted reactor)
     sync_url = database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
-    return create_engine(
+    engine = create_engine(
         sync_url,
         # Validate pooled connections before checkout — eliminates "server closed
         # the connection unexpectedly" after idle TCP drops by NAT/firewall/Postgres.
@@ -43,6 +47,31 @@ def get_engine(database_url: str) -> Engine:
             "keepalives_count": 3,
         },
     )
+
+    @event.listens_for(engine, "checkout")
+    def _pool_checkout(dbapi_conn, conn_record, conn_proxy) -> None:  # type: ignore[misc]
+        pool = engine.pool
+        overflow = getattr(pool, "overflow", lambda: 0)
+        overflow_val = overflow() if callable(overflow) else overflow
+        if overflow_val > 0:
+            size = getattr(pool, "size", lambda: 0)
+            size_val = size() if callable(size) else size
+            checked_out = getattr(pool, "checkedout", lambda: 0)
+            checked_out_val = checked_out() if callable(checked_out) else checked_out
+            _pool_logger.warning(
+                "Pool overflow on checkout: size=%d checkedout=%d overflow=%d",
+                size_val,
+                checked_out_val,
+                overflow_val,
+            )
+
+    @event.listens_for(engine, "invalidate")
+    def _pool_invalidate(dbapi_conn, conn_record, exception) -> None:  # type: ignore[misc]
+        _pool_logger.warning(
+            "Pool connection invalidated: exception=%r", exception
+        )
+
+    return engine
 
 
 def get_session_factory(database_url: str) -> sessionmaker[Session]:
