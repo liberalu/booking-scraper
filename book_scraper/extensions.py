@@ -567,10 +567,19 @@ class HeartbeatExtension:  # pragma: no cover
         d.addCallbacks(self._on_tick_done, self._on_tick_failed)
 
     def _on_tick_done(self, status: str | None) -> None:
-        # Operator-requested stop: the dashboard flipped status to
-        # 'stopping'. Tear the spider down cleanly. The spider's
-        # `closed()` callback transitions the row to 'failed' with
-        # error_reason='stopped_by_operator'.
+        # Worker-thread result lands here on the reactor thread.
+        if status is None:
+            # Row vanished (deleted by operator, or by a parallel cleanup).
+            # The spider has no live row to refresh — tear it down so the
+            # process exits cleanly instead of ghost-ticking forever
+            # (CODEOBS-03). Use a distinct close reason so the postmortem
+            # tells "operator deleted my row" from "operator pressed Stop".
+            logger.warning(
+                "Heartbeat tick: scrape_runs row for run %d vanished — tearing down spider",
+                self._run_id,
+            )
+            self._signal_stop_with_reason("row_vanished")
+            return
         if status == "stopping":
             self._signal_stop()
             return
@@ -601,6 +610,21 @@ class HeartbeatExtension:  # pragma: no cover
             return
         logger.info("Run %d transitioned to 'stopping' — closing spider", self._run_id)
         engine.close_spider(spider, "stopped_by_operator")
+
+    def _signal_stop_with_reason(self, reason: str) -> None:
+        """Close the spider with a specific reason. Used by CODEOBS-03 to
+        distinguish row-vanished from operator-requested stop."""
+        spider = getattr(self.crawler, "spider", None)
+        engine = getattr(self.crawler, "engine", None)
+        if spider is None or engine is None:
+            logger.warning(
+                "Heartbeat saw '%s' for run %d but spider/engine missing",
+                reason,
+                self._run_id,
+            )
+            return
+        logger.info("Run %d closing with reason '%s'", self._run_id, reason)
+        engine.close_spider(spider, reason)
 
     def _write_heartbeat(self, run_id: int) -> str | None:
         """Tick the heartbeat and report the run's current status.
