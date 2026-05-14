@@ -8,6 +8,14 @@ function HFBooks({ nav, goto }) {
   const [data, setData] = React.useState({ books: [], total: 0, pages: 1 });
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(1);
+  const [stats, setStats] = React.useState(null);
+
+  React.useEffect(() => {
+    fetch('/api/books/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setStats(d); })
+      .catch(() => {});
+  }, []);
 
   // Filter state (server-side filters)
   const [q, setQ] = React.useState('');
@@ -71,11 +79,11 @@ function HFBooks({ nav, goto }) {
       </>}
     >
       <HFKpiStrip items={[
-        { label:'Total titles',     value:data.total.toLocaleString(), delta:<span style={{color:HF.okInk}}>▲ 38 today</span> },
-        { label:'Enriched (ISBN-DB)', value:'5,210', delta:<span style={{color:HF.ink3}}>85.0%</span> },
-        { label:'Multi-shop',       value:'4,287', delta:<span style={{color:HF.ink3}}>69.9% in 2+ shops</span> },
-        { label:'Missing ISBN',     value:'923',  delta:<span style={{color:HF.warnInk}}>15.0%</span>, tone:'warn' },
-        { label:'Conflicts',        value:'47',    delta:<span style={{color:HF.errInk}}>needs review</span>, tone:'err' },
+        { label:'Total titles',     value: stats ? stats.total.toLocaleString() : data.total.toLocaleString() },
+        { label:'Enriched (ISBN-DB)', value: stats ? stats.enriched.toLocaleString() : '—', delta: stats ? <span style={{color:HF.ink3}}>{stats.enriched_pct}%</span> : null },
+        { label:'Multi-shop',       value: stats ? stats.multi_shop.toLocaleString() : '—', delta: stats ? <span style={{color:HF.ink3}}>{stats.avg_shops} shops avg</span> : null },
+        { label:'Single-shop',      value: stats ? stats.single_shop.toLocaleString() : '—', delta: stats && stats.total ? <span style={{color:HF.ink3}}>{Math.round(stats.single_shop / stats.total * 100)}%</span> : null },
+        { label:'Conflicts',        value:'—', delta:<span style={{color:HF.ink3}}>n/a</span> },
       ]}/>
 
       <HFCard style={{marginBottom:HF.gap, overflow:'visible'}} padding={12}>

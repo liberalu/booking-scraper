@@ -1588,7 +1588,7 @@ def _get_validation_issues_page(
     per_page: int,
 ) -> tuple[list[dict[str, Any]], int]:
     query = (
-        session.query(ValidationIssue, ScrapeRun, ShopBook, DiscoveredUrl)
+        session.query(ValidationIssue, ScrapeRun, ShopBook, DiscoveredUrl, Shop)
         .join(ScrapeRun, ValidationIssue.last_seen_run_id == ScrapeRun.id)
         .outerjoin(ShopBook, ValidationIssue.shop_book_id == ShopBook.id)
         .outerjoin(
@@ -1596,6 +1596,7 @@ def _get_validation_issues_page(
             (DiscoveredUrl.url == ValidationIssue.url)
             & (DiscoveredUrl.shop_id == ScrapeRun.shop_id),
         )
+        .outerjoin(Shop, Shop.id == ScrapeRun.shop_id)
     )
 
     if state in {"new", "acknowledged", "snoozed", "resolved"}:
@@ -1637,7 +1638,7 @@ def _get_validation_issues_page(
 
     rows = query.offset((page - 1) * per_page).limit(per_page).all()
     result: list[dict[str, Any]] = []
-    for issue, run, shop_book, disc_url in rows:
+    for issue, run, shop_book, disc_url, shop in rows:
         result.append(
             {
                 "id": issue.id,
@@ -1657,6 +1658,8 @@ def _get_validation_issues_page(
                 "snoozed_until": issue.snoozed_until.isoformat() if issue.snoozed_until else None,
                 "shop_book_id": issue.shop_book_id,
                 "shop_book_title": shop_book.title if shop_book else None,
+                "shop_id": run.shop_id,
+                "shop_name": shop.name if shop else None,
                 "url_type": disc_url.url_type if disc_url else None,
                 "book_type": shop_book.type if shop_book else None,
                 "lifecycle_state": issue.lifecycle_state,
@@ -1685,12 +1688,16 @@ def _get_scrape_failures_page(
     via the range/prefix logic in `severity_for_failure`."""
     from sqlalchemy import and_, or_
 
-    query = session.query(ScrapeFailure, ShopBook).outerjoin(
-        ShopBook,
-        and_(
-            ShopBook.shop_id == ScrapeFailure.shop_id,
-            ShopBook.url == ScrapeFailure.url,
-        ),
+    query = (
+        session.query(ScrapeFailure, ShopBook, Shop)
+        .outerjoin(
+            ShopBook,
+            and_(
+                ShopBook.shop_id == ScrapeFailure.shop_id,
+                ShopBook.url == ScrapeFailure.url,
+            ),
+        )
+        .outerjoin(Shop, Shop.id == ScrapeFailure.shop_id)
     )
 
     if state in {"new", "acknowledged", "snoozed", "resolved"}:
@@ -1760,7 +1767,7 @@ def _get_scrape_failures_page(
 
     rows = query.offset((page - 1) * per_page).limit(per_page).all()
     result: list[dict[str, Any]] = []
-    for failure, shop_book in rows:
+    for failure, shop_book, shop in rows:
         result.append(
             {
                 "id": failure.id,
@@ -1776,6 +1783,8 @@ def _get_scrape_failures_page(
                 "scrape_run_id": failure.run_id,
                 "shop_book_id": shop_book.id if shop_book else None,
                 "shop_book_title": shop_book.title if shop_book else None,
+                "shop_id": failure.shop_id,
+                "shop_name": shop.name if shop else None,
                 "lifecycle_state": failure.lifecycle_state,
                 "added_at": failure.occurred_at,
                 "severity": severity_for_failure(
@@ -2812,6 +2821,40 @@ def list_books(
         "page": page,
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page if per_page else 1,
+    }
+
+
+def get_book_stats(session: Session) -> dict[str, Any]:
+    """Aggregate stats for the books KPI strip."""
+    from book_scraper.db.models import Book, ShopBook
+
+    total = session.execute(select(func.count(Book.id))).scalar_one()
+    enriched = session.execute(
+        select(func.count(Book.id)).where(Book.data_source != "shop_inferred")
+    ).scalar_one()
+
+    # Shop counts per book (only books that have shop_books)
+    book_shop_counts = session.execute(
+        select(
+            ShopBook.book_id,
+            func.count(ShopBook.id).label("n"),
+        )
+        .where(ShopBook.book_id.isnot(None))
+        .group_by(ShopBook.book_id)
+    ).all()
+
+    multi_shop = sum(1 for _, n in book_shop_counts if n >= 2)
+    single_shop = sum(1 for _, n in book_shop_counts if n == 1)
+    total_listings = sum(n for _, n in book_shop_counts)
+    avg_shops = total_listings / len(book_shop_counts) if book_shop_counts else 0
+
+    return {
+        "total": total,
+        "enriched": enriched,
+        "enriched_pct": round(enriched / total * 100, 1) if total else 0,
+        "multi_shop": multi_shop,
+        "single_shop": single_shop,
+        "avg_shops": round(avg_shops, 1),
     }
 
 

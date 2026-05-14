@@ -11,14 +11,20 @@ function HFBook({ nav, goto, params }) {
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
+  const [history, setHistory] = React.useState(null);
 
   React.useEffect(() => {
     if (!bookId) { setLoading(false); return; }
     setLoading(true);
     setNotFound(false);
+    setHistory(null);
     fetch(`/api/books/${bookId}`)
       .then(r => { if (r.status === 404) { setNotFound(true); setLoading(false); return null; } return r.json(); })
       .then(d => { if (d) { setData(d); setLoading(false); } });
+    fetch(`/api/books/${bookId}/prices`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setHistory(d.series || []); })
+      .catch(() => {});
   }, [bookId]);
 
   if (loading) return <div style={{padding:40, color: HF.ink3, fontFamily: HF.sans}}>Loading…</div>;
@@ -55,6 +61,26 @@ function HFBook({ nav, goto, params }) {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
+  // Build a lookup of {shop -> price ~30 days ago} from real history.
+  // The Δ 30d column subtracts current price from this baseline.
+  const historyByShop = {};
+  (history || []).forEach(h => { historyByShop[h.shop] = h.series || []; });
+  function prevPriceFor(shopName) {
+    const series = historyByShop[shopName];
+    if (!series || series.length === 0) return null;
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+    // Pick the point closest to 30 days ago (or the oldest available point)
+    let best = null;
+    for (const p of series) {
+      const t = new Date(p.date).getTime();
+      if (t > cutoff) break;
+      best = p;
+    }
+    if (!best) best = series[0];
+    const v = parseFloat(best.price);
+    return isNaN(v) ? null : v;
+  }
+
   // One row per shop that lists this book. Field names mirror what
   // `book_detail` returns: shop, shop_book_id, url, price, in_stock,
   // last_seen_at, title, author, year, isbn, publisher, format, match_method.
@@ -64,7 +90,7 @@ function HFBook({ nav, goto, params }) {
     sbStatus: s.in_stock ? 'active' : 'out',
     url: s.url,
     price: s.price != null ? parseFloat(s.price) : null,
-    prev: null,
+    prev: prevPriceFor(s.shop),
     currency: 'EUR',
     stock: s.in_stock ? 'in stock' : 'out of stock',
     lastSeen: fmtRelative(s.last_seen_at),
@@ -140,7 +166,7 @@ function HFBook({ nav, goto, params }) {
       </HFCard>
 
       {tab === 'overview' && <HFBookListings HF={HF} shops={shops} goto={goto} methodTone={methodTone} sbTone={sbTone} lowest={lowest}/>}
-      {tab === 'prices'   && <HFBookPrices   HF={HF} shops={shops} lowest={lowest} bookId={bookId}/>}
+      {tab === 'prices'   && <HFBookPrices   HF={HF} shops={shops} lowest={lowest} history={history}/>}
       {tab === 'metadata' && <HFBookMetadata HF={HF} book={book} shops={shops}/>}
     </HFShell>
   );
@@ -211,16 +237,7 @@ function HFBookListings({ HF, shops, goto, methodTone, sbTone, lowest }) {
 
 // ─────────────────────── Prices tab ───────────────────────
 
-function HFBookPrices({ HF, shops, lowest, bookId }) {
-  const [history, setHistory] = React.useState(null);
-  React.useEffect(() => {
-    if (!bookId) return;
-    fetch(`/api/books/${bookId}/prices`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setHistory(d.series || []); })
-      .catch(() => {});
-  }, [bookId]);
-
+function HFBookPrices({ HF, shops, lowest, history }) {
   if (shops.length === 0 || shops.every(s => s.price == null)) {
     return <HFCard><div style={{padding:40, textAlign:'center', color:HF.ink4}}>No price data available.</div></HFCard>;
   }

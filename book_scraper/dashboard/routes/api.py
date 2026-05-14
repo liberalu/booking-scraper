@@ -1877,6 +1877,13 @@ def api_books(
     )
 
 
+@router.get("/books/stats")
+def api_book_stats(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from book_scraper.dashboard.queries import get_book_stats
+
+    return get_book_stats(session)
+
+
 @router.get("/books/{book_id}")
 def api_book_detail(book_id: int, session: Session = Depends(get_db)) -> dict[str, Any]:
     from book_scraper.dashboard.queries import book_detail
@@ -2560,6 +2567,8 @@ def api_issues(
             "scrape_run_id": r["scrape_run_id"],
             "shop_book_id": r["shop_book_id"],
             "shop_book_title": r["shop_book_title"],
+            "shop_id": r.get("shop_id"),
+            "shop_name": r.get("shop_name"),
             "url_type": r.get("url_type"),
             "book_type": r.get("book_type"),
             "lifecycle_state": r["lifecycle_state"],
