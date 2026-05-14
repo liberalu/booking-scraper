@@ -101,7 +101,34 @@ function HFCron({ nav, goto }) {
         <HFTable
           onRowClick={(r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus, chain_to_id: r.chain_to_id, chain_to_name: r.chain_to_name })}
           columns={[
-            { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true, cell:(v,r) => <span style={{color: r.enabled? 'var(--hf-ink)' : 'var(--hf-ink4)', fontWeight:500}}>{v}</span> },
+            { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true,
+              cell:(v, r) => {
+                const depth = r.depth || 0;
+                return (
+                  <span style={{display:'inline-flex', alignItems:'center', minWidth:0}}>
+                    {depth > 0 && (
+                      <span style={{
+                        display:'inline-flex', alignItems:'center',
+                        marginRight:6, flexShrink:0, color:'var(--hf-ink5)',
+                      }}>
+                        <svg width="18" height="16" viewBox="0 0 18 16" fill="none" style={{flexShrink:0}}>
+                          <path d="M5 0 V8 Q5 11 8 11 H16"
+                                stroke="var(--hf-ink5)"
+                                strokeWidth="1.25"
+                                strokeLinecap="round"
+                                fill="none"/>
+                        </svg>
+                      </span>
+                    )}
+                    <span style={{
+                      color: r.enabled ? 'var(--hf-ink)' : 'var(--hf-ink4)',
+                      fontWeight:500,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                    }}>{v}</span>
+                  </span>
+                );
+              }
+            },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
             { key:'shop', label:'Shop', w:'0.6fr', sortable:true },
             { key:'lastStatus', label:'Last', w:'0.7fr', sortable:true, cell:(v,r) => <span style={{display:'inline-flex', alignItems:'center', gap:7}}><HFDot tone={v==='ok'?'ok':'err'}/> <span style={{color: v==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>{r.last}</span></span> },
