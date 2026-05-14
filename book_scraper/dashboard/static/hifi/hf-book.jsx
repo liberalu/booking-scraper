@@ -137,11 +137,29 @@ function HFBook({ nav, goto, params }) {
         <HFPill tone="accent">matched · {matched} shops</HFPill>
         {pending > 0 && <HFPill tone="warn">{pending} pending review</HFPill>}
       </span>}
-      subtitle={<span style={{fontSize:13}}>
-        by <span style={{color:HF.ink2, fontWeight:500}}>{book.author}</span>
-        {' · '}<span style={{fontFamily:HF.mono, color:HF.ink3}}>ISBN {book.isbn}</span>
-        {' · '}{book.publisher} · {book.year}
-        {' · '}<span style={{color:HF.ink3}}>first matched {book.firstMatched}</span>
+      subtitle={<span style={{fontSize:13, display:'flex', flexDirection:'column', gap:4}}>
+        <span>
+          by <span style={{color:HF.ink2, fontWeight:500}}>{book.author}</span>
+          {' · '}<span style={{fontFamily:HF.mono, color:HF.ink3}}>ISBN {book.isbn}</span>
+          {' · '}{book.publisher} · {book.year}
+          {' · '}<span style={{color:HF.ink3}}>first matched {book.firstMatched}</span>
+        </span>
+        {book.dataSource === 'ibiblioteka' && (
+          <span style={{display:'flex', gap:16, alignItems:'center'}}>
+            {book.ibibliotekaPageUrl && (
+              <a href={book.ibibliotekaPageUrl} target="_blank" rel="noopener noreferrer"
+                 style={{color:HF.accent, textDecoration:'none', display:'flex', alignItems:'center', gap:4}}>
+                ibiblioteka.lt →
+              </a>
+            )}
+            {book.scrapedUrl && (
+              <a href={book.scrapedUrl} target="_blank" rel="noopener noreferrer"
+                 style={{color:HF.ink3, textDecoration:'none', fontFamily:HF.mono, fontSize:11, display:'flex', alignItems:'center', gap:4}}>
+                API source →
+              </a>
+            )}
+          </span>
+        )}
       </span>}
       breadcrumb={<>
         <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-books');}} style={{color:HF.ink3, textDecoration:'none'}}>Catalog</a>
@@ -752,175 +770,6 @@ function btnSm(HF) {
     color:HF.ink2, borderRadius:5, cursor:'pointer',
     fontFamily:HF.sans,
   };
-}
-
-// ─────────────────────── Conflicts tab ───────────────────────
-
-function HFBookConflicts({ HF, book, shops }) {
-  // Each shop's per-dimension agreement with canonical. Y/N/?/~ semantics:
-  //   true  → matches canonical
-  //   false → conflicts with canonical
-  //   null  → not provided / unknown
-  //   'fuzzy' → close but not exact (e.g., title diacritic / author abbreviation)
-  const dims = ['isbn','title','author','year','binding','translator','cover'];
-  const dimLabel = { isbn:'ISBN', title:'Title', author:'Author', year:'Year', binding:'Binding', translator:'Translator', cover:'Cover artist' };
-
-  const rows = [
-    { shop:'vaga',         method:'isbn',         confidence:1.00,
-      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:true,  translator:true,  cover:true   } },
-    { shop:'knygos.lt',    method:'isbn',         confidence:1.00,
-      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:true,  translator:true,  cover:null   } },
-    { shop:'patogu',       method:'title+author', confidence:0.94,
-      dim:{ isbn:true,  title:'fuzzy', author:true,    year:true,  binding:'fuzzy', translator:true, cover:null  } },
-    { shop:'krisostomus',  method:'manual',       confidence:1.00,
-      dim:{ isbn:true,  title:true,    author:true,    year:true,  binding:false, translator:null,  cover:false  } },
-    { shop:'humanitas',    method:'isbn',         confidence:1.00,
-      dim:{ isbn:true,  title:true,    author:true,    year:false, binding:true,  translator:'fuzzy', cover:null } },
-    { shop:'mintis',       method:'title+author', confidence:0.81,
-      dim:{ isbn:null,  title:true,    author:'fuzzy', year:true,  binding:null,  translator:null,  cover:null   } },
-  ];
-
-  // Buckets: classify each shop by which combination of dims agreed/conflicted.
-  const buckets = [
-    {
-      id:'isbn-but-not-binding',
-      title:'Matched by ISBN — but binding disagrees',
-      desc:'Same ISBN-13, but the shop reports a different physical edition (e.g. hardcover vs paperback).',
-      tone:'warn', icon:'⚠',
-      test: r => r.dim.isbn === true && r.dim.binding === false,
-      action:'Likely a different edition reusing the ISBN. Decide: split into a new book, or accept as a variant.',
-    },
-    {
-      id:'isbn-but-not-cover',
-      title:'Matched by ISBN — but cover artist disagrees',
-      desc:'ISBN matches, but credited cover artist differs from canonical.',
-      tone:'warn', icon:'⚠',
-      test: r => r.dim.isbn === true && r.dim.cover === false,
-      action:'Cover may have been re-illustrated for a regional reprint. Verify with the shop page.',
-    },
-    {
-      id:'isbn-but-not-year',
-      title:'Matched by ISBN — but year disagrees',
-      desc:'ISBN matches, but the shop reports a different publication year.',
-      tone:'warn', icon:'⚠',
-      test: r => r.dim.isbn === true && r.dim.year === false,
-      action:'Often a re-print sharing the ISBN. Accept the canonical year, or escalate if it is a true different edition.',
-    },
-    {
-      id:'fuzzy-title-author',
-      title:'Matched by title + author — fuzzy on either',
-      desc:'No ISBN was used; we matched on title and/or author with fuzzy similarity below 1.0.',
-      tone:'accent', icon:'~',
-      test: r => r.method === 'title+author' && (r.dim.title === 'fuzzy' || r.dim.author === 'fuzzy'),
-      action:'Inspect the shop title — diacritics, translated subtitle, or initials (e.g. "Y. N. Harari") are common.',
-    },
-    {
-      id:'manual-no-isbn-confirm',
-      title:'Manual match — fields ambiguous',
-      desc:'An operator linked this shop manually. Some fields the operator did not verify still differ from canonical.',
-      tone:'accent', icon:'M',
-      test: r => r.method === 'manual' && Object.values(r.dim).some(v => v === false),
-      action:'Sanity-check the operator-confirmed fields against any conflicts flagged here.',
-    },
-    {
-      id:'isbn-missing',
-      title:'No ISBN provided by shop',
-      desc:'Shop omits ISBN entirely; match relies on title+author similarity.',
-      tone:'warn', icon:'?',
-      test: r => r.dim.isbn == null,
-      action:'Lower-confidence match. Consider routing to the review queue if confidence < 0.85.',
-    },
-  ];
-
-  const tagged = buckets.map(b => ({ ...b, hits: rows.filter(b.test).map(r => r.shop) }));
-
-  return (
-    <>
-      <HFKpiStrip items={[
-        { label:'Conflict types',  value:String(tagged.filter(b => b.hits.length).length), delta:<span style={{color:HF.ink3}}>distinct buckets</span> },
-        { label:'Shops affected',  value:String(new Set(tagged.flatMap(b => b.hits)).size), delta:<span style={{color:HF.warnInk}}>at least one issue</span>, tone:'warn' },
-        { label:'ISBN-but-other',  value:String(tagged.filter(b => b.id.startsWith('isbn-but')).reduce((n,b)=>n+b.hits.length,0)), delta:<span style={{color:HF.errInk}}>could be wrong edition</span>, tone:'err' },
-        { label:'Fuzzy / manual',  value:String(tagged.filter(b => b.id.includes('fuzzy') || b.id.startsWith('manual')).reduce((n,b)=>n+b.hits.length,0)), delta:<span style={{color:HF.ink3}}>review-worthy</span> },
-        { label:'Below 0.85',      value:String(rows.filter(r=>r.confidence < 0.85).length), delta:<span style={{color:HF.warnInk}}>auto-flagged</span>, tone:'warn' },
-      ]}/>
-
-      <div style={{
-        marginTop: HF.gap,
-        padding: `12px ${HF.cardP}px`,
-        background: HF.surface,
-        border: `1px solid ${HF.border}`,
-        borderLeft: `3px solid ${HF.accent}`,
-        borderRadius: 6,
-        fontSize: 12.5, color: HF.ink2, lineHeight: 1.55,
-      }}>
-        Field-by-field values are on the <b style={{color:HF.ink}}>Metadata</b> tab. This view groups shops by <i>which combination of dimensions disagrees</i> with the canonical book — so you can decide whether a mismatch is a re-print, a wrong edition, or a bad match.
-      </div>
-
-      <HFCard title="Conflict types" sub="grouped by which combination of dimensions disagrees" style={{marginTop:HF.gap}} flush>
-        <div>
-          {tagged.filter(b => b.hits.length > 0).map((b, i, arr) => (
-            <div key={b.id} style={{
-              padding:`14px ${HF.cardP}px`,
-              borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-              display:'grid', gridTemplateColumns:'auto 1fr auto', gap:14, alignItems:'flex-start',
-            }}>
-              <span style={{
-                width:30, height:30, borderRadius:7,
-                background: b.tone==='warn'? HF.warnSoft : b.tone==='err'? HF.errSoft : HF.accentSoft,
-                border:`1px solid ${b.tone==='warn'? HF.warnBorder : b.tone==='err'? HF.errBorder : HF.accentBorder}`,
-                color: b.tone==='warn'? HF.warnInk : b.tone==='err'? HF.errInk : HF.accentInk,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:14, fontWeight:700, fontFamily:HF.mono,
-              }}>{b.icon}</span>
-              <div style={{display:'flex', flexDirection:'column', gap:6, minWidth:0}}>
-                <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
-                  <span style={{color:HF.ink, fontWeight:600, fontSize:13}}>{b.title}</span>
-                  <HFPill tone={b.tone}>{b.hits.length} {b.hits.length===1?'shop':'shops'}</HFPill>
-                </div>
-                <span style={{fontSize:12, color:HF.ink3, lineHeight:1.5}}>{b.desc}</span>
-                <div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:2}}>
-                  {b.hits.map(s => (
-                    <span key={s} style={{display:'inline-flex', alignItems:'center', gap:6, padding:'3px 7px 3px 4px', border:`1px solid ${HF.border}`, borderRadius:5, background:HF.surface, fontSize:11.5}}>
-                      <ShopMark name={s} HF={HF}/>
-                      <span style={{color:HF.ink, fontWeight:500}}>{s}</span>
-                    </span>
-                  ))}
-                </div>
-                <span style={{fontSize:11.5, color:HF.ink3, fontStyle:'italic', marginTop:2}}>→ {b.action}</span>
-              </div>
-              <div style={{display:'flex', flexDirection:'column', gap:5}}>
-                <HFButton size="sm">Review</HFButton>
-                <HFButton size="sm" variant="subtle">Dismiss</HFButton>
-              </div>
-            </div>
-          ))}
-        </div>
-      </HFCard>
-    </>
-  );
-}
-
-function DimCell({ v, HF }) {
-  if (v === true) {
-    return <span style={{display:'flex', justifyContent:'center'}}>
-      <span style={{width:18, height:18, borderRadius:4, background:HF.okSoft, border:`1px solid ${HF.okBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>
-        <svg width="10" height="10" viewBox="0 0 8 8" fill="none"><path d="M1.5 4 L3.5 6 L6.5 2" stroke={HF.okInk} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </span>
-    </span>;
-  }
-  if (v === false) {
-    return <span style={{display:'flex', justifyContent:'center'}}>
-      <span style={{width:18, height:18, borderRadius:4, background:HF.errSoft, border:`1px solid ${HF.errBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.errInk, fontSize:11, fontWeight:700}}>✗</span>
-    </span>;
-  }
-  if (v === 'fuzzy') {
-    return <span style={{display:'flex', justifyContent:'center'}}>
-      <span style={{width:18, height:18, borderRadius:4, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.warnInk, fontSize:11, fontWeight:700, fontFamily:HF.mono}}>~</span>
-    </span>;
-  }
-  return <span style={{display:'flex', justifyContent:'center'}}>
-    <span style={{width:18, height:18, borderRadius:4, background:HF.subtle, border:`1px solid ${HF.borderFaint}`, display:'inline-flex', alignItems:'center', justifyContent:'center', color:HF.ink4, fontSize:11, fontFamily:HF.mono}}>—</span>
-  </span>;
 }
 
 Object.assign(window, { HFBook });

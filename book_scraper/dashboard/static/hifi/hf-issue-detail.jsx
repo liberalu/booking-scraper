@@ -15,6 +15,23 @@ function HFIssueDetail({ nav, goto, params }) {
   const [apiData, setApiData] = React.useState(null);
   const [apiLoading, setApiLoading] = React.useState(!!issueId);
   const [apiNotFound, setApiNotFound] = React.useState(false);
+  const [waveTotal, setWaveTotal] = React.useState(1);
+
+  // Fetch real wave total from /api/issues/groups whenever the issue's type changes.
+  // Depends on `apiData?.issue || params?.type` directly so the hook stays above
+  // the early-return guards (Rules of Hooks).
+  React.useEffect(() => {
+    const t = apiData?.issue || params?.type;
+    if (!t) return;
+    fetch(`/api/issues/groups?group_by=type&state=new`)
+      .then(r => r.json())
+      .then(d => {
+        const groups = Array.isArray(d) ? d : (d.groups || []);
+        const row = groups.find(g => g.issue_type === t);
+        if (row && row.total) setWaveTotal(row.total);
+      })
+      .catch(() => {});
+  }, [apiData?.issue, params?.type]);
 
   React.useEffect(() => {
     if (!issueId) { setApiLoading(false); return; }
@@ -65,13 +82,7 @@ function HFIssueDetail({ nav, goto, params }) {
     scrape_run_failed:     'A scrape run ended with status=failed before completing its phase.',
     product_url_non_book:  'A URL classified as a product page resolved to something that is not a book (DVD, stationery, gift card, etc.).',
   };
-  // Wave totals — same scale as the issues page.
-  const WAVE_TOTAL = {
-    missing_price: 36242, match_isbn_drift: 9995, invalid_isbn: 6660,
-    non_product_active: 5107, price_spike: 2929, discover_fetch_failed: 2591,
-    unmatched_has_isbn: 2200, scrape_run_failed: 1218, product_url_non_book: 779,
-  };
-  const waveTotal = WAVE_TOTAL[type] || 1;
+  // (waveTotal fetched above, before the early-return guards)
 
   // Type-specific actions for the Fix-this panel.
   const fixActions = (() => {
