@@ -254,18 +254,29 @@ function HFBookMetadata({ book, authorsByRole }) {
 }
 
 function MultiLineChart({ series, h, shopColors }) {
-  if (!series || !series.length) return null;
+  const containerRef = React.useRef(null);
+  const [W, setW] = React.useState(600);
+
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    const obs = new ResizeObserver(entries => {
+      if (entries[0]) setW(Math.round(entries[0].contentRect.width));
+    });
+    obs.observe(containerRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  if (!series || !series.length) return <div ref={containerRef} style={{ height: h }} />;
 
   const allDates = [...new Set(series.flatMap(s => s.series.map(p => p.date)))].sort();
-  if (!allDates.length) return null;
+  if (!allDates.length) return <div ref={containerRef} style={{ height: h }} />;
 
   const allPrices = series.flatMap(s => s.series.map(p => p.price));
   const minP = Math.min(...allPrices);
   const maxP = Math.max(...allPrices);
   const priceRange = maxP - minP || 1;
 
-  const W = 100;
-  const PAD_L = 8, PAD_R = 4, PAD_T = 8, PAD_B = 20;
+  const PAD_L = 52, PAD_R = 12, PAD_T = 10, PAD_B = 24;
   const chartW = W - PAD_L - PAD_R;
   const chartH = h - PAD_T - PAD_B;
 
@@ -273,53 +284,62 @@ function MultiLineChart({ series, h, shopColors }) {
   const yOf = price => PAD_T + (1 - (price - minP) / priceRange) * chartH;
 
   return (
-    <svg viewBox={`0 0 ${W} ${h}`}
-         style={{ width: '100%', height: h, overflow: 'visible' }}
-         preserveAspectRatio="none">
-      {/* Gridlines + Y-axis labels */}
-      {[0, 0.25, 0.5, 0.75, 1].map(t => {
-        const y = PAD_T + t * chartH;
-        const price = maxP - t * priceRange;
-        return (
-          <g key={t}>
-            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
-                  stroke="var(--hf-border-faint)" strokeWidth="0.3"/>
-            <text x={PAD_L - 1} y={y + 1} textAnchor="end"
-                  style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-              {price.toFixed(2)}
-            </text>
-          </g>
-        );
-      })}
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <svg width={W} height={h} style={{ display: 'block', overflow: 'visible' }}>
+        {/* Gridlines + Y-axis price labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map(t => {
+          const y = PAD_T + t * chartH;
+          const price = maxP - t * priceRange;
+          return (
+            <g key={t}>
+              <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
+                    stroke="var(--hf-border-faint)" strokeWidth="0.5"/>
+              <text x={PAD_L - 6} y={y + 4} textAnchor="end"
+                    style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+                {price.toFixed(2)}
+              </text>
+            </g>
+          );
+        })}
 
-      {/* One line per shop */}
-      {series.map((s, i) => {
-        const raw = shopColors[i % shopColors.length];
-        const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
-        const pts = s.series.filter(p => allDates.includes(p.date));
-        if (pts.length < 2) return null;
-        const d = pts.map((p, j) =>
-          `${j === 0 ? 'M' : 'L'}${xOf(p.date).toFixed(2)},${yOf(p.price).toFixed(2)}`
-        ).join(' ');
-        return (
-          <path key={s.shop} d={d} fill="none"
-                stroke={color} strokeWidth="0.8"
-                strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
-        );
-      })}
+        {/* Lines + single-point dots */}
+        {series.map((s, i) => {
+          const raw = shopColors[i % shopColors.length];
+          const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
+          const pts = s.series.filter(p => allDates.includes(p.date));
 
-      {/* X-axis: first + last date */}
-      {allDates.length > 1 && <>
-        <text x={PAD_L} y={h - 2} textAnchor="start"
-              style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-          {allDates[0]}
-        </text>
-        <text x={W - PAD_R} y={h - 2} textAnchor="end"
-              style={{ fontSize: '2.5px', fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
-          {allDates[allDates.length - 1]}
-        </text>
-      </>}
-    </svg>
+          if (pts.length === 1) {
+            return (
+              <circle key={s.shop}
+                cx={xOf(pts[0].date)} cy={yOf(pts[0].price)} r={3}
+                fill={color} opacity={0.9}/>
+            );
+          }
+          if (pts.length < 1) return null;
+
+          const d = pts.map((p, j) =>
+            `${j === 0 ? 'M' : 'L'}${xOf(p.date).toFixed(1)},${yOf(p.price).toFixed(1)}`
+          ).join(' ');
+          return (
+            <path key={s.shop} d={d} fill="none"
+                  stroke={color} strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
+          );
+        })}
+
+        {/* X-axis: first + last date */}
+        {allDates.length > 1 && <>
+          <text x={PAD_L} y={h - 6} textAnchor="start"
+                style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+            {allDates[0]}
+          </text>
+          <text x={W - PAD_R} y={h - 6} textAnchor="end"
+                style={{ fontSize: 11, fill: 'var(--hf-ink4)', fontFamily: 'var(--hf-mono)' }}>
+            {allDates[allDates.length - 1]}
+          </text>
+        </>}
+      </svg>
+    </div>
   );
 }
 
@@ -402,7 +422,7 @@ function HFBookPrices({ book }) {
         <div style={{ padding: 'var(--hf-card-p)' }}>
           <MultiLineChart series={series} h={240} shopColors={SHOP_COLORS} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-            {series.map((s, i) => {
+            {series.filter(s => s.series.length >= 1).map((s, i) => {
               const raw = SHOP_COLORS[i % SHOP_COLORS.length];
               const color = raw === 'var(--hf-accent)' ? 'var(--hf-accent)' : raw;
               return (
