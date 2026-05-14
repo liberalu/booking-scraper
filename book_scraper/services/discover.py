@@ -168,9 +168,13 @@ class DiscoverService:
             else discover_cfg["categories"]
         )
         # Pydantic model exposes `url_templates()` returning a list;
+        # attribute access works for SimpleNamespace test stubs;
         # raw-dict fallback handles `url: str | list[str]`.
         if hasattr(cats_cfg, "url_templates"):
             templates: list[str] = cats_cfg.url_templates()
+        elif hasattr(cats_cfg, "url"):
+            raw = cats_cfg.url
+            templates = [raw] if isinstance(raw, str) else list(raw)
         else:
             raw = cats_cfg["url"]
             templates = [raw] if isinstance(raw, str) else list(raw)
