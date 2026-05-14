@@ -41,9 +41,9 @@ def _spawn_restart(shop: str, phase: str) -> None:
     """Spawn a detached scrapy process inside the current container.
 
     Stdout+stderr are captured to /var/log/scrapy_runs/spawn-<ts>-reconcile-restart-<shop>.log
-    via book_scraper.spawn_logging.open_spawn_log. Before this fix (CODEOBS-01),
-    both streams went to DEVNULL — any crash before the first heartbeat tick was
-    invisible (same bug-class as run #427 and patogupirkti runs 363–366).
+    via book_scraper.spawn_logging.open_spawn_log. Earlier versions sent both
+    streams to DEVNULL — any crash before the first heartbeat tick was invisible
+    (same bug-class as run #427 and patogupirkti runs 363–366).
     """
     from book_scraper.spawn_logging import open_spawn_log
 

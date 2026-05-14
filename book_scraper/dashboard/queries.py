@@ -327,8 +327,10 @@ def mark_stale_runs(session: Session) -> list[dict[str, Any]]:
     error reason is recorded as `stop_timeout` so the postmortem
     distinguishes it from ordinary heartbeat death.
 
-    Returns a list of dicts with per-run metadata for each killed run
-    (CODEOBS-02). Each dict has keys: run_id, shop, phase, close_reason.
+    Returns a list of dicts with per-run metadata for each killed run.
+    Each dict has keys: run_id, shop, phase, close_reason. The dashboard
+    reaper logs one WARNING per dict so the postmortem trail names what
+    it killed.
     """
     from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (

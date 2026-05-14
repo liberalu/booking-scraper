@@ -20,9 +20,9 @@ async def reaper_loop() -> None:
     """Run mark_stale_runs every REAPER_INTERVAL_SECONDS until cancelled.
 
     Per killed run, emits one WARNING log line carrying run_id, shop, phase,
-    close_reason (CODEOBS-02). The Phase 3 Grafana "Scrape runs overview"
-    dashboard surfaces these via the dashboard-logs panel — operators can
-    grep `Reaper killed run` to find every reaping in the time range.
+    close_reason. The Grafana "Scrape runs overview" dashboard surfaces
+    these via the dashboard-logs panel — operators can grep `Reaper killed
+    run` to find every reaping in the time range.
     """
     while True:
         try:

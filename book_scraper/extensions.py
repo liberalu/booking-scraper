@@ -171,7 +171,7 @@ class StallDetector:  # pragma: no cover
     def _collect_stall_diagnostics(self) -> dict[str, object]:
         """Snapshot scheduler + downloader state at the moment of a stall.
 
-        Returns a flat dict for the stall log line (CODEOBS-04):
+        Returns a flat dict for the stall log line:
           - request_count: total responses received (from Scrapy stats)
           - last_url: URL of the most recent response
           - in_flight_by_domain: {domain: count} dict of active downloads
@@ -625,9 +625,9 @@ class HeartbeatExtension:  # pragma: no cover
         if status is None:
             # Row vanished (deleted by operator, or by a parallel cleanup).
             # The spider has no live row to refresh — tear it down so the
-            # process exits cleanly instead of ghost-ticking forever
-            # (CODEOBS-03). Use a distinct close reason so the postmortem
-            # tells "operator deleted my row" from "operator pressed Stop".
+            # process exits cleanly instead of ghost-ticking forever.
+            # Use a distinct close reason so the postmortem tells
+            # "operator deleted my row" from "operator pressed Stop".
             logger.warning(
                 "Heartbeat tick: scrape_runs row for run %d vanished — tearing down spider",
                 self._run_id,
@@ -654,20 +654,16 @@ class HeartbeatExtension:  # pragma: no cover
         self._schedule_next()
 
     def _signal_stop(self) -> None:
-        spider = getattr(self.crawler, "spider", None)
-        engine = getattr(self.crawler, "engine", None)
-        if spider is None or engine is None:
-            logger.warning(
-                "Heartbeat saw 'stopping' for run %d but spider/engine missing",
-                self._run_id,
-            )
-            return
-        logger.info("Run %d transitioned to 'stopping' — closing spider", self._run_id)
-        engine.close_spider(spider, "stopped_by_operator")
+        """Close the spider for an operator-requested stop."""
+        self._signal_stop_with_reason("stopped_by_operator")
 
     def _signal_stop_with_reason(self, reason: str) -> None:
-        """Close the spider with a specific reason. Used by CODEOBS-03 to
-        distinguish row-vanished from operator-requested stop."""
+        """Close the spider with a specific reason.
+
+        Distinguishes row-vanished from operator-requested stop in the
+        postmortem trail, since both go through engine.close_spider but
+        carry different `close_reason` values into scrape_runs.
+        """
         spider = getattr(self.crawler, "spider", None)
         engine = getattr(self.crawler, "engine", None)
         if spider is None or engine is None:
