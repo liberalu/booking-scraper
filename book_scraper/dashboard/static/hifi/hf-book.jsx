@@ -55,11 +55,13 @@ function HFBook({ nav, goto, params }) {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
-  // One row per shop that lists this book.
+  // One row per shop that lists this book. Field names mirror what
+  // `book_detail` returns: shop, shop_book_id, url, price, in_stock,
+  // last_seen_at, title, author, year, isbn, publisher, format, match_method.
   const shops = (data.shops || []).map(s => ({
-    shop: s.name,
+    shop: s.shop,
     shopBookId: s.shop_book_id,
-    sbStatus: s.is_active ? (s.in_stock ? 'active' : 'out') : 'delisted',
+    sbStatus: s.in_stock ? 'active' : 'out',
     url: s.url,
     price: s.price != null ? parseFloat(s.price) : null,
     prev: null,
@@ -71,12 +73,12 @@ function HFBook({ nav, goto, params }) {
     confidence: null,
     by: 'auto',
     // Per-shop metadata fields (for Metadata matrix + Contributors)
-    shopAuthor: s.shop_author,
-    shopTitle: s.shop_title,
-    shopIsbn: s.shop_isbn,
-    shopYear: s.shop_year,
-    shopPublisher: s.shop_publisher,
-    shopFormat: s.shop_format,
+    shopAuthor: s.author,
+    shopTitle: s.title,
+    shopIsbn: s.isbn,
+    shopYear: s.year,
+    shopPublisher: s.publisher,
+    shopFormat: s.format,
   }));
 
   const prices = shops.map(s => s.price).filter(p => p != null && !isNaN(p));
