@@ -94,18 +94,13 @@ function HFCron({ nav, goto }) {
         </HFFilterBar>
       </HFCard>
 
-      {filters.filtered.length === 0 ? (
-        <HFCard><HFEmptyState title="No schedules match" sub="Try clearing filters." onClear={filters.clearAll}/></HFCard>
-      ) : (() => {
-        // Group by shop, preserving order of first appearance
-        const groups = [];
-        const byShop = {};
-        for (const job of filters.filtered) {
-          if (!byShop[job.shop]) { byShop[job.shop] = []; groups.push(job.shop); }
-          byShop[job.shop].push(job);
-        }
-        const onRowClick = (r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus, chain_to_id: r.chain_to_id, chain_to_name: r.chain_to_name });
-        const columns = [
+      <HFCard>
+        {filters.filtered.length === 0 ? (
+          <HFEmptyState title="No schedules match" sub="Try clearing filters." onClear={filters.clearAll}/>
+        ) : (
+        <HFTable
+          onRowClick={(r) => goto('schedule-detail', { id: r.id, name: r.name, cron: r.cron, shop: r.shop, enabled: r.enabled, lastStatus: r.lastStatus, chain_to_id: r.chain_to_id, chain_to_name: r.chain_to_name })}
+          columns={[
             { key:'name', label:'Name', w:'1.8fr', mono:true, sortable:true,
               cell:(v, r) => {
                 const depth = r.depth || 0;
@@ -135,6 +130,7 @@ function HFCron({ nav, goto }) {
               }
             },
             { key:'cron', label:'Cron', w:'0.9fr', mono:true, muted:true, sortable:true },
+            { key:'shop', label:'Shop', w:'0.6fr', sortable:true },
             { key:'_trigger', label:'Trigger', w:'1.4fr',
               cell:(_, r) => {
                 if (r.chain_to_id) {
@@ -209,20 +205,10 @@ function HFCron({ nav, goto }) {
               </HFButton>
             )},
           ]}
-        ];
-        return groups.map(shop => (
-          <HFCard key={shop} style={{marginBottom:'var(--hf-gap)'}}>
-            <div style={{
-              padding:'8px 16px 6px', borderBottom:'1px solid var(--hf-border-faint)',
-              display:'flex', alignItems:'center', gap:8,
-            }}>
-              <span style={{fontFamily:'var(--hf-mono)', fontWeight:600, fontSize:13, color:'var(--hf-ink)'}}>{shop}.lt</span>
-              <span style={{fontSize:12, color:'var(--hf-ink4)'}}>{byShop[shop].length} {byShop[shop].length === 1 ? 'job' : 'jobs'}</span>
-            </div>
-            <HFTable onRowClick={onRowClick} columns={columns} rows={byShop[shop]}/>
-          </HFCard>
-        ));
-      })()}
+          rows={filters.filtered}
+        />
+        )}
+      </HFCard>
     </HFShell>
   );
 }
