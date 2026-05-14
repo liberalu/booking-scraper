@@ -31,13 +31,13 @@ _SYSTEM_ENV_PREFIX = (
 # don't map to a per-shop scrapy phase. Appended after the dynamic
 # rows so they survive an empty cron_jobs table.
 #
-#  - Daily health summary at 09:00 UTC (~3 h after pegasas, ~2 h after
-#    humanitas Sunday): one line to scraper.log of completed/failed
-#    runs in the last 24 h. Operators tail or grep this for a
-#    lightweight heartbeat without standing up Slack/email/PagerDuty.
+#  - Health summary four times daily (03:00, 09:00, 15:00, 21:00 UTC):
+#    one line to scraper.log of completed/failed runs in the last 6 h.
+#    Operators tail or grep this for a lightweight heartbeat without
+#    standing up Slack/email/PagerDuty.
 _SYSTEM_LINES: tuple[str, ...] = (
     (
-        f"0 9 * * * {_SYSTEM_ENV_PREFIX} /app/scripts/cron_health_check.py"
+        f"0 3,9,15,21 * * * {_SYSTEM_ENV_PREFIX} /app/scripts/cron_health_check.py"
         f" >> {_LOG_PATH} 2>&1"
     ),
 )

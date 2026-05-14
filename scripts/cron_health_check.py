@@ -1,8 +1,8 @@
 """Daily health summary of scrape runs.
 
-Run via cron once a day. Prints one line to stdout (which the cron
+Run via cron four times a day. Prints one line to stdout (which the cron
 crontab redirects to ``/var/log/scraper.log``) summarising the last
-24 h of scrape runs:
+6 h of scrape runs:
 
   - "OK" line if everything completed cleanly
   - One "FAIL" line per failed run with run_id, phase, shop, close_reason
@@ -35,7 +35,7 @@ def main() -> int:
         print("[health-check] DATABASE_URL unset; skipping", file=sys.stderr)
         return 1
 
-    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=6)
     session = get_session_factory(database_url)()
     try:
         rows = list(
@@ -63,7 +63,7 @@ def main() -> int:
 
     if not failed and not running:
         print(
-            f"[health-check] {ts} OK — {len(completed)} run(s) completed in last 24 h"
+            f"[health-check] {ts} OK — {len(completed)} run(s) completed in last 6 h"
         )
         return 0
 
