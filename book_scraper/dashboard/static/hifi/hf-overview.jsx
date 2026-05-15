@@ -7,6 +7,36 @@ function HFOverview({ nav, goto }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [matching, setMatching] = React.useState(false);
+
+  const matchAll = React.useCallback(async () => {
+    setMatching(true);
+    try {
+      const shopsResp = await fetch('/api/shops');
+      const shopsData = await shopsResp.json();
+      const shopList = (shopsData.shops || []).map(s => s.name);
+      const results = await Promise.allSettled(
+        shopList.map(shop =>
+          fetch('/api/runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shop, phase: 'match', mode: 'full' }),
+          }).then(r => r.json())
+        )
+      );
+      const started = results.filter(r => r.status === 'fulfilled' && !r.value.detail).length;
+      if (window.HF_APP && window.HF_APP.toast) {
+        window.HF_APP.toast({ tone: 'ok', message: `Match queued for ${started} shop${started !== 1 ? 's' : ''}` });
+      }
+      goto('runs');
+    } catch (e) {
+      if (window.HF_APP && window.HF_APP.toast) {
+        window.HF_APP.toast({ tone: 'err', message: 'Match all failed', detail: String(e.message || e) });
+      }
+    } finally {
+      setMatching(false);
+    }
+  }, [goto]);
 
   // Shared loader — used for the initial mount fetch and the manual
   // Refresh button. `manual=true` toggles the toast feedback so the
@@ -115,6 +145,10 @@ function HFOverview({ nav, goto }) {
         <span style={{ color: 'var(--hf-ink)', fontWeight: 500 }}>Overview</span>
       </>}
       actions={<>
+        <HFButton disabled={matching} onClick={matchAll}>
+          <span style={{display:'flex'}}>{HF_ICONS.urls}</span>
+          {matching ? 'Matching…' : 'Match all'}
+        </HFButton>
         <HFButton disabled={refreshing} onClick={() => loadOverview(true)}>
           <span style={{display:'flex'}}>{HF_ICONS.refresh}</span>
           {refreshing ? 'Refreshing…' : 'Refresh'}

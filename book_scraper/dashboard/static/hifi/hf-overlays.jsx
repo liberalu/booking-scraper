@@ -515,11 +515,14 @@ function HFNewRunDialog({ open, onClose, goto }) {
             ? 'Scrape product pages for already-discovered URLs'
             : phase === 'discover'
               ? 'Find new URLs (sitemap / categories / full crawl)'
-              : 'Run DB-only data quality checks (no HTTP)'
+              : phase === 'match'
+                ? 'Link shop books to canonical books by ISBN (no HTTP)'
+                : 'Run DB-only data quality checks (no HTTP)'
         }>
           <HFSegmented value={phase} onChange={setPhase} options={[
             { value:'scan',     label:'Scan (products)' },
             { value:'discover', label:'Discover (URLs)' },
+            { value:'match',    label:'Match (ISBN link)' },
             { value:'validate', label:'Validate (DB checks)' },
           ]}/>
         </HFField>

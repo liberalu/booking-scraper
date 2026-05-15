@@ -123,7 +123,7 @@ function HFRuns({ nav, goto }) {
         </>}>
           <HFSearch placeholder="Search by ID, shop, phase…" width={260} value={q} onChange={setQ}/>
           <HFFilter label="Shop"    value={shop}    onChange={setShop}    options={shopNames}/>
-          <HFFilter label="Phase"   value={phase}   onChange={setPhase}   options={['all','discover','scan']}/>
+          <HFFilter label="Phase"   value={phase}   onChange={setPhase}   options={['all','discover','scan','match','validate']}/>
           <HFFilter label="Status"  value={status}  onChange={setStatus}  options={['all','running','paused','queued','completed','failed']}/>
           <HFFilter label="When"    value={when}    onChange={setWhen}    options={['any','1h','24h','7d','30d']}/>
         </HFFilterBar>
@@ -175,7 +175,7 @@ function HFRuns({ nav, goto }) {
             { key:'phase_type', label:'Phase', w:'1fr', sortable:true, sortVal:r=>r.phase_type+':'+r.phase_mode, cell: (v, r) => (
               <span style={{display:'flex', flexDirection:'column', gap:3, minWidth:0}}>
                 <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink)', fontWeight:500, textTransform:'capitalize'}}>{v}</span>
-                <HFPill tone={v==='scan'?'accent':'neutral'} style={{width:'fit-content', height:17, fontSize:11, padding:'0 6px', letterSpacing:0.2}}>{(r.phase_mode||'').replace('_',' ')}</HFPill>
+                {r.phase_mode && <HFPill tone={v==='scan'?'accent':'neutral'} style={{width:'fit-content', height:17, fontSize:11, padding:'0 6px', letterSpacing:0.2}}>{r.phase_mode.replace('_',' ')}</HFPill>}
               </span>
             )},
             { key:'status', label:'Status', w:'0.8fr', sortable:true, cell: (v, r) => (
