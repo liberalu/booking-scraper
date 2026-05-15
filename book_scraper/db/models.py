@@ -887,6 +887,7 @@ class Book(Base):
     audience: Mapped[str | None] = mapped_column(Text, nullable=True)
     libis_rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)
     libis_review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("scrape_runs.id", ondelete="SET NULL"), nullable=True
     )

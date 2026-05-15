@@ -564,6 +564,7 @@ class ScanSpider(scrapy.Spider):
             ):
                 if k in data and data[k] is not None:
                     book[k] = data[k]
+            book["source_url"] = url
             self._mark_response(
                 scrape_url_item_id,
                 response_url=url,

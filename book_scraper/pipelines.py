@@ -846,6 +846,7 @@ class PostgresPipeline:
                 "audience": adapter.get("audience"),
                 "libis_rating": adapter.get("libis_rating"),
                 "libis_review_count": adapter.get("libis_review_count"),
+                "source_url": adapter.get("source_url"),
                 "series_id": series_id,
             }
             if target is None:

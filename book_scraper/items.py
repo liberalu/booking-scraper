@@ -80,3 +80,4 @@ class BookItem(scrapy.Item):
     audience = scrapy.Field()
     libis_rating = scrapy.Field()
     libis_review_count = scrapy.Field()
+    source_url = scrapy.Field()
