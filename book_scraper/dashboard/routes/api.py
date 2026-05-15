@@ -91,6 +91,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_book_stats_cache: dict[str, Any] = {}
+_BOOK_STATS_TTL = 60  # seconds
+
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1891,7 +1894,13 @@ def api_books(
 def api_book_stats(session: Session = Depends(get_db)) -> dict[str, Any]:
     from book_scraper.dashboard.queries import get_book_stats
 
-    return get_book_stats(session)
+    now = datetime.now(UTC).timestamp()
+    if _book_stats_cache.get("expires_at", 0) > now:
+        return _book_stats_cache["value"]
+    result = get_book_stats(session)
+    _book_stats_cache["value"] = result
+    _book_stats_cache["expires_at"] = now + _BOOK_STATS_TTL
+    return result
 
 
 @router.get("/books/years")

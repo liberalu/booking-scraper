@@ -59,8 +59,25 @@ function HFIssueSparkline({ data, tone = 'neutral', w = 88, h = 24 }) {
 
 function HFIssues({ nav, goto }) {
   const HF = getHF();
-  const [tab, setTab] = React.useState('new');
-  const [view, setView] = React.useState('by_type');           // by_type | list
+
+  // Filter+tab+view state is mirrored to the URL so the view is shareable.
+  const _initialParams = React.useMemo(() => {
+    const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const TABS = ['new','acknowledged','snoozed','resolved','all'];
+    const VIEWS = ['by_type','list'];
+    return {
+      tab:  TABS.includes(sp.get('tab'))   ? sp.get('tab')   : 'new',
+      view: VIEWS.includes(sp.get('view')) ? sp.get('view')  : 'by_type',
+      shop: sp.get('shop') || 'all',
+      type: sp.get('type') || 'all',
+      sev:  sp.get('sev')  || 'all',
+      q:    sp.get('q')    || '',
+      run:  sp.get('run')  || 'any',
+    };
+  }, []);
+
+  const [tab, setTab] = React.useState(_initialParams.tab);
+  const [view, setView] = React.useState(_initialParams.view);
   const [byTypeSort, setByTypeSort] = React.useState('priority');  // priority | count | type
   const [selected, setSelected] = React.useState(new Set());
   const [expanded, setExpanded] = React.useState(null);
@@ -74,11 +91,27 @@ function HFIssues({ nav, goto }) {
   const [listPage, setListPage] = React.useState(1);
 
   // Filter state for list view (managed locally; API-driven when view===list)
-  const [shopFilter, setShopFilter] = React.useState('all');
-  const [sevFilter, setSevFilter] = React.useState('all');
-  const [typeFilter, setTypeFilter] = React.useState('all');
-  const [searchQ, setSearchQ] = React.useState('');
-  const [runFilter, setRunFilter] = React.useState('any');
+  const [shopFilter, setShopFilter] = React.useState(_initialParams.shop);
+  const [sevFilter, setSevFilter] = React.useState(_initialParams.sev);
+  const [typeFilter, setTypeFilter] = React.useState(_initialParams.type);
+  const [searchQ, setSearchQ] = React.useState(_initialParams.q);
+  const [runFilter, setRunFilter] = React.useState(_initialParams.run);
+
+  // Sync state → URL query params
+  React.useEffect(() => {
+    const sp = new URLSearchParams();
+    if (tab !== 'new')         sp.set('tab', tab);
+    if (view !== 'by_type')    sp.set('view', view);
+    if (shopFilter !== 'all')  sp.set('shop', shopFilter);
+    if (sevFilter !== 'all')   sp.set('sev', sevFilter);
+    if (typeFilter !== 'all')  sp.set('type', typeFilter);
+    if (searchQ)               sp.set('q', searchQ);
+    if (runFilter !== 'any')   sp.set('run', runFilter);
+    const qs = sp.toString();
+    const url = '/issues' + (qs ? '?' + qs : '');
+    const cur = window.location.pathname + window.location.search;
+    if (url !== cur) window.history.replaceState(null, '', url);
+  }, [tab, view, shopFilter, sevFilter, typeFilter, searchQ, runFilter]);
 
   // Fetch lifecycle counts on mount (and whenever tab changes to keep counts fresh)
   React.useEffect(() => {
@@ -301,6 +334,40 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   };
 
+  const _refreshList = () => {
+    setSelected(new Set());
+    fetch('/api/issues?per_page=1').then(r => r.json()).then(d => { if (d.counts) setLifecycleCounts(d.counts); }).catch(() => {});
+    setListLoading(true);
+    const rp = new URLSearchParams({ page: listPage, per_page: 50 });
+    if (tab !== 'all') rp.set('state', tab);
+    if (shopFilter !== 'all') rp.set('shop', shopFilter);
+    if (typeFilter !== 'all') rp.set('issue_type', typeFilter);
+    if (sevFilter !== 'all') rp.set('severity', sevFilter);
+    if (searchQ) rp.set('q', searchQ);
+    if (runFilter !== 'any') rp.set('run_id', runFilter);
+    fetch(`/api/issues?${rp}`).then(r => r.json()).then(d => { setListData(d); setListLoading(false); }).catch(() => { setListLoading(false); });
+  };
+
+  const bulkSnooze = (days = 7) => {
+    const ids = [...selected].map(Number).filter(Boolean);
+    if (!ids.length) return;
+    Promise.all(ids.map(id =>
+      fetch(`/api/issues/${id}/snooze`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+      })
+    )).then(_refreshList).catch(() => {});
+  };
+
+  const bulkResolve = () => {
+    const ids = [...selected].map(Number).filter(Boolean);
+    if (!ids.length) return;
+    Promise.all(ids.map(id =>
+      fetch(`/api/issues/${id}/lifecycle?state=resolved`, { method: 'PATCH' })
+    )).then(_refreshList).catch(() => {});
+  };
+
   return (
     <HFShell {...nav} activePage="issues"
       title="Issues" subtitle="Individual validation failures, parser errors, and data-quality events across all shops."
@@ -341,9 +408,9 @@ function HFIssues({ nav, goto }) {
             </span>
             <span style={{flex:1}}/>
             <HFButton size="sm" variant="primary" onClick={bulkAcknowledge}>Mark acknowledged</HFButton>
-            <HFButton size="sm">Snooze 7d…</HFButton>
+            <HFButton size="sm" onClick={() => bulkSnooze(7)}>Snooze 7d…</HFButton>
             <HFButton size="sm">Assign…</HFButton>
-            <HFButton size="sm">Mark resolved</HFButton>
+            <HFButton size="sm" onClick={bulkResolve}>Mark resolved</HFButton>
             <HFButton size="sm" variant="subtle" onClick={() => setSelected(new Set())}>Clear</HFButton>
           </div>
         </HFCard>
