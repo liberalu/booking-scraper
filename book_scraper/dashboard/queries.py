@@ -1498,6 +1498,7 @@ def get_issues_page(
     url_type: str = "",
     book_type: str = "",
     order: str = "desc",
+    sort_by: str = "age",
     page: int = 1,
     per_page: int = 50,
     kind: str = "all",
@@ -1539,6 +1540,7 @@ def get_issues_page(
             url_type=url_type,
             book_type=book_type,
             order=order,
+            sort_by=sort_by,
             page=helper_page,
             per_page=helper_per_page,
         )
@@ -1555,6 +1557,7 @@ def get_issues_page(
             q=q,
             severity=severity,
             order=order,
+            sort_by=sort_by,
             page=helper_page,
             per_page=helper_per_page,
         )
@@ -1562,10 +1565,17 @@ def get_issues_page(
         total += f_total
 
     if kind == "all":
-        rows.sort(
-            key=lambda r: r["added_at"] or datetime.min.replace(tzinfo=UTC),
-            reverse=(order != "asc"),
-        )
+        _sev_rank = {"critical": 1, "warning": 2}
+
+        def _merged_key(r: dict[str, Any]) -> Any:
+            if sort_by == "id":   return r.get("id") or 0
+            if sort_by == "type": return (r.get("issue") or r.get("error_reason") or "").lower()
+            if sort_by == "shop": return (r.get("shop_name") or "").lower()
+            if sort_by == "book": return (r.get("shop_book_title") or "").lower()
+            if sort_by == "sev":  return _sev_rank.get(r.get("severity", "warning"), 2)
+            return r["added_at"] or datetime.min.replace(tzinfo=UTC)
+
+        rows.sort(key=_merged_key, reverse=(order != "asc"))
         start = (page - 1) * per_page
         rows = rows[start : start + per_page]
 
@@ -1584,6 +1594,7 @@ def _get_validation_issues_page(
     url_type: str,
     book_type: str,
     order: str,
+    sort_by: str = "age",
     page: int,
     per_page: int,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -1627,13 +1638,31 @@ def _get_validation_issues_page(
 
     total = query.count()
 
-    if order == "asc":
+    from sqlalchemy import case as sa_case
+    _asc = order == "asc"
+    _id_tie = ValidationIssue.id.asc() if _asc else ValidationIssue.id.desc()
+    if sort_by == "id":
+        query = query.order_by(ValidationIssue.id.asc() if _asc else ValidationIssue.id.desc())
+    elif sort_by == "type":
         query = query.order_by(
-            ScrapeRun.started_at.asc().nulls_last(), ValidationIssue.id.asc()
+            ValidationIssue.issue.asc() if _asc else ValidationIssue.issue.desc(), _id_tie,
         )
-    else:
+    elif sort_by == "shop":
         query = query.order_by(
-            ScrapeRun.started_at.desc().nulls_last(), ValidationIssue.id.desc()
+            Shop.name.asc().nulls_last() if _asc else Shop.name.desc().nulls_last(), _id_tie,
+        )
+    elif sort_by == "book":
+        query = query.order_by(
+            ShopBook.title.asc().nulls_last() if _asc else ShopBook.title.desc().nulls_last(), _id_tie,
+        )
+    elif sort_by == "sev":
+        _crit = [k for k, v in ISSUE_SEVERITY.items() if v == "critical"]
+        _sev_col = sa_case((ValidationIssue.issue.in_(_crit), 1), else_=2)
+        query = query.order_by(_sev_col.asc() if _asc else _sev_col.desc(), _id_tie)
+    else:  # "age" default
+        query = query.order_by(
+            ScrapeRun.started_at.asc().nulls_last() if _asc else ScrapeRun.started_at.desc().nulls_last(),
+            _id_tie,
         )
 
     rows = query.offset((page - 1) * per_page).limit(per_page).all()
@@ -1680,6 +1709,7 @@ def _get_scrape_failures_page(
     q: str,
     severity: str,
     order: str,
+    sort_by: str = "age",
     page: int,
     per_page: int,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -1758,11 +1788,26 @@ def _get_scrape_failures_page(
 
     total = query.count()
 
-    if order == "asc":
-        query = query.order_by(ScrapeFailure.occurred_at.asc(), ScrapeFailure.id.asc())
-    else:
+    _asc_f = order == "asc"
+    _id_tie_f = ScrapeFailure.id.asc() if _asc_f else ScrapeFailure.id.desc()
+    if sort_by == "id":
+        query = query.order_by(ScrapeFailure.id.asc() if _asc_f else ScrapeFailure.id.desc())
+    elif sort_by == "type":
         query = query.order_by(
-            ScrapeFailure.occurred_at.desc(), ScrapeFailure.id.desc()
+            ScrapeFailure.error_reason.asc().nulls_last() if _asc_f else ScrapeFailure.error_reason.desc().nulls_last(),
+            _id_tie_f,
+        )
+    elif sort_by == "shop":
+        query = query.order_by(
+            Shop.name.asc().nulls_last() if _asc_f else Shop.name.desc().nulls_last(), _id_tie_f,
+        )
+    elif sort_by == "book":
+        query = query.order_by(
+            ShopBook.title.asc().nulls_last() if _asc_f else ShopBook.title.desc().nulls_last(), _id_tie_f,
+        )
+    else:  # "age" or "sev" (sev not easily expressible for failures — fall back to age)
+        query = query.order_by(
+            ScrapeFailure.occurred_at.asc() if _asc_f else ScrapeFailure.occurred_at.desc(), _id_tie_f,
         )
 
     rows = query.offset((page - 1) * per_page).limit(per_page).all()

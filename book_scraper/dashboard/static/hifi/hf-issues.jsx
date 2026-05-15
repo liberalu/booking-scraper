@@ -202,11 +202,13 @@ function HFIssues({ nav, goto }) {
     if (sevFilter !== 'all') params.set('severity', sevFilter);
     if (searchQ) params.set('q', searchQ);
     if (runFilter !== 'any') params.set('run_id', runFilter);
+    params.set('sort_by', listSort.col);
+    params.set('order', listSort.dir);
     fetch(`/api/issues?${params}`)
       .then(r => r.json())
       .then(d => { setListData(d); setListLoading(false); })
       .catch(() => { setListLoading(false); });
-  }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter, listPage]);
+  }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter, listPage, listSort]);
 
   // Reset page and selection when tab/view/filters change
   React.useEffect(() => { setListPage(1); setSelected(new Set()); }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter]);
@@ -264,27 +266,9 @@ function HFIssues({ nav, goto }) {
       run: issue.scrape_run_id ? `run:${issue.scrape_run_id}` : null,
       runRef: issue.scrape_run_id || null,
       age: issue.added_at ? formatRelativeAge(issue.added_at) : '—',
-      addedAt: issue.added_at || null,
       lifecycle: issue.lifecycle_state || 'new',
     };
   });
-
-  const _SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
-  const sortedListRows = React.useMemo(() => {
-    const { col, dir } = listSort;
-    const m = dir === 'asc' ? 1 : -1;
-    return [...listRows].sort((a, b) => {
-      switch (col) {
-        case 'id':   return m * (parseInt(a.id) - parseInt(b.id));
-        case 'sev':  return m * ((_SEV_RANK[a.sev] || 0) - (_SEV_RANK[b.sev] || 0));
-        case 'type': return m * a.type.localeCompare(b.type);
-        case 'shop': return m * (a.shop || '').localeCompare(b.shop || '');
-        case 'book': return m * (a.book || '').localeCompare(b.book || '');
-        case 'age':  return m * (new Date(a.addedAt || 0) - new Date(b.addedAt || 0));
-        default:     return 0;
-      }
-    });
-  }, [listRows, listSort]);
 
   // Bulk selection helpers
   const toggleOne = (id) => setSelected(prev => {
@@ -409,6 +393,8 @@ function HFIssues({ nav, goto }) {
     if (sevFilter !== 'all') rp.set('severity', sevFilter);
     if (searchQ) rp.set('q', searchQ);
     if (runFilter !== 'any') rp.set('run_id', runFilter);
+    rp.set('sort_by', listSort.col);
+    rp.set('order', listSort.dir);
     fetch(`/api/issues?${rp}`).then(r => r.json()).then(d => { setListData(d); setListLoading(false); }).catch(() => { setListLoading(false); });
   };
 
@@ -747,7 +733,7 @@ function HFIssues({ nav, goto }) {
           <>
           <ListRows
             HF={HF}
-            rows={sortedListRows}
+            rows={listRows}
             selected={selected}
             toggleOne={toggleOne}
             toggleAllVisible={toggleAllVisible}

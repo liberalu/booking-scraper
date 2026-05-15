@@ -2622,6 +2622,8 @@ def api_issues(
     book_type: str = "",
     severity: str = "",
     q: str = "",
+    sort_by: str = "age",
+    order: str = "desc",
     page: int = 1,
     per_page: int = 30,
     kind: str = "all",
@@ -2648,6 +2650,7 @@ def api_issues(
     per_page = max(1, min(per_page, 200))
     if kind not in ("all", "validation", "scrape_failure"):
         kind = "all"
+    _allowed_sort = {"age", "id", "type", "shop", "book", "sev"}
     rows, total = get_issues_page(
         session,
         state=state,
@@ -2658,6 +2661,8 @@ def api_issues(
         url_type=url_type_filter,
         book_type=book_type_filter,
         q=q,
+        sort_by=sort_by if sort_by in _allowed_sort else "age",
+        order="asc" if order == "asc" else "desc",
         page=page,
         per_page=per_page,
         kind=kind,
