@@ -16,6 +16,7 @@ function HFIssueDetail({ nav, goto, params }) {
   const [apiLoading, setApiLoading] = React.useState(!!issueId);
   const [apiNotFound, setApiNotFound] = React.useState(false);
   const [waveTotal, setWaveTotal] = React.useState(1);
+  const [otherIssues, setOtherIssues] = React.useState([]);
 
   // Fetch real wave total from /api/issues/groups whenever the issue's type changes.
   // Depends on `apiData?.issue || params?.type` directly so the hook stays above
@@ -45,6 +46,27 @@ function HFIssueDetail({ nav, goto, params }) {
       .then(d => { if (d) { setApiData(d); setApiLoading(false); } })
       .catch(() => setApiLoading(false));
   }, [issueId]);
+
+  React.useEffect(() => {
+    const t = apiData?.issue || params?.type;
+    const s = apiData?.shop_name || params?.shop;
+    if (!t) return;
+    const p = new URLSearchParams({ issue_type: t, per_page: 6, state: 'all' });
+    if (s) p.set('shop', s);
+    fetch(`/api/issues?${p}`)
+      .then(r => r.json())
+      .then(d => {
+        const rows = Array.isArray(d) ? d : (d.issues || d.items || []);
+        const filtered = issueId ? rows.filter(row => String(row.id) !== String(issueId)) : rows;
+        setOtherIssues(filtered.slice(0, 5).map(row => ({
+          id: row.id,
+          book: row.shop_book_title || '—',
+          issue: row.issue,
+          age: row.added_ago || '—',
+        })));
+      })
+      .catch(() => {});
+  }, [apiData?.issue, apiData?.shop_name, params?.type, params?.shop, issueId]);
 
   if (apiLoading) return <div style={{padding:40, color: getHF().ink3, fontFamily: getHF().sans}}>Loading…</div>;
   if (apiNotFound) return <div style={{padding:40, color: getHF().errInk, fontFamily: getHF().sans}}>Issue not found.</div>;
@@ -134,44 +156,8 @@ function HFIssueDetail({ nav, goto, params }) {
   const sevTone = { critical:'err', high:'warn', medium:'warn', low:'neutral' };
   const lifecycleTone = { new:'err', acknowledged:'accent', snoozed:'warn', resolved:'ok' };
 
-  // Synthetic raw snippet — same shape as the issues-page expand-row preview.
-  const rawSnippet = (() => {
-    switch (type) {
-      case 'missing_price':
-        return `<div class="product-page">
-  <h1>${book}</h1>
-  <span class="price-tag">         </span>   ← empty, selector matched but text empty
-  <span class="old-price">€19.90</span>
-</div>`;
-      case 'match_isbn_drift':
-        return `extracted_isbn:  9780062316098   ← shop reports
-canonical_isbn:  9780062316097   ← matched book ID 1841
-edit_distance:   1`;
-      case 'invalid_isbn':
-        return `extracted_isbn:  978006231609X
-length:          13 (ok)
-check_digit:     FAILED`;
-      case 'price_spike':
-        return `previous_price:  16.50 EUR (run #${runId - 2})
-current_price:   12.99 EUR (run #${runId})
-delta:           -21.3%   threshold ±15%`;
-      case 'scrape_run_failed':
-        return `run.status:    failed
-phase:         scan
-progress:      67%
-close_reason:  timeout · worker w-1 unresponsive 91s`;
-      default:
-        return `(no preview available for ${type})`;
-    }
-  })();
+  const rawSnippet = apiData?.raw_value || '(no raw value recorded)';
 
-  const otherIssues = [
-    { id:'ISS-266205', book:'Hello Kitty. Atostogų išvyka (lipdukų knygelė su užduotėlėmis)', field:'price', age:'4d ago' },
-    { id:'ISS-266204', book:'Rytai - Vakarai: komparatyvistinės studijos IX',                   field:'price', age:'4d ago' },
-    { id:'ISS-266203', book:'Baltoji gulbė',                                                    field:'price', age:'4d ago' },
-    { id:'ISS-266202', book:'Saulute debesy',                                                   field:'price', age:'4d ago' },
-    { id:'ISS-266201', book:'Lietuviu liaudies pasakos (3 knygu komplektas)',                   field:'price', age:'4d ago' },
-  ];
 
   const trimUrl = url ? url.replace(/^https?:\/\//, '') : null;
   const trimmedShown = trimUrl && trimUrl.length > 48 ? trimUrl.slice(0, 48) + '…' : trimUrl;
@@ -359,11 +345,11 @@ close_reason:  timeout · worker w-1 unresponsive 91s`;
               color:HF.accentInk, flexShrink:0,
             }}>{HF_ICONS.books}</span>
             <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:3}}>
-              <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-book-detail', { id: 266585 });}} style={{
+              <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-book-detail', { id: apiData?.shop_book_id });}} style={{
                 color:HF.ink, fontWeight:600, fontSize:14, textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
               }}>{book}</a>
               <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink3}}>
-                #266585 <span style={{color:HF.ink5, margin:'0 6px'}}>·</span> {shop}
+                #{apiData?.shop_book_id || '—'} <span style={{color:HF.ink5, margin:'0 6px'}}>·</span> {shop}
               </span>
             </div>
             {url && (
@@ -381,6 +367,9 @@ close_reason:  timeout · worker w-1 unresponsive 91s`;
         sub={`${otherIssues.length} of ${(waveTotal - 1).toLocaleString()} other issues in this wave`}
         flush
       >
+        {otherIssues.length === 0 && (
+          <div style={{padding:`14px ${HF.cardP}px`, color:HF.ink3, fontSize:13}}>No other issues of this type found.</div>
+        )}
         {otherIssues.map((o, i, arr) => (
           <div key={o.id} style={{
             padding:`12px ${HF.cardP}px`,
@@ -388,7 +377,7 @@ close_reason:  timeout · worker w-1 unresponsive 91s`;
             display:'grid', gridTemplateColumns:'14px 1fr auto auto', gap:14, alignItems:'center',
             cursor:'pointer',
           }}
-          onClick={() => goto('issue-detail', { id: o.id, type, sev, lifecycle, shop, book: o.book, age: o.age, runId })}
+          onClick={() => goto('issue-detail', { id: o.id })}
           className="hf-row"
           >
             <span style={{
@@ -398,7 +387,7 @@ close_reason:  timeout · worker w-1 unresponsive 91s`;
             <div style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
               <span style={{color:HF.ink, fontSize:13, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.book}</span>
               <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink3}}>
-                {o.id} <span style={{color:HF.ink5, margin:'0 6px'}}>·</span> {o.field}
+                ISS-{o.id} <span style={{color:HF.ink5, margin:'0 6px'}}>·</span> {o.issue}
               </span>
             </div>
             <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink3, whiteSpace:'nowrap'}}>{o.age}</span>
