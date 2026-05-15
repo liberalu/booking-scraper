@@ -168,16 +168,16 @@ function HFIssues({ nav, goto }) {
     return acc.map((v, i) => v + (series[i] || 0));
   }, []);
 
-  // Fetch by-type groups whenever the tab changes — used by the by_type view
-  // and by the inline-expand "Part of a wave of N" label in the list view.
+  // Fetch by-type groups whenever tab or shop filter changes.
   React.useEffect(() => {
     const params = new URLSearchParams({ group_by: 'type' });
     if (tab !== 'all') params.set('state', tab);
+    if (shopFilter !== 'all') params.set('shop', shopFilter);
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
       .then(d => setGroupsData(Array.isArray(d) ? d : (d.groups || [])))
       .catch(() => {});
-  }, [tab]);
+  }, [tab, shopFilter]);
 
   // Fetch type×shop groups for the waves view
   React.useEffect(() => {
@@ -215,7 +215,20 @@ function HFIssues({ nav, goto }) {
   const sevTone = { critical: 'err', high: 'warn', medium: 'warn', low: 'neutral' };
   const sevRank = { critical: 4, high: 3, medium: 2, low: 1 };
 
-  const byTypeRows = groupsData.map(row => {
+  const byTypeRows = groupsData
+  .filter(row => {
+    if (typeFilter !== 'all' && row.issue_type !== typeFilter) return false;
+    if (sevFilter === 'critical') {
+      const meta = HF_ISSUE_TYPES.find(t => t.type === row.issue_type);
+      if (!meta || meta.sev !== 'critical') return false;
+    } else if (sevFilter === 'warning') {
+      const meta = HF_ISSUE_TYPES.find(t => t.type === row.issue_type);
+      if (!meta || meta.sev === 'critical') return false;
+    }
+    if (searchQ && !row.issue_type.includes(searchQ.toLowerCase())) return false;
+    return true;
+  })
+  .map(row => {
     const meta = HF_ISSUE_TYPES.find(t => t.type === row.issue_type) || { sev: 'low', tone: 'neutral' };
     const total = row.total || 0;
     const ack = (row.by_state?.acknowledged ?? row.cnt_acknowledged) || 0;
