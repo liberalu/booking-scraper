@@ -252,7 +252,7 @@ def parse_category_page(html: str) -> CategoryPageResult:
             continue
         seen_urls.add(url)
 
-        sku = td_match.group(1)
+        magento_id = td_match.group(1)
         title = _unescape(str(td.get("name") or "")) or None
         if not title:
             continue
@@ -286,7 +286,7 @@ def parse_category_page(html: str) -> CategoryPageResult:
         # store the raw value under properties.variant for later
         # cross-shop matching and let the scan phase fill in clean
         # year/pages/cover_type from the product page.
-        properties: dict[str, Any] = {}
+        properties: dict[str, Any] = {"magento_id": magento_id}
         variant = td.get("variant")
         if isinstance(variant, str) and variant.strip():
             properties["variant_raw"] = variant.strip()
@@ -302,12 +302,11 @@ def parse_category_page(html: str) -> CategoryPageResult:
                 "url": url,
                 "title": title,
                 "author": author,
-                "sku": sku,
                 "price": price,
                 "price_original": price_original,
                 "in_stock": in_stock,
                 "categories": categories,
-                "properties": properties or None,
+                "properties": properties,
             }
         )
 

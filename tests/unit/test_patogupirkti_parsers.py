@@ -81,9 +81,10 @@ def test_parse_category_page_extracts_card_grid():
     assert all("/knyga/" in p["url"] and p["url"].endswith(".html") for p in products)
 
 
-def test_parse_category_page_card_carries_price_author_sku():
+def test_parse_category_page_card_carries_price_author_magento_id():
     """A card with a `product_tracking_data_<id>` JS block has all of
-    name, id, price, brand (author), variant (publisher/year/format)."""
+    name, price, brand (author), variant (publisher/year/format), and
+    the Magento internal product ID stored in properties["magento_id"]."""
     html = (FIXTURES / "category_page.html").read_text(encoding="utf-8")
     products = parse_category_page(html)["products"]
     # Find the Nutildytieji card — known from recon: id=62181, price=15.39,
@@ -101,7 +102,9 @@ def test_parse_category_page_card_carries_price_author_sku():
     assert nutildytieji["price_original"] == "15.39"
     # Discounted price rendered in the card.
     assert nutildytieji["price"] == "12.05"
-    assert nutildytieji["sku"] == "62181"
+    # Magento internal ID lives in properties, not as sku (sku is ISBN-only).
+    assert nutildytieji.get("sku") is None
+    assert nutildytieji["properties"]["magento_id"] == "62181"
     assert nutildytieji["in_stock"] is True
 
 
