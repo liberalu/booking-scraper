@@ -267,6 +267,7 @@ function HFIssues({ nav, goto }) {
       runRef: issue.scrape_run_id || null,
       age: issue.added_at ? formatRelativeAge(issue.added_at) : '—',
       lifecycle: issue.lifecycle_state || 'new',
+      shopBookId: issue.shop_book_id || null,
     };
   });
 
@@ -290,39 +291,69 @@ function HFIssues({ nav, goto }) {
   const someVisibleSelected = listRows.some(r => selected.has(r.id));
   const visibleIds = listRows.map(r => r.id);
 
-  // Type-specific "Fix this" actions
-  const fixActionsFor = (type) => {
+  // Type-specific "Fix this" actions — receives full row so actions can use shop/url/runRef
+  const fixActionsFor = (r) => {
     const open = (page, params) => () => goto(page, params);
-    switch (type) {
+    const rescrapeUrl = async () => {
+      if (!r.url || !r.shop) return window.alert('No URL or shop available.');
+      const res = await fetch('/api/runs', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ shop: r.shop, phase: 'scan', urls: r.url }),
+      });
+      const d = await res.json();
+      if (res.ok) window.alert(`Re-scrape started for ${r.shop}.`);
+      else window.alert('Failed: ' + (d.detail || res.status));
+    };
+    const bulkAck = async () => {
+      if (!window.confirm(`Acknowledge all "${r.type}" issues${r.shop ? ' in ' + r.shop : ''}?`)) return;
+      const res = await fetch('/api/issues/bulk-acknowledge', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ issue_type: r.type, shop: r.shop }),
+      });
+      const d = await res.json();
+      window.alert(res.ok ? `Acknowledged ${d.acknowledged} issues.` : 'Failed: ' + (d.detail || res.status));
+    };
+    const runMatcher = async () => {
+      if (!r.shop) return window.alert('No shop available.');
+      if (!window.confirm(`Trigger match run for ${r.shop}?`)) return;
+      const res = await fetch('/api/runs', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ shop: r.shop, phase: 'match' }),
+      });
+      const d = await res.json();
+      if (res.ok) { window.alert(`Match run started for ${r.shop}.`); goto('runs'); }
+      else window.alert('Failed: ' + (d.detail || res.status));
+    };
+    switch (r.type) {
       case 'missing_price':
       case 'invalid_isbn':
       case 'price_spike':
         return [
-          { label:'Open parser', primary:true, action:open('parser', { shop:'patogupirkti' }) },
-          { label:'Re-scrape URL', action:() => {} },
-          { label:'Bulk ack pattern', action:() => {} },
+          { label:'Open parser', primary:true, action:open('parser', { shop: r.shop }) },
+          { label:'Re-scrape URL', action: rescrapeUrl },
+          { label:'Bulk ack pattern', action: bulkAck },
         ];
       case 'match_isbn_drift':
       case 'unmatched_has_isbn':
         return [
-          { label:'Open book', primary:true, action:open('book', {}) },
-          { label:'Re-run matcher', action:() => {} },
-          { label:'Bulk ack pattern', action:() => {} },
+          { label:'Open book', primary:true, action: r.shopBookId ? open('shop-book-detail', { id: r.shopBookId }) : open('issue-detail', { id: r.id }) },
+          { label:'Re-run matcher', action: runMatcher },
+          { label:'Bulk ack pattern', action: bulkAck },
         ];
       case 'discover_fetch_failed':
         return [
-          { label:'Edit sitemap', primary:true, action:open('shop-detail', { name:'knygos.lt' }) },
-          { label:'Remove URL', action:() => {} },
+          { label:'Edit sitemap', primary:true, action:open('shop-detail', { name: r.shop }) },
+          { label:'Remove URL', action:() => window.alert('URL removal is not yet implemented.') },
         ];
       case 'scrape_run_failed':
         return [
-          { label:'Open run', primary:true, action:open('run-detail', {}) },
-          { label:'Re-run', action:() => {} },
+          { label:'Open run', primary:true, action: r.runRef ? open('run-detail', { id: r.runRef }) : () => {} },
+          { label:'Re-run', action:() => window.alert('Re-run is not yet implemented.') },
         ];
       default:
         return [
-          { label:'Open parser', primary:true, action:open('parser', {}) },
-          { label:'Re-scrape', action:() => {} },
+          { label:'Open parser', primary:true, action:open('parser', { shop: r.shop }) },
+          { label:'Re-scrape', action: rescrapeUrl },
         ];
     }
   };
@@ -877,7 +908,7 @@ function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleS
                 <div style={{display:'flex', flexDirection:'column', gap:8}}>
                   <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.6, fontWeight:600}}>Fix this</div>
                   <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-                    {fixActionsFor(r.type).map((a, idx) => (
+                    {fixActionsFor(r).map((a, idx) => (
                       <HFButton key={idx} size="sm" variant={a.primary?'primary':'default'} onClick={(e) => { e.stopPropagation(); a.action && a.action(); }}>{a.label}</HFButton>
                     ))}
                   </div>

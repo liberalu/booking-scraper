@@ -212,8 +212,14 @@ function HFIssueDetail({ nav, goto, params }) {
       </>}
       actions={<>
         {lifecycle === 'new'
-          ? <HFButton><span style={{display:'flex'}}>{HF_ICONS.check}</span> Mark acknowledged</HFButton>
-          : <HFButton>Move to New</HFButton>}
+          ? <HFButton onClick={async () => {
+              const r = await fetch(`/api/issues/${apiData?.id}/lifecycle?state=acknowledged`, { method:'PATCH' });
+              if (r.ok) setApiData(prev => prev ? { ...prev, lifecycle_state:'acknowledged' } : prev);
+            }}><span style={{display:'flex'}}>{HF_ICONS.check}</span> Mark acknowledged</HFButton>
+          : <HFButton onClick={async () => {
+              const r = await fetch(`/api/issues/${apiData?.id}/lifecycle?state=new`, { method:'PATCH' });
+              if (r.ok) setApiData(prev => prev ? { ...prev, lifecycle_state:'new' } : prev);
+            }}>Move to New</HFButton>}
         <HFButton variant="primary" onClick={() => goto('issues')}>Back to issues</HFButton>
       </>}
     >
