@@ -57,6 +57,12 @@ function HFIssueSparkline({ data, tone = 'neutral', w = 88, h = 24 }) {
   );
 }
 
+function hfIssueDetailLine(issueType, bookTitle) {
+  const meta = HF_ISSUE_TYPES.find(t => t.type === issueType);
+  const base = meta ? meta.description : issueType;
+  return bookTitle ? `${base} — ${bookTitle}` : base;
+}
+
 function HFIssues({ nav, goto }) {
   const HF = getHF();
 
@@ -70,7 +76,7 @@ function HFIssues({ nav, goto }) {
       view: VIEWS.includes(sp.get('view')) ? sp.get('view')  : 'by_type',
       shop: sp.get('shop') || 'all',
       type: sp.get('type') || 'all',
-      sev:  sp.get('sev')  || 'all',
+      sev:  ['all','critical','warning'].includes(sp.get('sev')) ? sp.get('sev') : 'all',
       q:    sp.get('q')    || '',
       run:  sp.get('run')  || 'any',
     };
@@ -434,7 +440,7 @@ function HFIssues({ nav, goto }) {
           </>}>
             <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={searchQ} onChange={setSearchQ}/>
             <HFFilter label="Shop"      value={shopFilter}  options={['all', ...availableShops]} onChange={setShopFilter}/>
-            <HFFilter label="Severity"  value={sevFilter}   options={['all','critical','high','medium','low']}                 onChange={setSevFilter}/>
+            <HFFilter label="Severity"  value={sevFilter}   options={['all','critical','warning']}                            onChange={setSevFilter}/>
             <HFFilter label="Type"      value={typeFilter}  options={['all', ...HF_ISSUE_TYPES.map(t=>t.type)]}                onChange={setTypeFilter}/>
             <span style={{display:'inline-flex', alignItems:'center', gap:6}}>
               <span style={{fontSize:12.5, color:HF.ink3}}>Run</span>
