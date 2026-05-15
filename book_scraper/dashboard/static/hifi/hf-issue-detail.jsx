@@ -106,6 +106,22 @@ function HFIssueDetail({ nav, goto, params }) {
   };
   // (waveTotal fetched above, before the early-return guards)
 
+  const bulkAckWave = async () => {
+    if (!window.confirm(`Acknowledge all ${waveTotal.toLocaleString()} "${type}" issues${shop ? ' in ' + shop : ''}?`)) return;
+    const r = await fetch('/api/issues/bulk-acknowledge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issue_type: type, shop }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setApiData(prev => prev ? { ...prev, lifecycle_state: 'acknowledged' } : prev);
+      window.alert(`Acknowledged ${d.acknowledged} issues.`);
+    } else {
+      window.alert('Bulk acknowledge failed: ' + (d.detail || r.status));
+    }
+  };
+
   // Type-specific actions for the Fix-this panel.
   const fixActions = (() => {
     const open = (page, p) => () => goto(page, p);
@@ -115,37 +131,37 @@ function HFIssueDetail({ nav, goto, params }) {
       case 'price_spike':
         return [
           { label:'Open parser', primary:true, action:open('parser', { shop }), desc:`Edit selectors for ${shop}` },
-          { label:'Re-scrape URL',   action:() => {}, desc:'Re-fetch this URL only' },
-          { label:'Bulk-ack wave',   action:() => {}, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
+          { label:'Re-scrape URL',   action:() => url && window.open(url, '_blank'), desc:'Re-fetch this URL only' },
+          { label:'Bulk-ack wave',   action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
         ];
       case 'match_isbn_drift':
       case 'unmatched_has_isbn':
         return [
-          { label:'Open book', primary:true, action:open('book', {}), desc:'Inspect the canonical book record' },
-          { label:'Re-run matcher',  action:() => {}, desc:'Re-evaluate this shop book against the matcher' },
-          { label:'Bulk-ack wave',   action:() => {}, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
+          { label:'Open book', primary:true, action:open('shop-book-detail', { id: apiData?.shop_book_id }), desc:'Inspect the shop-book record' },
+          { label:'Re-run matcher',  action:() => window.alert('The match phase is not yet implemented.'), desc:'Re-evaluate this shop book against the matcher' },
+          { label:'Bulk-ack wave',   action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
         ];
       case 'discover_fetch_failed':
         return [
           { label:'Edit sitemap', primary:true, action:open('shop-detail', { name: shop }), desc:'Manage discovery URLs for this shop' },
-          { label:'Remove URL',   action:() => {}, desc:'Stop scraping this URL' },
+          { label:'Remove URL',   action:() => window.alert('URL removal is not yet implemented.'), desc:'Stop scraping this URL' },
         ];
       case 'scrape_run_failed':
         return [
           { label:'Open run', primary:true, action:open('run-detail', { id: runId }), desc:`Inspect run #${runId}` },
-          { label:'Re-run',   action:() => {}, desc:'Re-trigger with the same parameters' },
+          { label:'Re-run',   action:() => window.alert('Re-run is not yet implemented.'), desc:'Re-trigger with the same parameters' },
         ];
       case 'non_product_active':
       case 'product_url_non_book':
         return [
           { label:'Open classifier', primary:true, action:open('parser', { shop }), desc:'Update URL classification rules' },
-          { label:'Mark URL non-book', action:() => {}, desc:'Add to skip list' },
-          { label:'Bulk-ack wave', action:() => {}, desc:`Acknowledge all ${waveTotal.toLocaleString()} similar` },
+          { label:'Mark URL non-book', action:() => window.alert('URL skip-list is not yet implemented.'), desc:'Add to skip list' },
+          { label:'Bulk-ack wave', action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} similar` },
         ];
       default:
         return [
           { label:'Open parser', primary:true, action:open('parser', {}), desc:'Edit selectors' },
-          { label:'Re-scrape',   action:() => {}, desc:'Re-fetch this URL only' },
+          { label:'Re-scrape',   action:() => url && window.open(url, '_blank'), desc:'Re-fetch this URL only' },
         ];
     }
   })();
@@ -245,7 +261,7 @@ function HFIssueDetail({ nav, goto, params }) {
               Likely a single parser regression, not {waveTotal.toLocaleString()} separate problems. Ack the entire wave in one action — see "Fix this" below.
             </div>
           </div>
-          <HFButton size="md" variant="primary">View wave →</HFButton>
+          <HFButton size="md" variant="primary" onClick={() => goto('issues', { type, shop })}>View wave →</HFButton>
         </div>
       )}
 
