@@ -102,6 +102,7 @@ function HFIssues({ nav, goto }) {
   const [tab, setTab] = React.useState(_initialParams.tab);
   const [view, setView] = React.useState(_initialParams.view);
   const [byTypeSort, setByTypeSort] = React.useState('priority');  // priority | count | type
+  const [listSort, setListSort] = React.useState({ col: 'age', dir: 'desc' });
   const [selected, setSelected] = React.useState(new Set());
   const [expanded, setExpanded] = React.useState(null);
 
@@ -263,9 +264,27 @@ function HFIssues({ nav, goto }) {
       run: issue.scrape_run_id ? `run:${issue.scrape_run_id}` : null,
       runRef: issue.scrape_run_id || null,
       age: issue.added_at ? formatRelativeAge(issue.added_at) : '—',
+      addedAt: issue.added_at || null,
       lifecycle: issue.lifecycle_state || 'new',
     };
   });
+
+  const _SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+  const sortedListRows = React.useMemo(() => {
+    const { col, dir } = listSort;
+    const m = dir === 'asc' ? 1 : -1;
+    return [...listRows].sort((a, b) => {
+      switch (col) {
+        case 'id':   return m * (parseInt(a.id) - parseInt(b.id));
+        case 'sev':  return m * ((_SEV_RANK[a.sev] || 0) - (_SEV_RANK[b.sev] || 0));
+        case 'type': return m * a.type.localeCompare(b.type);
+        case 'shop': return m * (a.shop || '').localeCompare(b.shop || '');
+        case 'book': return m * (a.book || '').localeCompare(b.book || '');
+        case 'age':  return m * (new Date(a.addedAt || 0) - new Date(b.addedAt || 0));
+        default:     return 0;
+      }
+    });
+  }, [listRows, listSort]);
 
   // Bulk selection helpers
   const toggleOne = (id) => setSelected(prev => {
@@ -285,6 +304,7 @@ function HFIssues({ nav, goto }) {
   const selectedCount = selected.size;
   const allVisibleSelected = listRows.length > 0 && listRows.every(r => selected.has(r.id));
   const someVisibleSelected = listRows.some(r => selected.has(r.id));
+  const visibleIds = listRows.map(r => r.id);
 
   // Type-specific "Fix this" actions
   const fixActionsFor = (type) => {
@@ -727,7 +747,7 @@ function HFIssues({ nav, goto }) {
           <>
           <ListRows
             HF={HF}
-            rows={listRows}
+            rows={sortedListRows}
             selected={selected}
             toggleOne={toggleOne}
             toggleAllVisible={toggleAllVisible}
@@ -738,6 +758,8 @@ function HFIssues({ nav, goto }) {
             sevTone={sevTone}
             fixActionsFor={fixActionsFor}
             goto={goto}
+            sort={listSort}
+            onSort={setListSort}
           />
           {listData.total > 50 && (
             <div style={{padding:'12px 16px', display:'flex', alignItems:'center', gap:8, borderTop:`1px solid ${HF.border}`, justifyContent:'flex-end'}}>
@@ -757,8 +779,18 @@ function HFIssues({ nav, goto }) {
 }
 
 // ── List view with bulk select + inline expand-row preview ──
-function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleSelected, someVisibleSelected, expanded, setExpanded, sevTone, fixActionsFor, goto }) {
+function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleSelected, someVisibleSelected, expanded, setExpanded, sevTone, fixActionsFor, goto, sort, onSort }) {
   const COLS = '36px 1.1fr 0.7fr 1.2fr 0.7fr 1.3fr 1.4fr 1.8fr 0.7fr 28px';
+  const SortHd = ({ col, label }) => {
+    const active = sort && sort.col === col;
+    const icon = !sort ? '' : active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+    return (
+      <span onClick={() => onSort && onSort({ col, dir: active && sort.dir === 'desc' ? 'asc' : 'desc' })}
+        style={{ cursor: onSort ? 'pointer' : 'default', userSelect: 'none', color: active ? HF.ink2 : HF.ink3 }}>
+        {label}<span style={{ fontSize: 9, opacity: active ? 1 : 0.45 }}>{icon}</span>
+      </span>
+    );
+  };
   return (
     <div>
       {/* Header */}
@@ -784,14 +816,14 @@ function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleS
             {!allVisibleSelected && someVisibleSelected && <span style={{width:7, height:1.8, background:'#fff', borderRadius:1}}/>}
           </span>
         </span>
-        <span>ID</span>
-        <span>SEVERITY</span>
-        <span>TYPE</span>
-        <span>SHOP</span>
-        <span>BOOK</span>
+        <SortHd col="id"   label="ID"/>
+        <SortHd col="sev"  label="SEVERITY"/>
+        <SortHd col="type" label="TYPE"/>
+        <SortHd col="shop" label="SHOP"/>
+        <SortHd col="book" label="BOOK"/>
         <span>URL</span>
         <span>DETAIL</span>
-        <span>WHEN</span>
+        <SortHd col="age"  label="WHEN"/>
         <span/>
       </div>
       {rows.map((r) => {
