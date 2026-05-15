@@ -96,6 +96,14 @@ function HFIssues({ nav, goto }) {
   const [typeFilter, setTypeFilter] = React.useState(_initialParams.type);
   const [searchQ, setSearchQ] = React.useState(_initialParams.q);
   const [runFilter, setRunFilter] = React.useState(_initialParams.run);
+  const [availableShops, setAvailableShops] = React.useState([]);
+
+  React.useEffect(() => {
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => setAvailableShops((d.shops || []).map(s => s.name)))
+      .catch(() => {});
+  }, []);
 
   // Sync state → URL query params
   React.useEffect(() => {
@@ -190,7 +198,7 @@ function HFIssues({ nav, goto }) {
     const ack = (row.by_state?.acknowledged ?? row.cnt_acknowledged) || 0;
     const newCount = (row.by_state?.new ?? row.cnt_new) || 0;
     const priority = sevRank[meta.sev || 'low'] * Math.log10(Math.max(2, newCount));
-    const trend = trendData[row.issue_type] || [];
+    const trend = trendData[row.issue_type] || Array(14).fill(0);
     const recent = trend.slice(-7).reduce((a, b) => a + b, 0);
     const prev = trend.slice(-14, -7).reduce((a, b) => a + b, 0);
     const deltaPct = prev > 0 ? Math.round((recent - prev) / prev * 100) : 0;
@@ -425,7 +433,7 @@ function HFIssues({ nav, goto }) {
             </span>
           </>}>
             <HFSearch placeholder="Search ID, book, URL, detail…" width={260} value={searchQ} onChange={setSearchQ}/>
-            <HFFilter label="Shop"      value={shopFilter}  options={['all','vaga','knygos.lt','patogupirkti','krisostomus']} onChange={setShopFilter}/>
+            <HFFilter label="Shop"      value={shopFilter}  options={['all', ...availableShops]} onChange={setShopFilter}/>
             <HFFilter label="Severity"  value={sevFilter}   options={['all','critical','high','medium','low']}                 onChange={setSevFilter}/>
             <HFFilter label="Type"      value={typeFilter}  options={['all', ...HF_ISSUE_TYPES.map(t=>t.type)]}                onChange={setTypeFilter}/>
             <span style={{display:'inline-flex', alignItems:'center', gap:6}}>
