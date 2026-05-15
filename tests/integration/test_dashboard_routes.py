@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from book_scraper.dashboard.app import app
 from book_scraper.dashboard.deps import get_db
 from book_scraper.db.models import (
+    Book,
+    DiscoveredUrl,
     ScrapeFailure,
     ScrapeRun,
     ScrapeUrlItem,
@@ -1919,3 +1921,41 @@ def test_issues_groups_by_type_shop(client: TestClient) -> None:
     if d["groups"]:
         g = d["groups"][0]
         assert "issue_type" in g and "shop_name" in g
+
+
+@pytest.mark.integration
+def test_shop_book_detail_api_returns_book_id_and_discovery_url(
+    client: TestClient, db_session: Session
+) -> None:
+    """Detail endpoint must expose book_id (canonical match) and
+    discovery_url (the DiscoveredUrl row linked to this shop_book)."""
+    shop = db_session.query(Shop).filter(Shop.name == "vaga").one()
+
+    canonical = Book(title="Linked Canonical Book", data_source="shop_inferred")
+    db_session.add(canonical)
+    db_session.flush()
+
+    shop_book = ShopBook(
+        shop_id=shop.id,
+        url="https://vaga.lt/linked-test",
+        title="Linked Test Book",
+        book_id=canonical.id,
+    )
+    db_session.add(shop_book)
+    db_session.flush()
+
+    disc_url = DiscoveredUrl(
+        shop_id=shop.id,
+        url="https://vaga.lt/linked-test",
+        normalized_url="vaga.lt/linked-test",
+        source="sitemap",
+        shop_book_id=shop_book.id,
+    )
+    db_session.add(disc_url)
+    db_session.commit()
+
+    response = client.get(f"/api/shop-books/{shop_book.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["book_id"] == canonical.id
+    assert data["discovery_url"] == "https://vaga.lt/linked-test"

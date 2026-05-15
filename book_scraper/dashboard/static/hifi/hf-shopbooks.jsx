@@ -143,6 +143,8 @@ function HFShopBooks({ nav, goto }) {
   const [bookType, setBookType]   = React.useState(_sp.get('type') || 'all');
   const [category, setCategory]   = React.useState(_sp.get('category') || '');
   const [urlUnreachable, setUrlUnreachable] = React.useState(_sp.get('unreachable') === '1');
+  const _linkedInit = _sp.get('linked') === 'not_linked' ? 'not linked' : (_sp.get('linked') || 'any');
+  const [linked, setLinked]       = React.useState(_linkedInit);
   const [page, setPage]           = React.useState(Math.max(1, parseInt(_sp.get('page') || '1', 10) || 1));
   const PER_PAGE = 30;
 
@@ -156,12 +158,13 @@ function HFShopBooks({ nav, goto }) {
     if (bookType !== 'all') sp.set('type', bookType);
     if (category.trim()) sp.set('category', category.trim());
     if (urlUnreachable) sp.set('unreachable', '1');
+    if (linked !== 'any') sp.set('linked', linked);
     if (page > 1) sp.set('page', String(page));
     const qs = sp.toString();
     window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
-  }, [q, shop, active, missing, bookType, category, urlUnreachable, page]);
+  }, [q, shop, active, missing, bookType, category, urlUnreachable, linked, page]);
 
-  React.useEffect(() => { setPage(1); }, [q, shop, active, missing, bookType, category, urlUnreachable]);
+  React.useEffect(() => { setPage(1); }, [q, shop, active, missing, bookType, category, urlUnreachable, linked]);
 
   const [data, setData] = React.useState({
     books: [], total: 0, page: 1, per_page: PER_PAGE, pages: 1,
@@ -179,19 +182,21 @@ function HFShopBooks({ nav, goto }) {
     if (bookType !== 'all') params.set('type_filter', bookType);
     if (category.trim()) params.set('category', category.trim());
     if (urlUnreachable) params.set('url_unreachable', 'true');
+    if (linked === 'linked')     params.set('linked', 'linked');
+    if (linked === 'not linked') params.set('linked', 'not_linked');
     fetch(`/api/shop-books?${params.toString()}`)
       .then(r => r.json())
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [q, shop, active, missing, bookType, category, urlUnreachable, page]);
+  }, [q, shop, active, missing, bookType, category, urlUnreachable, linked, page]);
 
   const rows = data.books;
   const activeCount =
     (q.trim()?1:0) + (shop!=='all'?1:0) + (active!=='all'?1:0) +
-    (missing!=='any'?1:0) + (bookType!=='all'?1:0) + (category.trim()?1:0) + (urlUnreachable?1:0);
+    (missing!=='any'?1:0) + (bookType!=='all'?1:0) + (category.trim()?1:0) + (urlUnreachable?1:0) + (linked!=='any'?1:0);
 
-  const clearAll = () => { setQ(''); setShop('all'); setActive('all'); setMissing('any'); setBookType('all'); setCategory(''); setUrlUnreachable(false); };
+  const clearAll = () => { setQ(''); setShop('all'); setActive('all'); setMissing('any'); setBookType('all'); setCategory(''); setUrlUnreachable(false); setLinked('any'); };
 
   return (
     <HFShell {...nav} activePage="shop-books"
@@ -226,6 +231,7 @@ function HFShopBooks({ nav, goto }) {
           <HFFilter label="Active"  value={active}   options={['all','true','false']}                onChange={setActive}/>
           <HFFilter label="Type"    value={bookType} options={['all','book','non_book','audio','ebook']} onChange={setBookType}/>
           <HFFilter label="Missing" value={missing}  options={['any','author','isbn','year','publisher','format','price']} onChange={setMissing} allLabel="any"/>
+          <HFFilter label="Linked"  value={linked}   options={['any','linked','not linked']} onChange={setLinked} allLabel="any"/>
         </HFFilterBar>
       </HFCard>
 
@@ -254,7 +260,14 @@ function HFShopBooks({ nav, goto }) {
             { key:'shop', label:'Shop', w:'0.7fr', sortable:true, cell: v => <span style={{color:'var(--hf-ink)'}}>{v}</span> },
             { key:'isbn', label:'ISBN', w:'1.1fr', mono:true, sortable:true, cell: v => v ? <span style={{color:'var(--hf-ink2)'}}>{v}</span> : <HFPill tone="warn">missing</HFPill> },
             { key:'price', label:'Price', w:'0.7fr', mono:true, align:'right', sortable:true, sortVal:r=>parseFloat((r.price||'').replace(/[^\d.]/g,''))||0, cell: v => <span style={{color: v==='—'? 'var(--hf-ink4)' : 'var(--hf-ink)', fontWeight:500}}>{v}</span> },
-            { key:'status', label:'Status', w:'0.8fr', sortable:true, cell: v => <HFPill tone={statusTone[v]}>{v}</HFPill> },
+            { key:'status', label:'Status', w:'0.8fr', sortable:true, cell: (v, r) => (
+              <span style={{display:'flex', flexDirection:'column', gap:3}}>
+                <HFPill tone={statusTone[v]}>{v}</HFPill>
+                {r.book_id
+                  ? <HFPill tone="ok" style={{width:'fit-content', fontSize:11, padding:'0 5px', height:16}}>linked</HFPill>
+                  : <HFPill tone="neutral" style={{width:'fit-content', fontSize:11, padding:'0 5px', height:16}}>unlinked</HFPill>}
+              </span>
+            )},
             { key:'updated', label:'Updated', w:'0.8fr', muted:true, mono:true, sortable:true },
             { key:'_', label:'', w:'28px', align:'right', cell: () => <span style={{color:'var(--hf-ink4)', display:'flex', justifyContent:'flex-end'}}>{HF_ICONS.chevron}</span> },
           ]}
@@ -390,6 +403,11 @@ function HFShopBookDetail({ nav, goto, params }) {
         {data.type && <HFPill tone={data.type === 'book' ? 'accent' : data.type === 'non_book' ? 'err' : 'warn'}>
           {data.type.replace('_', ' ')}
         </HFPill>}
+        {data.book_id && (
+          <span style={{cursor:'pointer'}} onClick={() => goto('book-detail', { id: data.book_id })}>
+            <HFPill tone="ok">linked →</HFPill>
+          </span>
+        )}
       </span>}
       subtitle={<span style={{fontSize:13}}>by {data.author || '—'} · <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink3)'}}>#{id}</span> · shop <span style={{color:'var(--hf-ink2)', fontWeight:500}}>{data.shop}</span></span>}
       breadcrumb={<>
@@ -634,10 +652,18 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'urls' && (
         <HFCard title="Source URLs" sub="discovered URLs linked to this book">
           {data.url ? (
-            <div style={{padding:`10px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:10, fontSize:13}}>
-              <span style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{data.url}</span>
-              <HFPill tone="accent">primary</HFPill>
-            </div>
+            <>
+              <div style={{padding:`10px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:10, fontSize:13}}>
+                <a href={data.url} target="_blank" rel="noopener noreferrer" style={{fontFamily:'var(--hf-mono)', color:'var(--hf-accent-ink)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{data.url}</a>
+                <HFPill tone="accent">shop url</HFPill>
+              </div>
+              {data.discovery_url && data.discovery_url !== data.url && (
+                <div style={{padding:`10px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:10, fontSize:13, borderTop:'1px solid var(--hf-border-faint)'}}>
+                  <a href={data.discovery_url} target="_blank" rel="noopener noreferrer" style={{fontFamily:'var(--hf-mono)', color:'var(--hf-ink2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>{data.discovery_url}</a>
+                  <HFPill tone="neutral">discovered</HFPill>
+                </div>
+              )}
+            </>
           ) : <HFEmptyState title="No URLs" sub="No URLs linked to this book." onClear={null}/>}
         </HFCard>
       )}
@@ -850,6 +876,9 @@ function HFShopBookDetail({ nav, goto, params }) {
 
       {tab === 'details' && (() => {
         const coreRows = [
+          ['Canonical book', data.book_id
+            ? <span style={{color:'var(--hf-accent-ink)', fontWeight:500, cursor:'pointer', textDecoration:'underline'}} onClick={() => goto('book-detail', { id: data.book_id })}>#{data.book_id} →</span>
+            : '—', !!data.book_id],
           ['Type',       data.type ? data.type.replace('_', ' ') : '—', data.type && data.type !== 'non_book'],
           ['URL type',   data.url_status || '—',   data.url_status && data.url_status !== 'non_product'],
           ['ISBN',       data.isbn || '—',        data.isbn],

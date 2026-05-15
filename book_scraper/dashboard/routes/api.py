@@ -361,6 +361,7 @@ def _book_dict(sb: ShopBook) -> dict[str, Any]:
         else None,
         "rating": float(sb.rating) if sb.rating is not None else None,
         "review_count": sb.review_count,
+        "book_id": sb.book_id,
     }
 
 
@@ -1712,6 +1713,8 @@ def api_shop_book_detail(
     d["url_count"] = url_count
     d["run_count"] = run_count
     d["runs"] = recent_runs
+    d["book_id"] = sb.book_id
+    d["discovery_url"] = linked_url.url if linked_url else None
     d["url_status"] = linked_url.url_type if linked_url else None
     d["url_fail_count"] = linked_url.fail_count if linked_url else 0
     d["classification"] = (
