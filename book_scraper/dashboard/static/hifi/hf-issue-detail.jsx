@@ -138,7 +138,16 @@ function HFIssueDetail({ nav, goto, params }) {
       case 'unmatched_has_isbn':
         return [
           { label:'Open book', primary:true, action:open('shop-book-detail', { id: apiData?.shop_book_id }), desc:'Inspect the shop-book record' },
-          { label:'Re-run matcher',  action:() => window.alert('The match phase is not yet implemented.'), desc:'Re-evaluate this shop book against the matcher' },
+          { label:'Re-run matcher',  action: async () => {
+              if (!window.confirm(`Trigger match run for ${shop}?`)) return;
+              const r = await fetch('/api/runs', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shop, phase: 'match' }),
+              });
+              const d = await r.json();
+              if (r.ok) { window.alert(`Match run started for ${shop}.`); goto('runs'); }
+              else window.alert('Failed: ' + (d.detail || r.status));
+            }, desc:'Re-evaluate this shop book against the matcher' },
           { label:'Bulk-ack wave',   action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
         ];
       case 'discover_fetch_failed':
@@ -261,7 +270,7 @@ function HFIssueDetail({ nav, goto, params }) {
               Likely a single parser regression, not {waveTotal.toLocaleString()} separate problems. Ack the entire wave in one action — see "Fix this" below.
             </div>
           </div>
-          <HFButton size="md" variant="primary" onClick={() => goto('issues', { type, shop })}>View wave →</HFButton>
+          <HFButton size="md" variant="primary" onClick={() => goto('issues')}>View wave →</HFButton>
         </div>
       )}
 
