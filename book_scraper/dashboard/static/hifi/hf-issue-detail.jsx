@@ -270,7 +270,7 @@ function HFIssueDetail({ nav, goto, params }) {
               Likely a single parser regression, not {waveTotal.toLocaleString()} separate problems. Ack the entire wave in one action — see "Fix this" below.
             </div>
           </div>
-          <HFButton size="md" variant="primary" onClick={() => goto('issues')}>View wave →</HFButton>
+          <HFButton size="md" variant="primary" onClick={() => goto('issues', { run: runId, type })}>View wave →</HFButton>
         </div>
       )}
 
