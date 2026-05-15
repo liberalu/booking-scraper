@@ -57,6 +57,23 @@ function HFIssueSparkline({ data, tone = 'neutral', w = 88, h = 24 }) {
   );
 }
 
+function formatRelativeAge(isoStr) {
+  if (!isoStr) return '—';
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000));
+  if (secs < 60)   return 'just now';
+  const m = Math.floor(secs / 60);
+  if (m < 60)      return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)      return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7)       return `${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w < 5)       return `${w}w ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12)     return `${mo}mo ago`;
+  return `${Math.floor(d / 365)}y ago`;
+}
+
 function hfIssueDetailLine(issueType, bookTitle) {
   const meta = HF_ISSUE_TYPES.find(t => t.type === issueType);
   const base = meta ? meta.description : issueType;
