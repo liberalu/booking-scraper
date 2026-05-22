@@ -404,6 +404,85 @@ def test_parse_product_page_keeps_lithuanian_books():
     assert not any(r.get("key") == "blocked_non_lt_language" for r in reasons)
 
 
+def test_parse_category_page_nested_anchor_before_title_preserves_card_data():
+    """Bug U regression: live category pages embed an inner <a> (e.g. a
+    wishlist / add-to-cart button) that appears *before* the title div
+    inside the outer book-item anchor.
+
+    Old code — `_CARD_BLOCK_RE` with non-greedy `.*?</a>` — terminates
+    the body capture at the inner </a>, so the body contains no
+    <div class="title"> and _parse_card returns a url-only stub.
+    The full title/author/price data is silently lost.
+
+    New code — slice between card opening positions — captures the full
+    body regardless of nested anchors.
+    """
+    inner_before_title = (
+        '<a class="book-item" href="/produktas/x/kakegurui/">'
+        # Inner anchor (wishlist button) appears BEFORE the title div.
+        '<a href="/produktas/x/kakegurui/?add-to-wishlist=1" class="wishlist">♡</a>'
+        '<div class="photo"><img src="https://www.humanitas.lt/uploads/kakegurui.webp">'
+        '</div>'
+        '<div class="author">Homura Kawamoto</div>'
+        '<div class="title">Kakegurui</div>'
+        '<div class="price"><div class="normal">'
+        '<div class="price-container">'
+        '<div class="discount">12.00 €</div>'
+        '<div class="price">15.00 €</div>'
+        '</div></div></div>'
+        '</a>'
+        '<a class="book-item" href="/produktas/x/oshi-no-ko/">'
+        '<div class="title">[Oshi No Ko]</div>'
+        '</a>'
+    )
+    products = parse_category_page(inner_before_title)["products"]
+    assert len(products) == 2, (
+        f"expected 2 products, got {len(products)}: {[p.get('url') for p in products]}"
+    )
+    by_url = {p["url"]: p for p in products}
+    kakegurui_url = "https://www.humanitas.lt/produktas/x/kakegurui/"
+    oshi_url = "https://www.humanitas.lt/produktas/x/oshi-no-ko/"
+    assert kakegurui_url in by_url, "kakegurui card missing from products"
+    assert oshi_url in by_url, "oshi-no-ko card missing from products"
+
+    # Critical: each card must carry its own title, not bleed into the adjacent card.
+    assert by_url[kakegurui_url].get("title") == "Kakegurui", (
+        f"kakegurui card has wrong title: {by_url[kakegurui_url].get('title')!r}"
+    )
+    assert by_url[oshi_url].get("title") == "[Oshi No Ko]"
+    # Price and author must also survive the nested anchor.
+    assert by_url[kakegurui_url].get("author") == "Homura Kawamoto"
+    assert by_url[kakegurui_url].get("price") == "12.00"
+    assert by_url[kakegurui_url].get("price_original") == "15.00"
+
+
+def test_parse_category_page_nested_anchor_no_url_title_swap():
+    """Even when a nested inner anchor causes body truncation, the
+    href captured for a card must never be paired with the *next*
+    card's title.  (The exact misattribution seen in runs #423/#437:
+    url=kakegurui, title=[Oshi No Ko].)
+
+    Both cards must appear independently with their own titles.
+    """
+    html = (
+        '<a href="/produktas/x/book-a/" class="book-item">'
+        '<a href="/produktas/x/book-a/krepselis/">Add to cart</a>'
+        '<div class="title">Grąžink man mano brolius</div>'
+        '</a>'
+        '<a href="/produktas/x/book-b/" class="book-item">'
+        '<div class="title">Labas rytas</div>'
+        '</a>'
+    )
+    products = parse_category_page(html)["products"]
+    by_url = {p["url"]: p for p in products}
+    url_a = "https://www.humanitas.lt/produktas/x/book-a/"
+    url_b = "https://www.humanitas.lt/produktas/x/book-b/"
+    assert by_url.get(url_a, {}).get("title") == "Grąžink man mano brolius", (
+        f"book-a has wrong title: {by_url.get(url_a, {}).get('title')!r}"
+    )
+    assert by_url.get(url_b, {}).get("title") == "Labas rytas"
+
+
 def test_parse_product_page_marks_out_of_stock_when_likutis_present():
     """Cart block carries 'Likutis nepakankamas' → in_stock False."""
     html = (

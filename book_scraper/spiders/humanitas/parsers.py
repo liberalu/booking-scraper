@@ -279,10 +279,19 @@ def parse_sitemap_urls(html: str) -> list[str]:
 #     <div class="price-discount-info">5 % nuolaida perkant internetu</div>
 #   </a>
 #
-# We split the response on `<a … class="book-item" …>…</a>` boundaries
-# so per-card fields don't bleed into adjacent cards.
-_CARD_BLOCK_RE = re.compile(
-    r'<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>(.*?)</a>',
+# Live category listing pages sometimes include inner <a> tags inside
+# cards (e.g. a wishlist or "Add to cart" anchor).  Using a non-greedy
+# `.*?</a>` regex to extract the card body terminates at the *first*
+# </a> — which is the inner anchor's close tag when it appears before
+# the title/author divs — and silently drops all card metadata.
+#
+# We avoid this entirely by matching only the *opening* tag of each
+# card and slicing the HTML between consecutive card openings.  The
+# body for card N is `html[opening_N.end : opening_N+1.start]`.  This
+# is immune to nested anchors and missing close tags, and captures the
+# full title/author/price content regardless of card structure.
+_CARD_OPENING_RE = re.compile(
+    r'<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>',
     re.S | re.I,
 )
 _CARD_TITLE_RE = re.compile(
@@ -384,11 +393,22 @@ def parse_category_page(html: str) -> CategoryPageResult:
     discover spider's standard "stop when a page returns 0 products"
     behaviour and a low ``max_pages`` safety cap in the TOML — page 2
     typically yields ~20 stragglers before page 3 returns empty.
+
+    Card body extraction uses ``_CARD_OPENING_RE`` to locate the *start*
+    of each `<a class="book-item">` tag; the body for card N is the
+    slice of HTML from the end of opening N to the start of opening N+1.
+    This is robust against nested inner `<a>` tags (e.g. wishlist or
+    "Add to cart" buttons) that would otherwise cause the old non-greedy
+    `.*?</a>` approach to terminate the body capture early and silently
+    drop title/author/price data.
     """
     products: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for href, body in _CARD_BLOCK_RE.findall(html):
-        product = _parse_card(href, body)
+    openings = list(_CARD_OPENING_RE.finditer(html))
+    for i, m in enumerate(openings):
+        body_start = m.end()
+        body_end = openings[i + 1].start() if i + 1 < len(openings) else len(html)
+        product = _parse_card(m.group(1), html[body_start:body_end])
         if product is None:
             continue
         url = product["url"]
