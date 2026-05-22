@@ -65,6 +65,36 @@ def test_parse_category_page_extracts_per_card_fields():
     assert wittgenstein["in_stock"] is True
 
 
+def test_parse_category_page_strips_trailing_slash_from_url():
+    """URLs from category-page hrefs always arrive with a trailing slash.
+
+    The pipeline uses shop_book.url as the canonical key; existing rows
+    are stored WITHOUT a trailing slash (the product page redirects to
+    the no-slash form).  The parser must normalise the href so that
+    discover upserts hit existing shop_books instead of inserting duplicates.
+    """
+    from book_scraper.spiders.humanitas.parsers import parse_category_page
+
+    html = (
+        '<a class="book-item" href="/produktas/visos-kategorijos/some-book/">'
+        '<div class="title">Some Book</div></a>'
+    )
+    products = parse_category_page(html)["products"]
+    assert len(products) == 1
+    assert products[0]["url"] == "https://www.humanitas.lt/produktas/visos-kategorijos/some-book"
+    assert not products[0]["url"].endswith("/"), "URL must not have trailing slash"
+
+
+def test_parse_sitemap_urls_strips_trailing_slash():
+    """parse_sitemap_urls applies the same trailing-slash normalisation."""
+    from book_scraper.spiders.humanitas.parsers import parse_sitemap_urls
+
+    html = '<a class="book-item" href="/produktas/x/book-slug/">Book</a>'
+    urls = parse_sitemap_urls(html)
+    assert urls == ["https://www.humanitas.lt/produktas/x/book-slug"]
+    assert not urls[0].endswith("/"), "URL must not have trailing slash"
+
+
 def test_parse_category_page_dedupes_repeated_card_urls():
     """If the listing renders the same product twice (sort/swiper edges),
     we emit it once."""
@@ -76,7 +106,7 @@ def test_parse_category_page_dedupes_repeated_card_urls():
     )
     products = parse_category_page(html)["products"]
     assert len(products) == 1
-    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/foo/"
+    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/foo"
 
 
 def test_parse_category_page_handles_card_without_discount():
@@ -104,7 +134,7 @@ def test_parse_category_page_drops_book_item_anchors_outside_product_namespace()
     )
     products = parse_category_page(html)["products"]
     assert len(products) == 1
-    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/real/"
+    assert products[0]["url"] == "https://www.humanitas.lt/produktas/x/real"
 
 
 def test_parse_sitemap_urls_handles_relative_hrefs_with_cntnt01page():
@@ -117,8 +147,8 @@ def test_parse_sitemap_urls_handles_relative_hrefs_with_cntnt01page():
     )
     urls = parse_sitemap_urls(html)
     assert urls == [
-        "https://www.humanitas.lt/produktas/visos-kategorijos/foo/",
-        "https://www.humanitas.lt/produktas/visos-kategorijos/bar/",
+        "https://www.humanitas.lt/produktas/visos-kategorijos/foo",
+        "https://www.humanitas.lt/produktas/visos-kategorijos/bar",
     ]
 
 
@@ -129,7 +159,7 @@ def test_parse_sitemap_urls_ignores_non_product_book_item_anchors():
         '<a class="book-item" href="/produktas/x/y/">book</a>'
     )
     urls = parse_sitemap_urls(html)
-    assert urls == ["https://www.humanitas.lt/produktas/x/y/"]
+    assert urls == ["https://www.humanitas.lt/produktas/x/y"]
 
 
 def test_parse_product_page_extracts_full_book_info():
@@ -440,8 +470,8 @@ def test_parse_category_page_nested_anchor_before_title_preserves_card_data():
         f"expected 2 products, got {len(products)}: {[p.get('url') for p in products]}"
     )
     by_url = {p["url"]: p for p in products}
-    kakegurui_url = "https://www.humanitas.lt/produktas/x/kakegurui/"
-    oshi_url = "https://www.humanitas.lt/produktas/x/oshi-no-ko/"
+    kakegurui_url = "https://www.humanitas.lt/produktas/x/kakegurui"
+    oshi_url = "https://www.humanitas.lt/produktas/x/oshi-no-ko"
     assert kakegurui_url in by_url, "kakegurui card missing from products"
     assert oshi_url in by_url, "oshi-no-ko card missing from products"
 
@@ -475,8 +505,8 @@ def test_parse_category_page_nested_anchor_no_url_title_swap():
     )
     products = parse_category_page(html)["products"]
     by_url = {p["url"]: p for p in products}
-    url_a = "https://www.humanitas.lt/produktas/x/book-a/"
-    url_b = "https://www.humanitas.lt/produktas/x/book-b/"
+    url_a = "https://www.humanitas.lt/produktas/x/book-a"
+    url_b = "https://www.humanitas.lt/produktas/x/book-b"
     assert by_url.get(url_a, {}).get("title") == "Grąžink man mano brolius", (
         f"book-a has wrong title: {by_url.get(url_a, {}).get('title')!r}"
     )

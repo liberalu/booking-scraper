@@ -245,7 +245,7 @@ def parse_sitemap_urls(html: str) -> list[str]:
         # Strip the `cntnt01page=N` query string the CMSMS Products
         # module echoes onto every paginated card. The product is the
         # same regardless of which result page it appeared on.
-        href = raw.split("?", 1)[0].split("#", 1)[0].strip()
+        href = raw.split("?", 1)[0].split("#", 1)[0].strip().rstrip("/")
         if not href:
             continue
         if href.startswith("//"):
@@ -324,7 +324,7 @@ def _parse_card(href: str, body: str) -> dict[str, Any] | None:
     the caller can drop them. Title is the minimum signal — without
     it the card carries no useful data.
     """
-    cleaned = href.split("?", 1)[0].split("#", 1)[0].strip()
+    cleaned = href.split("?", 1)[0].split("#", 1)[0].strip().rstrip("/")
     if not cleaned:
         return None
     if cleaned.startswith("//"):
