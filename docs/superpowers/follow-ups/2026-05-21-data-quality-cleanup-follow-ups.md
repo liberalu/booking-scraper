@@ -67,23 +67,27 @@ Replaced `_CARD_BLOCK_RE` with `_CARD_OPENING_RE` and rewrote `parse_category_pa
 
 All 465 unit tests pass. Two new regression tests added (`test_parse_category_page_nested_anchor_before_title_preserves_card_data`, `test_parse_category_page_nested_anchor_no_url_title_swap`).
 
-**Remaining: one-off T-style DB cleanup.**
+**All follow-up DB work complete (2026-05-22).** Three additional steps were needed beyond the parser fix itself:
 
-Future discover runs will no longer generate ghost shop_books or misattributed alias URLs. However, residue from runs #423/#437/#342/#389 (the 4 affected runs) still exists in the DB. After the scraper is redeployed and the next successful humanitas discover-categories run completes, run the T-style cleanup:
+**Step 1 — T-style orphan cleanup.** Residue from buggy runs #423/#437/#342/#389 left 10,898 `discovered_urls` rows with `shop_book_id` pointing to a shop_book whose canonical URL was different from the discovered_url's URL (trailing-slash mismatch). These were nulled out.
 
+**Step 2 — Root-cause discovery: trailing-slash URL normalization gap.** Investigating why `discovered_urls` never canonically linked to `shop_books` revealed that humanitas category-page `<a href>` attributes always carry a trailing slash (`/produktas/.../slug/`) while `shop_books.url` is stored without one. This pre-existing mismatch caused every discover run to fail to link discovered_urls to shop_books. Fixed in `book_scraper/spiders/humanitas/parsers.py` (both `_parse_card` and `parse_sitemap_urls` now call `.rstrip("/")` on the constructed URL). Parser tests updated accordingly; trailing-slash normalization regression test added.
+
+**Step 3 — Bulk DB normalization.** One-shot SQL run to fix the existing data:
 ```sql
--- Orphan alias discovered_urls (no canonical shop_book owns these URLs)
-UPDATE discovered_urls SET shop_book_id = NULL
-WHERE shop_id = (SELECT id FROM shops WHERE name = 'humanitas')
-  AND url_type = 'product'
-  AND shop_book_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM shop_books sb WHERE sb.id = discovered_urls.shop_book_id
-      AND sb.url = discovered_urls.url
-  );
+-- Strip trailing slashes from 81,130 existing discovered_urls
+UPDATE discovered_urls SET url = rtrim(url, '/')
+WHERE shop_id = (SELECT id FROM shops WHERE name = 'humanitas') AND url LIKE '%/';
+
+-- Re-link to shop_books by exact URL match (linked 10,898 rows)
+UPDATE discovered_urls du SET shop_book_id = sb.id
+FROM shop_books sb
+WHERE du.shop_id = sb.shop_id
+  AND du.shop_id = (SELECT id FROM shops WHERE name = 'humanitas')
+  AND du.url = sb.url AND du.shop_book_id IS NULL;
 ```
 
-Then re-run the X-style check for title-URL mismatch (771 still-active shop_books) and deactivate confirmed ghosts. The fresh discover run will re-populate correct records.
+**End state:** 10,898 of 13,294 humanitas product `discovered_urls` linked to `shop_books` (up from 0 before this session). 6,576 of 6,584 active shop_books now have at least one linked discovered_url. The 8 remaining orphans are pre-existing EE-2 cases (no discovered_url row at all — see below).
 
 ---
 
@@ -101,18 +105,18 @@ These are designed but not built. Their priority order for next session:
 
 ### Small follow-ups uncovered this session
 
-| Task | Why | Estimate |
-|---|---|---|
-| **EE-1 — Verify patogupirkti scan #438 reaches completion** | The 34,494 acknowledged price-triplet issues will mostly auto-flip back to `resolved` as the scan re-scrapes books and populates prices. ~24-40h remaining. Worth checking after scan completes whether any genuine stragglers remain. | passive monitoring |
-| **EE-2 — Investigate humanitas `orphan_no_url` (10)** | Active shop_books with zero `discovered_urls` rows. Either deleted-but-not-cascaded FK or a rare race in the discover pipeline. | 30 min |
-| **EE-3 — Extend `_NON_BOOK_TITLE_RE` patterns** | Add `(Blu-ray)`, `(USB)`, `(Vinyl)` — caught after this session for patogupirkti's edge cases. | 15 min |
-| **EE-4 — Auto-acknowledge for confirmed shop-side bugs** | New validator behaviour: emit `slug_diacritic_loss` as `acknowledged` instead of `new` (since the bug is in the shop, not our code, and we'll never fix it). Eliminates the recurring need to manually ack. | 1 hr |
-| **EE-5 — Formally delete `product_url_non_book` dead branch** | Currently stubbed to return empty list. Decide: remove entirely, or rebuild with smarter heuristic. | 30 min |
-| **EE-6 — Add integration tests for the `is_active=true` filter** | We added the filter to 6 validators in R. No test would catch a regression if someone removed it. A single fixture-loaded test asserting "deactivated shop_book stops firing isbn_duplicate" would prevent class-wide regression. | 1 hr |
-| **EE-7 — `_NON_BOOK_TITLE_RE` false-negative guard** | The current regex correctly distinguishes `(DVD)` (non-book) from `(su DVD)` (book-with-DVD-included). Add a test covering both to lock that behaviour down. | 15 min |
-| **EE-8 — Update data-quality spec's Rollout-Order** | Rule 9 (diacritic loss detection) is now Implemented; Rules 3, 7, 8 details unchanged. Reorder by what's actually next. | 15 min |
-| **EE-9 — Add "Validator filter cheatsheet" to CLAUDE.md** | Document: all shop_book-targeted validators require `is_active=true`; structural duplicates require it on both sides; price-missing checks require `in_stock=true`. Prevents future PRs from forgetting these gates. | 30 min |
-| **EE-10 — Regenerate `docs/superpowers/specs/INDEX.md`** | Rule 9 moved to Implemented bucket. Should pick up the spec's status header automatically via the existing script. | 5 min |
+| Task | Why | Estimate | Status |
+|---|---|---|---|
+| **EE-1 — Verify patogupirkti scan #438 reaches completion** | The 34,494 acknowledged price-triplet issues will mostly auto-flip back to `resolved` as the scan re-scrapes books and populates prices. ~24-40h remaining. Worth checking after scan completes whether any genuine stragglers remain. | passive monitoring | open |
+| **EE-2 — Investigate humanitas `orphan_no_url` (8)** | After URL normalization fix, 8 active shop_books still have zero `discovered_urls` rows (down from 10). IDs: 61496, 249251, 257003, 258619, 262808, 266716, 266731, 266732. These likely appeared via a scan run that didn't also insert a discovered_url row. Investigate and deactivate if no longer on the site. | 30 min | open |
+| ~~**EE-3 — Extend `_NON_BOOK_TITLE_RE` patterns**~~ | ~~Add `(Blu-ray)`, `(USB)`, `(Vinyl)` — Blu-ray was already there; added USB and Vinyl. Tests added.~~ | ~~15 min~~ | ✅ 2026-05-22 |
+| **EE-4 — Auto-acknowledge for confirmed shop-side bugs** | New validator behaviour: emit `slug_diacritic_loss` as `acknowledged` instead of `new` (since the bug is in the shop, not our code, and we'll never fix it). Eliminates the recurring need to manually ack. | 1 hr | open |
+| ~~**EE-5 — Formally delete `product_url_non_book` dead branch**~~ | ~~Removed entirely — the dead loop body and docstring references cleaned up. `non_book_has_isbn` is the correct replacement.~~ | ~~30 min~~ | ✅ 2026-05-22 |
+| **EE-6 — Add integration tests for the `is_active=true` filter** | We added the filter to 6 validators in R. No test would catch a regression if someone removed it. A single fixture-loaded test asserting "deactivated shop_book stops firing isbn_duplicate" would prevent class-wide regression. | 1 hr | open |
+| ~~**EE-7 — `_NON_BOOK_TITLE_RE` false-negative guard**~~ | ~~3 tests added: `test_title_indicates_non_book_detects_media_formats`, `_detects_bundles`, `_false_negative_guard`. Covers `(DVD)` vs `(su DVD)` boundary, all new patterns, None/empty.~~ | ~~15 min~~ | ✅ 2026-05-22 |
+| **EE-8 — Update data-quality spec's Rollout-Order** | Rule 9 (diacritic loss detection) is now Implemented; Rules 3, 7, 8 details unchanged. Reorder by what's actually next. | 15 min | open |
+| **EE-9 — Add "Validator filter cheatsheet" to CLAUDE.md** | Document: all shop_book-targeted validators require `is_active=true`; structural duplicates require it on both sides; price-missing checks require `in_stock=true`. Prevents future PRs from forgetting these gates. | 30 min | open |
+| ~~**EE-10 — Regenerate `docs/superpowers/specs/INDEX.md`**~~ | ~~Run via `python3 docs/superpowers/scripts/build-spec-index.py` — 25 specs indexed.~~ | ~~5 min~~ | ✅ 2026-05-22 |
 
 ---
 
