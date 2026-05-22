@@ -93,6 +93,50 @@ Spiders are generic — shop is passed as argument: `scrapy crawl discover -a sh
 
 Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider reschedules the failed range as N smaller pageSize requests (`subdivide_factor` in the shop config, default 5). The depth=1 sub-page carries `_sub=1` in its URL so it can't recurse. Each subdivision is logged as a `subdivided` row on `scrape_run_events` (renders as ⊟ in the dashboard's Timeline card).
 
+### Post-phase auto-trigger (match step 1 + validate after every scan/discover)
+
+`PostPhaseAutoTrigger` (`book_scraper/extensions.py`) wires every successful `scan` or `discover` spider close into:
+
+1. **Match step 1 (ISBN match) inline** — a single fast `UPDATE shop_books SET book_id = bi.book_id WHERE sb.isbn = bi.isbn AND sb.book_id IS NULL`. Runs in a short-lived session in the spider process (no separate `scrape_runs` row). Links any newly-scraped shop_book to existing canonical books by ISBN within milliseconds.
+2. **Validate as a subprocess** — spawns `scrapy crawl validate -a shop=<shop>` as a fire-and-forget detached process. Creates a regular `scrape_runs` row (phase=`validate`). Picks up data-quality changes immediately and auto-resolves stale issues via `resolve_gone_issues`.
+
+Hooks both `scan` and `discover` because shops like pegasas/iBiblioteka yield `ShopBookItem`s in the discover phase (scan is a no-op for them).
+
+Skipped when:
+- The run closes with `reason != "finished"` (failures don't propagate noise).
+- The spider's `cron_job_id` points to a job whose `chain_to_job_id` targets `match` or `validate` — yields to the cron chain to avoid double-firing.
+- Env var `POST_PHASE_AUTO_TRIGGER=0` (legacy alias: `POST_SCAN_AUTO_TRIGGER=0`).
+
+This means **you don't need to schedule `match` or `validate` cron jobs**. Match step 2 (author backfill) and step 3 (synthesis) only run during a full `match` phase — currently optional/manual. Step 3 is disabled by default via `MATCH_SYNTHESIS_ENABLED` (see below).
+
+### Feature flags
+
+| Env var | Default | Effect |
+|---|---|---|
+| `POST_PHASE_AUTO_TRIGGER` | `1` | Auto-runs match step 1 + validate after every scan/discover. Set `0` to disable. |
+| `MATCH_SYNTHESIS_ENABLED` | `0` | When the full `match` phase runs, step 3 (canonical synthesis from shop data) is skipped. Set `1` to re-enable. Disabled because the per-row synthesis loop on shops with ~2.5k unmatched books blocks the reactor past the 60s heartbeat reaper, killing steps 1 + 2 mid-transaction. When Rule 1 (multi-shop consensus synthesis, see `docs/superpowers/specs/2026-05-18-data-quality-rules-design.md`) lands with batched commits, remove this flag. |
+
+### Validator issue types (recent additions)
+
+| Issue type | Severity | What it detects |
+|---|---|---|
+| `slug_diacritic_loss` | info | Slug has more `-`-separated alphabetic pieces than the title has words AND the title contains LT diacritics. Catches shops whose slug generator drops diacritics character-by-character (e.g. `Kalėdų pūga` → `kale-du-pu-ga`) instead of transliterating to `kaledu-puga`. Suppresses the broader `slug_title_mismatch` on the same book via supersession. |
+| `non_product_active` | info | `shop_book.is_active=true` but all its `discovered_urls` are `non_product`. Auto-heals: validator flips `is_active=false` when the predicate matches, so the issue resolves on the next run. |
+| `non_book_has_isbn` (refined) | info | `type='non_book'` with a 978/979-prefixed ISBN — but **excludes** legitimate non-book products whose categories include `žaislai` / `žaidimai` / `dėlionės` / `sąsiuviniai` / `kortelės` / `žemėlapiai` / `raštinės` / `hobio` / `mokyklinės` / `popieriaus` / `lavinamieji` / `stalo žaid…` (case- and diacritic-insensitive). |
+| `format_is_dimensions` | info | `shop_books.format` looks like a dimension expression (`17x24`, `170 x 205 mm`). Driven by parser bugs — `format_from_cover_type` now drops dimension-only inputs to None instead of leaking them. |
+| `url_aliases` (refined) | info | `discovered_urls` row with a different URL shape than the canonical `shop_books.url`. Now filters URL-encoding mismatches (`mi%C5%A1ku-x` vs `mišku-x`) and OpenCart legacy route URLs (`index.php?route=product/product&product_id=N`) — those are platform-level aliases, not data-quality issues. |
+
+### Validator filter gates (cheatsheet)
+
+Every validator that queries `shop_books` applies mandatory pre-filters. Missing one is a silent noise regression — always check these when adding or modifying a validator.
+
+| Gate | SQL predicate | Validators that require it |
+|---|---|---|
+| Active books only | `sb.is_active = true` | All single-book validators: `isbn_duplicate` (both sides), `title_author_duplicate` (both sides), `sku_duplicate` (both sides), `slug_title_mismatch`, `slug_diacritic_loss`, `unmatched_has_isbn`, `match_isbn_drift`, `year_out_of_range`, `non_book_has_isbn`, `non_product_active`, `orphan_no_url`, `stale_active`, `url_aliases` |
+| In-stock books only | `sb.in_stock = true` | `active_no_price`, `no_price_history` (price-missing checks — out-of-stock books legitimately have no price) |
+
+**Structural duplicate validators** (`isbn_duplicate`, `title_author_duplicate`, `sku_duplicate`) require `is_active = true` on **both** sides of the duplicate pair, not just the flagged book. Otherwise deactivated shop_books generate spurious duplicate issues against their still-active counterparts.
+
 ### Per-shop runtime settings
 
 Precedence chain at runtime, highest to lowest:

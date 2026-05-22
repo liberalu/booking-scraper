@@ -528,6 +528,35 @@ def test_match_isbn_drift_flagged_when_isbns_differ(db_session):
     assert len(issues) == 1
 
 
+@pytest.mark.integration
+def test_match_isbn_drift_not_flagged_when_isbn_matches_any_canonical_isbn(db_session):
+    """ISBN-13 on shop_book matches the book's isbn13 even though the book also has
+    an isbn10 — the isbn10 differing should NOT produce a false-positive drift issue."""
+    shop = _make_shop(db_session, "m3")
+    run = _make_run(db_session, shop.id)
+
+    book = _make_book_obj(db_session, "9786094660689", suffix="drift_fp")
+    # Also add the equivalent isbn10 to the canonical book
+    db_session.add(BookIsbn(book_id=book.id, isbn="6094660684", isbn_type="isbn10"))
+
+    sb = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopmd2.lt/p/1",
+        title="Drift False Positive Book",
+        isbn="9786094660689",  # matches the book's isbn13 exactly
+        match_status="matched",
+        book_id=book.id,
+    )
+    db_session.add(sb)
+    db_session.commit()
+
+    ValidateService(db_session).run(shop.id, run.id)
+    db_session.commit()
+
+    issues = _issues_for(db_session, sb.id, "match_isbn_drift")
+    assert len(issues) == 0
+
+
 # ---------------------------------------------------------------------------
 # Relationship integrity checks (VAL-10)
 # ---------------------------------------------------------------------------
@@ -654,3 +683,57 @@ def test_run_returns_counters_keyed_by_issue(db_session):
     db_session.commit()
 
     assert counters["isbn_duplicate"] == 2
+
+
+# ---------------------------------------------------------------------------
+# is_active=true filter — regression guard (EE-6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_deactivated_shop_book_does_not_fire_isbn_duplicate(db_session):
+    """A deactivated shop_book must be ignored by isbn_duplicate.
+
+    All shop_book-targeted validators apply is_active=true.  Without this
+    gate, stale deactivated records generate spurious duplicate issues
+    against their still-active counterparts.  A single regression here
+    would reopen thousands of noise issues on every validate run.
+    """
+    shop = _make_shop(db_session, "q")
+    run = _make_run(db_session, shop.id)
+
+    # Two rows sharing an ISBN — the classic duplicate pair.
+    sb_active = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopq.lt/p/active",
+        title="Active Book",
+        isbn="9780000000099",
+        is_active=True,
+    )
+    sb_inactive = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopq.lt/p/inactive",
+        title="Inactive Book",
+        isbn="9780000000099",
+        is_active=False,
+    )
+    db_session.add_all([sb_active, sb_inactive])
+    db_session.commit()
+
+    ValidateService(db_session).run(shop.id, run.id)
+    db_session.commit()
+
+    issues = (
+        db_session.execute(
+            select(ValidationIssue).where(
+                ValidationIssue.shop_book_id.in_([sb_active.id, sb_inactive.id]),
+                ValidationIssue.issue == "isbn_duplicate",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert issues == [], (
+        "isbn_duplicate must not fire when one of the pair is is_active=false; "
+        f"got issues on shop_book ids: {[i.shop_book_id for i in issues]}"
+    )

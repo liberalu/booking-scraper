@@ -88,3 +88,79 @@ def test_acknowledged_stays_acknowledged_on_re_detection(db_session):
     db_session.refresh(issue)
     assert issue.lifecycle_state == "acknowledged"
     assert issue.run_count == 2
+
+
+def _upsert_issue_with_initial_state(
+    db_session, shop_id, run_id, shop_book_id, initial_state: str
+):
+    upsert_validation_issues(
+        db_session,
+        [
+            {
+                "url": "https://vaga.lt/b",
+                "field": "slug",
+                "issue": "slug_diacritic_loss",
+                "raw_value": "kale-du-pu-ga",
+                "shop_book_id": shop_book_id,
+                "initial_state": initial_state,
+            }
+        ],
+        shop_id=shop_id,
+        run_id=run_id,
+    )
+    db_session.flush()
+
+
+def test_initial_state_acknowledged_on_first_detection(db_session):
+    """Validators that set initial_state='acknowledged' produce an acknowledged
+    issue on first detection — the issue never lands in the 'new' queue.
+
+    This is the behaviour for slug_diacritic_loss: the bug lives in the
+    shop's slug generator and we will never fix it ourselves, so surfacing
+    it as 'new' only creates manual-ack churn.
+    """
+    shop, shop_book = _setup(db_session)
+    run = ScrapeRun(shop_id=shop.id, phase="validate", status="running")
+    db_session.add(run)
+    db_session.flush()
+
+    _upsert_issue_with_initial_state(db_session, shop.id, run.id, shop_book.id, "acknowledged")
+    issue = db_session.query(ValidationIssue).one()
+    assert issue.lifecycle_state == "acknowledged", (
+        "initial_state='acknowledged' must produce an acknowledged issue, not 'new'"
+    )
+
+
+def test_resolved_issue_with_initial_state_acknowledged_reopens_as_acknowledged(db_session):
+    """When a resolved issue is re-detected with initial_state='acknowledged',
+    it should reopen as 'acknowledged', not 'new'.
+
+    Without this, slug_diacritic_loss issues would cycle new→ack→resolved→new
+    every time the operator clears them, defeating the whole point of
+    initial_state='acknowledged'.
+    """
+    shop, shop_book = _setup(db_session)
+    run1 = ScrapeRun(shop_id=shop.id, phase="validate", status="running")
+    db_session.add(run1)
+    db_session.flush()
+
+    # First detection — acknowledged.
+    _upsert_issue_with_initial_state(db_session, shop.id, run1.id, shop_book.id, "acknowledged")
+    issue = db_session.query(ValidationIssue).one()
+    assert issue.lifecycle_state == "acknowledged"
+
+    # Simulate operator resolution (e.g. issue marked resolved externally).
+    issue.lifecycle_state = "resolved"
+    db_session.flush()
+
+    # Re-detect — should come back as 'acknowledged', not 'new'.
+    run2 = ScrapeRun(shop_id=shop.id, phase="validate", status="running")
+    db_session.add(run2)
+    db_session.flush()
+    _upsert_issue_with_initial_state(db_session, shop.id, run2.id, shop_book.id, "acknowledged")
+
+    db_session.refresh(issue)
+    assert issue.lifecycle_state == "acknowledged", (
+        "re-detected resolved issue with initial_state='acknowledged' must reopen "
+        "as 'acknowledged', not 'new'"
+    )

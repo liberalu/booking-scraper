@@ -1595,7 +1595,11 @@ def upsert_validation_issues(
                 "raw_value": i.get("raw_value"),
                 "shop_book_id": i.get("shop_book_id"),
                 "discovered_url_id": i.get("discovered_url_id"),
-                "lifecycle_state": "new",
+                # Validators may request a non-default initial state via
+                # "initial_state".  Currently used by slug_diacritic_loss
+                # which always starts as "acknowledged" (the bug is in the
+                # shop's slug generator — we will never fix it ourselves).
+                "lifecycle_state": i.get("initial_state", "new"),
                 "run_count": 1,
             }
             for i in batch
@@ -1607,7 +1611,16 @@ def upsert_validation_issues(
         "run_count": ValidationIssue.run_count + 1,
         "raw_value": excluded.raw_value,
         "lifecycle_state": sa.case(
-            (ValidationIssue.lifecycle_state == "resolved", sa.literal("new")),
+            # Re-detecting a resolved issue: reset to whatever initial_state
+            # the validator requested (excluded.lifecycle_state holds the
+            # inserted value from _make_values).  Most validators use "new";
+            # slug_diacritic_loss uses "acknowledged" so it never reopens
+            # as "new" just because the shop still hasn't fixed their slug
+            # generator.
+            (
+                ValidationIssue.lifecycle_state == "resolved",
+                excluded.lifecycle_state,
+            ),
             (
                 sa.and_(
                     ValidationIssue.lifecycle_state == "snoozed",

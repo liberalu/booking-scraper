@@ -460,6 +460,11 @@ class ValidateService:
                         "issue": "slug_diacritic_loss",
                         "raw_value": slug,
                         "shop_book_id": row.id,
+                        # The diacritic-loss pattern is a shop-side bug in
+                        # the slug generator — we will never fix it on our
+                        # side.  Start as "acknowledged" so the issue never
+                        # lands in the "new" queue and requires manual ack.
+                        "initial_state": "acknowledged",
                     }
                 )
         return results
