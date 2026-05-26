@@ -129,6 +129,12 @@ def test_initial_state_acknowledged_on_first_detection(db_session):
     assert issue.lifecycle_state == "acknowledged", (
         "initial_state='acknowledged' must produce an acknowledged issue, not 'new'"
     )
+    # acknowledged_at must be stamped on initial insert so downstream
+    # queries filtering on `acknowledged_at IS NOT NULL` treat
+    # auto-acked issues identically to manually-acked ones.
+    assert issue.acknowledged_at is not None, (
+        "initial_state='acknowledged' must set acknowledged_at on INSERT"
+    )
 
 
 def test_resolved_issue_with_initial_state_acknowledged_reopens_as_acknowledged(db_session):
@@ -163,4 +169,10 @@ def test_resolved_issue_with_initial_state_acknowledged_reopens_as_acknowledged(
     assert issue.lifecycle_state == "acknowledged", (
         "re-detected resolved issue with initial_state='acknowledged' must reopen "
         "as 'acknowledged', not 'new'"
+    )
+    # acknowledged_at must be refreshed when transitioning resolved→acknowledged
+    # via initial_state.  Otherwise the dashboard "acknowledged in the last 7d"
+    # filter would silently miss reopened issues.
+    assert issue.acknowledged_at is not None, (
+        "resolved→acknowledged reopen via initial_state must set acknowledged_at"
     )

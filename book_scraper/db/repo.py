@@ -1581,6 +1581,8 @@ def upsert_validation_issues(
         if not i.get("shop_book_id") and not i.get("discovered_url_id")
     ]
 
+    now = datetime.now(UTC)
+
     def _make_values(
         batch: list[dict[str, str | int | None]],
     ) -> list[dict[str, object]]:
@@ -1600,6 +1602,12 @@ def upsert_validation_issues(
                 # which always starts as "acknowledged" (the bug is in the
                 # shop's slug generator — we will never fix it ourselves).
                 "lifecycle_state": i.get("initial_state", "new"),
+                # Mirror what `acknowledge_validation_issue` does on manual
+                # ack so downstream queries filtering on `acknowledged_at
+                # IS NOT NULL` see auto-acknowledged issues the same way.
+                "acknowledged_at": (
+                    now if i.get("initial_state") == "acknowledged" else None
+                ),
                 "run_count": 1,
             }
             for i in batch
@@ -1633,6 +1641,20 @@ def upsert_validation_issues(
         "resolved_at": sa.case(
             (ValidationIssue.lifecycle_state == "resolved", sa.null()),
             else_=ValidationIssue.resolved_at,
+        ),
+        "acknowledged_at": sa.case(
+            # Resolved issue re-detected with initial_state="acknowledged":
+            # carry the freshly-stamped acknowledged_at from the INSERT row.
+            # Otherwise preserve the existing timestamp (covers the
+            # "stays acknowledged on re-detection" case from manual ack).
+            (
+                sa.and_(
+                    ValidationIssue.lifecycle_state == "resolved",
+                    excluded.lifecycle_state == "acknowledged",
+                ),
+                excluded.acknowledged_at,
+            ),
+            else_=ValidationIssue.acknowledged_at,
         ),
     }
 
