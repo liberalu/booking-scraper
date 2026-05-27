@@ -2595,7 +2595,7 @@ def get_issues_groups(
 
     if shop_id is not None:
         q = q.where(ValidationIssue.shop_id == shop_id)
-    if state:
+    if state in {"new", "acknowledged", "snoozed", "resolved"}:
         q = q.where(ValidationIssue.lifecycle_state == state)
     if run_id is not None:
         q = q.where(ValidationIssue.last_seen_run_id == run_id)

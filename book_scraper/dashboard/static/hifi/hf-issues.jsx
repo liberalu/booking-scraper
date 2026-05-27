@@ -180,7 +180,7 @@ function HFIssues({ nav, goto }) {
   // Fetch by-type groups whenever tab, shop, or run filter changes.
   React.useEffect(() => {
     const params = new URLSearchParams({ group_by: 'type' });
-    if (tab !== 'all') params.set('state', tab);
+    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
     if (shopFilter !== 'all') params.set('shop', shopFilter);
     if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
@@ -193,7 +193,7 @@ function HFIssues({ nav, goto }) {
   React.useEffect(() => {
     if (view !== 'waves') return;
     const params = new URLSearchParams({ group_by: 'type_shop' });
-    if (tab !== 'all') params.set('state', tab);
+    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
     if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
@@ -206,7 +206,7 @@ function HFIssues({ nav, goto }) {
     if (view !== 'list') return;
     setListLoading(true);
     const params = new URLSearchParams({ page: listPage, per_page: 50 });
-    if (tab !== 'all') params.set('state', tab);
+    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
     if (shopFilter !== 'all') params.set('shop', shopFilter);
     if (typeFilter !== 'all') params.set('issue_type', typeFilter);
     if (sevFilter !== 'all') params.set('severity', sevFilter);
@@ -443,7 +443,7 @@ function HFIssues({ nav, goto }) {
         setListPage(p => p); // trigger list re-fetch via effect dep noop — force by toggling
         setListLoading(true);
         const params = new URLSearchParams({ page: listPage, per_page: 50 });
-        if (tab !== 'all') params.set('state', tab);
+        params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
         if (shopFilter !== 'all') params.set('shop', shopFilter);
         if (typeFilter !== 'all') params.set('issue_type', typeFilter);
         if (sevFilter !== 'all') params.set('severity', sevFilter);
