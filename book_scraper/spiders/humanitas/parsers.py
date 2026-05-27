@@ -29,10 +29,24 @@ Field source on the product page:
        <b>Leidinio kalba:</b> Lietuvių <br>
        <b>Formatas:</b> Kieti viršeliai <br>
      </div>`
-  * Out-of-stock signal: JS sets `out_of_stock = 'Likutis nepakankamas';`
-    and the cart button is hidden — there is no plain HTML class on the
-    product header. We approximate by scanning the rendered page for the
-    `Likutis nepakankamas` substring near the cart container.
+  * Out-of-stock signal: humanitas marks unbuyable items via three
+    independent CSS-class signals on the rendered HTML. Any of them is
+    sufficient — the parser ORs them together in `_extract_price_pair`:
+      - `<div class="cart-price price-hidden">` — the price block
+        carries an extra `price-hidden` class and renders no value.
+      - `<a … class="ext_button … disabled">` — the "į krepšelį"
+        anchor carries `disabled`.
+      - Empty cart-price block — `<div class="cart-price">` is present
+        with only the "Kaina:" label and contains no `price-container`
+        child and no inline `<div class="price">N.NN €</div>`. Cart
+        button is NOT disabled in this state. Likely "listed but
+        unpriced" — new imports awaiting pricing, pre-orders, etc.
+        (~3.9 % of catalogue at any moment.)
+    Earlier versions of the parser scanned the rendered HTML for the
+    Lithuanian substring `Likutis nepakankamas`, but that string lives
+    only inside `<script>` (as the JS var `out_of_stock`), so it never
+    matched real pages after script-stripping. See commits 5580fc7 and
+    dc3f7d9 for the migration.
 
 Coverage caveat (verified on the 2026-05-07 recon): some products
 (legacy imports / accessories) lack the `<div class="book-info">`
