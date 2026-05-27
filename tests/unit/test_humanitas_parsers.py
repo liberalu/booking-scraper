@@ -513,18 +513,68 @@ def test_parse_category_page_nested_anchor_no_url_title_swap():
     assert by_url.get(url_b, {}).get("title") == "Labas rytas"
 
 
-def test_parse_product_page_marks_out_of_stock_when_likutis_present():
-    """Cart block carries 'Likutis nepakankamas' → in_stock False."""
+def test_parse_product_page_marks_out_of_stock_when_price_hidden_class_present():
+    """`<div class="cart-price price-hidden">` (no price element) → OOS.
+
+    Live humanitas pages signal unbuyable items two ways: the cart-price
+    block gets a `price-hidden` modifier with no price inside it, and
+    the "į krepšelį" anchor gets `disabled`. Either is sufficient. The
+    historical heuristic that scanned visible HTML for the Lithuanian
+    substring "Likutis nepakankamas" never matched real pages because
+    that string lives only inside `<script>`, which the parser strips
+    before scanning.
+    """
     html = (
         '<html><head><title>x</title>'
         '<meta property="og:title" content="x">'
         '</head><body>'
         '<div class="cart-container" data-product-id="42">'
-        '  <div class="cart-price"><div class="label">Kaina:</div>'
-        '    <div class="price-container"><div class="discount">'
-        '15.10 €</div><div class="price">15.90 €</div></div></div>'
-        '  <span>Likutis nepakankamas</span>'
-        '</div></div></div></body></html>'
+        '  <div class="cart-price price-hidden" data-cart-price="">'
+        '    <div class="label">Kaina:</div>'
+        '  </div>'
+        '</div></body></html>'
     )
     data = parse_product_page(html)
     assert data["in_stock"] is False
+    assert data["price"] is None
+
+
+def test_parse_product_page_marks_out_of_stock_when_cart_button_disabled():
+    """`<a class="ext_button ... disabled">` on the cart anchor → OOS."""
+    html = (
+        '<html><head><title>x</title>'
+        '<meta property="og:title" content="x">'
+        '</head><body>'
+        '<div class="cart-container" data-product-id="42">'
+        '  <div class="cart-price"><div class="label">Kaina:</div></div>'
+        '  <div class="action-list"><div data-cart-button="">'
+        '    <a href="#" class="ext_button orange-style uppercase disabled">'
+        '      į krepšelį</a></div></div>'
+        '</div></body></html>'
+    )
+    data = parse_product_page(html)
+    assert data["in_stock"] is False
+
+
+def test_parse_product_page_ignores_likutis_inside_script_block():
+    """Every product page inlines `var out_of_stock = 'Likutis nepakankamas';`
+    inside a top-level <script>. The OOS heuristic must not be fooled by
+    it — only the rendered CSS-class signals count.
+    """
+    html = (
+        '<html><head><title>x</title>'
+        '<meta property="og:title" content="x">'
+        "<script>var out_of_stock = 'Likutis nepakankamas';</script>"
+        '</head><body>'
+        '<div class="cart-container" data-product-id="42">'
+        '  <div class="cart-price"><div class="label">Kaina:</div>'
+        '    <div class="price-container"><div class="discount">'
+        '15.10 €</div><div class="price">15.90 €</div></div></div>'
+        '  <div class="action-list"><div data-cart-button="">'
+        '    <a href="#" class="ext_button orange-style uppercase">'
+        '      į krepšelį</a></div></div>'
+        '</div></body></html>'
+    )
+    data = parse_product_page(html)
+    assert data["in_stock"] is True
+    assert data["price"] == "15.10"

@@ -142,11 +142,31 @@ def _extract_book_info(html: str) -> dict[str, str]:
 
 _PRICE_RE = re.compile(r"([\d ]+[.,]\d+)\s*€")
 
-# Drop `<script>…</script>` blocks before the OOS-text sniff. The
+# Drop `<script>…</script>` blocks before any rendered-HTML sniff. The
 # template inlines `var out_of_stock = 'Likutis nepakankamas';` on
 # every product page, which would otherwise false-positive every
 # in-stock listing as out of stock.
 _SCRIPT_BLOCK_RE = re.compile(r"<script\b.*?</script>", re.S | re.I)
+
+# OOS signals on the rendered product page. Humanitas marks unbuyable
+# items two ways, both reliable:
+#   * `<div class="cart-price price-hidden" data-cart-price="">` — the
+#     price block carries an extra `price-hidden` class and renders no
+#     price element inside it.
+#   * `<a … class="ext_button orange-style uppercase disabled">` — the
+#     "į krepšelį" (add to cart) anchor carries `disabled`.
+# Either signal is sufficient. The old heuristic that scanned visible
+# HTML for `"likutis nepakankamas"` never matched because that string
+# appears only inside `<script>` (as the JS var `out_of_stock`), which
+# we strip before scanning.
+_OOS_PRICE_HIDDEN_RE = re.compile(
+    r'<div\s+class="cart-price\s+price-hidden\b',
+    re.I,
+)
+_OOS_CART_DISABLED_RE = re.compile(
+    r'<a\b[^>]*\bclass="[^"]*\bext_button\b[^"]*\bdisabled\b',
+    re.I,
+)
 
 
 def _parse_price(raw: str | None) -> str | None:
@@ -216,16 +236,20 @@ def _extract_price_pair(html: str) -> tuple[str | None, str | None, bool]:
 
     # `prices.in_stock` is NOT NULL in the schema, so we always emit a
     # boolean. Default to True (the live shop's overwhelming majority
-    # of listings are in stock); flip to False when visible HTML
-    # carries the "Likutis nepakankamas" (insufficient stock) notice
-    # humanitas renders for OOS listings.
+    # of listings are in stock); flip to False when the rendered HTML
+    # carries either CSS-class signal humanitas attaches to unbuyable
+    # listings: `cart-price price-hidden` on the price block, or
+    # `disabled` on the "į krepšelį" anchor. Either is sufficient.
     #
-    # We scan visible HTML only — the page also assigns
-    # `var out_of_stock = 'Likutis nepakankamas';` inside a top-level
-    # <script> on every product, so a naive substring check on the
-    # raw response would mark every book OOS.
+    # Strip <script> blocks first so the inline `var out_of_stock =
+    # 'Likutis nepakankamas';` declaration the template emits on every
+    # product doesn't get scanned. The OOS class signals live in the
+    # rendered template, not in scripts, so this is safe.
     visible = _SCRIPT_BLOCK_RE.sub("", html)
-    in_stock: bool = "likutis nepakankamas" not in visible.lower()
+    in_stock: bool = not (
+        _OOS_PRICE_HIDDEN_RE.search(visible) is not None
+        or _OOS_CART_DISABLED_RE.search(visible) is not None
+    )
     return price, price_original, in_stock
 
 
