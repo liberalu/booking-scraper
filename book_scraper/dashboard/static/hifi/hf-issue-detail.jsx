@@ -77,7 +77,7 @@ function HFIssueDetail({ nav, goto, params }) {
   const sev       = apiData?.severity          || params?.sev       || 'critical';
   const lifecycle = apiData?.lifecycle_state   || params?.lifecycle || 'new';
   const shop      = apiData?.shop_name         || params?.shop      || 'patogupirkti';
-  const book      = apiData?.shop_book_title   || params?.book      || 'Arturas ir Maltazaro kerštas (DVD)';
+  const book      = apiData ? (apiData.shop_book_title || null) : (params?.book || 'Arturas ir Maltazaro kerštas (DVD)');
   const url       = apiData?.url               || params?.url       || 'https://patogupirkti.lt/knyga/arturas-ir-maltazaro-kerstas-dvd';
   const age       = apiData?.added_ago         || params?.age       || '4d ago';
   const runId     = apiData?.scrape_run_id     || params?.runId     || 407;
@@ -95,7 +95,7 @@ function HFIssueDetail({ nav, goto, params }) {
   };
   const DESC_BY_TYPE = {
     missing_price:         'No price scraped. Parser likely hit a broken or restructured product page.',
-    match_isbn_drift:      'Shop reports an ISBN that disagrees with the canonical book matched by other shops.',
+    match_isbn_drift:      'This shop_book is linked to a canonical book whose ISBN(s) do not match the shop_book ISBN. Either the shop_book ISBN was corrupted (re-scrape) or the canonical link is wrong (unlink + re-match).',
     invalid_isbn:          'ISBN failed check-digit / length validation. Value cannot be reliably matched.',
     non_product_active:    'A URL classified as non-product is still being scraped as if it were a book listing.',
     price_spike:           'Price moved by more than the configured threshold in a single run, with no promo marker.',
@@ -125,16 +125,56 @@ function HFIssueDetail({ nav, goto, params }) {
   // Type-specific actions for the Fix-this panel.
   const fixActions = (() => {
     const open = (page, p) => () => goto(page, p);
+    const rescrape = async () => {
+      if (!url) return;
+      if (!window.confirm(`Re-scrape ${url}?`)) return;
+      const r = await fetch('/api/runs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop, phase: 'scan', urls: url }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) window.alert('Re-scrape started.');
+      else window.alert('Failed: ' + (d.detail || r.status));
+    };
     switch (type) {
       case 'missing_price':
       case 'invalid_isbn':
       case 'price_spike':
         return [
-          { label:'Open parser', primary:true, action:open('parser', { shop }), desc:`Edit selectors for ${shop}` },
-          { label:'Re-scrape URL',   action:() => url && window.open(url, '_blank'), desc:'Re-fetch this URL only' },
-          { label:'Bulk-ack wave',   action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
+          { label:'Open shop', primary:true, action:open('shop-detail', { name: shop }), desc:`View shop detail for ${shop}` },
+          { label:'Re-scrape URL', action:rescrape, desc:'Trigger a single-URL scan for this book' },
+          { label:'Bulk-ack wave', action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
         ];
-      case 'match_isbn_drift':
+      case 'match_isbn_drift': {
+        const unlinkAndRematch = async () => {
+          const sbId = apiData?.shop_book_id;
+          if (!sbId) { window.alert('No shop_book_id on this issue.'); return; }
+          if (!window.confirm(
+            `Unlink shop_book #${sbId} from canonical book` +
+            (matchContext?.book_id ? ` #${matchContext.book_id}` : '') +
+            ` and trigger a match run for ${shop}?\n\n` +
+            `This clears shop_books.book_id so the next match step 1 can re-link by the current ISBN.`
+          )) return;
+          const r1 = await fetch(`/api/shop-books/${sbId}/unlink-canonical`, { method:'POST' });
+          if (!r1.ok) { const d=await r1.json().catch(()=>({})); window.alert('Unlink failed: '+(d.detail||r1.status)); return; }
+          const r2 = await fetch('/api/runs', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ shop, phase:'match' }),
+          });
+          const d2 = await r2.json().catch(()=>({}));
+          if (r2.ok) { window.alert(`Unlinked. Match run started for ${shop}.`); goto('runs'); }
+          else window.alert('Unlink ok, but match-run failed: ' + (d2.detail || r2.status));
+        };
+        return [
+          { label:'Re-scrape URL', primary:true, action:rescrape, desc:'Re-fetch the live product page — fixes a corrupted shop_book ISBN' },
+          { label:'Unlink & re-match', action: unlinkAndRematch,
+            desc: matchContext?.book_id
+              ? `Clear book_id=${matchContext.book_id} on this shop_book, then run match — use when the canonical link is wrong`
+              : 'Clear the wrong canonical link, then run match' },
+          { label:'Open book', action:open('shop-book-detail', { id: apiData?.shop_book_id }), desc:'Inspect the shop-book record' },
+          { label:'Bulk-ack wave', action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} ${type} issues in this wave` },
+        ];
+      }
       case 'unmatched_has_isbn':
         return [
           { label:'Open book', primary:true, action:open('shop-book-detail', { id: apiData?.shop_book_id }), desc:'Inspect the shop-book record' },
@@ -163,14 +203,14 @@ function HFIssueDetail({ nav, goto, params }) {
       case 'non_product_active':
       case 'product_url_non_book':
         return [
-          { label:'Open classifier', primary:true, action:open('parser', { shop }), desc:'Update URL classification rules' },
+          { label:'Open shop', primary:true, action:open('shop-detail', { name: shop }), desc:'Update URL classification rules' },
           { label:'Mark URL non-book', action:() => window.alert('URL skip-list is not yet implemented.'), desc:'Add to skip list' },
           { label:'Bulk-ack wave', action:bulkAckWave, desc:`Acknowledge all ${waveTotal.toLocaleString()} similar` },
         ];
       default:
         return [
-          { label:'Open parser', primary:true, action:open('parser', {}), desc:'Edit selectors' },
-          { label:'Re-scrape',   action:() => url && window.open(url, '_blank'), desc:'Re-fetch this URL only' },
+          { label:'Open shop', primary:true, action:open('shop-detail', { name: shop }), desc:'View shop config' },
+          { label:'Re-scrape', action:rescrape, desc:'Trigger a single-URL scan for this book' },
         ];
     }
   })();
@@ -182,6 +222,7 @@ function HFIssueDetail({ nav, goto, params }) {
   const lifecycleTone = { new:'err', acknowledged:'accent', snoozed:'warn', resolved:'ok' };
 
   const rawSnippet = apiData?.raw_value || '(no raw value recorded)';
+  const matchContext = apiData?.match_context || null;
 
 
   const trimUrl = url ? url.replace(/^https?:\/\//, '') : null;
@@ -290,13 +331,59 @@ function HFIssueDetail({ nav, goto, params }) {
             {desc}
           </div>
           <div style={{padding:`0 ${HF.cardP}px ${HF.cardP}px`}}>
-            <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Raw extraction snippet</div>
-            <pre style={{
-              margin:0, padding:'10px 12px',
-              background:'#0F1419', color:'#D9E0E6', borderRadius:6,
-              fontFamily:HF.mono, fontSize:11.5, lineHeight:1.55,
-              overflow:'auto', whiteSpace:'pre',
-            }}>{rawSnippet}</pre>
+            {matchContext ? (
+              <>
+                <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>ISBN drift breakdown</div>
+                <div style={{
+                  border:`1px solid ${HF.border}`, borderRadius:6, overflow:'hidden',
+                  fontSize:12.5, lineHeight:1.5,
+                }}>
+                  <div style={{
+                    display:'grid', gridTemplateColumns:'140px 1fr',
+                    padding:'10px 12px', borderBottom:`1px solid ${HF.borderFaint}`,
+                    background: HF.warnSoft,
+                  }}>
+                    <span style={{color:HF.ink3, fontSize:11.5}}>Shop ISBN</span>
+                    <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
+                      <span style={{fontFamily:HF.mono, color:HF.warnInk, fontWeight:600}}>{matchContext.sb_isbn || '—'}</span>
+                      {book && <span style={{color:HF.ink2, fontSize:11.5}}>"{book}"</span>}
+                    </span>
+                  </div>
+                  <div style={{
+                    display:'grid', gridTemplateColumns:'140px 1fr',
+                    padding:'10px 12px',
+                  }}>
+                    <span style={{color:HF.ink3, fontSize:11.5}}>Canonical ISBN</span>
+                    <span style={{display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
+                      <span style={{fontFamily:HF.mono, color:HF.ink, fontWeight:600}}>
+                        {matchContext.book_isbn || '—'}
+                        {matchContext.book_isbns && matchContext.book_isbns.length > 1 && (
+                          <span style={{color:HF.ink3, fontWeight:400, marginLeft:6, fontSize:11.5}}>
+                            (+{matchContext.book_isbns.length - 1} other: {matchContext.book_isbns.filter(x => x !== matchContext.book_isbn).join(', ')})
+                          </span>
+                        )}
+                      </span>
+                      {matchContext.book_id && (
+                        <a href="#" onClick={(e)=>{e.preventDefault(); goto('book-detail', { id: matchContext.book_id });}}
+                          style={{color:HF.accentInk, fontSize:11.5, textDecoration:'none'}}>
+                          Book #{matchContext.book_id}{matchContext.book_title ? ` — "${matchContext.book_title}"` : ''} →
+                        </a>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:10.5, color:HF.ink4, textTransform:'uppercase', letterSpacing:0.5, fontWeight:600, marginBottom:6}}>Raw extraction snippet</div>
+                <pre style={{
+                  margin:0, padding:'10px 12px',
+                  background:'#0F1419', color:'#D9E0E6', borderRadius:6,
+                  fontFamily:HF.mono, fontSize:11.5, lineHeight:1.55,
+                  overflow:'auto', whiteSpace:'pre',
+                }}>{rawSnippet}</pre>
+              </>
+            )}
           </div>
         </HFCard>
 
@@ -310,7 +397,7 @@ function HFIssueDetail({ nav, goto, params }) {
               { k:'Detected',  v:age },
               { k:'Run',       v:`#${runId}`, mono:true, link:() => goto('run-detail', { id:runId }) },
               { k:'Shop',      v:shop || '—', mono:true, link: shop ? () => goto('shop-detail', { name:shop }) : null },
-              ...(url ? [{ k:'URL', v:trimmedShown, mono:true, urlLink: url, extra: <a href="#" onClick={(e)=>{e.preventDefault(); goto('urls');}} style={{color:HF.accentInk, fontFamily:HF.sans, fontSize:11.5, textDecoration:'none', whiteSpace:'nowrap'}}>View in URLs →</a> }] : []),
+              ...(url ? [{ k:'URL', v:trimmedShown, mono:true, urlLink: url, extra: <a href="#" onClick={(e)=>{e.preventDefault(); goto('urls', { q: url });}} style={{color:HF.accentInk, fontFamily:HF.sans, fontSize:11.5, textDecoration:'none', whiteSpace:'nowrap'}}>View in URLs →</a> }] : []),
             ].map((row, i, arr) => (
               <div key={row.k} style={{
                 display:'grid', gridTemplateColumns:'90px 1fr',
@@ -362,7 +449,7 @@ function HFIssueDetail({ nav, goto, params }) {
       </HFCard>
 
       {/* Affected book */}
-      {book && (
+      {(book || url) && (
         <HFCard
           title="Affected book"
           sub="book where this issue was detected"
@@ -376,11 +463,14 @@ function HFIssueDetail({ nav, goto, params }) {
               color:HF.accentInk, flexShrink:0,
             }}>{HF_ICONS.books}</span>
             <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:3}}>
-              <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-book-detail', { id: apiData?.shop_book_id });}} style={{
-                color:HF.ink, fontWeight:600, fontSize:14, textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-              }}>{book}</a>
+              {apiData?.shop_book_id
+                ? <a href="#" onClick={(e)=>{e.preventDefault(); goto('shop-book-detail', { id: apiData.shop_book_id });}} style={{
+                    color:HF.ink, fontWeight:600, fontSize:14, textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                  }}>{book || `Book #${apiData.shop_book_id}`}</a>
+                : <span style={{color:HF.ink, fontWeight:600, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{book || url || '—'}</span>
+              }
               <span style={{fontFamily:HF.mono, fontSize:11.5, color:HF.ink3}}>
-                #{apiData?.shop_book_id || '—'} <span style={{color:HF.ink5, margin:'0 6px'}}>·</span> {shop}
+                {apiData?.shop_book_id ? `#${apiData.shop_book_id} · ` : ''}{shop || '—'}
               </span>
             </div>
             {url && (

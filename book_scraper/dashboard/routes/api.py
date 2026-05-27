@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text as sa_text
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session, joinedload
 
@@ -1733,6 +1733,27 @@ def api_shop_book_detail(
     return d
 
 
+@router.post("/shop-books/{shop_book_id}/unlink-canonical")
+def api_shop_book_unlink_canonical(
+    shop_book_id: int, session: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """POST /shop-books/{id}/unlink-canonical — clear shop_books.book_id.
+
+    Used by the match_isbn_drift Fix-this panel: drops the wrong canonical
+    link so the next match step 1 (`WHERE sb.book_id IS NULL`) can re-link
+    by the corrected ISBN. No-op if already unlinked.
+    """
+    sb = session.get(ShopBook, shop_book_id)
+    if sb is None:
+        raise HTTPException(status_code=404, detail="shop_book not found")
+    previous = sb.book_id
+    if previous is None:
+        return {"shop_book_id": shop_book_id, "previous_book_id": None, "changed": False}
+    sb.book_id = None
+    session.commit()
+    return {"shop_book_id": shop_book_id, "previous_book_id": previous, "changed": True}
+
+
 # ─── URLs ────────────────────────────────────────────────────────────────────
 
 
@@ -2722,6 +2743,7 @@ def api_issues_groups(
     group_by: str = "type",
     state: str = "",
     shop: str = "",
+    run_id: int = 0,
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """GET /issues/groups — aggregated issue counts for the grouped view.
@@ -2729,6 +2751,7 @@ def api_issues_groups(
     group_by: 'type' (default) or 'type_shop'.
     state: optional filter ('new'|'acknowledged'|'snoozed'|'resolved').
     shop: optional shop name filter.
+    run_id: optional run scope.
     """
     shop_id: int | None = None
     if shop:
@@ -2740,6 +2763,7 @@ def api_issues_groups(
         group_by=group_by,
         state=state or None,
         shop_id=shop_id,
+        run_id=run_id if run_id > 0 else None,
     )
     return {"groups": groups, "group_by": group_by}
 
@@ -2802,6 +2826,52 @@ def api_bulk_unacknowledge_issues(
     return {"unacknowledged": int(getattr(result, "rowcount", 0) or 0)}
 
 
+@router.post("/issues/bulk-rescrape")
+def api_bulk_rescrape_issues(
+    payload: dict[str, Any],
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """POST /issues/bulk-rescrape — collect product URLs for all open issues
+    of the given type and return them so the caller can spawn a targeted
+    scan run via /api/runs with `urls=<comma-separated>`.
+
+    Body: { "issue_type": "invalid_isbn", "shop": "pegasas" }
+
+    Returns { "urls": "url1,url2,...", "count": N }.
+
+    This bypasses the `scrape_url_items` pending queue (which is bound
+    to historical run_ids) and goes through the same single-URL rescrape
+    code path that powers the per-issue "Re-scrape" button.
+    """
+    issue_type = str(payload.get("issue_type") or "")
+    shop_name = str(payload.get("shop") or "")
+    if not issue_type:
+        raise HTTPException(status_code=422, detail="issue_type is required")
+    if not shop_name:
+        raise HTTPException(status_code=422, detail="shop is required")
+
+    shop_obj = session.execute(select(Shop).where(Shop.name == shop_name)).scalar()
+    if not shop_obj:
+        raise HTTPException(status_code=404, detail=f"Unknown shop: {shop_name}")
+
+    rows = session.execute(
+        sa_text("""
+            SELECT DISTINCT du.url
+            FROM discovered_urls du
+            JOIN shop_books sb ON sb.id = du.shop_book_id
+            JOIN validation_issues vi ON vi.shop_book_id = sb.id
+            WHERE du.url_type = 'product'
+              AND vi.shop_id = :shop_id
+              AND vi.issue = :issue_type
+              AND vi.lifecycle_state IN ('new', 'acknowledged')
+            ORDER BY du.url
+        """),
+        {"shop_id": shop_obj.id, "issue_type": issue_type},
+    ).fetchall()
+    urls = [r[0] for r in rows if r[0]]
+    return {"urls": ",".join(urls), "count": len(urls)}
+
+
 @router.get("/issues/trend")
 def api_issues_trend(
     days: int = 14,
@@ -2836,15 +2906,61 @@ def api_issue_detail(
 
     # Resolve discovered_url_id: use FK directly if set, otherwise look up by URL+shop
     disc_url_id = issue.discovered_url_id
+    disc_url: DiscoveredUrl | None = None
     if disc_url_id is None and issue.url and run:
-        disc_url_id = (
-            session.query(DiscoveredUrl.id)
+        disc_url = (
+            session.query(DiscoveredUrl)
             .filter(
                 DiscoveredUrl.url == issue.url,
                 DiscoveredUrl.shop_id == run.shop_id,
             )
-            .scalar()
+            .first()
         )
+        if disc_url:
+            disc_url_id = disc_url.id
+
+    # If the issue has no direct shop_book link, try to resolve via discovered_url
+    if shop_book is None:
+        sb_id_via_url = (
+            disc_url.shop_book_id
+            if disc_url is not None
+            else (
+                session.query(DiscoveredUrl.shop_book_id)
+                .filter(DiscoveredUrl.id == disc_url_id)
+                .scalar()
+                if disc_url_id
+                else None
+            )
+        )
+        if sb_id_via_url:
+            shop_book = session.query(ShopBook).filter(ShopBook.id == sb_id_via_url).first()
+
+    resolved_shop_book_id = (
+        issue.shop_book_id if issue.shop_book_id else (shop_book.id if shop_book else None)
+    )
+
+    # For match_isbn_drift: enrich with the canonical book's title + all its ISBNs
+    # so the UI can render a labelled pair (shop_book ISBN vs canonical ISBN +
+    # canonical title) rather than the bare `X vs Y` raw_value.
+    match_context: dict[str, Any] | None = None
+    if issue.issue == "match_isbn_drift" and shop_book and shop_book.book_id:
+        from book_scraper.db.models import Book, BookIsbn
+
+        canonical = session.get(Book, shop_book.book_id)
+        canonical_isbns = (
+            session.query(BookIsbn.isbn)
+            .filter(BookIsbn.book_id == shop_book.book_id)
+            .order_by(BookIsbn.isbn_type.desc())
+            .all()
+        )
+        sb_isbn, _, book_isbn = (issue.raw_value or "").partition(" vs ")
+        match_context = {
+            "sb_isbn": sb_isbn.strip() or shop_book.isbn,
+            "book_isbn": book_isbn.strip() or None,
+            "book_id": shop_book.book_id,
+            "book_title": canonical.title if canonical else None,
+            "book_isbns": [r.isbn for r in canonical_isbns],
+        }
 
     return {
         "id": issue.id,
@@ -2854,7 +2970,7 @@ def api_issue_detail(
         "issue": issue.issue,
         "raw_value": issue.raw_value,
         "scrape_run_id": issue.last_seen_run_id,
-        "shop_book_id": issue.shop_book_id,
+        "shop_book_id": resolved_shop_book_id,
         "discovered_url_id": disc_url_id,
         "shop_book_title": shop_book.title if shop_book else None,
         "shop_name": shop.name if shop else None,
@@ -2866,6 +2982,7 @@ def api_issue_detail(
         "added_at": run.started_at.isoformat() if run.started_at else None,
         "added_ago": _rel(run.started_at),
         "description": ISSUE_DESCRIPTIONS.get(issue.issue, ""),
+        "match_context": match_context,
     }
 
 

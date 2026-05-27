@@ -14,7 +14,7 @@
 
 const HF_ISSUE_TYPES = [
   { type:'missing_price',         sev:'critical', tone:'err',     description:'No price scraped. Parser likely hit a broken or restructured product page.' },
-  { type:'match_isbn_drift',      sev:'high',     tone:'warn',    description:'Shop reports an ISBN that disagrees with the canonical book matched by other shops.' },
+  { type:'match_isbn_drift',      sev:'high',     tone:'warn',    description:'Shop-book is linked to a canonical book whose ISBN(s) do not match. Either the shop ISBN was corrupted (re-scrape) or the canonical link is wrong (unlink + re-match).' },
   { type:'invalid_isbn',          sev:'high',     tone:'warn',    description:'ISBN check digit fails validation or the value is not 10/13 digits.' },
   { type:'non_product_active',    sev:'low',      tone:'neutral', description:'A URL classified as non-product is still being scraped as if it were a book listing.' },
   { type:'price_spike',           sev:'medium',   tone:'warn',    description:'Price moved by more than the configured threshold in a single run, with no promo marker.' },
@@ -95,7 +95,7 @@ function HFIssues({ nav, goto }) {
       type: sp.get('type') || 'all',
       sev:  ['all','critical','warning'].includes(sp.get('sev')) ? sp.get('sev') : 'all',
       q:    sp.get('q')    || '',
-      run:  sp.get('run')  || 'any',
+      run:  sp.get('run') || sp.get('run_id') || 'any',
     };
   }, []);
 
@@ -169,27 +169,29 @@ function HFIssues({ nav, goto }) {
     return acc.map((v, i) => v + (series[i] || 0));
   }, []);
 
-  // Fetch by-type groups whenever tab or shop filter changes.
+  // Fetch by-type groups whenever tab, shop, or run filter changes.
   React.useEffect(() => {
     const params = new URLSearchParams({ group_by: 'type' });
     if (tab !== 'all') params.set('state', tab);
     if (shopFilter !== 'all') params.set('shop', shopFilter);
+    if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
       .then(d => setGroupsData(Array.isArray(d) ? d : (d.groups || [])))
       .catch(() => {});
-  }, [tab, shopFilter]);
+  }, [tab, shopFilter, runFilter]);
 
   // Fetch type×shop groups for the waves view
   React.useEffect(() => {
     if (view !== 'waves') return;
     const params = new URLSearchParams({ group_by: 'type_shop' });
     if (tab !== 'all') params.set('state', tab);
+    if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
       .then(d => setWavesData(Array.isArray(d) ? d : (d.groups || [])))
       .catch(() => {});
-  }, [view, tab]);
+  }, [view, tab, runFilter]);
 
   // Fetch list when in list view
   React.useEffect(() => {
@@ -201,7 +203,7 @@ function HFIssues({ nav, goto }) {
     if (typeFilter !== 'all') params.set('issue_type', typeFilter);
     if (sevFilter !== 'all') params.set('severity', sevFilter);
     if (searchQ) params.set('q', searchQ);
-    if (runFilter !== 'any') params.set('run_id', runFilter);
+    if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     params.set('sort_by', listSort.col);
     params.set('order', listSort.dir);
     fetch(`/api/issues?${params}`)
@@ -324,13 +326,14 @@ function HFIssues({ nav, goto }) {
       if (res.ok) { window.alert(`Match run started for ${r.shop}.`); goto('runs'); }
       else window.alert('Failed: ' + (d.detail || res.status));
     };
+    const bulkRescrape = async () => bulkRescrapeGroup(r.type, r.shop);
     switch (r.type) {
       case 'missing_price':
       case 'invalid_isbn':
       case 'price_spike':
         return [
-          { label:'Open parser', primary:true, action:open('parser', { shop: r.shop }) },
-          { label:'Re-scrape URL', action: rescrapeUrl },
+          { label:'Open shop', primary:true, action:open('shop-detail', { name: r.shop }) },
+          { label:'Re-scrape all', action: bulkRescrape },
           { label:'Bulk ack pattern', action: bulkAck },
         ];
       case 'match_isbn_drift':
@@ -352,7 +355,7 @@ function HFIssues({ nav, goto }) {
         ];
       default:
         return [
-          { label:'Open parser', primary:true, action:open('parser', { shop: r.shop }) },
+          { label:'Open shop', primary:true, action:open('shop-detail', { name: r.shop }) },
           { label:'Re-scrape', action: rescrapeUrl },
         ];
     }
@@ -380,6 +383,35 @@ function HFIssues({ nav, goto }) {
       firstSeen: '—', lastSeen: '—', span: '', sample: null, runFailure: true,
     }));
   const byTypeShopRows = [];
+
+  // Bulk-rescrape: fetch the URL list for the issue group, then start a
+  // targeted scan run with `urls=` (same path as the per-issue rescrape).
+  const bulkRescrapeGroup = async (issueType, shop) => {
+    if (!shop) return window.alert('Select a shop first (use the Shop filter) before re-scraping.');
+
+    // Step 1: get the URLs for this issue group
+    const qRes = await fetch('/api/issues/bulk-rescrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issue_type: issueType, shop }),
+    });
+    const qData = await qRes.json();
+    if (!qRes.ok) { window.alert('Failed to collect URLs: ' + (qData.detail || qRes.status)); return; }
+    if (!qData.count) { window.alert('No URLs found for this issue group.'); return; }
+
+    // Step 2: start a targeted scan run with those URLs
+    const sRes = await fetch('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shop, phase: 'scan', urls: qData.urls }),
+    });
+    const sData = await sRes.json();
+    if (!sRes.ok) {
+      window.alert(`Found ${qData.count} URL(s), but scan failed to start: ${sData.detail || sRes.status}`);
+      return;
+    }
+    window.alert(`Scan started for ${qData.count} URL(s). When it finishes, run a Validate phase to close the resolved issues (click below or trigger from the Runs page).`);
+  };
 
   // Bulk-acknowledge: POST with optional type+shop filters derived from selected rows
   const bulkAcknowledge = () => {
@@ -679,27 +711,16 @@ function HFIssues({ nav, goto }) {
             <div key={r.type} style={{
               padding:`14px ${HF.cardP}px`,
               borderBottom: i < arr.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-              display:'grid', gridTemplateColumns:'auto 1fr auto auto auto', gap:18, alignItems:'center',
+              display:'grid', gridTemplateColumns:'auto 1fr auto auto auto auto', gap:18, alignItems:'center',
             }}>
               <span style={{
                 width:8, height:8, borderRadius:'50%', flexShrink:0,
                 background: r.tone === 'err' ? HF.err : r.tone === 'warn' ? HF.warn : HF.ink4,
               }}/>
-              <div style={{display:'flex', flexDirection:'column', gap:3, minWidth:0}}>
-                <span style={{fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 600}}>{r.type}</span>
-                <span style={{fontSize:11.5, color: HF.ink3}}>
-                  <HFPill tone={sevTone[r.sev]} style={{marginRight:6}}>{r.sev}</HFPill>
-                  {r.direction === 'up'   && <span style={{color:HF.errInk, fontFamily:HF.mono, fontWeight:500}}>▲ {r.deltaPct}% / 14d</span>}
-                  {r.direction === 'down' && <span style={{color:HF.okInk, fontFamily:HF.mono, fontWeight:500}}>▼ {Math.abs(r.deltaPct)}% / 14d</span>}
-                  {r.direction === 'flat' && <span style={{color:HF.ink4, fontFamily:HF.mono}}>flat / 14d</span>}
-                </span>
-              </div>
-              <HFIssueSparkline data={r.trend} tone={r.direction === 'up' ? 'err' : r.direction === 'down' ? 'ok' : 'neutral'} w={100} h={28}/>
-              <div style={{display:'flex', alignItems:'center', gap:18, fontFamily: HF.mono, fontVariantNumeric:'tabular-nums', fontSize:12.5}}>
-                <HFPill tone={r.tone}>{r.newCount.toLocaleString()} new</HFPill>
-                <span style={{color: HF.ink3, minWidth:60, textAlign:'right'}}>{r.total.toLocaleString()} total</span>
-                <span style={{color: HF.ink4, minWidth:60, textAlign:'right'}}>Ack ({r.ack.toLocaleString()})</span>
-              </div>
+              <span style={{fontFamily: HF.mono, fontSize: 13, color: HF.ink, fontWeight: 600}}>{r.type}</span>
+              <span style={{color: HF.ink3, minWidth:60, textAlign:'right', fontFamily: HF.mono, fontVariantNumeric:'tabular-nums', fontSize:12.5}}>{r.total.toLocaleString()} total</span>
+              <span style={{color: HF.ink4, minWidth:60, textAlign:'right', fontFamily: HF.mono, fontVariantNumeric:'tabular-nums', fontSize:12.5}}>Ack ({r.ack.toLocaleString()})</span>
+              <HFButton size="sm" onClick={() => bulkRescrapeGroup(r.type, shopFilter !== 'all' ? shopFilter : undefined)}>Re-scrape all</HFButton>
               <HFButton size="sm" variant="primary" onClick={() => { setTypeFilter(r.type); setView('list'); }}>View</HFButton>
             </div>
           ))}

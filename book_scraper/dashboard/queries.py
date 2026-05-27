@@ -142,8 +142,9 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         " or a reprinted edition. Check both entries and merge or correct."
     ),
     "match_isbn_drift": (
-        "The ISBN on the shop book differs from the ISBN on its canonical book match."
-        " One was likely corrected after the match was made — re-match or fix manually."
+        "The shop_book ISBN doesn't match any ISBN on its linked canonical book."
+        " Either the shop_book ISBN got corrupted (re-scrape the URL to refresh it)"
+        " or the canonical link is wrong (unlink book_id and run match again)."
     ),
     "no_price_history": (
         "No price has ever been recorded for this book. It may never have been successfully"
@@ -177,6 +178,12 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         "The URL slug and the scraped title diverge significantly. The parser may be"
         " picking up a wrong title element, or the shop renamed the product without"
         " updating the slug."
+    ),
+    "slug_diacritic_loss": (
+        "The URL slug looks like the shop's slug generator dropped Lithuanian"
+        " diacritic characters entirely (e.g. 'Kalėdų pūga' → 'kale-du-pu-ga')"
+        " instead of transliterating them (expected 'kaledu-puga'). A shop-side"
+        " bug — worth reporting to the shop to improve their product URLs."
     ),
     "stale_active": (
         "Book is marked active but was last seen in a scrape run over 30 days ago."
@@ -238,6 +245,7 @@ ISSUE_SEVERITY: dict[str, str] = {
     "price_zero": "critical",
     "product_url_non_book": "info",
     "sku_duplicate": "warning",
+    "slug_diacritic_loss": "info",
     "slug_title_mismatch": "info",
     "stale_active": "warning",
     "title_author_duplicate": "warning",
@@ -2420,7 +2428,7 @@ def get_shop_book_issues(session: Session, shop_book_id: int) -> list[dict[str, 
     rows = (
         session.query(ValidationIssue)
         .filter(ValidationIssue.shop_book_id == shop_book_id)
-        .order_by(ValidationIssue.id.desc())
+        .order_by(ValidationIssue.lifecycle_state.asc(), ValidationIssue.id.desc())
         .all()
     )
     return [
@@ -2543,6 +2551,7 @@ def get_issues_groups(
     group_by: str = "type",
     state: str | None = None,
     shop_id: int | None = None,
+    run_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return grouped issue counts for the grouped-view toggle.
 
@@ -2550,6 +2559,7 @@ def get_issues_groups(
     group_by='type_shop' -> one row per (issue_type, shop).
     state                -> optional filter: 'new'|'acknowledged'|'snoozed'|'resolved'.
     shop_id              -> optional shop scope.
+    run_id               -> optional run scope (filters by last_seen_run_id).
     """
     count_cols = [
         func.count().label("total"),
@@ -2587,6 +2597,8 @@ def get_issues_groups(
         q = q.where(ValidationIssue.shop_id == shop_id)
     if state:
         q = q.where(ValidationIssue.lifecycle_state == state)
+    if run_id is not None:
+        q = q.where(ValidationIssue.last_seen_run_id == run_id)
 
     if group_by == "type_shop":
         q = q.group_by(ValidationIssue.issue, Shop.name, Shop.id).order_by(
