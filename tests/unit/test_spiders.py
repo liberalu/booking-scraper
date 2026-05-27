@@ -838,6 +838,181 @@ class TestScanSpider:
         assert props.get("pages") == 200
         assert props.get("cover_type") == "Kieti viršeliai"
 
+    def test_missing_price_dump_disabled_by_default(self, monkeypatch, tmp_path):
+        """No env var → no file written, even when parser returns price=None.
+
+        Default behaviour: zero dumps. This protects normal scrape runs
+        from disk-bloat surprises and proves the gate is the env var,
+        not the trigger condition.
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        monkeypatch.delenv("SCRAPER_DUMP_MISSING_PRICE_MAX", raising=False)
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_DIR", str(tmp_path))
+        spider = ScanSpider(shop="vaga")
+
+        def fake_parse(_html: str) -> dict[str, object]:
+            return {
+                "title": "X",
+                "is_book_product": True,
+                "type": "book",
+                "in_stock": True,
+                "price": None,  # the trigger
+                "categories": [],
+                "schema_types": [],
+                "book_score": 5,
+                "book_score_reasons": [],
+            }
+
+        monkeypatch.setattr(spider.parsers, "parse_product_page", fake_parse)
+        response = _fake_response(
+            "https://vaga.lt/missing-price",
+            "<html><body></body></html>",
+            meta={"discovered_url_id": 1},
+        )
+        list(spider.parse_product(response))
+        # Nothing should have been written.
+        assert list(tmp_path.rglob("*.html")) == []
+        assert list(tmp_path.rglob("*.summary.txt")) == []
+
+    def test_missing_price_dump_captures_body_and_summary(self, monkeypatch, tmp_path):
+        """With env var set, an in-stock book product whose parser returned
+        price=None writes both the raw HTML and a summary file. The
+        summary's marker_matches line records which anchor regexes
+        matched, so the operator can see at a glance whether the cart
+        block was even present in the body.
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_MAX", "5")
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_DIR", str(tmp_path))
+        spider = ScanSpider(shop="vaga")
+
+        def fake_parse(_html: str) -> dict[str, object]:
+            return {
+                "title": "Missing Price Book",
+                "sku": "299192",
+                "is_book_product": True,
+                "type": "book",
+                "in_stock": True,
+                "price": None,
+                "categories": [],
+                "schema_types": [],
+                "book_score": 5,
+                "book_score_reasons": [],
+            }
+
+        monkeypatch.setattr(spider.parsers, "parse_product_page", fake_parse)
+
+        body = (
+            "<html><body>"
+            '<div class="cart-container" data-product-id="299192">'
+            '<div class="cart-price"><div class="label">Kaina:</div>'
+            '<div class="price-container"><div class="price">13.74 €</div>'
+            "</div></div></div>"
+            "</body></html>"
+        )
+        response = _fake_response(
+            "https://www.humanitas.lt/produktas/visos-kategorijos/hitman-stans",
+            body,
+            meta={"discovered_url_id": 42},
+        )
+        list(spider.parse_product(response))
+
+        html_files = list(tmp_path.rglob("*.html"))
+        summary_files = list(tmp_path.rglob("*.summary.txt"))
+        assert len(html_files) == 1, html_files
+        assert len(summary_files) == 1, summary_files
+
+        # Body round-trips byte-for-byte so we can diff against a live
+        # FlareSolverr fetch later.
+        assert html_files[0].read_text(encoding="utf-8") == body
+
+        summary = summary_files[0].read_text(encoding="utf-8")
+        assert (
+            "url=https://www.humanitas.lt/produktas/visos-kategorijos/hitman-stans"
+            in summary
+        )
+        assert "parsed_title='Missing Price Book'" in summary
+        assert "parsed_sku='299192'" in summary
+        # marker_matches: cart-container, cart-price, price-container and
+        # price-div all match; price-hidden / disabled do not.
+        assert "cart-container=1" in summary
+        assert "price-container=1" in summary
+        assert "price-div=1" in summary
+        assert "price-hidden=0" in summary
+        assert "disabled=0" in summary
+
+        # Files are nested under shop subdir.
+        assert (tmp_path / "vaga").is_dir()
+
+    def test_missing_price_dump_counter_is_enforced(self, monkeypatch, tmp_path):
+        """`SCRAPER_DUMP_MISSING_PRICE_MAX=1` → only the first trigger
+        writes; the second is silently skipped. Protects long-running
+        scans from filling disk if the bug turns out to be common.
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_MAX", "1")
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_DIR", str(tmp_path))
+        spider = ScanSpider(shop="vaga")
+
+        def fake_parse(_html: str) -> dict[str, object]:
+            return {
+                "title": "X",
+                "is_book_product": True,
+                "type": "book",
+                "in_stock": True,
+                "price": None,
+                "categories": [],
+                "schema_types": [],
+                "book_score": 5,
+                "book_score_reasons": [],
+            }
+
+        monkeypatch.setattr(spider.parsers, "parse_product_page", fake_parse)
+        for i in range(3):
+            response = _fake_response(
+                f"https://vaga.lt/missing-{i}",
+                "<html></html>",
+                meta={"discovered_url_id": i},
+            )
+            list(spider.parse_product(response))
+        assert len(list(tmp_path.rglob("*.html"))) == 1
+
+    def test_missing_price_dump_skips_when_book_is_oos(self, monkeypatch, tmp_path):
+        """Out-of-stock books legitimately have no price — don't dump them
+        even with the env var on. This keeps captures focused on real
+        anomalies (in_stock book with parser-missed price), not noise.
+        """
+        from book_scraper.spiders.scan import ScanSpider
+
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_MAX", "5")
+        monkeypatch.setenv("SCRAPER_DUMP_MISSING_PRICE_DIR", str(tmp_path))
+        spider = ScanSpider(shop="vaga")
+
+        def fake_parse(_html: str) -> dict[str, object]:
+            return {
+                "title": "OOS Book",
+                "is_book_product": True,
+                "type": "book",
+                "in_stock": False,  # legitimately OOS
+                "price": None,
+                "categories": [],
+                "schema_types": [],
+                "book_score": 5,
+                "book_score_reasons": [],
+            }
+
+        monkeypatch.setattr(spider.parsers, "parse_product_page", fake_parse)
+        response = _fake_response(
+            "https://vaga.lt/oos-book",
+            "<html></html>",
+            meta={"discovered_url_id": 99},
+        )
+        list(spider.parse_product(response))
+        assert list(tmp_path.rglob("*.html")) == []
+
     def test_is_anti_bot_response_matches_known_walls(self):
         from book_scraper.spiders.scan import _is_anti_bot_response
 

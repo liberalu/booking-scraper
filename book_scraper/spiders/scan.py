@@ -1,6 +1,10 @@
 import contextlib
+import os
+import re as _re
 import time
 from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import scrapy
@@ -11,9 +15,11 @@ from book_scraper.config import load_shop_config
 from book_scraper.db.repo import (
     get_pending_scrape_url_items,
     increment_scrape_run_stats,
+    insert_scrape_url_item,
     mark_scrape_url_item_response,
     reset_processing_scrape_url_items,
     update_scrape_run_progress,
+    upsert_discovered_url,
 )
 from book_scraper.db.session import get_session_factory
 from book_scraper.event_log import log_response_event
@@ -117,6 +123,32 @@ class ScanSpider(scrapy.Spider):
         # its own flag and may sweep again (bounded by attempts < cap).
         self._end_of_run_retry_done: bool = False
 
+        # `missing_price` diagnostic capture. When the parser returns
+        # `price=None` for an item it has classified as a book in
+        # stock, we sometimes can't tell after the fact whether the
+        # body really lacked a price (transient page variant, partial
+        # render, FlareSolverr session miss) or whether the parser
+        # missed a layout we don't have a regex for. Capturing the raw
+        # body + a one-line summary on the first N occurrences gives us
+        # an actual sample to diff against the live page.
+        #
+        # Opt-in (defaults to disabled so normal runs don't write
+        # to disk): set `SCRAPER_DUMP_MISSING_PRICE_MAX=N` env var to
+        # cap captures per spider process. Pair with
+        # `SCRAPER_DUMP_MISSING_PRICE_DIR` to override the path.
+        try:
+            self._missing_price_dumps_remaining: int = int(
+                os.environ.get("SCRAPER_DUMP_MISSING_PRICE_MAX", "0") or "0"
+            )
+        except ValueError:
+            self._missing_price_dumps_remaining = 0
+        self._missing_price_dump_dir: Path = Path(
+            os.environ.get(
+                "SCRAPER_DUMP_MISSING_PRICE_DIR",
+                "/tmp/scraper-missing-price",
+            )
+        )
+
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):  # type: ignore[no-untyped-def]
         spider = super().from_crawler(crawler, *args, **kwargs)
@@ -160,12 +192,8 @@ class ScanSpider(scrapy.Spider):
                     session, self._run_id, cap=retry_cap
                 )
                 if eligible:
-                    reset_failed_items_to_pending(
-                        session, [it.id for it in eligible]
-                    )
-                    new_items = get_pending_scrape_url_items(
-                        session, self._run_id
-                    )
+                    reset_failed_items_to_pending(session, [it.id for it in eligible])
+                    new_items = get_pending_scrape_url_items(session, self._run_id)
                 self._end_of_run_retry_done = True
             session.commit()
         finally:
@@ -553,14 +581,34 @@ class ScanSpider(scrapy.Spider):
         # the ShopBookItem construction below.
         if data.get("_emit_as") == "book":
             from book_scraper.items import BookItem
+
             book = BookItem()
             for k in (
-                "libis_code", "data_source", "title", "title_full", "year",
-                "publisher", "series", "isbns", "authors", "release_place",
-                "type", "format", "pages", "duration", "dimensions",
-                "language", "translated_from", "description", "cover_url",
-                "upcoming_release", "udc_codes", "subjects", "audience",
-                "libis_rating", "libis_review_count",
+                "libis_code",
+                "data_source",
+                "title",
+                "title_full",
+                "year",
+                "publisher",
+                "series",
+                "isbns",
+                "authors",
+                "release_place",
+                "type",
+                "format",
+                "pages",
+                "duration",
+                "dimensions",
+                "language",
+                "translated_from",
+                "description",
+                "cover_url",
+                "upcoming_release",
+                "udc_codes",
+                "subjects",
+                "audience",
+                "libis_rating",
+                "libis_review_count",
             ):
                 if k in data and data[k] is not None:
                     book[k] = data[k]
@@ -580,13 +628,39 @@ class ScanSpider(scrapy.Spider):
                 retry_count=retry_count,
             )
             self._queue_url_status_update(
-                discovered_url_id, http_status=200, url_type="product",
+                discovered_url_id,
+                http_status=200,
+                url_type="product",
                 book_score=data.get("book_score", 5),
                 is_book_product=True,
                 book_score_reasons=data.get("book_score_reasons", []),
             )
+            # Multipart works (iBiblioteka): the parent record's `parts[]`
+            # lists per-volume libis_codes. Each volume has its own ISBN
+            # only retrievable via a direct fetch of the part code, so we
+            # enqueue follow-up scrape items here. The spider's pending
+            # queue is polled on `spider_idle`, so these get picked up
+            # within the same run.
+            part_urls = data.get("_part_urls") or []
+            if part_urls:
+                self._enqueue_followup_urls(part_urls)
             yield book
             return
+
+        # Diagnostic capture: when a page that the parser believes
+        # describes an in-stock book still produces price=None, save
+        # the raw response body to disk so we can diff it against the
+        # live page later. Opt-in via SCRAPER_DUMP_MISSING_PRICE_MAX.
+        if (
+            self._missing_price_dumps_remaining > 0
+            and data.get("price") is None
+            and data.get("in_stock") is not False
+            and data.get("is_book_product")
+        ):
+            try:
+                self._dump_missing_price_body(response, url, data)
+            except Exception as e:  # noqa: BLE001 — diagnostic must not break scrape
+                self.logger.warning("missing_price dump failed for url=%s: %s", url, e)
 
         item = ShopBookItem(
             url=url,
@@ -637,6 +711,98 @@ class ScanSpider(scrapy.Spider):
 
         self._urls_processed += 1
         yield item
+
+    def _dump_missing_price_body(
+        self,
+        response: Any,
+        url: str,
+        data: dict[str, Any],
+    ) -> None:
+        """Save the raw response body when parser returned price=None
+        for an item it considers an in-stock book product.
+
+        Captures both the full HTML and a one-line summary of which
+        anchor regexes matched (cart-container, cart-price, price-hidden,
+        disabled, price-container). Reading the summary alone often
+        identifies the failure mode (anti-bot wall, missing-price-block
+        variant, unexpected layout) without opening the HTML.
+
+        Bounded by `self._missing_price_dumps_remaining`; decrements on
+        every call so per-run disk usage is capped at the env var
+        `SCRAPER_DUMP_MISSING_PRICE_MAX`.
+        """
+        self._missing_price_dumps_remaining -= 1
+
+        dump_root = self._missing_price_dump_dir / self.shop_name
+        dump_root.mkdir(parents=True, exist_ok=True)
+
+        # Slug the URL into a filename: keep the last two path segments,
+        # strip query/fragment, replace non-alphanumerics with `-`.
+        path_tail = url.split("://", 1)[-1].split("?", 1)[0].rstrip("/")
+        slug = _re.sub(r"[^A-Za-z0-9._-]+", "-", path_tail)[-120:].lstrip("-")
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        base = f"{ts}-run{self._run_id or 'X'}-{slug}"
+        html_path = dump_root / f"{base}.html"
+        summary_path = dump_root / f"{base}.summary.txt"
+
+        body = response.text or ""
+        body_lower = body.lower()
+        markers = {
+            "cart-container": '<div class="cart-container"' in body,
+            "cart-price": '<div class="cart-price' in body,
+            "price-hidden": "cart-price price-hidden" in body,
+            "disabled": "uppercase disabled" in body,
+            "price-container": '<div class="price-container"' in body,
+            "price-div": bool(
+                _re.search(
+                    r'<div\s+class="price"[^>]*>\s*[\d ]+[.,]\d+',
+                    body,
+                )
+            ),
+            "anti-bot": _is_anti_bot_response(body_lower),
+        }
+
+        # Slice up to 1 KB around the cart-container for the summary so
+        # we can see what region of the page the parser was looking at.
+        cart_slice = ""
+        cart_m = _re.search(
+            r'<div\s+class="cart-container"[\s\S]{0,1024}',
+            body,
+            _re.I,
+        )
+        if cart_m:
+            cart_slice = cart_m.group(0)[:1024]
+
+        try:
+            html_path.write_text(body, encoding="utf-8")
+            summary_lines = [
+                f"url={url}",
+                f"final_url={response.url if hasattr(response, 'url') else 'unknown'}",
+                f"http_status={getattr(response, 'status', 'unknown')}",
+                f"response_bytes={len(body)}",
+                f"run_id={self._run_id}",
+                f"parsed_title={data.get('title')!r}",
+                f"parsed_sku={data.get('sku')!r}",
+                f"parsed_in_stock={data.get('in_stock')!r}",
+                f"parsed_is_book_product={data.get('is_book_product')!r}",
+                "marker_matches="
+                + ",".join(f"{k}={int(v)}" for k, v in markers.items()),
+                "--- cart-container slice (first 1024 chars) ---",
+                cart_slice or "(no cart-container in body)",
+            ]
+            summary_path.write_text("\n".join(summary_lines), encoding="utf-8")
+        except OSError as e:
+            self.logger.warning(
+                "missing_price dump write failed for url=%s: %s", url, e
+            )
+            return
+
+        self.logger.warning(
+            "missing_price body captured: url=%s file=%s markers=%s",
+            url,
+            html_path,
+            markers,
+        )
 
     def handle_error(self, failure: Any) -> None:
         """Handle request failures (timeouts, connection errors)."""
@@ -896,6 +1062,51 @@ class ScanSpider(scrapy.Spider):
         self._urls_responded += 1
         if self._urls_responded % self._flush_every == 0:
             self._flush_progress()
+
+    def _enqueue_followup_urls(self, urls: list[str]) -> None:
+        """Enqueue additional URLs as scrape_url_items for the current run.
+
+        Used by the canonical-book branch when a parser discovers extra
+        records to fetch — currently iBiblioteka's multipart parts, where
+        the parent record's `parts[]` lists per-volume libis_codes that
+        carry the actual per-volume ISBNs. Each part becomes a fresh
+        scrape_url_item; the spider's `spider_idle` loop pulls them from
+        the pending pool on its next tick, keeping ingestion within the
+        same run.
+
+        Uses a short-lived session, independent of `_progress_session`,
+        so we don't entangle our commit with the in-flight batch updates.
+        """
+        if not urls or self._run_id is None:
+            return
+        database_url = self.settings.get("DATABASE_URL")
+        session_factory = get_session_factory(database_url)
+        session = session_factory()
+        try:
+            from book_scraper.db.models import Shop
+
+            shop = session.query(Shop).filter_by(name=self.shop_name).one_or_none()
+            if shop is None:
+                return
+            for url in urls:
+                du = upsert_discovered_url(
+                    session,
+                    shop_id=shop.id,
+                    url=url,
+                    source="multipart_followup",
+                    run_id=self._run_id,
+                )
+                insert_scrape_url_item(
+                    session,
+                    run_id=self._run_id,
+                    shop_id=shop.id,
+                    discovered_url_id=du.id,
+                    url=url,
+                    url_type="product",
+                )
+            session.commit()
+        finally:
+            session.close()
 
     def _flush_progress(self) -> None:
         """Flush queued URL status updates and progress to DB."""
