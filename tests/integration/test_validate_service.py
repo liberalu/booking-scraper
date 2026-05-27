@@ -152,10 +152,13 @@ def test_title_author_duplicate_flags_both_rows(db_session):
     shop = _make_shop(db_session, "b")
     run = _make_run(db_session, shop.id)
 
+    # title+author duplicate fires ONLY when ISBNs also match (or both
+    # are null) — same title+author with different ISBNs is a legitimate
+    # re-edition, not a duplicate URL.  Use identical ISBNs here.
     sb1 = ShopBook(shop_id=shop.id, url="https://testshopb.lt/p/1", title="Same Title",
                    author="Same Author", isbn="9780000000010")
     sb2 = ShopBook(shop_id=shop.id, url="https://testshopb.lt/p/2", title="Same Title",
-                   author="Same Author", isbn="9780000000011")
+                   author="Same Author", isbn="9780000000010")
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -215,10 +218,14 @@ def test_slug_title_mismatch_zero_overlap_flagged(db_session):
     shop = _make_shop(db_session, "d")
     run = _make_run(db_session, shop.id)
 
+    # Title has no LT diacritics, so `slug_diacritic_loss` cannot
+    # supersede this — only `slug_title_mismatch` fires.  (Diacritic-
+    # loss supersession is exercised by check_slug_diacritic_loss's
+    # own unit tests.)
     sb = ShopBook(
         shop_id=shop.id,
         url="https://testshopd.lt/vyresnio-amziaus-zmoniu-sveika",
-        title="Ką šunys galvoja?",
+        title="What do dogs think about quietly",
     )
     db_session.add(sb)
     db_session.commit()
@@ -376,13 +383,58 @@ def test_format_is_dimensions_flagged(db_session):
 
 @pytest.mark.integration
 def test_non_product_active_flagged_via_join(db_session):
+    """Residual case: shop_book has a mix of product + non_product URLs.
+
+    Auto-heal only deactivates when ALL URLs are non_product.  When SOME
+    URLs are still product, the book stays active and the issue surfaces
+    for human investigation.
+    """
     shop = _make_shop(db_session, "j")
     run = _make_run(db_session, shop.id)
 
     sb = ShopBook(
         shop_id=shop.id,
         url="https://testshopj.lt/p/1",
-        title="Active Non-Product",
+        title="Mixed Product/Non-Product",
+        is_active=True,
+    )
+    db_session.add(sb)
+    db_session.flush()
+
+    _make_du(
+        db_session, shop.id, sb.url,
+        url_type="product", shop_book_id=sb.id
+    )
+    _make_du(
+        db_session, shop.id, "https://testshopj.lt/p/1-alt",
+        url_type="non_product", shop_book_id=sb.id
+    )
+    db_session.commit()
+
+    ValidateService(db_session).run(shop.id, run.id)
+    db_session.commit()
+
+    issues = _issues_for(db_session, sb.id, "non_product_active")
+    assert len(issues) == 1
+    assert issues[0].raw_value == "non_product"
+    # Mixed case → shop_book stays active for human investigation.
+    db_session.refresh(sb)
+    assert sb.is_active is True
+
+
+@pytest.mark.integration
+def test_non_product_active_auto_heals_when_all_urls_non_product(db_session):
+    """When ALL of a shop_book's discovered_urls are non_product, the
+    validator auto-heals by setting is_active=false rather than emitting
+    an issue.  This was the common case (~99%) during the pegasas cleanup
+    (2026-05-17, 1,945 rows)."""
+    shop = _make_shop(db_session, "j2")
+    run = _make_run(db_session, shop.id)
+
+    sb = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopj2.lt/p/1",
+        title="All Non-Product",
         is_active=True,
     )
     db_session.add(sb)
@@ -397,9 +449,12 @@ def test_non_product_active_flagged_via_join(db_session):
     ValidateService(db_session).run(shop.id, run.id)
     db_session.commit()
 
+    db_session.refresh(sb)
+    assert sb.is_active is False, "all-non_product shop_book must auto-heal to inactive"
+    assert sb.inactive_since is not None
+    # No issue is emitted — the deactivation is the resolution.
     issues = _issues_for(db_session, sb.id, "non_product_active")
-    assert len(issues) == 1
-    assert issues[0].raw_value == "non_product"
+    assert issues == []
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +642,9 @@ def test_url_aliases_flagged_when_multiple_urls_per_shop_book(db_session):
 
     issues = _issues_for(db_session, sb.id, "url_aliases")
     assert len(issues) == 1
-    assert issues[0].raw_value == "2"
+    # raw_value counts ALIAS URLs only (excludes the canonical
+    # shop_book.url).  Two discovered_urls = 1 canonical + 1 alias = "1".
+    assert issues[0].raw_value == "1"
 
 
 # ---------------------------------------------------------------------------

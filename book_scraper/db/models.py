@@ -596,8 +596,8 @@ class ScrapeUrlItem(Base):
 
     __table_args__ = (
         Index("ix_scrape_url_items_run_status", "run_id", "status"),
-        Index("ix_scrape_url_items_shop_claimed_at", "shop_id", "claimed_at"),
         Index("ix_scrape_url_items_run_done_at", "run_id", "done_at"),
+        Index("ix_scrape_url_items_shop_claimed_at", "shop_id", "claimed_at"),
         UniqueConstraint("run_id", "url", name="uq_scrape_url_items_run_url"),
     )
 
