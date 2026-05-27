@@ -126,6 +126,18 @@ This means **you don't need to schedule `match` or `validate` cron jobs**. Match
 | `format_is_dimensions` | info | `shop_books.format` looks like a dimension expression (`17x24`, `170 x 205 mm`). Driven by parser bugs — `format_from_cover_type` now drops dimension-only inputs to None instead of leaking them. |
 | `url_aliases` (refined) | info | `discovered_urls` row with a different URL shape than the canonical `shop_books.url`. Now filters URL-encoding mismatches (`mi%C5%A1ku-x` vs `mišku-x`) and OpenCart legacy route URLs (`index.php?route=product/product&product_id=N`) — those are platform-level aliases, not data-quality issues. |
 
+### `match_isbn_drift` is stale state, not a matcher bug
+
+`match.py` linkage is **strictly ISBN-exact**:
+
+- Step 1: `UPDATE shop_books SET book_id = bi.book_id WHERE sb.isbn = bi.isbn AND sb.book_id IS NULL`.
+- Step 2 (`_step2_author_backfill`) writes only to `shop_authors.canonical_author_id` — never touches `shop_books.book_id`.
+- Step 3 (`_step3_shop_inferred_synthesis`, gated by `MATCH_SYNTHESIS_ENABLED=0`) synthesises a new canonical from the shop_book's own ISBN, then re-runs step 1.
+
+No code path can link a shop_book to a canonical whose ISBNs disagree. So when `match_isbn_drift` fires, **the matcher didn't make a bad link** — the shop_book's `isbn` mutated *after* the link was made, and step 1's `WHERE sb.book_id IS NULL` guard means it's never re-evaluated. Causes seen in production: FlareSolverr session race writing another product's metadata to the wrong row, EAN vs ISBN parser slips, a URL being re-listed to a different product by the shop.
+
+**Operator fix** (also surfaced as actions on the issue detail page): Re-scrape URL to refresh the shop_book ISBN, or Unlink & re-match (`POST /api/shop-books/{id}/unlink-canonical` clears `book_id` so step 1 can re-link by the corrected ISBN). Don't go looking for a matcher bug.
+
 ### Validator filter gates (cheatsheet)
 
 Every validator that queries `shop_books` applies mandatory pre-filters. Missing one is a silent noise regression — always check these when adding or modifying a validator.
