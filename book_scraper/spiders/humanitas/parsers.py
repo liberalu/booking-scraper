@@ -167,6 +167,39 @@ _OOS_CART_DISABLED_RE = re.compile(
     r'<a\b[^>]*\bclass="[^"]*\bext_button\b[^"]*\bdisabled\b',
     re.I,
 )
+# Third unbuyable state: `<div class="cart-price">` is present and
+# carries the "Kaina:" label, but contains no price element — no
+# `<div class="price-container">` child, no inline
+# `<div class="price">N.NN €</div>`. Cart button is *not* disabled in
+# this state, so the `_OOS_CART_DISABLED_RE` detector misses it.
+# Observed on 2026-05-27 in 60/60 captured response bodies (across new
+# imports, decoratives, miscellaneous items) — i.e. ~3.9% of the
+# humanitas catalogue on any given scan. Likely "listed but unpriced"
+# (new arrivals awaiting pricing, pre-orders, etc.). Treat as
+# in_stock=False so the validator stops firing missing_price for them.
+_CART_PRICE_BLOCK_OPEN_RE = re.compile(
+    r'<div\s+class="cart-price[^"]*"[^>]*>',
+    re.I,
+)
+_PRICE_CONTAINER_RE = re.compile(r'<div\s+class="price-container"', re.I)
+
+
+def _cart_price_block_is_empty(html: str) -> bool:
+    """True iff a `cart-price` block exists but holds no price value.
+
+    Scans a 600-char window after the cart-price open tag. Real
+    cart-price blocks on humanitas are ~80–200 chars in both the
+    priced and the empty state, so 600 chars safely covers any priced
+    layout (where we expect to find a `price-container` child or an
+    inline euro value) without spilling into unrelated sibling blocks.
+    """
+    m = _CART_PRICE_BLOCK_OPEN_RE.search(html)
+    if not m:
+        return False
+    window = html[m.end() : m.end() + 600]
+    if _PRICE_CONTAINER_RE.search(window):
+        return False
+    return not _PRICE_RE.search(window)
 
 
 def _parse_price(raw: str | None) -> str | None:
@@ -249,6 +282,7 @@ def _extract_price_pair(html: str) -> tuple[str | None, str | None, bool]:
     in_stock: bool = not (
         _OOS_PRICE_HIDDEN_RE.search(visible) is not None
         or _OOS_CART_DISABLED_RE.search(visible) is not None
+        or _cart_price_block_is_empty(visible)
     )
     return price, price_original, in_stock
 
@@ -318,12 +352,8 @@ _CARD_OPENING_RE = re.compile(
     r'<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>',
     re.S | re.I,
 )
-_CARD_TITLE_RE = re.compile(
-    r'<div\s+class="title"[^>]*>\s*([^<]+?)\s*</div>', re.I
-)
-_CARD_AUTHOR_RE = re.compile(
-    r'<div\s+class="author"[^>]*>\s*([^<]+?)\s*</div>', re.I
-)
+_CARD_TITLE_RE = re.compile(r'<div\s+class="title"[^>]*>\s*([^<]+?)\s*</div>', re.I)
+_CARD_AUTHOR_RE = re.compile(r'<div\s+class="author"[^>]*>\s*([^<]+?)\s*</div>', re.I)
 _CARD_PRICE_PAIR_RE = re.compile(
     r'<div\s+class="price-container"[^>]*>\s*'
     r'<div\s+class="discount"[^>]*>\s*([^<]+?)\s*</div>\s*'
@@ -335,9 +365,7 @@ _CARD_PRICE_PAIR_RE = re.compile(
 _CARD_SINGLE_PRICE_RE = re.compile(
     r'<div\s+class="price"[^>]*>\s*([\d ]+[.,]\d+\s*€)\s*</div>', re.I
 )
-_CARD_IMG_RE = re.compile(
-    r'<img\s[^>]*\bsrc="([^"]+)"', re.I
-)
+_CARD_IMG_RE = re.compile(r'<img\s[^>]*\bsrc="([^"]+)"', re.I)
 
 
 def _parse_card(href: str, body: str) -> dict[str, Any] | None:
@@ -482,9 +510,7 @@ def parse_product_page(html: str) -> ProductPageResult:
     og_title = _meta_content(html, "og:title")
     raw_title_m = re.search(r"<title>([^<]*)</title>", html, re.S | re.I)
     raw_title = _unescape(raw_title_m.group(1)) if raw_title_m else None
-    title = og_title or (
-        _TITLE_SUFFIX_RE.sub("", raw_title) if raw_title else None
-    )
+    title = og_title or (_TITLE_SUFFIX_RE.sub("", raw_title) if raw_title else None)
     data["title"] = title
 
     # OG description / image.
@@ -613,8 +639,11 @@ def parse_product_page(html: str) -> ProductPageResult:
         reasons = data.get("book_score_reasons")
         if isinstance(reasons, list):
             reasons.append(
-                {"key": "blocked_non_lt_language", "points": 0,
-                 "language": detected_language.strip()}
+                {
+                    "key": "blocked_non_lt_language",
+                    "points": 0,
+                    "language": detected_language.strip(),
+                }
             )
 
     # Properties dict isn't part of ProductPageResult; the discover/

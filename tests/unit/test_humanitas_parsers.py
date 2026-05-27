@@ -17,9 +17,9 @@ def test_parse_sitemap_urls_extracts_product_links_from_index_page():
     urls = parse_sitemap_urls(html)
     assert urls, "expected at least one product URL"
     # Every URL must be on the LT product permalink namespace.
-    assert all(
-        u.startswith("https://www.humanitas.lt/produktas/") for u in urls
-    ), "non-product URL leaked into sitemap output"
+    assert all(u.startswith("https://www.humanitas.lt/produktas/") for u in urls), (
+        "non-product URL leaked into sitemap output"
+    )
     # The recon snapshot of the homepage's swiper rendered ~31 product
     # cards via `<a class="book-item">`. Production catalogue pages
     # render up to `m575a2product_limit` (capped at 5 000) cards.
@@ -56,7 +56,7 @@ def test_parse_category_page_extracts_per_card_fields():
     assert wittgenstein is not None, "expected wittgensteino-meiluze in fixture"
     assert wittgenstein["title"] == "Wittgensteino meilužė"
     assert wittgenstein["author"] == "David Markson"
-    assert wittgenstein["price"] == "14.25"          # final / discounted
+    assert wittgenstein["price"] == "14.25"  # final / discounted
     assert wittgenstein["price_original"] == "15.00"  # pre-discount
     assert wittgenstein["image_url"]
     assert wittgenstein["image_url"].startswith("https://www.humanitas.lt/uploads/")
@@ -81,7 +81,10 @@ def test_parse_category_page_strips_trailing_slash_from_url():
     )
     products = parse_category_page(html)["products"]
     assert len(products) == 1
-    assert products[0]["url"] == "https://www.humanitas.lt/produktas/visos-kategorijos/some-book"
+    assert (
+        products[0]["url"]
+        == "https://www.humanitas.lt/produktas/visos-kategorijos/some-book"
+    )
     assert not products[0]["url"].endswith("/"), "URL must not have trailing slash"
 
 
@@ -117,7 +120,7 @@ def test_parse_category_page_handles_card_without_discount():
         '<div class="title">Foo</div>'
         '<div class="price"><div class="normal">'
         '<div class="price">19.99 €</div>'
-        '</div></div></a>'
+        "</div></div></a>"
     )
     products = parse_category_page(html)["products"]
     assert len(products) == 1
@@ -191,9 +194,9 @@ def test_parse_product_page_extracts_full_book_info():
     assert data["image_url"]
     assert data["image_url"].startswith("https://www.humanitas.lt/uploads/")
     assert data["description"] is not None
-    assert "Paraščių" in (data["description"] or "") or len(
-        data["description"] or ""
-    ) > 50
+    assert (
+        "Paraščių" in (data["description"] or "") or len(data["description"] or "") > 50
+    )
 
     # Book classifier should fire (ISBN + author + book metadata).
     assert data["is_book_product"] is True
@@ -233,7 +236,7 @@ def test_parse_product_page_tolerates_missing_book_info_block():
 
 def test_parse_product_page_strips_humanitas_title_suffix():
     html = (
-        '<html><head><title>Test Book - Humanitas</title>'
+        "<html><head><title>Test Book - Humanitas</title>"
         '<meta property="og:title" content="Test Book">'
         "</head><body></body></html>"
     )
@@ -244,7 +247,7 @@ def test_parse_product_page_strips_humanitas_title_suffix():
 def test_parse_product_page_rejects_non_isbn_gtin():
     """Lesson from pegasas — only Bookland prefixes are real ISBNs."""
     html = (
-        '<html><head><title>Sticker pack - Humanitas</title>'
+        "<html><head><title>Sticker pack - Humanitas</title>"
         '<meta property="og:title" content="Sticker pack">'
         '</head><body><div class="book-info">'
         "<b>ISBN:</b> 4010070123456 <br>"
@@ -257,7 +260,7 @@ def test_parse_product_page_rejects_non_isbn_gtin():
 def test_parse_product_page_validates_real_isbn_checksum():
     """A 978-prefixed but checksum-broken value must also be rejected."""
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         # Same prefix as the real fixture but flip the last digit.
@@ -276,7 +279,7 @@ def test_parse_product_page_accepts_old_lt_isbn10():
     accept them (not just 978/979 Bookland 13-digit codes).
     """
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         "<b>ISBN:</b> 9986767156 <br>"
@@ -316,7 +319,7 @@ def test_price_parsing_normalises_lithuanian_format(raw: str, expected: str | No
 def test_parse_product_page_skips_dimensions_in_formatas_field():
     """`Formatas:` overloads cover-type and dimensions — only the former is format."""
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         "<b>ISBN:</b> 9786094802966 <br>"
@@ -344,7 +347,7 @@ def test_parse_product_page_skips_dimensions_in_formatas_field():
 def test_parse_product_page_skips_dimension_variants_from_format(raw: str):
     """Dimensions show up in many shapes; none should leak into `format`."""
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         f"<b>Formatas:</b> {raw} <br>"
@@ -357,7 +360,7 @@ def test_parse_product_page_skips_dimension_variants_from_format(raw: str):
 
 def test_parse_product_page_treats_pasirinkite_as_missing_format():
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         "<b>Formatas:</b> Pasirinkite <br>"
@@ -370,7 +373,7 @@ def test_parse_product_page_treats_pasirinkite_as_missing_format():
 
 def test_parse_product_page_recognises_kieti_virseliai_as_hardcover():
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         '</head><body><div class="book-info">'
         "<b>Formatas:</b> Kieti viršeliai <br>"
@@ -384,7 +387,7 @@ def test_parse_product_page_recognises_kieti_virseliai_as_hardcover():
 def test_parse_product_page_drops_non_lt_books_via_language_gate():
     """English (or any non-LT) book → is_book_product=False so scan skips it."""
     html = (
-        '<html><head><title>An English Book - Humanitas</title>'
+        "<html><head><title>An English Book - Humanitas</title>"
         '<meta property="og:title" content="An English Book">'
         '</head><body><div class="book-info">'
         "<b>ISBN:</b> 9780349439273 <br>"
@@ -408,7 +411,7 @@ def test_parse_product_page_keeps_books_with_missing_language():
     legitimate LT books that just weren't tagged.
     """
     html = (
-        '<html><head><title>Untagged - Humanitas</title>'
+        "<html><head><title>Untagged - Humanitas</title>"
         '<meta property="og:title" content="Untagged">'
         '</head><body><div class="book-info">'
         "<b>ISBN:</b> 9786094802966 <br>"
@@ -452,18 +455,18 @@ def test_parse_category_page_nested_anchor_before_title_preserves_card_data():
         # Inner anchor (wishlist button) appears BEFORE the title div.
         '<a href="/produktas/x/kakegurui/?add-to-wishlist=1" class="wishlist">♡</a>'
         '<div class="photo"><img src="https://www.humanitas.lt/uploads/kakegurui.webp">'
-        '</div>'
+        "</div>"
         '<div class="author">Homura Kawamoto</div>'
         '<div class="title">Kakegurui</div>'
         '<div class="price"><div class="normal">'
         '<div class="price-container">'
         '<div class="discount">12.00 €</div>'
         '<div class="price">15.00 €</div>'
-        '</div></div></div>'
-        '</a>'
+        "</div></div></div>"
+        "</a>"
         '<a class="book-item" href="/produktas/x/oshi-no-ko/">'
         '<div class="title">[Oshi No Ko]</div>'
-        '</a>'
+        "</a>"
     )
     products = parse_category_page(inner_before_title)["products"]
     assert len(products) == 2, (
@@ -498,10 +501,10 @@ def test_parse_category_page_nested_anchor_no_url_title_swap():
         '<a href="/produktas/x/book-a/" class="book-item">'
         '<a href="/produktas/x/book-a/krepselis/">Add to cart</a>'
         '<div class="title">Grąžink man mano brolius</div>'
-        '</a>'
+        "</a>"
         '<a href="/produktas/x/book-b/" class="book-item">'
         '<div class="title">Labas rytas</div>'
-        '</a>'
+        "</a>"
     )
     products = parse_category_page(html)["products"]
     by_url = {p["url"]: p for p in products}
@@ -525,14 +528,42 @@ def test_parse_product_page_marks_out_of_stock_when_price_hidden_class_present()
     before scanning.
     """
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
-        '</head><body>'
+        "</head><body>"
         '<div class="cart-container" data-product-id="42">'
         '  <div class="cart-price price-hidden" data-cart-price="">'
         '    <div class="label">Kaina:</div>'
-        '  </div>'
-        '</div></body></html>'
+        "  </div>"
+        "</div></body></html>"
+    )
+    data = parse_product_page(html)
+    assert data["in_stock"] is False
+    assert data["price"] is None
+
+
+def test_parse_product_page_marks_out_of_stock_when_cart_price_block_empty():
+    """`<div class="cart-price">` present + only "Kaina:" label, no price
+    element, cart button NOT disabled → still OOS.
+
+    Humanitas's third unbuyable state — distinct from `price-hidden`
+    and `disabled`. Observed in 60/60 captured response bodies during
+    a 2026-05-27 probe. Likely "listed but unpriced" (new arrivals,
+    pre-orders). The validator must suppress missing_price for these
+    so the dashboard isn't flooded with ~3.9% of the catalogue.
+    """
+    html = (
+        "<html><head><title>x</title>"
+        '<meta property="og:title" content="x">'
+        "</head><body>"
+        '<div class="cart-container" data-product-id="42">'
+        '  <div class="cart-price" data-cart-price="">'
+        '    <div class="label">Kaina:</div>'
+        "  </div>"
+        '  <div class="action-list"><div data-cart-button="">'
+        '    <a href="#" class="ext_button orange-style uppercase">'
+        "      į krepšelį</a></div></div>"
+        "</div></body></html>"
     )
     data = parse_product_page(html)
     assert data["in_stock"] is False
@@ -542,15 +573,15 @@ def test_parse_product_page_marks_out_of_stock_when_price_hidden_class_present()
 def test_parse_product_page_marks_out_of_stock_when_cart_button_disabled():
     """`<a class="ext_button ... disabled">` on the cart anchor → OOS."""
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
-        '</head><body>'
+        "</head><body>"
         '<div class="cart-container" data-product-id="42">'
         '  <div class="cart-price"><div class="label">Kaina:</div></div>'
         '  <div class="action-list"><div data-cart-button="">'
         '    <a href="#" class="ext_button orange-style uppercase disabled">'
-        '      į krepšelį</a></div></div>'
-        '</div></body></html>'
+        "      į krepšelį</a></div></div>"
+        "</div></body></html>"
     )
     data = parse_product_page(html)
     assert data["in_stock"] is False
@@ -562,18 +593,18 @@ def test_parse_product_page_ignores_likutis_inside_script_block():
     it — only the rendered CSS-class signals count.
     """
     html = (
-        '<html><head><title>x</title>'
+        "<html><head><title>x</title>"
         '<meta property="og:title" content="x">'
         "<script>var out_of_stock = 'Likutis nepakankamas';</script>"
-        '</head><body>'
+        "</head><body>"
         '<div class="cart-container" data-product-id="42">'
         '  <div class="cart-price"><div class="label">Kaina:</div>'
         '    <div class="price-container"><div class="discount">'
         '15.10 €</div><div class="price">15.90 €</div></div></div>'
         '  <div class="action-list"><div data-cart-button="">'
         '    <a href="#" class="ext_button orange-style uppercase">'
-        '      į krepšelį</a></div></div>'
-        '</div></body></html>'
+        "      į krepšelį</a></div></div>"
+        "</div></body></html>"
     )
     data = parse_product_page(html)
     assert data["in_stock"] is True
