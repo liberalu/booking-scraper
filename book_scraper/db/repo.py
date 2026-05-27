@@ -348,6 +348,10 @@ def upsert_shop_book(
         return shop_book, True, None, []
     else:
         old_price = shop_book.price
+        # Capture pre-update ISBN so the post-loop drift guard can compare
+        # against the value the row had *before* the conditional_fields
+        # loop overwrote it. See "ISBN drift guard" block below.
+        old_isbn = shop_book.isbn
         shop_book.last_run_id = run_id
         shop_book.last_run_action = "updated"
 
@@ -402,6 +406,56 @@ def upsert_shop_book(
 
         if image_url is not None:
             shop_book.image_url = image_url
+
+        # ── ISBN drift guard ────────────────────────────────────────────
+        # When a previously-linked shop_book gets a new ISBN that doesn't
+        # belong to its linked canonical book, the link is stale. Null
+        # `book_id` + reset `match_status='unmatched'` so the next match
+        # step 1 (which runs in PostPhaseAutoTrigger after every scan/
+        # discover) can re-link by the corrected ISBN.
+        #
+        # Without this guard, post-link ISBN corruption (FlareSolverr
+        # session race, EAN/ISBN parser slip, shop re-listing a URL to a
+        # different product) silently accumulates as `match_isbn_drift`
+        # validation issues — match step 1 has `WHERE sb.book_id IS NULL`
+        # and never re-evaluates an existing link. See CLAUDE.md
+        # "`match_isbn_drift` is stale state, not a matcher bug".
+        if (
+            isbn is not None
+            and shop_book.book_id is not None
+            and isbn != old_isbn
+        ):
+            from book_scraper.db.models import BookIsbn
+
+            still_valid = (
+                session.execute(
+                    select(BookIsbn.id).where(
+                        BookIsbn.book_id == shop_book.book_id,
+                        BookIsbn.isbn == isbn,
+                    )
+                ).scalar_one_or_none()
+                is not None
+            )
+            if not still_valid:
+                old_book_id = shop_book.book_id
+                old_match_status = shop_book.match_status
+                shop_book.book_id = None
+                shop_book.match_status = "unmatched"
+                changes.append(
+                    {
+                        "field": "book_id",
+                        "old": str(old_book_id),
+                        "new": None,
+                    }
+                )
+                if old_match_status != "unmatched":
+                    changes.append(
+                        {
+                            "field": "match_status",
+                            "old": old_match_status,
+                            "new": "unmatched",
+                        }
+                    )
 
         if type is not None:
             shop_book.type = type
