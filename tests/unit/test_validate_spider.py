@@ -136,9 +136,7 @@ def test_closed_calls_finalize_run_failsafe(stub_db_layer) -> None:
     leaves the run row in 'running'.  The failsafe's own terminal-state
     guard (added with the run-424 fix) makes this a no-op when the happy
     path already completed the run — but the call must still happen."""
-    with patch(
-        "book_scraper.spiders.validate.finalize_run_failsafe"
-    ) as mock_failsafe:
+    with patch("book_scraper.spiders.validate.finalize_run_failsafe") as mock_failsafe:
         spider = _build_spider()
         spider._run_id = 999
         spider.settings = MagicMock()
@@ -149,6 +147,75 @@ def test_closed_calls_finalize_run_failsafe(stub_db_layer) -> None:
         mock_failsafe.assert_called_once()
         _args, kwargs = mock_failsafe.call_args
         assert kwargs.get("status") == "failed" or _args[2] == "failed"
+
+
+def test_counters_logged_with_per_issue_breakdown(stub_db_layer, caplog) -> None:
+    """The validate spider must log a `validate_counters` line on every run
+    with the per-issue emit counts. Without it, the only signal that a
+    check has silently stopped emitting (typo, swallowed exception,
+    deleted `results.extend` line) is a sudden drop in the dashboard's
+    open-issue count — easy to miss. `resolve_gone_issues` then
+    unconditionally clears the backlog for that type on the next run.
+
+    Format is `key=value`-pair-friendly so LogQL can `| logfmt` and
+    alert on "issue_type that historically emits > N drops to 0".
+    """
+    import logging
+
+    stub_db_layer.vs_cls.return_value.run.return_value = {
+        "isbn_duplicate": 4,
+        "active_no_price": 2,
+        "slug_title_mismatch": 0,
+    }
+
+    with caplog.at_level(logging.INFO, logger="scrapy.spiders.validate"):
+        # Scrapy's spider.logger writes to a child of the spider's name
+        # (per Scrapy convention). Capture everything at INFO and filter
+        # by message text below.
+        caplog.set_level(logging.INFO)
+        asyncio.run(_drain(_build_spider()))
+
+    matches = [
+        rec.getMessage()
+        for rec in caplog.records
+        if "validate_counters" in rec.getMessage()
+    ]
+    assert len(matches) == 1, (
+        f"expected exactly one validate_counters log line, got: {matches}"
+    )
+    line = matches[0]
+    # Run/shop identifiers present
+    assert "run_id=999" in line
+    assert "shop=testshop" in line
+    # Aggregate fields present
+    assert "total=6" in line
+    assert "distinct=3" in line
+    # Per-issue counts present (sorted, key=value)
+    assert "active_no_price=2" in line
+    assert "isbn_duplicate=4" in line
+    assert "slug_title_mismatch=0" in line
+
+
+def test_counters_logged_when_validator_returns_empty(stub_db_layer, caplog) -> None:
+    """Empty counters dict is the most dangerous case — every standing
+    issue gets auto-resolved by `resolve_gone_issues`. The log line
+    must still emit with total=0 so dashboards can alert on it.
+    """
+    import logging
+
+    stub_db_layer.vs_cls.return_value.run.return_value = {}
+
+    with caplog.at_level(logging.INFO):
+        asyncio.run(_drain(_build_spider()))
+
+    matches = [
+        rec.getMessage()
+        for rec in caplog.records
+        if "validate_counters" in rec.getMessage()
+    ]
+    assert len(matches) == 1
+    assert "total=0" in matches[0]
+    assert "distinct=0" in matches[0]
 
 
 async def _drain(spider: ValidateSpider) -> list:

@@ -102,7 +102,34 @@ class ValidateSpider(scrapy.Spider):
         # Otherwise long multi-table scans block the reactor past
         # DEAD_RUN_SECONDS (60s) and the dashboard reaper marks the run
         # heartbeat_timeout mid-SQL.
-        await asyncio.to_thread(_run_validate)
+        counters: dict[str, int] = await asyncio.to_thread(_run_validate) or {}
+
+        # Per-run emit summary — the only visibility into "did this
+        # check actually fire on real data?" at runtime. `ValidateService`
+        # collects per-issue counts as it builds the upsert batch but
+        # the spider used to discard them. Without this log line the
+        # only signal of a silently-broken check is a sudden drop in
+        # the dashboard's open-issue count, which is easy to miss.
+        # `resolve_gone_issues` unconditionally marks every open issue
+        # not re-emitted by the current run as resolved (db/repo.py
+        # `resolve_gone_issues`), so a zero-count check silently wipes
+        # the backlog for that type.
+        #
+        # Emitted as a single `key=value` line so Loki / LogQL can
+        # `| logfmt` and graph per-issue counts over time — dashboard
+        # alarms can then fire on "any issue_type that historically
+        # emits > N suddenly drops to 0". Counter values are ints and
+        # issue keys are snake_case, both logfmt-safe without quoting.
+        total = sum(counters.values())
+        detail = " ".join(f"{k}={v}" for k, v in sorted(counters.items()))
+        self.logger.info(
+            "validate_counters run_id=%d shop=%s total=%d distinct=%d %s",
+            run_id,
+            self.shop_name,
+            total,
+            len(counters),
+            detail,
+        )
 
         session = get_session_factory(database_url)()
         try:
