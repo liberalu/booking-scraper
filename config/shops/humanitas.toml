@@ -4,10 +4,17 @@ base_url = "https://www.humanitas.lt"
 
 [scraping]
 # FlareSolverr is the bottleneck (~1–3 s per request, can spike to 10 s
-# while the browser warms up). Two parallel sessions saturate one FS
-# container; bump only after horizontally scaling FS.
+# while the browser warms up). MUST stay at 1: the FS middleware reuses
+# a single browser session across all requests, and two concurrent
+# `request.get` calls on the same session race for the same browser
+# instance — the second response silently returns the first request's
+# body. This produced the 2026-05-22 humanitas regression where the
+# `m575a2filt_leidimo_kalba=Lithuanian` seed (5,000 books, 18.9 MB)
+# returned the bilingual seed's 596 KB / 110-book body and ~5,000
+# books went un-discovered. Verified via concurrent threading test.
+# Only raise after the FS middleware grows a per-slot session pool.
 download_delay = 0.5
-concurrent_requests_per_domain = 2
+concurrent_requests_per_domain = 1
 batch_size = 50
 batch_pause = 5
 max_retries = 2
