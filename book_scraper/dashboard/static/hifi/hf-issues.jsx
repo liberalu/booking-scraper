@@ -88,14 +88,22 @@ function HFIssues({ nav, goto }) {
     const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const TABS = ['new','acknowledged','snoozed','resolved','all'];
     const VIEWS = ['by_type','list'];
+    const run = sp.get('run') || sp.get('run_id') || 'any';
+    // When the user deep-links with a run filter (e.g. from the runs
+    // page), they want to see every issue THAT run touched — including
+    // ones already resolved by a follow-up validate. Defaulting to
+    // tab='new' produces a misleading empty list because validate
+    // auto-fires after scan/discover and resolves most fresh issues
+    // within seconds.
+    const defaultTab = run !== 'any' ? 'all' : 'new';
     return {
-      tab:  TABS.includes(sp.get('tab'))   ? sp.get('tab')   : 'new',
+      tab:  TABS.includes(sp.get('tab'))   ? sp.get('tab')   : defaultTab,
       view: VIEWS.includes(sp.get('view')) ? sp.get('view')  : 'by_type',
       shop: sp.get('shop') || 'all',
       type: sp.get('type') || 'all',
       sev:  ['all','critical','warning'].includes(sp.get('sev')) ? sp.get('sev') : 'all',
       q:    sp.get('q')    || '',
-      run:  sp.get('run') || sp.get('run_id') || 'any',
+      run,
     };
   }, []);
 
