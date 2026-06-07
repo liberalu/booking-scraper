@@ -1,0 +1,72 @@
+# Grafana provisioned alert — catches silent upstream breakage in the discover
+# phase (e.g. the 2026-06 ibiblioteka incident: the search endpoint moved to
+# /detailed-search/page, every POST 405'd, and discovery quietly processed 0
+# URLs for ~3 weeks before anyone noticed).
+#
+# Signal: a discover run that reached a terminal state (completed/failed) in the
+# last 24h having processed 0 URLs. A healthy discover always processes >0, so a
+# terminal-with-zero run means the strategy fetched nothing — a strong proxy for
+# an endpoint/auth/schema change upstream.
+#
+# Reload after editing:  docker compose restart grafana
+# Notifications: this rule uses Grafana's default notification policy/contact
+# point. To actually receive alerts, configure a contact point (email/Slack/
+# webhook) in Grafana → Alerting → Contact points, or provision one alongside.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: book-scraper-discovery
+    folder: book-scraper
+    interval: 5m
+    rules:
+      - uid: discover-zero-urls
+        title: Discover finished with 0 URLs
+        condition: C
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          service: scraper
+          role: discover
+          severity: warning
+        annotations:
+          summary: >-
+            A discover run finished in the last 24h having processed 0 URLs.
+            The strategy fetched nothing — likely an upstream endpoint/auth/
+            schema change (cf. the ibiblioteka /detailed-search 405 incident,
+            2026-06). Check the run's log and re-probe the shop's API.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: postgres-bookscraper
+            model:
+              refId: A
+              datasource:
+                type: postgres
+                uid: postgres-bookscraper
+              format: table
+              rawSql: |
+                SELECT count(*)::float8 AS value
+                FROM scrape_runs r
+                JOIN shops s ON s.id = r.shop_id
+                WHERE r.phase::text LIKE 'discover%'
+                  AND r.status IN ('completed', 'failed')
+                  AND COALESCE(r.finished_at, r.started_at)
+                        > now() - interval '24 hours'
+                  AND r.urls_processed = 0;
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
