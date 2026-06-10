@@ -5,10 +5,29 @@ from sqlalchemy.orm import Session, sessionmaker
 
 _pool_logger = logging.getLogger("book_scraper.db.pool")
 
+# One Engine (one connection pool) per normalised URL, per process.
+#
+# get_engine used to build a brand-new Engine on every call. Hot paths that
+# call it per-item — scan._mark_response, the discover/scan progress writers —
+# therefore created a fresh QueuePool (5 + 10 overflow) for every response,
+# never disposed. Two failure modes resulted:
+#   1. Connection churn: ~50 new Postgres connections/min, ~70 held idle,
+#      intermittently exhausting max_connections=100 ("too many clients").
+#   2. Reactor stalls: each new engine's synchronous connect() + pool_pre_ping
+#      round-trip ran inside the Twisted/asyncio reactor thread. Under
+#      connection pressure these blocked the event loop in bursts, stranding
+#      in-flight requests past the 120s reaper window so they were swept to
+#      stuck_in_processing (http_status NULL) instead of completing.
+# Memoising by normalised URL bounds the whole process to one pool.
+_engines: dict[str, Engine] = {}
+
 
 def get_engine(database_url: str) -> Engine:
     # Use sync engine for Scrapy pipelines (Scrapy runs in Twisted reactor)
     sync_url = database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+    cached = _engines.get(sync_url)
+    if cached is not None:
+        return cached
     engine = create_engine(
         sync_url,
         # Validate pooled connections before checkout — eliminates "server closed
@@ -67,10 +86,9 @@ def get_engine(database_url: str) -> Engine:
 
     @event.listens_for(engine, "invalidate")
     def _pool_invalidate(dbapi_conn, conn_record, exception) -> None:  # type: ignore[misc]
-        _pool_logger.warning(
-            "Pool connection invalidated: exception=%r", exception
-        )
+        _pool_logger.warning("Pool connection invalidated: exception=%r", exception)
 
+    _engines[sync_url] = engine
     return engine
 
 
