@@ -86,6 +86,13 @@ def test_book_detail_returns_full_record_with_shops(db_session, client):
     data = response.json()
     assert data["title"] == "Detail Test"
     assert data["libis_code"] == "LIBIS000000800002"
+    assert data["ibiblioteka_page_url"] == (
+        "https://ibiblioteka.lt/metis/publication/LIBIS000000800002"
+    )
+    assert data["scraped_url"] == (
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/"
+        "LIBIS000000800002"
+    )
     assert any(s["shop"] == "vaga" for s in data["shops"])
     assert any(s["price"] == "15.00" for s in data["shops"])
 

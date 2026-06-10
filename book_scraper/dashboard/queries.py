@@ -3132,14 +3132,25 @@ def book_detail(session: Session, book_id: int) -> dict[str, Any] | None:
             first_matched = min(timestamps).isoformat()
 
     # Build ibiblioteka URLs when this is an ibiblioteka-sourced book.
-    # scraped_url  — the JSON API endpoint stored on books.source_url (set by
-    #   the scan pipeline since the ibiblioteka spider emits BookItem, not
-    #   ShopBookItem, so there are no shop_books rows for this shop).
-    # ibiblioteka_page_url — the human-readable SPA page on ibiblioteka.lt,
-    #   constructed from the numeric API id embedded in scraped_url.
+    # scraped_url  — the JSON API endpoint. Prefer books.source_url when the
+    #   scan pipeline stored it (legacy numeric-id endpoint); fall back to
+    #   the libis_code-based endpoint, which the API resolves for every
+    #   record (same path shape parsers.py uses for multipart part URLs).
+    # ibiblioteka_page_url — the human-readable SPA page on ibiblioteka.lt.
+    #   The publication route accepts the record code (C1B…/LIBIS…) as well
+    #   as the numeric API id, so libis_code covers books with no source_url.
     scraped_url: str | None = book.source_url
     ibiblioteka_page_url: str | None = None
-    if scraped_url:
+    if book.data_source == "ibiblioteka" and book.libis_code:
+        ibiblioteka_page_url = (
+            f"https://ibiblioteka.lt/metis/publication/{book.libis_code}"
+        )
+        if not scraped_url:
+            scraped_url = (
+                "https://ibiblioteka.lt/metis-api/bibliographic-records/public/"
+                f"{book.libis_code}"
+            )
+    elif scraped_url:
         numeric_id = scraped_url.rstrip("/").split("/")[-1]
         if numeric_id.isdigit():
             ibiblioteka_page_url = (
