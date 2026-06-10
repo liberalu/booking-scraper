@@ -582,16 +582,23 @@ class ValidateService:
                 }
             )
 
-        # book_no_metadata: type='book' AND isbn/author/year all NULL
+        # book_no_metadata: type='book' AND isbn/author/year all NULL.
+        # Suppress rows whose title/categories clearly mark a non-book (DVDs,
+        # 'KNYGŲ RINKINYS' box-sets in patogupirkti's /knyga/ path) — they
+        # legitimately lack ISBN/author/year. Same filter as non_book_has_isbn.
         book_no_metadata_rows = self._session.execute(
             text(
-                "SELECT id, url FROM shop_books "
+                "SELECT id, url, title, categories FROM shop_books "
                 "WHERE shop_id = :shop_id AND type = 'book' "
                 "  AND isbn IS NULL AND author IS NULL AND year IS NULL"
             ),
             {"shop_id": shop_id},
         ).all()
         for row in book_no_metadata_rows:
+            if _title_indicates_non_book(row.title) or _categories_indicate_non_book(
+                row.categories
+            ):
+                continue
             results.append(
                 {
                     "scrape_run_id": run_id,
@@ -715,10 +722,12 @@ class ValidateService:
         """
         results: list[dict[str, str | int | None]] = []
 
-        # book_no_signals: type='book' with no discriminating metadata
+        # book_no_signals: type='book' with no discriminating metadata.
+        # Same non-book title/category suppression as book_no_metadata above —
+        # a DVD or box-set genuinely has no book signals.
         book_no_signals_rows = self._session.execute(
             text(
-                "SELECT id, url FROM shop_books "
+                "SELECT id, url, title, categories FROM shop_books "
                 "WHERE shop_id = :shop_id AND type = 'book' "
                 "  AND isbn IS NULL AND author IS NULL "
                 "  AND year IS NULL AND format IS NULL"
@@ -726,6 +735,10 @@ class ValidateService:
             {"shop_id": shop_id},
         ).all()
         for row in book_no_signals_rows:
+            if _title_indicates_non_book(row.title) or _categories_indicate_non_book(
+                row.categories
+            ):
+                continue
             results.append(
                 {
                     "scrape_run_id": run_id,

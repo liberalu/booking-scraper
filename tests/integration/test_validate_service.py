@@ -310,6 +310,43 @@ def test_no_price_history_flagged_for_active_book_without_prices(db_session):
     assert len(issues) == 1
 
 
+@pytest.mark.integration
+def test_book_no_metadata_and_signals_suppressed_for_nonbook_titles(db_session):
+    """type='book' rows whose title clearly marks a non-book (DVD, box-set)
+    must not raise book_no_metadata / book_no_signals — they legitimately
+    lack ISBN/author/year. A genuine metadata-less book is still flagged.
+
+    Mirrors the non_book_has_isbn suppression: DVDs and 'KNYGŲ RINKINYS'
+    box-sets in patogupirkti's /knyga/ path drive ~150 false positives.
+    """
+    shop = _make_shop(db_session, "nbm")
+    run = _make_run(db_session, shop.id)
+
+    dvd = ShopBook(
+        shop_id=shop.id, url="https://testshopnbm.lt/dvd",
+        title="Magnolija (DVD)", type="book",
+    )
+    boxset = ShopBook(
+        shop_id=shop.id, url="https://testshopnbm.lt/set",
+        title="KNYGŲ RINKINYS. Fantastika paaugliams", type="book",
+    )
+    real_book = ShopBook(
+        shop_id=shop.id, url="https://testshopnbm.lt/book",
+        title="Tikra knyga be metaduomenu", type="book",
+    )
+    db_session.add_all([dvd, boxset, real_book])
+    db_session.commit()
+
+    ValidateService(db_session).run(shop.id, run.id)
+    db_session.commit()
+
+    for sb in (dvd, boxset):
+        assert _issues_for(db_session, sb.id, "book_no_metadata") == []
+        assert _issues_for(db_session, sb.id, "book_no_signals") == []
+    assert len(_issues_for(db_session, real_book.id, "book_no_metadata")) == 1
+    assert len(_issues_for(db_session, real_book.id, "book_no_signals")) == 1
+
+
 # ---------------------------------------------------------------------------
 # Data correctness checks (VAL-06)
 # ---------------------------------------------------------------------------
