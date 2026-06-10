@@ -227,6 +227,58 @@ def test_diacritic_lossy_still_flags_non_truncated_title() -> None:
     assert _looks_diacritic_lossy("kale-du-pu-ga-2196148", "Kalėdų pūga") is True
 
 
+def test_diacritic_lossy_ignores_extra_slug_words() -> None:
+    """patogupirkti false-positive class: the slug carries extra descriptive
+    text (subtitle, edition marker, translation) so it has more pieces than
+    the title has words — but every diacritic-bearing title word still appears
+    *whole* in the slug. Raw piece-count > word-count over-fires here; only
+    genuine fragmentation (adjacent pieces re-merging into a diacritic word)
+    is the diacritic-loss signature. ~815 patogupirkti rows are this class.
+    """
+    from book_scraper.services.validate import _looks_diacritic_lossy
+
+    # '-2-as-leidimas' (2nd edition) appended; 'inzinerine'/'kompiuterine' whole.
+    assert (
+        _looks_diacritic_lossy(
+            "inzinerine-ir-kompiuterine-grafika-2-as-leidimas",
+            "Inžinerinė ir kompiuterinė grafika",
+        )
+        is False
+    )
+    # Subtitle words reordered/added; 'juru','gyvunai','isgirsk' all whole.
+    assert (
+        _looks_diacritic_lossy(
+            "juru-gyvunai-paliesk-pajusk-isgirsk-spausk-ir-klausyk",
+            "Paliesk, pajusk, išgirsk. Jūrų gyvūnai",
+        )
+        is False
+    )
+    # English translation appended; 'mazasis' whole.
+    assert (
+        _looks_diacritic_lossy("mazasis-princas-the-little-prince", "Mažasis princas")
+        is False
+    )
+    # '(knyga su defektais)' relisting — long subtitle slug, 'zvilgsnis' whole.
+    assert (
+        _looks_diacritic_lossy(
+            "zvilgsnis-is-veidrodzio-moters-kelias-per-gyvenima-vyro-akimis-kopija",
+            "Žvilgsnis iš veidrodžio (knyga su defektais)",
+        )
+        is False
+    )
+
+
+def test_diacritic_lossy_flags_genuine_fragment_remerge() -> None:
+    """The genuine bug: a diacritic title word is split across ≥2 adjacent
+    slug pieces that concatenate back to the transliterated word.
+    'Kalėdų pūga' → 'kale-du-pu-ga': kale+du=kaledu, pu+ga=puga."""
+    from book_scraper.services.validate import _looks_diacritic_lossy
+
+    assert _looks_diacritic_lossy("kale-du-pu-ga", "Kalėdų pūga") is True
+    # Single fragmented word among otherwise-whole pieces still flags.
+    assert _looks_diacritic_lossy("zinia-nesys-12345", "Žinianešys") is True
+
+
 # ---------------------------------------------------------------------------
 # _title_indicates_non_book — parenthesised format markers and bundle words
 # ---------------------------------------------------------------------------

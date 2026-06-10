@@ -184,47 +184,74 @@ _TRUNCATED_TITLE_RE = re.compile(r"(?:…|\.\.\.)\s*$")
 _TOKEN_DEDUP_DIGIT_RE = re.compile(r"^([a-z]{2,})\d+$")
 
 
+def _fold_ascii(s: str) -> str:
+    """Lowercase and strip combining diacritic marks (NFD + drop Mn).
+
+    Lithuanian diacritics all decompose to base-letter + combining mark
+    (ė→e, š→s, ž→z, ų→u, ą→a, …), so this folds a title word to the same
+    ASCII form a diacritic-dropping slug generator would produce.
+    """
+    nfd = unicodedata.normalize("NFD", s.lower())
+    return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+
+
 def _looks_diacritic_lossy(slug: str | None, title: str | None) -> bool:
-    """True iff the slug has more alphabetic pieces than the title has
-    words, AND the title contains Lithuanian diacritics.
+    """True iff a Lithuanian diacritic-bearing title word is *fragmented*
+    across adjacent slug pieces — the signature of a slug generator that
+    drops diacritics character-by-character instead of transliterating.
 
-    The smoking gun for a diacritic-loss bug:
-    - Title `Kalėdų pūga` has 2 words; the correct slug is `kaledu-puga`
-      (2 pieces).  The buggy slug `kale-du-pu-ga` has 4 pieces, meaning
-      the shop's slug generator split a single word at each dropped
-      diacritic.
-    - Title `Tu. Aš. Mes` has 3 words; slug `tu-as-mes` has 3 pieces.
-      3 ≤ 3 → not flagged (correctly transliterated short words).
-    - Title `Kodėl gi ne` has 3 words; slug `kodel-gi-ne` has 3 pieces.
-      3 ≤ 3 → not flagged.
+    The smoking gun is fragment re-merge, not a raw piece-vs-word count:
+    - `Kalėdų pūga` → buggy `kale-du-pu-ga`: `kale`+`du` re-merges to
+      `kaledu` (= folded `Kalėdų`) and `pu`+`ga` to `puga`. Flagged.
+    - `Kalėdų pūga` → correct `kaledu-puga`: each diacritic word appears
+      whole as its own piece. Not flagged.
 
-    The diacritic gate restricts the check to LT-flavoured titles, the
-    only place we've seen the bug in the wild.
+    The earlier piece-count > word-count heuristic over-fired on slugs that
+    merely carry extra text (subtitles, edition markers like `-2-as-leidimas`,
+    appended translations, `-kopija` relisting suffixes) — there the title's
+    diacritic words are present whole, so no re-merge occurs and we don't flag.
+    The diacritic gate restricts the check to LT-flavoured titles, the only
+    place the bug appears in the wild.
     """
     if not slug or not title:
         return False
-    # Truncated titles (trailing "…"/"...") can't be word-counted fairly —
-    # the slug holds the full title's words but the stored title is cut
-    # short, so piece-count > word-count fires spuriously. Skip them.
+    # Truncated titles (trailing "…"/"...") drop words the slug still carries,
+    # which would manufacture spurious fragments. Skip them.
     if _TRUNCATED_TITLE_RE.search(title):
         return False
-    # Normalise to NFC so combining-mark sequences (`e` + U+0307) collapse
-    # into precomposed chars (`ė`). The DB stores titles in NFD form;
-    # without normalisation the diacritic membership check fails AND the
-    # title-word regex treats each combining mark as a word boundary,
-    # tripling the apparent word count and masking the bug.
+    # NFC so combining-mark sequences (`e` + U+0307) collapse into precomposed
+    # chars (`ė`) — the DB stores titles in NFD; without this the diacritic
+    # membership check fails and the word regex treats each mark as a boundary.
     title_nfc = unicodedata.normalize("NFC", title)
-    if not any(c in _LT_DIACRITICS for c in title_nfc):
+    diacritic_words = [
+        w
+        for w in _TITLE_WORD_RE.findall(title_nfc)
+        if any(c in _LT_DIACRITICS for c in w)
+    ]
+    if not diacritic_words:
         return False
     cleaned = _SLUG_SKU_SUFFIX_RE.sub("", slug.lower().strip("/"))
-    slug_pieces = [p for p in cleaned.split("-") if p.isalpha()]
-    if len(slug_pieces) < 3:
-        # Below 3 pieces, the count comparison is too noisy. The bug
-        # always manifests as ≥4 pieces (the title has ≥2 multi-syllable
-        # diacritic words).
+    pieces = [p for p in cleaned.split("-") if p.isalpha()]
+    if len(pieces) < 2:
         return False
-    title_word_count = len(_TITLE_WORD_RE.findall(title_nfc))
-    return len(slug_pieces) > title_word_count
+    pieces_set = set(pieces)
+    n = len(pieces)
+    for word in diacritic_words:
+        target = _fold_ascii(word)
+        # Skip short particles (aš→as, dėl→del) — too noisy to re-merge — and
+        # words already present whole in the slug (correct transliteration).
+        if len(target) < 4 or target in pieces_set:
+            continue
+        # Smoking gun: ≥2 consecutive slug pieces concatenate back to `target`.
+        for i in range(n):
+            acc = ""
+            for j in range(i, n):
+                acc += pieces[j]
+                if len(acc) > len(target):
+                    break
+                if acc == target and j > i:
+                    return True
+    return False
 
 
 def _should_flag_slug_title(slug: str | None, title: str | None) -> bool:
