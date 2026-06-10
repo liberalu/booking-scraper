@@ -74,6 +74,33 @@ def test_slug_title_mismatch_none_title_does_not_flag() -> None:
     assert _should_flag_slug_title("some-slug", None) is False
 
 
+def test_slug_title_mismatch_strips_woocommerce_dedup_digit() -> None:
+    """WooCommerce appends a numeric dedup suffix to the slug's final token
+    when two products share a slug stem (``Sidhartha`` → ``sidhartha2``).
+
+    The bare token ``sidhartha2`` shares no tokens with title ``Sidhartha``,
+    so without stripping the trailing digits the check fires spuriously.
+    humanitas emits ~132 such single-word foreign-title false positives.
+    The trailing digit-run must be stripped before comparison.
+    """
+    assert _should_flag_slug_title("sidhartha2", "Sidhartha") is False
+    assert _should_flag_slug_title("meditations9", "Meditations") is False
+    assert _should_flag_slug_title("madagaskaras2", "Madagaskaras") is False
+    # Parenthesised language qualifier on the title side, dedup digit on slug.
+    assert _should_flag_slug_title("matrix4", "Matrix (lietuvių kalba)") is False
+
+
+def test_slug_title_mismatch_genuine_difference_still_flags() -> None:
+    """Dedup-digit stripping must NOT mask a genuine wrong-product mismatch.
+
+    ``Politikas`` vs slug ``politika`` differ by a real character (no trailing
+    digit), and the patogupirkti ``isaac-asimov`` slug describes a different
+    book than its title — both must stay flagged.
+    """
+    assert _should_flag_slug_title("politika", "Politikas") is True
+    assert _should_flag_slug_title("isaac-asimov", "Fondas ir Žemė") is True
+
+
 # ---------------------------------------------------------------------------
 # _looks_diacritic_lossy — detects shop-side slug generators that drop
 # Lithuanian diacritics character-by-character instead of transliterating.
@@ -162,6 +189,42 @@ def test_diacritic_lossy_handles_none() -> None:
     assert _looks_diacritic_lossy(None, "Kalėdų pūga") is False
     assert _looks_diacritic_lossy("kale-du-pu-ga", None) is False
     assert _looks_diacritic_lossy("", "") is False
+
+
+def test_diacritic_lossy_skips_truncated_title() -> None:
+    """A title stored truncated with a trailing ellipsis (``…`` or ``...``)
+    cannot be fairly word-counted against the slug: the slug carries the
+    full title's words while the stored title is cut short, so
+    piece-count > word-count fires spuriously.
+
+    humanitas stores ~648 such truncated titles — the dominant false-positive
+    source for slug_diacritic_loss. Both the single-char ellipsis and the
+    three-dot form must suppress the flag.
+    """
+    from book_scraper.services.validate import _looks_diacritic_lossy
+
+    assert (
+        _looks_diacritic_lossy(
+            "romas-kvintas-itraukiancio-pa-sakojimo-meistras",
+            "Romas Kvintas. Įtraukiančio pasakojimo...",
+        )
+        is False
+    )
+    assert (
+        _looks_diacritic_lossy(
+            "kas-lindi-po-zeme-urvas-i-lau-kiniu-gyvunu-pasauli",
+            "Kas lindi po žeme. Urvas į laukinių gyvūnų…",
+        )
+        is False
+    )
+
+
+def test_diacritic_lossy_still_flags_non_truncated_title() -> None:
+    """The truncation guard must not weaken the genuine bug detection on
+    complete (non-truncated) titles."""
+    from book_scraper.services.validate import _looks_diacritic_lossy
+
+    assert _looks_diacritic_lossy("kale-du-pu-ga-2196148", "Kalėdų pūga") is True
 
 
 # ---------------------------------------------------------------------------

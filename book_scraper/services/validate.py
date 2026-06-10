@@ -170,6 +170,19 @@ _TITLE_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 # the alphabetic pieces of the slug fairly against the title's word count.
 _SLUG_SKU_SUFFIX_RE = re.compile(r"-\d+$")
 
+# A title stored with a trailing ellipsis ("…" U+2026 or "...") is truncated —
+# the slug carries the full title's words while the stored title is cut short,
+# so the slug-piece vs title-word count comparison is meaningless. humanitas
+# stores ~648 such truncated titles (the dominant slug_diacritic_loss false
+# positive). Detected and skipped in `_looks_diacritic_lossy`.
+_TRUNCATED_TITLE_RE = re.compile(r"(?:…|\.\.\.)\s*$")
+
+# WooCommerce appends a numeric dedup suffix glued to the slug's final token
+# when two products share a slug stem ("Sidhartha" -> "sidhartha2"). Strip a
+# trailing digit-run from an alphabetic token so it can match the bare title
+# token in `_should_flag_slug_title` (humanitas ~132 false positives).
+_TOKEN_DEDUP_DIGIT_RE = re.compile(r"^([a-z]{2,})\d+$")
+
 
 def _looks_diacritic_lossy(slug: str | None, title: str | None) -> bool:
     """True iff the slug has more alphabetic pieces than the title has
@@ -189,6 +202,11 @@ def _looks_diacritic_lossy(slug: str | None, title: str | None) -> bool:
     only place we've seen the bug in the wild.
     """
     if not slug or not title:
+        return False
+    # Truncated titles (trailing "…"/"...") can't be word-counted fairly —
+    # the slug holds the full title's words but the stored title is cut
+    # short, so piece-count > word-count fires spuriously. Skip them.
+    if _TRUNCATED_TITLE_RE.search(title):
         return False
     # Normalise to NFC so combining-mark sequences (`e` + U+0307) collapse
     # into precomposed chars (`ė`). The DB stores titles in NFD form;
@@ -220,6 +238,14 @@ def _should_flag_slug_title(slug: str | None, title: str | None) -> bool:
     title_tokens = _tokenize(title)
     if not slug_tokens or not title_tokens:
         return False
+    # A WooCommerce dedup digit glued to a slug token ("sidhartha2") would
+    # never match the bare title token ("sidhartha"). Add the digit-stripped
+    # form as a comparison candidate so the dedup suffix doesn't masquerade
+    # as a genuine mismatch. Only widens the slug side, so a truly different
+    # slug still has zero overlap and stays flagged.
+    for token in tuple(slug_tokens):
+        if m := _TOKEN_DEDUP_DIGIT_RE.match(token):
+            slug_tokens.add(m.group(1))
     return not (slug_tokens & title_tokens)
 
 
