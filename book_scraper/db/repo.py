@@ -29,6 +29,7 @@ from book_scraper.db.models import (
     UrlClassification,
     ValidationIssue,
 )
+from book_scraper.settings import RETRY_CAP
 from book_scraper.spiders.vaga.parsers import infer_shop_book_type
 from book_scraper.url_utils import normalize_url
 
@@ -420,11 +421,7 @@ def upsert_shop_book(
         # validation issues — match step 1 has `WHERE sb.book_id IS NULL`
         # and never re-evaluates an existing link. See CLAUDE.md
         # "`match_isbn_drift` is stale state, not a matcher bug".
-        if (
-            isbn is not None
-            and shop_book.book_id is not None
-            and isbn != old_isbn
-        ):
+        if isbn is not None and shop_book.book_id is not None and isbn != old_isbn:
             from book_scraper.db.models import BookIsbn
 
             still_valid = (
@@ -912,12 +909,24 @@ def count_auto_resume_chain_depth(session: Session, run_id: int) -> int:
     )
 
 
-def reset_retryable_failures(session: Session, run_id: int) -> int:
+def reset_retryable_failures(
+    session: Session, run_id: int, cap: int = RETRY_CAP
+) -> int:
     """Reset failed URL items with retryable error reasons back to pending.
 
     run_aborted: items that were in-flight when the run was killed.
     stuck_in_processing: items that timed out in the processing state.
     Both are transient failures that should be retried on the next run.
+
+    `attempts >= cap` items are NOT reset — they've been dispatched
+    `cap` times already and stay `failed` (sticky). Without this ceiling,
+    a record the upstream server persistently 5xxes is aborted mid-retry
+    on every stall (→ `run_aborted`, a retryable reason), reset to pending,
+    re-dispatched, and re-stalls — never retiring, and starving the healthy
+    backlog behind it. The ceiling mirrors the end-of-run retry sweep
+    (`fetch_retryable_failed_items`) and the dashboard's `attempts >= RETRY_CAP`
+    "exhausted" display, so a record gives up after the same number of tries
+    no matter which path reset it.
     """
     retryable_item_ids = (
         session.query(ScrapeUrlItem.id)
@@ -928,6 +937,7 @@ def reset_retryable_failures(session: Session, run_id: int) -> int:
         .filter(
             ScrapeUrlItem.run_id == run_id,
             ScrapeUrlItem.status == "failed",
+            ScrapeUrlItem.attempts < cap,
             ScrapeFailure.run_id == run_id,
             ScrapeFailure.error_reason.in_(_RETRYABLE_FAILURE_REASONS),
         )
@@ -1625,9 +1635,7 @@ def upsert_validation_issues(
 
     sb_issues = [i for i in issues if i.get("shop_book_id")]
     du_issues = [
-        i
-        for i in issues
-        if i.get("discovered_url_id") and not i.get("shop_book_id")
+        i for i in issues if i.get("discovered_url_id") and not i.get("shop_book_id")
     ]
     url_issues = [
         i
@@ -2444,8 +2452,9 @@ def create_manual_book(
             au = Author(name=author.strip(), normalized_name=norm)
             session.add(au)
             session.flush()
-        session.add(BookAuthor(book_id=book.id, author_id=au.id,
-                               role="author", position=0))
+        session.add(
+            BookAuthor(book_id=book.id, author_id=au.id, role="author", position=0)
+        )
 
     return book
 

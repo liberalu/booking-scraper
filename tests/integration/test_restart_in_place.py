@@ -116,3 +116,51 @@ def test_restart_in_place_resets_retryable_failures(db_session):
 
     refreshed_item = db_session.get(ScrapeUrlItem, item.id)
     assert refreshed_item.status == "pending"
+
+
+def test_reset_retryable_failures_skips_attempt_exhausted_items(db_session):
+    """Retryable failures that have already been attempted RETRY_CAP times
+    must stay `failed` (sticky) instead of being reset to pending.
+
+    Regression: a record that the server persistently 5xxes gets aborted
+    mid-retry on every stall, comes back as `run_aborted` (retryable), and
+    was reset to pending forever — never retiring. The scan re-dispatched
+    it each resume, re-stalled, and never reached the healthy backlog. The
+    `attempts < cap` ceiling lets these records exhaust and drop out.
+    """
+    from book_scraper.db.repo import record_scrape_failure, reset_retryable_failures
+    from book_scraper.settings import RETRY_CAP
+
+    run = _seed_failed_run(db_session)
+    shop_id = run.shop_id
+
+    def _failed_item(url, attempts):
+        item = insert_scrape_url_item(
+            db_session,
+            run_id=run.id,
+            shop_id=shop_id,
+            discovered_url_id=None,
+            url=url,
+            url_type="product",
+        )
+        item.status = "failed"
+        item.attempts = attempts
+        db_session.flush()
+        record_scrape_failure(
+            db_session,
+            scrape_url_item=item,
+            error_reason="run_aborted",
+            http_status=None,
+        )
+        db_session.flush()
+        return item
+
+    fresh = _failed_item("https://www.vaga.lt/p/fresh", attempts=RETRY_CAP - 1)
+    exhausted = _failed_item("https://www.vaga.lt/p/exhausted", attempts=RETRY_CAP)
+    db_session.commit()
+
+    reset_retryable_failures(db_session, run.id)
+    db_session.commit()
+
+    assert db_session.get(ScrapeUrlItem, fresh.id).status == "pending"
+    assert db_session.get(ScrapeUrlItem, exhausted.id).status == "failed"
