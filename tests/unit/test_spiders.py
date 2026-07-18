@@ -81,8 +81,11 @@ class TestDiscoverSpiderCategories:
         assert all(item["source"] == "category" for item in discovered)
         assert len(shop_books) > 0
         assert all(item["shop_name"] == "vaga" for item in shop_books)
-        assert len(next_pages) == 1
+        # Fixture total is 9910 at page_size 100 → pages 2..100 enqueued
+        # upfront so concurrency engages on discover.
+        assert len(next_pages) == 99
         assert "page=2" in next_pages[0].url
+        assert "page=100" in next_pages[-1].url
 
     def test_parse_categories_empty_page_yields_nothing(self):
         spider = DiscoverSpider(shop="vaga", strategy="categories")
@@ -112,8 +115,49 @@ class TestDiscoverSpiderCategories:
         )
         results = list(spider.parse_categories(response))
         next_pages = [r for r in results if isinstance(r, Request)]
-        assert len(next_pages) == 1
+        assert len(next_pages) == 99
         assert "page=2" in next_pages[0].url
+
+    def test_page_2_does_not_re_paginate_upfront(self):
+        """Pages 2..N must not enqueue further pages — the queue was
+        filled by page 1's upfront pagination."""
+        spider = DiscoverSpider(shop="vaga", strategy="categories")
+        html = (FIXTURES / "vaga_category_page.html").read_text()
+        response = _fake_response(
+            "https://vaga.lt/knygos?limit=100&page=2", html, meta={"page": 2}
+        )
+        results = list(spider.parse_categories(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        assert next_pages == []
+
+    def test_multi_seed_shop_ignores_total_and_chains(self):
+        """Multi-seed shops (url = [...]) paginate each seed independently;
+        _enqueue_remaining_pages can only walk one template, so a parser
+        total must be ignored and pagination must chain from response.url."""
+        from types import SimpleNamespace
+
+        spider = DiscoverSpider(shop="humanitas", strategy="categories")
+        assert len(spider.strategy_conf.url_templates()) > 1
+        spider.parsers = SimpleNamespace(
+            parse_category_page=lambda html: {
+                "products": [
+                    {"url": "https://www.humanitas.lt/produktas/x", "title": "X"}
+                ],
+                "total": 5000,
+            }
+        )
+        url = (
+            "https://www.humanitas.lt/produktai/visos-kategorijos/"
+            "?cntnt01page=1&m575a2product_limit=5000"
+            "&m575a2filt_leidimo_kalba=Lithuanian-English"
+        )
+        response = _fake_response(url, "<html></html>", meta={"page": 1})
+        results = list(spider.parse_categories(response))
+        next_pages = [r for r in results if isinstance(r, Request)]
+        # Chained (one next page from response.url), not 4999/5000 upfront.
+        assert len(next_pages) == 1
+        assert "cntnt01page=2" in next_pages[0].url
+        assert "Lithuanian-English" in next_pages[0].url
 
     def test_toml_max_pages_caps_when_no_cli_override(self):
         """`max_pages` from CategoriesConfig acts as a safety cap.

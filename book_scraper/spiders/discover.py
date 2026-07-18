@@ -681,6 +681,16 @@ class DiscoverSpider(scrapy.Spider):
 
         current_page = response.meta.get("page") or 1
 
+        # Multi-seed shops (categories url = [...], e.g. humanitas) paginate
+        # each seed independently; _enqueue_remaining_pages can only walk one
+        # template, so treat total as unknown and chain per seed.
+        if (
+            total is not None
+            and self.strategy != "graphql"
+            and len(self.strategy_conf.url_templates()) > 1
+        ):
+            total = None
+
         # Upfront pagination: when the parser exposes a real total, the
         # first page enqueues every remaining page at once so Scrapy can
         # actually run them in parallel under concurrent_requests_per_domain.
@@ -742,14 +752,9 @@ class DiscoverSpider(scrapy.Spider):
                     self.conf.shop.base_url, self.strategy_conf, page=page
                 )
             else:
-                # Non-graphql shops only reach this branch when their
-                # parser returns a non-None total — currently no caller
-                # does, so fall back to the first conf URL template.
-                # `_next_categories_page_url` is response-driven and
-                # we don't have a response here; format the first
-                # template directly. (When list URL + total both
-                # exist in some future shop, this would only walk
-                # the first list entry; revisit when needed.)
+                # Single-template shops only (vaga): parse_categories
+                # nulls the total for multi-seed shops before calling
+                # us, so formatting templates[0] is always correct here.
                 templates = self.strategy_conf.url_templates()
                 next_url = templates[0].format(page=page)
             new_item_id = self._enqueue_url(next_url, "category_page")

@@ -81,6 +81,10 @@ class CategoriesConfig(BaseModel):
     # so each filter walks its own page sequence.
     url: str | list[str]
     max_age_hours: int = 672
+    # Items per listing page — must match the limit= baked into the URL
+    # template. Only consulted when the parser returns a non-None total
+    # (upfront pagination computes last_page = ceil(total / page_size)).
+    page_size: int = 100
     # Safety cap on chained pagination. The discover spider chains
     # page+1 until it sees an empty page; if a CF rate-limit blip or a
     # transient empty response misreads as "end of catalogue" we'd be
@@ -182,6 +186,7 @@ class MatchConfig(BaseModel):
     highest-trust shop's title/year/format/etc. wins. Publisher is NOT
     trust-ranked: it sticks to the first writer.
     """
+
     trust: int = 50
 
 

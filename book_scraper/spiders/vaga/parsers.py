@@ -248,13 +248,13 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
 def parse_category_page(html: str) -> CategoryPageResult:
     """Parse product cards from a vaga.lt category page.
 
-    Returns ``{"products": [...], "total": None}``. vaga.lt's category
-    HTML doesn't expose a reliable total-count signal, so the spider
-    falls back to per-page chained pagination — same behaviour as
-    before the contract change. Each product dict keeps its previous
-    keys (url, title, author, price, price_original, image_url).
-    Prices are in Lithuanian format: '16,32€' -> '16.32'. URLs have
-    query parameters stripped (e.g. '?limit=100' removed).
+    Returns ``{"products": [...], "total": int | None}``. OpenCart prints
+    "Rodoma nuo 1 iki 100 iš 9910 (...)" on every listing page; the total
+    lets the spider enqueue all pages upfront so concurrency engages on
+    discover instead of chaining one page at a time. Each product dict
+    keeps its previous keys (url, title, author, price, price_original,
+    image_url). Prices are in Lithuanian format: '16,32€' -> '16.32'.
+    URLs have query parameters stripped (e.g. '?limit=100' removed).
     """
     products: list[dict[str, Any]] = []
     segments = re.split(r'class="product-item-container product-\d+"', html)[1:]
@@ -298,7 +298,12 @@ def parse_category_page(html: str) -> CategoryPageResult:
                 "image_url": image_url,
             }
         )
-    return {"products": products, "total": None}
+
+    total = None
+    total_match = re.search(r"Rodoma nuo \d+ iki \d+ iš (\d+)", html)
+    if total_match:
+        total = int(total_match.group(1))
+    return {"products": products, "total": total}
 
 
 def parse_product_page(html: str) -> ProductPageResult:

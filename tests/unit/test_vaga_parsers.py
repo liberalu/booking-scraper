@@ -32,9 +32,9 @@ def test_parse_category_page():
     assert "title" in first
     assert "price" in first
     assert first["url"].startswith("https://vaga.lt/")
-    # vaga's HTML doesn't carry a count signal — total stays None,
-    # which makes the spider fall back to per-page pagination.
-    assert result["total"] is None
+    # OpenCart's "Rodoma nuo 1 iki 100 iš 9910" line carries the catalogue
+    # total — the spider uses it to enqueue all pages upfront.
+    assert result["total"] == 9910
 
 
 def test_parse_product_page():
