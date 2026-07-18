@@ -84,8 +84,12 @@ def _is_genuine_url_alias(canon_url: str, alias_url: str) -> bool:
         return False
     # URL-decode both sides and compare. Handles `mi%C5%A1ku-...` vs
     # `mišku-...` and `route=product%2Fproduct` vs `route=product/product`.
-    canon_dec = unquote(canon_url).rstrip("/")
-    alias_dec = unquote(alias_url).rstrip("/")
+    # Query strings are stripped first: on these platforms product identity
+    # lives in the path — `?search=...` / `?autorius_id=...` are navigation
+    # residue (OpenCart route URLs, where the query IS the identity, are
+    # already filtered out above).
+    canon_dec = unquote(canon_url.split("?", 1)[0]).rstrip("/")
+    alias_dec = unquote(alias_url.split("?", 1)[0]).rstrip("/")
     if canon_dec == alias_dec:
         return False
     # Also re-apply the last-segment-differs gate after decoding (the SQL

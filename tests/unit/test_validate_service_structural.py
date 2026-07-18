@@ -440,3 +440,21 @@ def test_url_alias_handles_empty_inputs() -> None:
 
     assert _is_genuine_url_alias("", "https://vaga.lt/x") is False
     assert _is_genuine_url_alias("https://vaga.lt/x", "") is False
+
+
+def test_url_alias_filters_query_string_variants() -> None:
+    """Same path with `?search=` / `?autorius_id=` residue isn't an alias —
+    product identity lives in the path on these platforms (vaga 2026-07)."""
+    from book_scraper.services.validate import _is_genuine_url_alias
+
+    canon = "https://vaga.lt/kivis-lavina-ranka?search=Kivis+lavina+rank%C4%85"
+    assert _is_genuine_url_alias(canon, "https://vaga.lt/kivis-lavina-ranka") is False
+    # %20 vs + space-encoding mismatch inside the query
+    alias = "https://vaga.lt/kivis-lavina-ranka?search=Kivis%20lavina%20rank%C4%85"
+    assert _is_genuine_url_alias(canon, alias) is False
+    canon2 = "https://vaga.lt/cat/sub/laimes-ziburys?autorius_id=1681"
+    assert _is_genuine_url_alias(canon2, "https://vaga.lt/cat/sub/laimes-ziburys") is False
+    # Different path slug still counts even when a query string is present
+    assert (
+        _is_genuine_url_alias(canon, "https://vaga.lt/kivis-raso-skaicius") is True
+    )
