@@ -93,7 +93,6 @@ _SPA_FLAT_PATHS = [
     "/cron",
     "/issues",
     "/prices",
-    "/parser",
 ]
 _SPA_DETAIL_PATHS = [
     "/runs/{rest:path}",
