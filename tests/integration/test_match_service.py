@@ -165,8 +165,11 @@ def test_step2_does_not_pair_translator_at_position_0(db_session):
     assert sa.canonical_author_id == primary.id
 
 
-def test_step3_synthesizes_shop_inferred_after_two_shops(db_session):
+def test_step3_synthesizes_shop_inferred_after_two_shops(db_session, monkeypatch):
     """Two shops carry the same ISBN, no canonical match -> create shop_inferred book."""
+    monkeypatch.setattr(
+        "book_scraper.services.match.MATCH_SYNTHESIS_ENABLED", True
+    )
 
     sv = _make_shop(db_session, "vaga")
     sp = _make_shop(db_session, "pegasas")
@@ -196,9 +199,12 @@ def test_step3_synthesizes_shop_inferred_after_two_shops(db_session):
     assert rows[0].title == "Vaga Title"
 
 
-def test_step3_publisher_is_first_writer_not_highest_trust(db_session):
+def test_step3_publisher_is_first_writer_not_highest_trust(db_session, monkeypatch):
     """Sticky publisher: the FIRST shop's publisher persists even when
     a higher-trust shop also has the ISBN."""
+    monkeypatch.setattr(
+        "book_scraper.services.match.MATCH_SYNTHESIS_ENABLED", True
+    )
     import datetime
 
     from book_scraper.db.models import Publisher
