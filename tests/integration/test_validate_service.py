@@ -122,10 +122,18 @@ def test_isbn_duplicate_flags_both_rows(db_session):
     shop = _make_shop(db_session, "a")
     run = _make_run(db_session, shop.id)
 
-    sb1 = ShopBook(shop_id=shop.id, url="https://testshopa.lt/p/1", title="Book 1",
-                   isbn="9780000000001")
-    sb2 = ShopBook(shop_id=shop.id, url="https://testshopa.lt/p/2", title="Book 2",
-                   isbn="9780000000001")
+    sb1 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopa.lt/p/1",
+        title="Book 1",
+        isbn="9780000000001",
+    )
+    sb2 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopa.lt/p/2",
+        title="Book 2",
+        isbn="9780000000001",
+    )
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -155,10 +163,20 @@ def test_title_author_duplicate_flags_both_rows(db_session):
     # title+author duplicate fires ONLY when ISBNs also match (or both
     # are null) — same title+author with different ISBNs is a legitimate
     # re-edition, not a duplicate URL.  Use identical ISBNs here.
-    sb1 = ShopBook(shop_id=shop.id, url="https://testshopb.lt/p/1", title="Same Title",
-                   author="Same Author", isbn="9780000000010")
-    sb2 = ShopBook(shop_id=shop.id, url="https://testshopb.lt/p/2", title="Same Title",
-                   author="Same Author", isbn="9780000000010")
+    sb1 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopb.lt/p/1",
+        title="Same Title",
+        author="Same Author",
+        isbn="9780000000010",
+    )
+    sb2 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopb.lt/p/2",
+        title="Same Title",
+        author="Same Author",
+        isbn="9780000000010",
+    )
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -184,10 +202,12 @@ def test_sku_duplicate_flags_both_rows(db_session):
     shop = _make_shop(db_session, "c")
     run = _make_run(db_session, shop.id)
 
-    sb1 = ShopBook(shop_id=shop.id, url="https://testshopc.lt/p/1", title="SKU1",
-                   sku="SKU-001")
-    sb2 = ShopBook(shop_id=shop.id, url="https://testshopc.lt/p/2", title="SKU2",
-                   sku="SKU-001")
+    sb1 = ShopBook(
+        shop_id=shop.id, url="https://testshopc.lt/p/1", title="SKU1", sku="SKU-001"
+    )
+    sb2 = ShopBook(
+        shop_id=shop.id, url="https://testshopc.lt/p/2", title="SKU2", sku="SKU-001"
+    )
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -323,16 +343,22 @@ def test_book_no_metadata_and_signals_suppressed_for_nonbook_titles(db_session):
     run = _make_run(db_session, shop.id)
 
     dvd = ShopBook(
-        shop_id=shop.id, url="https://testshopnbm.lt/dvd",
-        title="Magnolija (DVD)", type="book",
+        shop_id=shop.id,
+        url="https://testshopnbm.lt/dvd",
+        title="Magnolija (DVD)",
+        type="book",
     )
     boxset = ShopBook(
-        shop_id=shop.id, url="https://testshopnbm.lt/set",
-        title="KNYGŲ RINKINYS. Fantastika paaugliams", type="book",
+        shop_id=shop.id,
+        url="https://testshopnbm.lt/set",
+        title="KNYGŲ RINKINYS. Fantastika paaugliams",
+        type="book",
     )
     real_book = ShopBook(
-        shop_id=shop.id, url="https://testshopnbm.lt/book",
-        title="Tikra knyga be metaduomenu", type="book",
+        shop_id=shop.id,
+        url="https://testshopnbm.lt/book",
+        title="Tikra knyga be metaduomenu",
+        type="book",
     )
     db_session.add_all([dvd, boxset, real_book])
     db_session.commit()
@@ -438,13 +464,13 @@ def test_non_product_active_flagged_via_join(db_session):
     db_session.add(sb)
     db_session.flush()
 
+    _make_du(db_session, shop.id, sb.url, url_type="product", shop_book_id=sb.id)
     _make_du(
-        db_session, shop.id, sb.url,
-        url_type="product", shop_book_id=sb.id
-    )
-    _make_du(
-        db_session, shop.id, "https://testshopj.lt/p/1-alt",
-        url_type="non_product", shop_book_id=sb.id
+        db_session,
+        shop.id,
+        "https://testshopj.lt/p/1-alt",
+        url_type="non_product",
+        shop_book_id=sb.id,
     )
     db_session.commit()
 
@@ -477,10 +503,7 @@ def test_non_product_active_auto_heals_when_all_urls_non_product(db_session):
     db_session.add(sb)
     db_session.flush()
 
-    _make_du(
-        db_session, shop.id, sb.url,
-        url_type="non_product", shop_book_id=sb.id
-    )
+    _make_du(db_session, shop.id, sb.url, url_type="non_product", shop_book_id=sb.id)
     db_session.commit()
 
     ValidateService(db_session).run(shop.id, run.id)
@@ -668,10 +691,20 @@ def test_url_aliases_flagged_when_multiple_urls_per_shop_book(db_session):
     db_session.flush()
 
     # Two discovered_urls both pointing to the same shop_book
-    _make_du(db_session, shop.id, "https://testshopn.lt/p/1",
-             url_type="product", shop_book_id=sb.id)
-    _make_du(db_session, shop.id, "https://testshopn.lt/p/1-alt",
-             url_type="product", shop_book_id=sb.id)
+    _make_du(
+        db_session,
+        shop.id,
+        "https://testshopn.lt/p/1",
+        url_type="product",
+        shop_book_id=sb.id,
+    )
+    _make_du(
+        db_session,
+        shop.id,
+        "https://testshopn.lt/p/1-alt",
+        url_type="product",
+        shop_book_id=sb.id,
+    )
     db_session.commit()
 
     ValidateService(db_session).run(shop.id, run.id)
@@ -700,10 +733,18 @@ def test_dedup_second_run_does_not_create_duplicate_rows(db_session):
     shop = _make_shop(db_session, "o")
     run1 = _make_run(db_session, shop.id)
 
-    sb1 = ShopBook(shop_id=shop.id, url="https://testshopo.lt/p/1", title="Dup1",
-                   isbn="9780000000030")
-    sb2 = ShopBook(shop_id=shop.id, url="https://testshopo.lt/p/2", title="Dup2",
-                   isbn="9780000000030")
+    sb1 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopo.lt/p/1",
+        title="Dup1",
+        isbn="9780000000030",
+    )
+    sb2 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopo.lt/p/2",
+        title="Dup2",
+        isbn="9780000000030",
+    )
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -766,10 +807,18 @@ def test_run_returns_counters_keyed_by_issue(db_session):
     shop = _make_shop(db_session, "p")
     run = _make_run(db_session, shop.id)
 
-    sb1 = ShopBook(shop_id=shop.id, url="https://testshopp.lt/p/1", title="Ctr1",
-                   isbn="9780000000040")
-    sb2 = ShopBook(shop_id=shop.id, url="https://testshopp.lt/p/2", title="Ctr2",
-                   isbn="9780000000040")
+    sb1 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopp.lt/p/1",
+        title="Ctr1",
+        isbn="9780000000040",
+    )
+    sb2 = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopp.lt/p/2",
+        title="Ctr2",
+        isbn="9780000000040",
+    )
     db_session.add_all([sb1, sb2])
     db_session.commit()
 
@@ -830,4 +879,124 @@ def test_deactivated_shop_book_does_not_fire_isbn_duplicate(db_session):
     assert issues == [], (
         "isbn_duplicate must not fire when one of the pair is is_active=false; "
         f"got issues on shop_book ids: {[i.shop_book_id for i in issues]}"
+    )
+
+
+@pytest.mark.integration
+def test_no_validator_fires_on_a_fully_inactive_shop(db_session):
+    """A shop whose every shop_book is is_active=false must produce NO issues.
+
+    This is the general guard behind the mandatory `is_active` gate: the rows
+    below are deliberately crafted to trip most checks (duplicate ISBN/SKU,
+    missing metadata, zero price, dimension-shaped format, out-of-range year,
+    stale last_seen_at, orphan with no discovered_urls row, non_book with a
+    real ISBN, an unreachable URL, and a genuine URL alias) — every one of
+    them on a delisted row, where none is actionable.
+
+    Seven checks were missing the gate before 2026-07-25 and fired here.
+    A NEW check that forgets the gate will fail this test too, which is the
+    point: the behavioural net catches what a source-level grep cannot.
+    """
+    shop = _make_shop(db_session, "inactive")
+    run = _make_run(db_session, shop.id)
+    long_ago = datetime.now(UTC) - timedelta(days=4 * VALIDATE_STALE_CADENCE_DAYS)
+
+    # Duplicate ISBN + title/author + SKU pair, both delisted.
+    dup_a = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopinactive.lt/p/dup-a",
+        title="Ta Pati Knyga",
+        author="Jonas Jonaitis",
+        isbn="9780000000123",
+        sku="SKU-DUP",
+        is_active=False,
+        last_seen_at=long_ago,
+    )
+    dup_b = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopinactive.lt/p/dup-b",
+        title="Ta Pati Knyga",
+        author="Jonas Jonaitis",
+        isbn="9780000000123",
+        sku="SKU-DUP",
+        is_active=False,
+        last_seen_at=long_ago,
+    )
+    # type='book' with no ISBN/author/year/format → book_no_metadata +
+    # book_no_signals; price=0 while in_stock → price_zero; slug shares no
+    # token with the title → slug_title_mismatch; no discovered_urls row at
+    # all → orphan_no_url.
+    barren = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopinactive.lt/p/istorija-apie-berniuka",
+        title="Kasdienis maistas",
+        type="book",
+        price=0,
+        in_stock=True,
+        is_active=False,
+        last_seen_at=long_ago,
+    )
+    # Dimension-shaped format + impossible year + unmatched-with-ISBN.
+    malformed = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopinactive.lt/p/malformed",
+        title="Netvarkinga Knyga",
+        format="17x24",
+        year=1500,
+        isbn="9780000000456",
+        match_status="unmatched",
+        is_active=False,
+        last_seen_at=long_ago,
+    )
+    # non_book carrying a real 978 ISBN → non_book_has_isbn.
+    non_book = ShopBook(
+        shop_id=shop.id,
+        url="https://testshopinactive.lt/p/non-book",
+        title="Kažkoks Gaminys",
+        type="non_book",
+        isbn="9780000000789",
+        is_active=False,
+        last_seen_at=long_ago,
+    )
+    db_session.add_all([dup_a, dup_b, barren, malformed, non_book])
+    db_session.flush()
+
+    # An unreachable URL and a genuinely-different alias slug, both on
+    # delisted rows → unreachable_active / url_aliases.
+    _make_du(
+        db_session,
+        shop.id,
+        "https://testshopinactive.lt/p/malformed",
+        url_type="unreachable",
+        shop_book_id=malformed.id,
+    )
+    _make_du(
+        db_session,
+        shop.id,
+        "https://testshopinactive.lt/p/malformed-alias-99",
+        shop_book_id=malformed.id,
+    )
+    _make_du(
+        db_session,
+        shop.id,
+        "https://testshopinactive.lt/p/non-book",
+        url_type="non_product",
+        shop_book_id=non_book.id,
+    )
+    db_session.commit()
+
+    counters = ValidateService(db_session).run(shop.id, run.id)
+    db_session.commit()
+
+    sb_ids = [dup_a.id, dup_b.id, barren.id, malformed.id, non_book.id]
+    issues = (
+        db_session.execute(
+            select(ValidationIssue).where(ValidationIssue.shop_book_id.in_(sb_ids))
+        )
+        .scalars()
+        .all()
+    )
+    assert issues == [], (
+        "no validator may fire on a delisted shop_book; got "
+        f"{sorted({i.issue for i in issues})} (counters={counters})"
     )

@@ -107,18 +107,18 @@ def _is_genuine_url_alias(canon_url: str, alias_url: str) -> bool:
 # under ISBN. Diacritic-stripped keys handle NFD-stored values; both
 # raw and stripped variants are checked for safety.
 _NON_BOOK_CATEGORY_KEYWORDS: tuple[str, ...] = (
-    "zaisl",      # žaislai (toys)
-    "zaidim",     # žaidimai (games)
-    "delion",     # dėlionės (puzzles / jigsaws)
-    "sasiuvin",   # sąsiuviniai (notebooks)
-    "kortel",     # kortelės (cards)
-    "zemelap",    # žemėlapiai (maps)
-    "rastin",     # raštinės prekės (office supplies)
-    "hobio",      # hobio prekės (hobby goods)
-    "mokyklin",   # mokyklinės prekės (school supplies)
-    "popier",     # popieriaus gaminiai (paper goods)
-    "lavinam",    # lavinamieji (educational toys)
-    "stalo zaid", # stalo žaidimai (board games — covers cases where kw above misses)
+    "zaisl",  # žaislai (toys)
+    "zaidim",  # žaidimai (games)
+    "delion",  # dėlionės (puzzles / jigsaws)
+    "sasiuvin",  # sąsiuviniai (notebooks)
+    "kortel",  # kortelės (cards)
+    "zemelap",  # žemėlapiai (maps)
+    "rastin",  # raštinės prekės (office supplies)
+    "hobio",  # hobio prekės (hobby goods)
+    "mokyklin",  # mokyklinės prekės (school supplies)
+    "popier",  # popieriaus gaminiai (paper goods)
+    "lavinam",  # lavinamieji (educational toys)
+    "stalo zaid",  # stalo žaidimai (board games — covers cases where kw above misses)
 )
 
 
@@ -134,8 +134,7 @@ def _categories_indicate_non_book(categories: list[str] | None) -> bool:
         return False
     blob = " | ".join(str(c) for c in categories).lower()
     stripped = "".join(
-        c for c in unicodedata.normalize("NFD", blob)
-        if unicodedata.category(c) != "Mn"
+        c for c in unicodedata.normalize("NFD", blob) if unicodedata.category(c) != "Mn"
     )
     return any(kw in stripped for kw in _NON_BOOK_CATEGORY_KEYWORDS)
 
@@ -280,6 +279,63 @@ def _should_flag_slug_title(slug: str | None, title: str | None) -> bool:
     return not (slug_tokens & title_tokens)
 
 
+def _live_books_where(alias: str = "", *, in_stock: bool = False) -> str:
+    """Return the mandatory `shop_books` WHERE prefix: shop scope + gates.
+
+    Every validator reads only the *live* catalogue. A delisted row
+    (`is_active=false`) is not a data-quality problem — it's gone — and the
+    price-missing checks additionally require `in_stock=true`, because an
+    out-of-stock book legitimately has no current price.
+
+    These gates used to be hand-written in each of the ~22 raw-SQL blocks
+    below. Seven had silently drifted without one (`book_no_metadata`,
+    `book_no_signals`, `price_zero`, `format_is_dimensions`,
+    `non_book_has_isbn`, `orphan_no_url`, `url_aliases`), each reopening
+    noise issues on delisted rows on every run. Building the clause here
+    means a new check cannot forget: see the two regression guards in
+    tests/integration/test_validate_service.py.
+
+    `alias` is the table alias used in the query ("" when unaliased).
+    """
+    prefix = f"{alias}." if alias else ""
+    clauses = [f"{prefix}shop_id = :shop_id", f"{prefix}is_active = true"]
+    if in_stock:
+        clauses.append(f"{prefix}in_stock = true")
+    return " AND ".join(clauses)
+
+
+# Every issue key this service can emit. A typo in one of the literals below
+# would orphan that issue type: `resolve_gone_issues` auto-resolves anything
+# the current run didn't re-emit, so a misspelt key silently closes a real
+# backlog and opens a bogus one. run() asserts against this set so the typo
+# fails loudly on the first run instead.
+ISSUE_KEYS: frozenset[str] = frozenset(
+    {
+        "active_no_price",
+        "book_no_metadata",
+        "book_no_signals",
+        "format_is_dimensions",
+        "in_stock_no_price",
+        "isbn_duplicate",
+        "match_isbn_drift",
+        "no_price_history",
+        "non_book_has_isbn",
+        "non_product_active",
+        "orphan_no_url",
+        "price_zero",
+        "sku_duplicate",
+        "slug_diacritic_loss",
+        "slug_title_mismatch",
+        "stale_active",
+        "title_author_duplicate",
+        "unmatched_has_isbn",
+        "unreachable_active",
+        "url_aliases",
+        "year_out_of_range",
+    }
+)
+
+
 class ValidateService:
     """Per-shop data-quality validator. Checks are SQL-driven and idempotent.
 
@@ -321,6 +377,13 @@ class ValidateService:
         for issue in issues:
             key = str(issue["issue"])
             counters[key] = counters.get(key, 0) + 1
+        unknown = set(counters) - ISSUE_KEYS
+        if unknown:
+            raise AssertionError(
+                f"validator emitted unregistered issue key(s): {sorted(unknown)} — "
+                "add them to ISSUE_KEYS and to ISSUE_DESCRIPTIONS in "
+                "book_scraper/dashboard/queries.py, or fix the typo"
+            )
         return counters
 
     def check_structural_duplicates(
@@ -345,13 +408,11 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url, sb.isbn "
                 "FROM shop_books sb "
-                "WHERE sb.shop_id = :shop_id "
-                "  AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND sb.isbn IS NOT NULL AND sb.isbn != '' "
                 "  AND EXISTS ("
                 "      SELECT 1 FROM shop_books sb2 "
-                "      WHERE sb2.shop_id = :shop_id "
-                "        AND sb2.is_active = true "
+                f"      WHERE {_live_books_where('sb2')} "
                 "        AND sb2.isbn = sb.isbn "
                 "        AND sb2.id != sb.id"
                 "  )"
@@ -378,14 +439,12 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url, sb.title, sb.author "
                 "FROM shop_books sb "
-                "WHERE sb.shop_id = :shop_id "
-                "  AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND sb.title IS NOT NULL "
                 "  AND sb.author IS NOT NULL "
                 "  AND EXISTS ("
                 "      SELECT 1 FROM shop_books sb2 "
-                "      WHERE sb2.shop_id = :shop_id "
-                "        AND sb2.is_active = true "
+                f"      WHERE {_live_books_where('sb2')} "
                 "        AND lower(sb2.title) = lower(sb.title) "
                 "        AND lower(sb2.author) = lower(sb.author) "
                 "        AND sb2.id != sb.id "
@@ -412,13 +471,11 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url, sb.sku "
                 "FROM shop_books sb "
-                "WHERE sb.shop_id = :shop_id "
-                "  AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND sb.sku IS NOT NULL "
                 "  AND EXISTS ("
                 "      SELECT 1 FROM shop_books sb2 "
-                "      WHERE sb2.shop_id = :shop_id "
-                "        AND sb2.is_active = true "
+                f"      WHERE {_live_books_where('sb2')} "
                 "        AND sb2.sku = sb.sku "
                 "        AND sb2.id != sb.id"
                 "  )"
@@ -452,8 +509,7 @@ class ValidateService:
             text(
                 "SELECT id, url, title "
                 "FROM shop_books "
-                "WHERE shop_id = :shop_id AND title IS NOT NULL "
-                "  AND is_active = true"
+                f"WHERE {_live_books_where()} AND title IS NOT NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -499,8 +555,7 @@ class ValidateService:
         rows = self._session.execute(
             text(
                 "SELECT id, url, title FROM shop_books "
-                "WHERE shop_id = :shop_id AND title IS NOT NULL "
-                "  AND is_active = true"
+                f"WHERE {_live_books_where()} AND title IS NOT NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -548,8 +603,7 @@ class ValidateService:
         active_no_price_rows = self._session.execute(
             text(
                 "SELECT id, url FROM shop_books "
-                "WHERE shop_id = :shop_id AND is_active = true "
-                "  AND in_stock = true AND price IS NULL"
+                f"WHERE {_live_books_where(in_stock=True)} AND price IS NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -569,8 +623,7 @@ class ValidateService:
         in_stock_no_price_rows = self._session.execute(
             text(
                 "SELECT id, url FROM shop_books "
-                "WHERE shop_id = :shop_id AND is_active = true "
-                "  AND in_stock = true AND price IS NULL"
+                f"WHERE {_live_books_where(in_stock=True)} AND price IS NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -593,7 +646,7 @@ class ValidateService:
         book_no_metadata_rows = self._session.execute(
             text(
                 "SELECT id, url, title, categories FROM shop_books "
-                "WHERE shop_id = :shop_id AND type = 'book' "
+                f"WHERE {_live_books_where()} AND type = 'book' "
                 "  AND isbn IS NULL AND author IS NULL AND year IS NULL"
             ),
             {"shop_id": shop_id},
@@ -622,8 +675,7 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url FROM shop_books sb "
                 "LEFT JOIN prices p ON p.shop_book_id = sb.id "
-                "WHERE sb.shop_id = :shop_id AND sb.is_active = true "
-                "  AND sb.in_stock = true AND p.id IS NULL"
+                f"WHERE {_live_books_where('sb', in_stock=True)} AND p.id IS NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -654,8 +706,7 @@ class ValidateService:
         year_rows = self._session.execute(
             text(
                 "SELECT id, url, year FROM shop_books "
-                "WHERE shop_id = :shop_id AND year IS NOT NULL "
-                "  AND is_active = true "
+                f"WHERE {_live_books_where()} AND year IS NOT NULL "
                 "  AND (year < 1800 OR year > extract(year from now())::int + 2)"
             ),
             {"shop_id": shop_id},
@@ -678,7 +729,7 @@ class ValidateService:
         price_zero_rows = self._session.execute(
             text(
                 "SELECT id, url FROM shop_books "
-                "WHERE shop_id = :shop_id AND price = 0 AND in_stock = true"
+                f"WHERE {_live_books_where(in_stock=True)} AND price = 0"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -698,7 +749,7 @@ class ValidateService:
         format_rows = self._session.execute(
             text(
                 r"SELECT id, url, format FROM shop_books "
-                r"WHERE shop_id = :shop_id AND format IS NOT NULL "
+                rf"WHERE {_live_books_where()} AND format IS NOT NULL "
                 r"  AND format ~ '^\d+.*[xX×].*\d+'"
             ),
             {"shop_id": shop_id},
@@ -732,7 +783,7 @@ class ValidateService:
         book_no_signals_rows = self._session.execute(
             text(
                 "SELECT id, url, title, categories FROM shop_books "
-                "WHERE shop_id = :shop_id AND type = 'book' "
+                f"WHERE {_live_books_where()} AND type = 'book' "
                 "  AND isbn IS NULL AND author IS NULL "
                 "  AND year IS NULL AND format IS NULL"
             ),
@@ -773,8 +824,8 @@ class ValidateService:
         non_book_isbn_rows = self._session.execute(
             text(
                 "SELECT id, url, isbn, title, categories FROM shop_books "
-                "WHERE shop_id = :shop_id AND type = 'non_book' AND isbn IS NOT NULL "
-                "AND isbn ~ '^97[89]'"
+                f"WHERE {_live_books_where()} AND type = 'non_book' "
+                "AND isbn IS NOT NULL AND isbn ~ '^97[89]'"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -809,7 +860,7 @@ class ValidateService:
             text(
                 "UPDATE shop_books sb "
                 "SET is_active = false, inactive_since = NOW() "
-                "WHERE sb.shop_id = :shop_id AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND NOT EXISTS ("
                 "      SELECT 1 FROM discovered_urls du "
                 "      WHERE du.shop_book_id = sb.id "
@@ -830,7 +881,7 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url FROM shop_books sb "
                 "JOIN discovered_urls du ON du.shop_book_id = sb.id "
-                "WHERE sb.shop_id = :shop_id AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND du.url_type = 'non_product'"
             ),
             {"shop_id": shop_id},
@@ -864,7 +915,7 @@ class ValidateService:
         stale_rows = self._session.execute(
             text(
                 "SELECT id, url, last_seen_at FROM shop_books "
-                "WHERE shop_id = :shop_id AND is_active = true "
+                f"WHERE {_live_books_where()} "
                 "  AND last_seen_at < now() - make_interval(days => :days)"
             ),
             {"shop_id": shop_id, "days": days},
@@ -886,7 +937,7 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url FROM shop_books sb "
                 "JOIN discovered_urls du ON du.shop_book_id = sb.id "
-                "WHERE sb.shop_id = :shop_id AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND du.url_type = 'unreachable'"
             ),
             {"shop_id": shop_id},
@@ -908,7 +959,7 @@ class ValidateService:
             text(
                 "SELECT sb.id, sb.url FROM shop_books sb "
                 "LEFT JOIN discovered_urls du ON du.shop_book_id = sb.id "
-                "WHERE sb.shop_id = :shop_id AND du.id IS NULL"
+                f"WHERE {_live_books_where('sb')} AND du.id IS NULL"
             ),
             {"shop_id": shop_id},
         ).all()
@@ -943,8 +994,7 @@ class ValidateService:
         unmatched_rows = self._session.execute(
             text(
                 "SELECT id, url, isbn FROM shop_books "
-                "WHERE shop_id = :shop_id AND match_status = 'unmatched' "
-                "  AND is_active = true "
+                f"WHERE {_live_books_where()} AND match_status = 'unmatched' "
                 "  AND isbn IS NOT NULL"
             ),
             {"shop_id": shop_id},
@@ -974,8 +1024,7 @@ class ValidateService:
                 "   ORDER BY bi2.isbn_type DESC LIMIT 1) AS book_isbn "
                 "FROM shop_books sb "
                 "JOIN books b ON b.id = sb.book_id "
-                "WHERE sb.shop_id = :shop_id "
-                "  AND sb.is_active = true "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND sb.match_status = 'matched' "
                 "  AND sb.isbn IS NOT NULL "
                 "  AND NOT EXISTS ("
@@ -1041,7 +1090,7 @@ class ValidateService:
                 "SELECT sb.id, sb.url, du.url AS alias_url "
                 "FROM shop_books sb "
                 "JOIN discovered_urls du ON du.shop_book_id = sb.id "
-                "WHERE sb.shop_id = :shop_id "
+                f"WHERE {_live_books_where('sb')} "
                 "  AND rtrim(du.url, '/') != rtrim(sb.url, '/') "
                 "  AND regexp_replace(rtrim(du.url, '/'), '^.+/', '') "
                 "    != regexp_replace(rtrim(sb.url, '/'), '^.+/', '')"

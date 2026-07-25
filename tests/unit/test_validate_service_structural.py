@@ -138,9 +138,9 @@ def test_diacritic_lossy_handles_nfd_decomposed_title() -> None:
     # the source-file editor encodes string literals (some editors
     # silently NFC-coerce).
     title_nfd = unicodedata.normalize("NFD", "Kalėdų pūga")
-    assert any(
-        unicodedata.category(c) == "Mn" for c in title_nfd
-    ), "NFD normalisation produced no combining marks — fixture broken"
+    assert any(unicodedata.category(c) == "Mn" for c in title_nfd), (
+        "NFD normalisation produced no combining marks — fixture broken"
+    )
     assert _looks_diacritic_lossy("kale-du-pu-ga-2196148", title_nfd) is True
 
 
@@ -357,9 +357,9 @@ def test_categories_non_book_case_and_diacritic_insensitive() -> None:
     sometimes drop diacritics in metadata."""
     from book_scraper.services.validate import _categories_indicate_non_book
 
-    assert _categories_indicate_non_book(["ZAISLAI"]) is True       # no diacritic, uppercase
-    assert _categories_indicate_non_book(["zaislai"]) is True       # no diacritic, lowercase
-    assert _categories_indicate_non_book(["Žaislai"]) is True       # with diacritic
+    assert _categories_indicate_non_book(["ZAISLAI"]) is True  # no diacritic, uppercase
+    assert _categories_indicate_non_book(["zaislai"]) is True  # no diacritic, lowercase
+    assert _categories_indicate_non_book(["Žaislai"]) is True  # with diacritic
 
 
 def test_categories_non_book_does_not_flag_book_categories() -> None:
@@ -406,7 +406,9 @@ def test_url_alias_filters_opencart_route_form() -> None:
     alias = "https://vaga.lt/index.php?route=product/product&product_id=179009"
     assert _is_genuine_url_alias(canon, alias) is False
     # And the percent-encoded slash variant.
-    alias_encoded = "https://vaga.lt/index.php?route=product%2Fproduct&product_id=179009"
+    alias_encoded = (
+        "https://vaga.lt/index.php?route=product%2Fproduct&product_id=179009"
+    )
     assert _is_genuine_url_alias(canon, alias_encoded) is False
 
 
@@ -442,6 +444,71 @@ def test_url_alias_handles_empty_inputs() -> None:
     assert _is_genuine_url_alias("https://vaga.lt/x", "") is False
 
 
+# ---------------------------------------------------------------------------
+# Mandatory filter gates — _live_books_where is the single source. See the
+# cheatsheet in CLAUDE.md; the behavioural counterpart lives in
+# tests/integration/test_validate_service.py.
+# ---------------------------------------------------------------------------
+
+
+def test_live_books_where_emits_shop_scope_and_active_gate() -> None:
+    from book_scraper.services.validate import _live_books_where
+
+    assert _live_books_where() == "shop_id = :shop_id AND is_active = true"
+
+
+def test_live_books_where_qualifies_with_alias() -> None:
+    from book_scraper.services.validate import _live_books_where
+
+    assert _live_books_where("sb") == "sb.shop_id = :shop_id AND sb.is_active = true"
+
+
+def test_live_books_where_adds_in_stock_gate_on_request() -> None:
+    """Price-missing checks additionally require in_stock=true — an
+    out-of-stock book legitimately has no current price."""
+    from book_scraper.services.validate import _live_books_where
+
+    assert _live_books_where(in_stock=True) == (
+        "shop_id = :shop_id AND is_active = true AND in_stock = true"
+    )
+
+
+def test_no_validator_hand_writes_the_is_active_gate() -> None:
+    """The gate must exist in exactly one place: _live_books_where.
+
+    Before 2026-07-25 each of the ~22 raw-SQL blocks hand-wrote its own
+    `is_active = true`, and seven had silently drifted without one —
+    reopening noise issues on delisted rows every run. A hand-written gate
+    reintroduces the copy-paste this centralisation removed, so fail loudly
+    if one reappears.
+    """
+    from pathlib import Path
+
+    import book_scraper.services.validate as validate_module
+
+    src = Path(validate_module.__file__).read_text()
+    occurrences = src.count("is_active = true")
+    assert occurrences == 1, (
+        f"expected the is_active gate in _live_books_where only, found "
+        f"{occurrences} occurrences — build the clause via _live_books_where()"
+    )
+
+
+def test_every_issue_key_has_a_dashboard_description() -> None:
+    """ISSUE_KEYS is the emit-side registry; ISSUE_DESCRIPTIONS is what the
+    dashboard renders. A new issue type that lands in one but not the other
+    shows up in the UI as a bare unexplained key.
+    """
+    from book_scraper.dashboard.queries import ISSUE_DESCRIPTIONS
+    from book_scraper.services.validate import ISSUE_KEYS
+
+    missing = sorted(ISSUE_KEYS - set(ISSUE_DESCRIPTIONS))
+    assert not missing, (
+        f"issue keys with no ISSUE_DESCRIPTIONS entry: {missing} — add them to "
+        "book_scraper/dashboard/queries.py"
+    )
+
+
 def test_url_alias_filters_query_string_variants() -> None:
     """Same path with `?search=` / `?autorius_id=` residue isn't an alias —
     product identity lives in the path on these platforms (vaga 2026-07)."""
@@ -453,8 +520,8 @@ def test_url_alias_filters_query_string_variants() -> None:
     alias = "https://vaga.lt/kivis-lavina-ranka?search=Kivis%20lavina%20rank%C4%85"
     assert _is_genuine_url_alias(canon, alias) is False
     canon2 = "https://vaga.lt/cat/sub/laimes-ziburys?autorius_id=1681"
-    assert _is_genuine_url_alias(canon2, "https://vaga.lt/cat/sub/laimes-ziburys") is False
-    # Different path slug still counts even when a query string is present
     assert (
-        _is_genuine_url_alias(canon, "https://vaga.lt/kivis-raso-skaicius") is True
+        _is_genuine_url_alias(canon2, "https://vaga.lt/cat/sub/laimes-ziburys") is False
     )
+    # Different path slug still counts even when a query string is present
+    assert _is_genuine_url_alias(canon, "https://vaga.lt/kivis-raso-skaicius") is True
