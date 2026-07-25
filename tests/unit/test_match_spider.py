@@ -43,12 +43,15 @@ def stub_db_layer():
     fake_run = SimpleNamespace(id=999)
 
     with (
-        patch("book_scraper.spiders.match.get_session_factory") as get_factory,
-        patch("book_scraper.spiders.match.upsert_shop", return_value=fake_shop) as ush,
+        patch("book_scraper.spiders.service_spider.get_session_factory") as get_factory,
         patch(
-            "book_scraper.spiders.match.create_scrape_run", return_value=fake_run
+            "book_scraper.spiders.service_spider.upsert_shop", return_value=fake_shop
+        ) as ush,
+        patch(
+            "book_scraper.spiders.service_spider.create_scrape_run",
+            return_value=fake_run,
         ) as csr,
-        patch("book_scraper.spiders.match.finish_scrape_run") as fsr,
+        patch("book_scraper.spiders.service_spider.finish_scrape_run") as fsr,
         patch("book_scraper.spiders.match.MatchService") as ms_cls,
     ):
         # Each call to get_session_factory(url)() returns a fresh MagicMock.
@@ -104,9 +107,7 @@ def test_match_service_runs_off_event_loop_thread(stub_db_layer):
 
 def test_counters_propagate_to_items_updated(stub_db_layer):
     """The completed run row must reflect what MatchService actually did."""
-    counters = MatchCounters(
-        books_linked=10, authors_linked=4, books_synthesized=2
-    )
+    counters = MatchCounters(books_linked=10, authors_linked=4, books_synthesized=2)
     stub_db_layer.ms_cls.return_value.run.return_value = counters
 
     # Capture the ScrapeRun the spider mutates after the thread returns.
@@ -131,7 +132,7 @@ def test_counters_propagate_to_items_updated(stub_db_layer):
     # watcher, while the first two (run-create, MatchService) stay plain.
     sessions = [MagicMock(), MagicMock(), finalize_session]
     with patch(
-        "book_scraper.spiders.match.get_session_factory",
+        "book_scraper.spiders.service_spider.get_session_factory",
         return_value=lambda: sessions.pop(0),
     ):
         asyncio.run(_drain(_build_spider()))
@@ -141,6 +142,28 @@ def test_counters_propagate_to_items_updated(stub_db_layer):
     # Spider should request the 'completed' terminal status.
     _args, kwargs = stub_db_layer.finish_scrape_run.call_args
     assert kwargs.get("status") == "completed"
+
+
+def test_closed_calls_finalize_run_failsafe() -> None:
+    """closed() must call finalize_run_failsafe so a crash mid-SQL never
+    leaves the run row in 'running'.
+
+    MatchSpider had no `closed()` at all until the lifecycle moved into
+    ServiceSpider (2026-07-25) — validate.py had the failsafe, its "mirrors
+    match.py exactly" copy did not, so a match crash left the run zombie
+    until the dashboard reaper caught it 60s later.
+    """
+    with patch(
+        "book_scraper.spiders.service_spider.finalize_run_failsafe"
+    ) as mock_failsafe:
+        spider = _build_spider()
+        spider._run_id = 999
+
+        spider.closed(reason="finished")
+
+        mock_failsafe.assert_called_once()
+        _args, kwargs = mock_failsafe.call_args
+        assert kwargs.get("status") == "failed" or _args[2] == "failed"
 
 
 async def _drain(spider: MatchSpider) -> list:

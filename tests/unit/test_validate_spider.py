@@ -43,14 +43,15 @@ def stub_db_layer():
     fake_run = SimpleNamespace(id=999)
 
     with (
-        patch("book_scraper.spiders.validate.get_session_factory") as get_factory,
+        patch("book_scraper.spiders.service_spider.get_session_factory") as get_factory,
         patch(
-            "book_scraper.spiders.validate.upsert_shop", return_value=fake_shop
+            "book_scraper.spiders.service_spider.upsert_shop", return_value=fake_shop
         ) as ush,
         patch(
-            "book_scraper.spiders.validate.create_scrape_run", return_value=fake_run
+            "book_scraper.spiders.service_spider.create_scrape_run",
+            return_value=fake_run,
         ) as csr,
-        patch("book_scraper.spiders.validate.finish_scrape_run") as fsr,
+        patch("book_scraper.spiders.service_spider.finish_scrape_run") as fsr,
         patch("book_scraper.spiders.validate.ValidateService") as vs_cls,
     ):
         get_factory.return_value = lambda: MagicMock()
@@ -136,7 +137,9 @@ def test_closed_calls_finalize_run_failsafe(stub_db_layer) -> None:
     leaves the run row in 'running'.  The failsafe's own terminal-state
     guard (added with the run-424 fix) makes this a no-op when the happy
     path already completed the run — but the call must still happen."""
-    with patch("book_scraper.spiders.validate.finalize_run_failsafe") as mock_failsafe:
+    with patch(
+        "book_scraper.spiders.service_spider.finalize_run_failsafe"
+    ) as mock_failsafe:
         spider = _build_spider()
         spider._run_id = 999
         spider.settings = MagicMock()
