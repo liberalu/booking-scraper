@@ -140,12 +140,18 @@ No code path can link a shop_book to a canonical whose ISBNs disagree. So when `
 
 ### Validator filter gates (cheatsheet)
 
-Every validator that queries `shop_books` applies mandatory pre-filters. Missing one is a silent noise regression — always check these when adding or modifying a validator.
+Every validator that queries `shop_books` applies mandatory pre-filters. Missing one is a silent noise regression.
 
-| Gate | SQL predicate | Validators that require it |
+**Don't hand-write these predicates — build the WHERE prefix with `_live_books_where()`** (`book_scraper/services/validate.py`). It is the single source of the gates; a check that writes its own is what caused the drift below.
+
+| Gate | SQL predicate | Applies to |
 |---|---|---|
-| Active books only | `sb.is_active = true` | All single-book validators: `isbn_duplicate` (both sides), `title_author_duplicate` (both sides), `sku_duplicate` (both sides), `slug_title_mismatch`, `slug_diacritic_loss`, `unmatched_has_isbn`, `match_isbn_drift`, `year_out_of_range`, `non_book_has_isbn`, `non_product_active`, `orphan_no_url`, `stale_active`, `url_aliases` |
-| In-stock books only | `sb.in_stock = true` | `active_no_price`, `no_price_history` (price-missing checks — out-of-stock books legitimately have no price) |
+| Active books only | `sb.is_active = true` | **Every** validator that reads `shop_books` — `_live_books_where()` always emits it. Structural duplicates need it on both sides of the pair (pass the `sb2` alias in the EXISTS sub-select). |
+| In-stock books only | `sb.in_stock = true` | `_live_books_where(in_stock=True)` — price checks only (`active_no_price`, `in_stock_no_price`, `no_price_history`, `price_zero`); out-of-stock books legitimately have no price. |
+
+Two regression guards keep this honest: a source-level check that `is_active = true` appears exactly once in the module (`tests/unit/test_validate_service_structural.py`), and an all-inactive-shop integration test asserting **no** validator fires on delisted rows (`tests/integration/test_validate_service.py`) — that one catches a new check that forgets the gate, which a grep cannot. Seven checks had drifted ungated until 2026-07-25 (`book_no_metadata`, `book_no_signals`, `price_zero`, `format_is_dimensions`, `non_book_has_isbn`, `orphan_no_url`, `url_aliases`).
+
+New issue types must be added to `ISSUE_KEYS` (validate.py) **and** `ISSUE_DESCRIPTIONS` (dashboard/queries.py) — `run()` raises on an unregistered key, because a typo'd key makes `resolve_gone_issues` silently close the real backlog and open a bogus one.
 
 **Structural duplicate validators** (`isbn_duplicate`, `title_author_duplicate`, `sku_duplicate`) require `is_active = true` on **both** sides of the duplicate pair, not just the flagged book. Otherwise deactivated shop_books generate spurious duplicate issues against their still-active counterparts.
 
