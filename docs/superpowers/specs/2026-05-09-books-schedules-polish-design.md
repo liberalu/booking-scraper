@@ -1,5 +1,6 @@
 # Books + Schedules Polish — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Close the small but visible gaps in the existing Books and Schedules surfaces of the hifi dashboard, and adopt the newer canonical Book detail page. This is "Phase 1" of a larger Books/Schedules track; bigger items (book merge/unlink, manual book creation, schedule chain visualization) are deferred to their own specs.

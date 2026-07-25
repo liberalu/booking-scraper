@@ -1,5 +1,6 @@
 # Non-Book Filtering Design
 
+**Status:** Implemented
 **Date:** 2026-04-18
 
 ## Problem

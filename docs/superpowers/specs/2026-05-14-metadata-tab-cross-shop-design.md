@@ -1,5 +1,6 @@
 # Metadata Tab Cross-Shop Comparison — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Upgrade the Metadata tab on the canonical Book detail page from showing only canonical field values to showing a full cross-shop comparison matrix: per-shop Contributors table (Author row uses raw `ShopBook.author`; other roles use canonical data with `—` for shops) and per-field per-shop metadata matrix with conflict detection.

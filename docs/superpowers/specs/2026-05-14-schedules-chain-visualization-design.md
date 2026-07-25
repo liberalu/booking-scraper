@@ -1,5 +1,6 @@
 # Schedules Chain Visualization — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Make chained cron jobs visually obvious in `HFCron`. Replace the flat "Chain" column with a tree-sorted table where chain children appear indented under their parent, a "Trigger" column distinguishes time-based vs chain-triggered jobs, and chain-triggered jobs show no "Next run" (they have no cron schedule of their own).

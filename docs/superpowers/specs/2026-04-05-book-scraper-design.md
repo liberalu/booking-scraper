@@ -1,6 +1,7 @@
 # Book Price Scraper — Design Spec
 
 **Date:** 2026-04-05
+**Status:** Implemented
 **Goal:** Build a multi-shop book price comparison system for Lithuanian e-shops. Track book prices over time, compare across shops, detect discounts.
 
 ---

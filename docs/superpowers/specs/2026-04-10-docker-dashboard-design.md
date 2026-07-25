@@ -1,5 +1,6 @@
 # Docker + Monitoring Dashboard Design
 
+**Status:** Implemented
 ## Overview
 
 Containerize the book scraper and add a web-based monitoring dashboard. The scraper runs on a cron schedule inside Docker and can also be triggered from the dashboard UI. The dashboard shows scrape run history, validation issues, price trends, inventory stats, and live logs.

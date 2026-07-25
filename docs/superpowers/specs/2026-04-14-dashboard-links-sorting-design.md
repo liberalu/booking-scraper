@@ -1,5 +1,6 @@
 # Dashboard Links, Sorting & UI Improvements
 
+**Status:** Implemented
 **Date:** 2026-04-14
 
 ## Overview

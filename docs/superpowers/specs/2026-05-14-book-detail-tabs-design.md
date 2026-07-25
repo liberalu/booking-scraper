@@ -1,5 +1,6 @@
 # Book Detail Tabs — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Upgrade `HFBook` from a single-card layout to a tabbed detail page. Add Listings (improved), Metadata, and stub Prices/Conflicts tabs. No backend changes — all data comes from the existing `/api/books/:id` response.

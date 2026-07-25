@@ -1,5 +1,6 @@
 # Dashboard Modern Redesign — Design Spec
 
+**Status:** Implemented
 ## Overview
 
 Refine the existing dark/glass admin dashboard without changing its layout structure or adding new features. The goal is sharper typography, tighter component polish, and a more premium feel — achieved through three targeted changes: a custom font, refined CSS design tokens, and component-level tweaks.

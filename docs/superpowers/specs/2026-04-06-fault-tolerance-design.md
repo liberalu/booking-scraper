@@ -1,5 +1,6 @@
 # Fault Tolerance & Resumable Scraping — Design Spec
 
+**Status:** Implemented
 **Date:** 2026-04-06
 **Goal:** Make scraping resumable after crashes, track discovered URLs in PostgreSQL, and refactor spiders into generic per-phase classes that work across all shops.
 

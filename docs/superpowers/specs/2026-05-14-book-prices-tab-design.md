@@ -1,5 +1,6 @@
 # Book Prices Tab — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Replace the `HFBookPricesStub` placeholder in the Book detail page with a real Prices tab showing a 30-day multi-line price chart (one line per shop) plus three KPI cards.

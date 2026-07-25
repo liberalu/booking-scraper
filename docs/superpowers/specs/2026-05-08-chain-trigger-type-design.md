@@ -1,5 +1,6 @@
 # Chain Trigger Type Design
 
+**Status:** Partially implemented — chain wiring in place via `chain_to_job_id`; `triggered_by` column on `scrape_runs` and UI trigger badge not yet added
 **Goal:** Enforce exclusive triggers (cron OR chain, not both) and surface trigger type in the Schedules UI and per-run history.
 
 **Architecture:** Two changes — server-side auto-disable when a chain is assigned, and a new `triggered_by` column on `scrape_runs` so every run records how it started. The UI adds a trigger type badge on the Schedules table and in run history.

@@ -1,5 +1,6 @@
 # Manual Book Creation — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Wire the existing `HFAddBookDialog` stub to a new `POST /api/books` endpoint so operators can manually add canonical books with `data_source=manual`. ISBN collision returns a 409 with a link to the conflicting book.

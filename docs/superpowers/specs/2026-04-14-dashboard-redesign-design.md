@@ -1,5 +1,6 @@
 # Dashboard Redesign — Design Spec
 
+**Status:** Implemented
 ## Goal
 
 Restyle the existing FastAPI + Jinja2 dashboard with a "Clean & Airy" minimal aesthetic, add dark/light theme toggle, reorganize navigation (replace Inventory with new Discovered URLs page), and merge Inventory stats into Overview.
