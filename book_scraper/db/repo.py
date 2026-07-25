@@ -1074,7 +1074,6 @@ def finish_scrape_run(
     run = session.get(ScrapeRun, run_id)
     if run is None:
         return
-    was_running = run.status == "running"
     was_non_terminal = run.status not in ("completed", "failed")
     run.status = status
     run.finished_at = datetime.now(UTC)
@@ -1085,9 +1084,16 @@ def finish_scrape_run(
     if reason is not None and run.close_reason is None:
         run.close_reason = reason
     session.flush()
-    if was_running:
+    # Guarded on `was_non_terminal`, not `was_running`: a run that fails out
+    # of 'stopping' (stop_timeout) or 'paused' still has in-flight
+    # `processing` items to abort and still deserves a failure issue. The
+    # narrower `was_running` check silently skipped both for those runs,
+    # which is why the dashboard reaper used to hand-roll this body.
+    # Both callees are idempotent (`done_at IS NULL` clause /
+    # already-has-one skip), so the broadened guard can't double-apply.
+    if was_non_terminal:
         abort_processing_scrape_url_items(session, run_id)
-    if was_running and status == "failed":
+    if was_non_terminal and status == "failed":
         record_scrape_run_failed_issue(session, run, reason or "finished_failed")
     if was_non_terminal and status in ("completed", "failed"):
         terminal_event = (
@@ -1327,7 +1333,6 @@ def mark_stale_runs_failed(
     phase: str,
     reason: str = "stale_pre_scan",
 ) -> int:
-    now = datetime.now(UTC)
     stmt = select(ScrapeRun).where(
         ScrapeRun.shop_id == shop_id,
         ScrapeRun.phase == phase,
@@ -1335,24 +1340,7 @@ def mark_stale_runs_failed(
     )
     stale = list(session.execute(stmt).scalars().all())
     for run in stale:
-        run.status = "failed"
-        run.finished_at = now
-        if run.close_reason is None:
-            run.close_reason = reason
-        record_scrape_run_failed_issue(session, run, reason)
-        abort_processing_scrape_url_items(session, run.id)
-        emit_scrape_run_event(
-            session,
-            run.id,
-            run_event_types.FAILED,
-            payload={
-                "close_reason": reason,
-                "urls_processed": run.urls_processed,
-                "error_count": run.error_count,
-            },
-            actor=run_event_types.ACTOR_SYSTEM,
-        )
-        logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
+        finish_scrape_run(session, run.id, "failed", reason=reason)
     session.flush()
     return len(stale)
 
@@ -1413,7 +1401,6 @@ def mark_orphan_runs_failed(
     Returns a list of (run_id, shop_name, phase) tuples for the caller
     to optionally spawn automatic restarts.
     """
-    now = datetime.now(UTC)
     stmt = (
         select(ScrapeRun)
         .where(ScrapeRun.status == "running")
@@ -1422,26 +1409,11 @@ def mark_orphan_runs_failed(
     orphans = list(session.execute(stmt).scalars().all())
     orphan_info: list[tuple[int, str, str]] = []
     for run in orphans:
-        run.status = "failed"
-        run.finished_at = now
-        run.resumable_after_failure = True
-        if run.close_reason is None:
-            run.close_reason = "orphan_on_boot"
-        record_scrape_run_failed_issue(session, run, "orphan_on_boot")
-        abort_processing_scrape_url_items(session, run.id)
-        emit_scrape_run_event(
-            session,
-            run.id,
-            run_event_types.FAILED,
-            payload={
-                "close_reason": "orphan_on_boot",
-                "urls_processed": run.urls_processed,
-                "error_count": run.error_count,
-            },
-            actor=run_event_types.ACTOR_SYSTEM,
-        )
+        # Capture identity before the transition — the caller uses it to
+        # spawn restarts, and `run.shop` is eager-loaded here.
         orphan_info.append((run.id, run.shop.name, run.phase))
-        logger.info("scrape_run %d -> failed (reason=orphan_on_boot)", run.id)
+        finish_scrape_run(session, run.id, "failed", reason="orphan_on_boot")
+        run.resumable_after_failure = True
     session.flush()
     return orphan_info
 

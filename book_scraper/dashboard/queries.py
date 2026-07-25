@@ -340,11 +340,8 @@ def mark_stale_runs(session: Session) -> list[dict[str, Any]]:
     reaper logs one WARNING per dict so the postmortem trail names what
     it killed.
     """
-    from book_scraper.db import scrape_run_events as run_event_types
     from book_scraper.db.repo import (
-        abort_processing_scrape_url_items,
-        emit_scrape_run_event,
-        record_scrape_run_failed_issue,
+        finish_scrape_run,
         sweep_orphaned_processing_items,
     )
 
@@ -361,25 +358,16 @@ def mark_stale_runs(session: Session) -> list[dict[str, Any]]:
         last_activity = run.last_heartbeat or run.started_at
         if last_activity and last_activity < cutoff:
             reason = "stop_timeout" if run.status == "stopping" else "heartbeat_timeout"
-            run.status = "failed"
-            run.finished_at = datetime.now(UTC)
+            # One shared fail transition (status, finished_at, close_reason,
+            # failure issue, processing-item abort, FAILED event, log line).
+            # This body used to be hand-rolled here and had drifted from the
+            # two copies in repo.py; it only handled 'stopping' runs correctly
+            # because of the explicit abort call, which finish_scrape_run now
+            # covers via its was_non_terminal guard.
+            finish_scrape_run(session, run.id, "failed", reason=reason)
+            # Reaped runs still own valid pending items, so the next scheduled
+            # run should adopt them (see find_resumable_run).
             run.resumable_after_failure = True
-            # close_reason is stamped inside record_scrape_run_failed_issue
-            # (first writer wins), keeping the reason on the run row itself.
-            record_scrape_run_failed_issue(session, run, reason)
-            abort_processing_scrape_url_items(session, run.id)
-            emit_scrape_run_event(
-                session,
-                run.id,
-                run_event_types.FAILED,
-                payload={
-                    "close_reason": reason,
-                    "urls_processed": run.urls_processed,
-                    "error_count": run.error_count,
-                },
-                actor=run_event_types.ACTOR_SYSTEM,
-            )
-            logger.info("scrape_run %d -> failed (reason=%s)", run.id, reason)
             killed.append({
                 "run_id": run.id,
                 "shop": run.shop.name if run.shop else "<unknown>",
