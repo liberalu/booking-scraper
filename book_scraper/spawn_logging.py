@@ -54,6 +54,21 @@ SPAWN_LOG_DIR = Path("/var/log/scrapy_runs")
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
 
 
+def spawn_paths() -> tuple[str, str]:
+    """Return ``(scrapy_bin, project_root)`` for spawning detached crawls.
+
+    Derived at runtime from the current interpreter and package location
+    so spawns work both in the container (``/app``) and in local
+    checkouts — a hardcoded ``/app`` broke stall auto-resume for
+    locally-launched crawls (FileNotFoundError, 2026-07-18).
+    """
+    import sys
+
+    scrapy_bin = str(Path(sys.executable).with_name("scrapy"))
+    project_root = str(Path(__file__).resolve().parent.parent)
+    return scrapy_bin, project_root
+
+
 def _slug(value: str) -> str:
     return _SLUG_RE.sub("_", value.lower()).strip("_") or "unknown"
 

@@ -45,7 +45,7 @@ def _spawn_restart(shop: str, phase: str) -> None:
     streams to DEVNULL — any crash before the first heartbeat tick was invisible
     (same bug-class as run #427 and patogupirkti runs 363–366).
     """
-    from book_scraper.spawn_logging import open_spawn_log
+    from book_scraper.spawn_logging import open_spawn_log, spawn_paths
 
     if phase.startswith("discover_"):
         crawl_phase = "discover"
@@ -54,18 +54,19 @@ def _spawn_restart(shop: str, phase: str) -> None:
         crawl_phase = phase
         strategy = ""
 
-    cmd = ["/app/.venv/bin/scrapy", "crawl", crawl_phase, "-a", f"shop={shop}"]
+    scrapy_bin, project_root = spawn_paths()
+    cmd = [scrapy_bin, "crawl", crawl_phase, "-a", f"shop={shop}"]
     if crawl_phase == "discover" and strategy:
         cmd.extend(["-a", f"strategy={strategy}"])
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = "/app"
+    env["PYTHONPATH"] = project_root
 
     log_fd, log_path = open_spawn_log("reconcile-restart", shop)
     try:
         subprocess.Popen(
             cmd,
-            cwd="/app",
+            cwd=project_root,
             env=env,
             stdout=log_fd,
             stderr=subprocess.STDOUT,

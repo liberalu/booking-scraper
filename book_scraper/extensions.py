@@ -358,8 +358,11 @@ class StallDetector:  # pragma: no cover
             )
             return
 
+        from book_scraper.spawn_logging import open_spawn_log, spawn_paths
+
+        scrapy_bin, project_root = spawn_paths()
         cmd_parts = [
-            "/app/.venv/bin/scrapy",
+            scrapy_bin,
             "crawl",
             spider_name,
             "-a",
@@ -370,16 +373,14 @@ class StallDetector:  # pragma: no cover
         cmd = " ".join(shlex.quote(p) for p in cmd_parts)
 
         env = os.environ.copy()
-        env.setdefault("PYTHONPATH", "/app")
-
-        from book_scraper.spawn_logging import open_spawn_log
+        env.setdefault("PYTHONPATH", project_root)
 
         log_fd, log_path = open_spawn_log("stall-resume", shop)
         try:
             try:
                 subprocess.Popen(
                     cmd_parts,
-                    cwd="/app",
+                    cwd=project_root,
                     env=env,
                     stdout=log_fd,
                     stderr=subprocess.STDOUT,
@@ -828,7 +829,10 @@ class CronChainTrigger:  # pragma: no cover
         import shlex
         import subprocess
 
-        cmd_parts = ["/app/.venv/bin/scrapy", "crawl", phase, "-a", f"shop={shop}"]
+        from book_scraper.spawn_logging import open_spawn_log, spawn_paths
+
+        scrapy_bin, project_root = spawn_paths()
+        cmd_parts = [scrapy_bin, "crawl", phase, "-a", f"shop={shop}"]
         if phase == "discover" and strategy:
             cmd_parts.extend(["-a", f"strategy={strategy}"])
         cmd_parts.extend(["-a", f"cron_job_id={chain_job_id}"])
@@ -836,17 +840,15 @@ class CronChainTrigger:  # pragma: no cover
             cmd_parts.extend(shlex.split(args))
 
         env = os.environ.copy()
-        env.setdefault("PYTHONPATH", "/app")
+        env.setdefault("PYTHONPATH", project_root)
         cmd_str = " ".join(shlex.quote(p) for p in cmd_parts)
-
-        from book_scraper.spawn_logging import open_spawn_log
 
         log_fd, log_path = open_spawn_log("cron-chain", shop)
         try:
             try:
                 subprocess.Popen(
                     cmd_parts,
-                    cwd="/app",
+                    cwd=project_root,
                     env=env,
                     stdout=log_fd,
                     stderr=subprocess.STDOUT,
