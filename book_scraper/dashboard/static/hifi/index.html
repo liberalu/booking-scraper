@@ -33,7 +33,6 @@
 <script type="text/babel" src="/static/hifi/hf-details.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-more-details.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-overlays.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-parser.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-issues.jsx"></script>
 <script type="text/babel" src="/static/hifi/hf-issue-detail.jsx"></script>
 <script type="text/babel">
@@ -56,7 +55,7 @@ const URL_BUILDERS = {
   'book-detail':      (p) => `/books/${encodeURIComponent(p?.id ?? '')}`,
   'shop-books':       () => '/shop-books',
   'shop-book-detail': (p) => `/shop-books/${encodeURIComponent(p?.id ?? '')}`,
-  'urls':             () => '/urls',
+  'urls':             (p) => p?.q ? `/urls?q=${encodeURIComponent(p.q)}` : '/urls',
   'url-detail':       (p) => `/urls/${encodeURIComponent(p?.id ?? '')}`,
   'shops':            () => '/shops',
   'shop-detail':      (p) => `/shops/${encodeURIComponent(p?.name ?? '')}`,
@@ -65,19 +64,22 @@ const URL_BUILDERS = {
   'issues':           () => '/issues',
   'issue-detail':     (p) => `/issues/${encodeURIComponent(p?.id ?? '')}`,
   'prices':           () => '/prices',
-  'parser':           () => '/parser',
 };
 
-function parsePath(pathname) {
+function parsePath(pathname, search) {
   const parts = pathname.split('/').filter(Boolean);
-  if (parts.length === 0) return { page: 'overview', params: {} };
+  const qp = {};
+  if (search) {
+    new URLSearchParams(search).forEach((v, k) => { qp[k] = v; });
+  }
+  if (parts.length === 0) return { page: 'overview', params: qp };
   const head = parts[0];
   const rest = parts.slice(1).map(decodeURIComponent);
   if (rest.length > 0 && DETAIL_BY_HEAD[head]) {
     const m = DETAIL_BY_HEAD[head];
-    return { page: m.page, params: { [m.param]: rest.join('/') } };
+    return { page: m.page, params: { [m.param]: rest.join('/'), ...qp } };
   }
-  return { page: head, params: {} };
+  return { page: head, params: qp };
 }
 
 function buildPath(page, params) {
@@ -87,7 +89,7 @@ function buildPath(page, params) {
 window.HF_BUILD_PATH = buildPath;
 
 function App() {
-  const initial = parsePath(window.location.pathname);
+  const initial = parsePath(window.location.pathname, window.location.search);
   const [page, setPage] = React.useState(initial.page);
   const [params, setParams] = React.useState(initial.params);
   const [collapsed, setCollapsed] = React.useState(false);
@@ -117,7 +119,7 @@ function App() {
 
   React.useEffect(() => {
     const onPop = () => {
-      const p = parsePath(window.location.pathname);
+      const p = parsePath(window.location.pathname, window.location.search);
       setPage(p.page);
       setParams(p.params);
     };
@@ -168,7 +170,7 @@ function App() {
     'book-detail':      () => <HFBook nav={nav} goto={goto} params={params} />,
     'shop-books':       () => <HFShopBooks nav={nav} goto={goto} />,
     'shop-book-detail': () => <HFShopBookDetail nav={nav} goto={goto} params={params} />,
-    'urls':             () => <HFUrls nav={nav} goto={goto} />,
+    'urls':             () => <HFUrls nav={nav} goto={goto} params={params} />,
     'url-detail':       () => <HFUrlDetail nav={nav} goto={goto} params={params} />,
     'shops':            () => <HFShops nav={nav} goto={goto} />,
     'shop-detail':      () => <HFShopDetail nav={nav} goto={goto} params={params} />,
@@ -177,7 +179,6 @@ function App() {
     'issues':           () => <HFIssues nav={nav} goto={goto} />,
     'issue-detail':     () => <HFIssueDetail nav={nav} goto={goto} params={params} />,
     'prices':           () => <HFPrices nav={nav} goto={goto} />,
-    'parser':           () => <HFParserEditor nav={nav} goto={goto} />,
   };
 
   const renderer = pages[page];

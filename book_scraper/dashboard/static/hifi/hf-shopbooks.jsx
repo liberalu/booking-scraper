@@ -451,8 +451,8 @@ function HFShopBookDetail({ nav, goto, params }) {
       <HFKpiStrip items={[
         { label:'Current price', value: data.price || '—', delta:<span style={{color:'var(--hf-ink3)'}}>in shop</span> },
         { label:'Price records', value: String(priceHistory.length), delta:<span style={{color:'var(--hf-ink3)'}}>{priceChanges.length} changes</span> },
-        { label:'Issues',        value: String(data.issues || 0), delta:<span style={{color: (data.issues||0) > 0 ? 'var(--hf-warn-ink)' : 'var(--hf-ok-ink)'}}>{(data.issues||0) > 0 ? 'needs attention' : 'all clean'}</span>, tone: (data.issues||0) > 0 ? 'warn' : 'ok',
-          ...(data.issues > 0 ? { onClick: () => setTab('issues') } : {}) },
+        { label:'Issues',        value: String(data.issues || 0), delta:<span style={{color: (data.issues||0) > 0 ? 'var(--hf-warn-ink)' : 'var(--hf-ok-ink)'}}>{(data.issues||0) > 0 ? 'needs attention' : issuesList.length > 0 ? 'all resolved' : 'all clean'}</span>, tone: (data.issues||0) > 0 ? 'warn' : 'ok',
+          ...(issuesList.length > 0 ? { onClick: () => setTab('issues') } : {}) },
         { label:'Status',  value: data.status || '—', tone: data.is_active ? 'ok' : 'neutral',
           delta:<span style={{color:'var(--hf-ink3)'}}>{data.is_active ? 'active listing' : `last seen ${data.updated || '—'}`}</span> },
         { label:'Last seen', value: data.updated || '—', delta:<span style={{color:'var(--hf-ink3)'}}>in catalog</span> },
@@ -465,7 +465,7 @@ function HFShopBookDetail({ nav, goto, params }) {
             { id:'details',        label:'Details',        count: 13 + Object.keys(data.attributes||{}).length },
             { id:'prices',         label:'Prices',         count: priceHistory.length || undefined },
             { id:'changes',        label:'Changes',        count: changes.length || undefined },
-            { id:'issues',         label:'Issues',         count: data.issues || undefined },
+            { id:'issues',         label:'Issues',         count: issuesList.length || undefined },
             { id:'classification', label:'Classification' },
             { id:'urls',           label:'URLs',           count: data.url_count || undefined },
             { id:'runs',           label:'Runs',           count: data.run_count || undefined },
@@ -631,22 +631,43 @@ function HFShopBookDetail({ nav, goto, params }) {
       {tab === 'changes' && <HFChangesPanel changes={changes} fmtDate={fmtDate}/>}
 
       {/* ── Issues ── */}
-      {tab === 'issues' && (
-        <HFCard title="Validation issues" sub={`${issuesList.length} recorded`}>
-          {issuesList.length === 0
-            ? <HFEmptyState title="No issues" sub="All fields passed validation." onClear={null}/>
-            : <HFTable
-                columns={[
-                  { key:'issue', label:'Issue', w:'1.2fr', mono:true, sortable:true },
-                  { key:'field', label:'Field', w:'0.7fr', mono:true, sortable:true, cell: v => <span style={{color:'var(--hf-ink3)'}}>{v || '—'}</span> },
-                  { key:'raw_value', label:'Value', w:'1fr', cell: v => <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink2)'}}>{v ?? '—'}</span> },
-                  { key:'severity', label:'Sev.', w:'0.6fr', sortable:true, cell: v => <HFPill tone={sevTone[v]||'neutral'}>{v}</HFPill> },
-                  { key:'lifecycle_state', label:'State', w:'0.8fr', sortable:true, cell: v => <HFPill tone={v==='already_seen'?'muted':'warn'}>{v?.replace('_',' ')}</HFPill> },
-                ]}
-                rows={issuesList}
-              />}
-        </HFCard>
-      )}
+      {tab === 'issues' && (() => {
+        const active   = issuesList.filter(i => i.lifecycle_state !== 'resolved');
+        const resolved = issuesList.filter(i => i.lifecycle_state === 'resolved');
+        const issueRow = (i) => (
+          <div key={i.id}
+            onClick={() => goto('issue-detail', { id: i.id })}
+            style={{
+              padding:`10px var(--hf-card-p)`, display:'grid',
+              gridTemplateColumns:'1.4fr 0.7fr 1fr 0.65fr 0.85fr',
+              gap:8, alignItems:'center', cursor:'pointer',
+              opacity: i.lifecycle_state === 'resolved' ? 0.5 : 1,
+              borderBottom:`1px solid var(--hf-border-faint)`,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background='var(--hf-subtle)'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}
+          >
+            <span style={{fontFamily:'var(--hf-mono)', fontSize:13, color:'var(--hf-ink)', fontWeight:500}}>{i.issue}</span>
+            <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink3)'}}>{i.field || '—'}</span>
+            <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink2)'}}>{i.raw_value ?? '—'}</span>
+            <HFPill tone={sevTone[i.severity]||'neutral'}>{i.severity}</HFPill>
+            <HFPill tone={i.lifecycle_state==='resolved'?'ok':i.lifecycle_state==='acknowledged'?'neutral':'warn'}>
+              {i.lifecycle_state?.replace(/_/g,' ')}
+            </HFPill>
+          </div>
+        );
+        return (
+          <HFCard title="Validation issues" sub={`${active.length} active · ${resolved.length} resolved`}>
+            {issuesList.length === 0
+              ? <HFEmptyState title="No issues" sub="All fields passed validation." onClear={null}/>
+              : <div>
+                  {active.map(issueRow)}
+                  {resolved.map(issueRow)}
+                </div>
+            }
+          </HFCard>
+        );
+      })()}
 
       {/* ── URLs ── */}
       {tab === 'urls' && (

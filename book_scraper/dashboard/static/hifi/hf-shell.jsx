@@ -202,8 +202,6 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           </div>
           <div style={{ flex: 1 }}/>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--hf-ink3)' }}>
-            <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 11, color: 'var(--hf-ink4)' }}>v2.14.0</span>
-            <span style={{ width: 1, height: 18, background: 'var(--hf-border)' }}/>
             <HFButton size="md" variant="primary" onClick={openNewRun}>
               <span style={{ display: 'flex' }}>{HF_ICONS.plus}</span> New run
             </HFButton>

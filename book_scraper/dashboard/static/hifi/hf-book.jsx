@@ -31,12 +31,13 @@ function HFBook({ nav, goto, params }) {
   if (loading) return <div style={{padding:40, color: HF.ink3, fontFamily: HF.sans}}>Loading…</div>;
   if (notFound || !data) return <div style={{padding:40, color: HF.ink3, fontFamily: HF.sans}}>Book not found.</div>;
 
-  const primaryIsbn = data.isbns?.find(i => i.isbn_type === 'isbn13')?.isbn || data.isbns?.[0]?.isbn || '—';
+  const primaryIsbn = data.isbns?.find(i => i.type === 'isbn13')?.isbn || data.isbns?.[0]?.isbn || '—';
 
   const book = {
     title: data.title,
     title_full: data.title_full,
     isbn: primaryIsbn,
+    isbns: data.isbns || [],
     publisher: data.publisher,
     year: data.year,
     pages: data.pages,
@@ -141,7 +142,11 @@ function HFBook({ nav, goto, params }) {
       subtitle={<span style={{fontSize:13, display:'flex', flexDirection:'column', gap:4}}>
         <span>
           by <span style={{color:HF.ink2, fontWeight:500}}>{book.author}</span>
-          {' · '}<span style={{fontFamily:HF.mono, color:HF.ink3}}>ISBN {book.isbn}</span>
+          {' · '}<span style={{fontFamily:HF.mono, color:HF.ink3}}>
+            {book.isbns.length > 1
+              ? book.isbns.map((i, idx) => <span key={i.isbn}>{idx > 0 && <span style={{color:HF.ink5}}> / </span>}<span style={{color: i.type === 'isbn13' ? HF.ink3 : HF.ink4}}>{i.isbn}</span></span>)
+              : book.isbn}
+          </span>
           {' · '}{book.publisher} · {book.year}
           {' · '}<span style={{color:HF.ink3}}>first matched {book.firstMatched}</span>
         </span>
@@ -382,71 +387,99 @@ function HFBookMetadata({ HF, book, shops }) {
   const order = shops.map(s => s.shop);
   return (
     <>
+      <HFIdentifiersCard HF={HF} book={book} shops={shops} order={order}/>
       <HFContributorsCard HF={HF} book={book} shops={shops} order={order}/>
       <HFMetadataMatrix HF={HF} book={book} shops={shops} order={order}/>
     </>
   );
 }
 
-function HFContributorsCard({ HF, book, shops, order }) {
-  // Build per-role rows from canonical contributors. API only exposes a
-  // single shop_author per shop (not per-role), so only the Author row has
-  // per-shop cells; other roles show canonical-only.
-  const contributors = (book.contributors || []).map(c => ({
-    role: c.role,
-    canonical: c.name,
+// Shared grid renderer used by both Identifiers and Contributors cards.
+function HFFieldGrid({ HF, rows, order, shops, labelHeader }) {
+  if (!rows.length) return null;
+  return (
+    <div style={{overflowX:'auto'}} className="hf-scroll">
+      <div style={{minWidth: 200 + order.length*140}}>
+        <div style={{
+          display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
+          padding:`8px ${HF.cardP}px`, alignItems:'center',
+          background:HF.subtle, borderBottom:`1px solid ${HF.border}`,
+          fontSize:11, fontWeight:600, color:HF.ink3, textTransform:'uppercase', letterSpacing:0.5,
+        }}>
+          <span>{labelHeader}</span><span>Canonical</span>
+          {order.map(n => (
+            <span key={n} style={{display:'flex', alignItems:'center', gap:6, textTransform:'none', letterSpacing:0, fontWeight:600, color:HF.ink2, fontSize:11.5}}>
+              <ShopMark name={n} HF={HF}/><span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{n}</span>
+            </span>
+          ))}
+        </div>
+        {rows.map((c, i) => (
+          <div key={c.role} style={{
+            display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
+            padding:`9px ${HF.cardP}px`, alignItems:'center',
+            borderBottom: i < rows.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
+            fontSize:12,
+          }}>
+            <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{c.role}</span>
+            <span style={{color:HF.ink, fontWeight:500, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily: c.mono ? HF.mono : undefined}}>{c.canonical || '—'}</span>
+            {order.map(n => {
+              const v = c.cells[n];
+              if (v == null) return <span key={n} style={{color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>—</span>;
+              const match = c.matchFn(v);
+              if (match === 'conflict') {
+                return <span key={n} title={v} style={{display:'flex', alignItems:'center', gap:6, color:HF.warnInk, fontSize:11.5, minWidth:0, fontFamily: c.mono ? HF.mono : undefined}}>
+                  <span style={{width:14, height:14, borderRadius:3, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0}}>!</span>
+                  <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>
+                </span>;
+              }
+              const color = match === 'exact' ? HF.ink2 : HF.ink4;
+              return <span key={n} style={{color, fontSize:11.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily: c.mono ? HF.mono : undefined}}>{v}</span>;
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HFIdentifiersCard({ HF, book, shops, order }) {
+  if (!book.isbns?.length) return null;
+  const allCanonicalIsbns = new Set(book.isbns.map(i => i.isbn));
+  const rows = book.isbns.map(ci => ({
+    role: ci.type === 'isbn13' ? 'ISBN-13' : ci.type === 'isbn10' ? 'ISBN-10' : ci.type,
+    canonical: ci.isbn,
+    mono: true,
+    matchFn: v => v === ci.isbn ? 'exact' : allCanonicalIsbns.has(v) ? 'equiv' : 'conflict',
     cells: order.reduce((acc, shopName) => {
-      const shopObj = shops.find(s => s.shop === shopName);
-      const shopAuthor = shopObj?.shopAuthor;
-      acc[shopName] = (c.role === 'Author' && shopAuthor) ? shopAuthor : null;
+      acc[shopName] = shops.find(s => s.shop === shopName)?.shopIsbn ?? null;
       return acc;
     }, {}),
   }));
+  return (
+    <HFCard title="Identifiers" sub="canonical ISBNs vs. what each shop reports"
+            style={{marginBottom:HF.gap}} flush>
+      <HFFieldGrid HF={HF} rows={rows} order={order} shops={shops} labelHeader="Type"/>
+    </HFCard>
+  );
+}
 
-  if (!contributors.length) return null;
-
+function HFContributorsCard({ HF, book, shops, order }) {
+  const rows = (book.contributors || []).map(c => ({
+    role: c.role,
+    canonical: c.name,
+    mono: false,
+    matchFn: v => v === c.name ? 'exact' : 'conflict',
+    cells: order.reduce((acc, shopName) => {
+      const shopObj = shops.find(s => s.shop === shopName);
+      acc[shopName] = (c.role === 'Author' && shopObj?.shopAuthor) ? shopObj.shopAuthor : null;
+      return acc;
+    }, {}),
+  }));
+  if (!rows.length) return null;
   return (
     <HFCard title="Contributors" sub="people credited on this book — author, translator, editor, cover artist, illustrator, producer, narrator"
             style={{marginBottom:HF.gap}} flush>
-      <div style={{overflowX:'auto'}} className="hf-scroll">
-        <div style={{minWidth: 200 + order.length*140}}>
-          <div style={{
-            display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
-            padding:`8px ${HF.cardP}px`, alignItems:'center',
-            background:HF.subtle, borderBottom:`1px solid ${HF.border}`,
-            fontSize:11, fontWeight:600, color:HF.ink3, textTransform:'uppercase', letterSpacing:0.5,
-          }}>
-            <span>Role</span><span>Canonical</span>
-            {order.map(n => (
-              <span key={n} style={{display:'flex', alignItems:'center', gap:6, textTransform:'none', letterSpacing:0, fontWeight:600, color:HF.ink2, fontSize:11.5}}>
-                <ShopMark name={n} HF={HF}/><span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{n}</span>
-              </span>
-            ))}
-          </div>
-          {contributors.map((c, i) => (
-            <div key={c.role} style={{
-              display:'grid', gridTemplateColumns:`160px 200px repeat(${order.length}, 1fr)`,
-              padding:`9px ${HF.cardP}px`, alignItems:'center',
-              borderBottom: i < contributors.length-1 ? `1px solid ${HF.borderFaint}` : 'none',
-              fontSize:12,
-            }}>
-              <span style={{color:HF.ink, fontWeight:600, fontSize:12.5}}>{c.role}</span>
-              <span style={{color: (typeof c.canonical === 'string' && c.canonical.startsWith('—')) ? HF.ink4 : HF.ink, fontWeight:500, paddingRight:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.canonical}</span>
-              {order.map(n => {
-                const v = c.cells[n];
-                if (v == null) return <span key={n} style={{color:HF.ink4, fontSize:11.5, fontFamily:HF.mono}}>—</span>;
-                if (typeof v === 'object' && v.conflict) {
-                  return <span key={n} title={v.v} style={{display:'flex', alignItems:'center', gap:6, color:HF.warnInk, fontSize:11.5, minWidth:0}}>
-                    <span style={{width:14, height:14, borderRadius:3, background:HF.warnSoft, border:`1px solid ${HF.warnBorder}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700}}>!</span>
-                    <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v.v}</span>
-                  </span>;
-                }
-                return <span key={n} style={{color: v===c.canonical? HF.ink2 : HF.warnInk, fontSize:11.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{v}</span>;
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
+      <HFFieldGrid HF={HF} rows={rows} order={order} shops={shops} labelHeader="Role"/>
     </HFCard>
   );
 }
@@ -458,7 +491,8 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
   //   { v: '<value>', conflict:true } → shop reported a different value (warning)
   //   { missing:true }              → shop did not provide this field
   const fields = [
-    { field:'ISBN',       canonical: book.isbn,      perShop: s => s.shopIsbn },
+    { field:'ISBN',       canonical: book.isbn,      perShop: s => s.shopIsbn,
+      match: v => book.isbns.length > 0 ? book.isbns.some(i => i.isbn === v) : v === book.isbn },
     { field:'Title',      canonical: book.title,     perShop: s => s.shopTitle },
     { field:'Author',     canonical: book.author,    perShop: s => s.shopAuthor },
     { field:'Year',       canonical: book.year != null ? String(book.year) : null, perShop: s => s.shopYear != null ? String(s.shopYear) : null },
@@ -478,7 +512,7 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
         missing++;
       } else {
         const v = String(raw);
-        const matches = row.canonical != null && v === String(row.canonical);
+        const matches = row.match ? row.match(v) : (row.canonical != null && v === String(row.canonical));
         cells[s.shop] = matches ? { v } : { v, conflict:true };
         provided++;
         if (!matches) conflicts++;

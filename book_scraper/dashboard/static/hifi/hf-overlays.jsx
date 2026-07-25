@@ -310,7 +310,7 @@ function HFCommandK({ open, onClose, goto }) {
     { t:'Add URL',            k:'act', a:'openAddURL',      hint:'enqueue a page' },
     { t:'Add shop',           k:'act', a:'openAddShop',     hint:'new scrape target' },
     { t:'Add book',           k:'act', a:'openAddBook',     hint:'manual entry' },
-    { t:'Edit parser…',       k:'act', a:'openParserPick',  hint:'DOM selectors' },
+    { t:'Open shop…',         k:'act', a:'openParserPick',  hint:'pick shop to view' },
     { t:'Open settings',      k:'act', a:'openSettings',    hint:'preferences' },
   ];
   const quick = [
@@ -938,7 +938,7 @@ function HFAddShopDialog({ open, onClose, goto }) {
 
   return (
     <HFModal open={open} onClose={onClose} width={520}>
-      <HFModalHead title="Add shop" sub="A new scrape target. You'll configure the parser next." onClose={onClose} icon={HF_ICONS.shops}/>
+      <HFModalHead title="Add shop" sub="A new scrape target." onClose={onClose} icon={HF_ICONS.shops}/>
       <HFModalBody>
         <HFField label="Shop name" required>
           <HFInput value={name} onChange={setName} placeholder="vaga.lt" autoFocus/>
@@ -964,13 +964,13 @@ function HFAddShopDialog({ open, onClose, goto }) {
           fontSize: 12, color: 'var(--hf-accent-ink)', display: 'flex', gap: 8, alignItems: 'flex-start',
         }}>
           <span style={{ marginTop: 1 }}>{HF_ICONS.bang}</span>
-          <span>After creating, you'll be taken to the parser editor to set up selectors.</span>
+          <span>After creating, you'll be taken to the shop detail page.</span>
         </div>
       </HFModalBody>
       <HFModalFoot>
         <HFButton onClick={onClose}>Cancel</HFButton>
-        <HFButton variant="primary" onClick={() => { onClose(); goto('parser', { shop: name || 'new-shop' }); }} disabled={!name || !domain}>
-          Create & configure parser
+        <HFButton variant="primary" onClick={() => { onClose(); goto('shop-detail', { name: name || '' }); }} disabled={!name || !domain}>
+          Create shop
         </HFButton>
       </HFModalFoot>
     </HFModal>
@@ -1103,33 +1103,37 @@ function HFAddBookDialog({ open, onClose }) {
   );
 }
 
-// ══════════════════════════════ Parser picker (for cmd+K "Edit parser…") ═══════
+// ══════════════════════════════ Shop picker (for cmd+K "Open shop…") ═══════
 function HFParserPicker({ open, onClose, goto }) {
   const HF = getHF();
-  const shops = [
-    { v:'vaga',    lbl:'vaga.lt',        parser:'product.v3', health:99.8 },
-    { v:'knygos',  lbl:'knygos.lt',      parser:'product.v2', health:96.4 },
-    { v:'patogupirkti', lbl:'patogupirkti.lt', parser:'product.v4', health:82.1 },
-    { v:'humanitas', lbl:'humanitas.lt', parser:'product.v1', health:71.2 },
-  ];
+  const [shops, setShops] = React.useState([]);
+  React.useEffect(() => {
+    if (!open) return;
+    fetch('/api/shops')
+      .then(r => r.json())
+      .then(d => setShops(d.shops || []))
+      .catch(() => {});
+  }, [open]);
   return (
     <HFModal open={open} onClose={onClose} width={480}>
-      <HFModalHead title="Edit parser — pick a shop" onClose={onClose} icon={HF_ICONS.settings}/>
+      <HFModalHead title="Open shop" onClose={onClose} icon={HF_ICONS.settings}/>
       <HFModalBody style={{ padding: 8 }}>
+        {shops.length === 0 && <div style={{padding:'20px', color:'var(--hf-ink4)', fontSize:13, textAlign:'center'}}>Loading…</div>}
         {shops.map(s => {
-          const tone = s.health >= 95 ? 'var(--hf-ok-ink)' : s.health >= 85 ? 'var(--hf-warn-ink)' : 'var(--hf-err-ink)';
+          const sTone = s.last_run_status === 'completed' ? 'var(--hf-ok-ink)' : s.last_run_status === 'failed' ? 'var(--hf-err-ink)' : 'var(--hf-ink4)';
+          const sStatus = s.last_run_status === 'completed' ? 'healthy' : s.last_run_status === 'failed' ? 'failing' : s.last_run_status || '—';
           return (
-            <div key={s.v} onClick={() => { onClose(); goto('parser', { shop: s.v }); }} style={{
+            <div key={s.name} onClick={() => { onClose(); goto('shop-detail', { name: s.name }); }} style={{
               padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 12,
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hf-subtle)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--hf-ink)' }}>{s.lbl}</div>
-                <div style={{ fontSize: 12, color: 'var(--hf-ink3)', fontFamily: 'var(--hf-mono)', marginTop: 2 }}>{s.parser}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--hf-ink)' }}>{s.name}.lt</div>
+                <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 2 }}>{(s.books||0).toLocaleString()} books · last run {s.last_run_ago || '—'}</div>
               </div>
-              <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 12, color: tone, fontVariantNumeric: 'tabular-nums' }}>{s.health}%</span>
+              <span style={{ fontFamily: 'var(--hf-mono)', fontSize: 12, color: sTone, fontVariantNumeric: 'tabular-nums' }}>{sStatus}</span>
               <span style={{ color: 'var(--hf-ink4)', display: 'flex' }}>{HF_ICONS.arrow}</span>
             </div>
           );
