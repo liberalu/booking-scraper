@@ -1,4 +1,5 @@
 import logging  # pragma: no cover
+import os  # pragma: no cover
 import time  # pragma: no cover
 from typing import Any  # pragma: no cover
 
@@ -865,5 +866,206 @@ class CronChainTrigger:  # pragma: no cover
             self._cron_job_id or -1,
             cmd_str,
             chain_job_id,
+            log_path,
+        )
+
+
+class PostPhaseAutoTrigger:  # pragma: no cover
+    """After a successful scan OR discover run, automatically run match
+    step 1 (ISBN-match SQL) inline and spawn a validate subprocess for
+    the same shop.
+
+    Rationale (2026-05-18 cleanup):
+    - Match step 1 (ISBN match) is a single fast SQL UPDATE. Running it
+      after every data-producing phase closes the gap where a new
+      shop_book with a known ISBN sits unmatched until the next
+      scheduled match run.
+    - Validate after every data-producing phase picks up data-quality
+      changes immediately and clears stale issues (via
+      `resolve_gone_issues`). Without this, operators had to remember
+      to trigger validate manually after scans — easy to forget, and
+      stale issues piled up.
+
+    Both `scan` and `discover` are hooked because some shops produce
+    shop_books in the discover phase too (pegasas GraphQL/LupaSearch,
+    ibiblioteka detail API, etc.). The scan phase is a no-op for those
+    shops, so a scan-only trigger would silently miss them.
+
+    Disabled via env var ``POST_PHASE_AUTO_TRIGGER=0`` if needed.
+
+    Skipped when:
+    - The run closed with a reason other than "finished" (failures and
+      stalls don't propagate noise).
+    - The spider's ``cron_job_id`` points to a job whose
+      ``chain_to_job_id`` already targets match or validate — we yield
+      to the cron chain rather than double-firing.
+    """
+
+    _TRIGGERING_PHASES: tuple[str, ...] = ("scan", "discover")
+    _SPAWN_CONTEXT = "post-phase-auto"
+
+    def __init__(self, crawler: Crawler) -> None:
+        self.crawler = crawler
+        # Honour both the new env var and the legacy POST_SCAN_AUTO_TRIGGER
+        # value for backward compatibility (so existing deploys with the
+        # old env name keep working).
+        raw = (
+            os.environ.get("POST_PHASE_AUTO_TRIGGER")
+            or os.environ.get("POST_SCAN_AUTO_TRIGGER")
+            or "1"
+        )
+        self._enabled = raw.lower() in ("1", "true", "yes", "on")
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> "PostPhaseAutoTrigger":
+        ext = cls(crawler)
+        crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
+        return ext
+
+    def spider_closed(self, spider: Any, reason: str) -> None:
+        phase = getattr(spider, "name", "")
+        if phase not in self._TRIGGERING_PHASES:
+            return
+        if not self._enabled:
+            logger.info("PostPhaseAutoTrigger: disabled via env, skipping.")
+            return
+        if reason != "finished":
+            logger.info(
+                "PostPhaseAutoTrigger: %s closed (reason=%s), skipping chain",
+                phase,
+                reason,
+            )
+            return
+        shop_name = getattr(spider, "shop_name", None)
+        if not shop_name:
+            return
+
+        # Yield to cron chain if one already targets match or validate.
+        if self._cron_chain_will_handle(spider):
+            logger.info(
+                "PostPhaseAutoTrigger: %s run in cron chain → match/validate; "
+                "skipping inline auto-trigger to avoid duplicate runs.",
+                phase,
+            )
+            return
+
+        # Step 1: run ISBN-match SQL inline. Fast single UPDATE — no need
+        # to spawn the whole match spider.
+        try:
+            updates = self._run_isbn_match_inline(shop_name)
+            logger.info(
+                "PostPhaseAutoTrigger: ISBN-match linked %d shop_books for %s "
+                "(after %s)",
+                updates,
+                shop_name,
+                phase,
+            )
+        except Exception:
+            logger.exception(
+                "PostPhaseAutoTrigger: ISBN-match SQL failed for %s", shop_name
+            )
+
+        # Step 2: spawn validate subprocess for the same shop.
+        self._spawn_validate(shop_name)
+
+    def _cron_chain_will_handle(self, spider: Any) -> bool:
+        """Return True iff this scan run is part of a cron chain that
+        already targets a match or validate run — in which case we
+        defer to the cron chain rather than firing again."""
+        cron_job_id = getattr(spider, "cron_job_id", None)
+        if not cron_job_id:
+            return False
+        try:
+            cron_job_id = int(cron_job_id)
+        except (TypeError, ValueError):
+            return False
+
+        from book_scraper.db.models import CronJob
+        from book_scraper.db.session import get_session_factory
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if not database_url:
+            return False
+        try:
+            session = get_session_factory(database_url)()
+            try:
+                this_job = session.get(CronJob, cron_job_id)
+                if this_job is None or not this_job.chain_to_job_id:
+                    return False
+                chain_job = session.get(CronJob, this_job.chain_to_job_id)
+                return chain_job is not None and chain_job.phase in (
+                    "match", "validate",
+                )
+            finally:
+                session.close()
+        except Exception:
+            logger.exception(
+                "PostPhaseAutoTrigger: cron-chain check failed for cron_job_id=%d",
+                cron_job_id,
+            )
+            return False
+
+    def _run_isbn_match_inline(self, shop_name: str) -> int:
+        """Run match step 1 (ISBN-match SQL) inline in a fresh session.
+
+        Just the SQL — no spider, no separate run row, no scrape_runs
+        entry. Author backfill (step 2) is skipped here too; the next
+        scheduled match phase handles it.
+        """
+        from book_scraper.db.session import get_session_factory
+
+        database_url = self.crawler.settings.get("DATABASE_URL")
+        if not database_url:
+            return 0
+        session = get_session_factory(database_url)()
+        try:
+            from book_scraper.services.match import MatchService
+
+            n = MatchService(session)._step1_isbn_match(shop_name)
+            session.commit()
+            return n
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def _spawn_validate(self, shop_name: str) -> None:
+        """Fire-and-forget a validate run for the given shop."""
+        import shlex
+        import subprocess
+
+        from book_scraper.spawn_logging import open_spawn_log, spawn_paths
+
+        scrapy_bin, project_root = spawn_paths()
+        cmd_parts = [
+            scrapy_bin, "crawl", "validate", "-a", f"shop={shop_name}",
+        ]
+        env = os.environ.copy()
+        env.setdefault("PYTHONPATH", project_root)
+        cmd_str = " ".join(shlex.quote(p) for p in cmd_parts)
+
+        log_fd, log_path = open_spawn_log(self._SPAWN_CONTEXT, shop_name)
+        try:
+            try:
+                subprocess.Popen(
+                    cmd_parts,
+                    cwd=project_root,
+                    env=env,
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception:
+                logger.exception(
+                    "PostPhaseAutoTrigger: failed to spawn validate (%s)", cmd_str
+                )
+                return
+        finally:
+            log_fd.close()
+        logger.info(
+            "PostPhaseAutoTrigger: spawned validate for %s (log=%s)",
+            shop_name,
             log_path,
         )
