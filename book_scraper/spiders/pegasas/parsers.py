@@ -19,13 +19,16 @@ from __future__ import annotations
 import html as html_module
 import json
 import re
+import unicodedata
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
 from book_scraper.book_types import BOOK_LIKE_TYPES, BookType
+from book_scraper.isbn import is_valid_isbn, to_isbn13
 from book_scraper.spiders.cover_type import format_from_cover_type
 from book_scraper.spiders.graphql_urls import _PRODUCT_FIELDS
 from book_scraper.spiders.parser_types import CategoryPageResult, ProductPageResult
+from book_scraper.spiders.pegasas.category_names import CATEGORY_NAMES
 
 _BASE_URL = "https://www.pegasas.lt"
 
@@ -73,16 +76,69 @@ _EBOOK_CATEGORY_IDS: frozenset[int] = frozenset({6122})
 
 
 def derive_book_type(
-    is_book: object, is_audio_book: object, is_ebook: object = None
+    is_book: object,
+    is_audio_book: object,
+    is_ebook: object = None,
+    has_book_category: bool = False,
 ) -> BookType:
-    """Map Magento/LupaSearch boolean-ish flags to our `type` field."""
+    """Map Magento/LupaSearch boolean-ish flags to our `type` field.
+
+    `has_book_category` is a fallback: pegasas's Magento `is_book`
+    flag is unreliable for a subset of products (educational textbooks,
+    illustrated children's books, certain new releases) — the API
+    returns `is_book=False` even though category membership clearly
+    marks them as books. When the caller has positive category-name
+    evidence ("Knygos", "Grožinė literatūra", "Mokomoji literatūra",
+    etc.), the fallback overrides the Magento flag and returns `book`.
+    """
     if bool(is_audio_book):
         return "audio"
     if bool(is_ebook):
         return "ebook"
     if bool(is_book):
         return "book"
+    if has_book_category:
+        return "book"
     return "non_book"
+
+
+# Category-name substring keywords that signal "this is a book" —
+# used as the `has_book_category` fallback when Magento's `is_book`
+# flag is False. Diacritic-stripped + lower-cased substring match
+# means any category whose name contains one of these (in any case,
+# with or without LT diacritics, anywhere in the string) flips the
+# type to `book`.
+#
+# `in` rather than `startswith` so "Mokslo literatūra" and "Mokomoji
+# literatūra" match via "literat" — the second word in those names —
+# the same way "Grožinė literatūra" matches via "groz" + "literat".
+# Pegasas's full category catalogue (1,170 names) contains no false
+# positives for these substrings: no cosmetics / toys / stationery
+# happens to share these prefixes.
+_BOOK_CATEGORY_SUBSTRINGS: tuple[str, ...] = (
+    "knyg",      # Knygos, Knygelės, Knygos vaikams, ...
+    "groz",      # Grožinė literatūra
+    "literat",   # Mokslo literatūra, Mokomoji literatūra, Literatūra, ...
+    "vadovel",   # Vadovėliai (textbooks)
+    "pratyb",    # Pratybos (workbooks)
+)
+
+
+def _categories_indicate_book(categories: list[str] | None) -> bool:
+    """True iff any category name contains a book-signalling substring
+    after diacritic stripping (see `_BOOK_CATEGORY_SUBSTRINGS`)."""
+    if not categories:
+        return False
+    nfd = unicodedata.normalize
+    for cat in categories:
+        if not isinstance(cat, str):
+            continue
+        stripped = "".join(
+            c for c in nfd("NFD", cat.lower()) if unicodedata.category(c) != "Mn"
+        )
+        if any(sub in stripped for sub in _BOOK_CATEGORY_SUBSTRINGS):
+            return True
+    return False
 
 
 def _fmt_from_book_type(book_type: BookType, cover_type: str | None) -> str | None:
@@ -138,24 +194,32 @@ def _parse_int(value: object) -> int | None:
 
 
 def _coerce_isbn(value: object) -> str | None:
-    """Return the value only if it's a plausible ISBN-13.
+    """Return an ISBN-13 string from the raw field value, or None.
 
-    pegasas's Magento `EAN kodas` field carries non-book GTIN-13 codes
-    too (sticker kits, puzzles, etc., often prefixed `40100706...`).
-    Bookland (and therefore ISBN-13) only uses the 978/979 EAN
-    prefixes, so we use that as the gate. Returns None for anything
-    else; downstream code keeps the raw EAN in `properties.ean`.
+    Accepts:
+    - Valid ISBN-13 (13 digits, 978/979 prefix, correct check digit)
+    - Valid ISBN-10 (10 digits, correct check digit) → converted to ISBN-13
+    - ISBN-10 with wrong check digit — recovered by stripping the bad
+      check digit, prepending '978', and recomputing the correct ISBN-13
+      check digit (e.g. pegasas stores 9955082484 whose correct ISBN-13
+      is 9789955082484)
+
+    pegasas's Magento `EAN kodas` also carries non-book GTIN-13 codes
+    (puzzles, sticker kits, prefixed 40100706…).  Only 978/979 prefixes
+    are Bookland / ISBN-13 space, so we reject anything else.
+    All output is normalised to ISBN-13.
     """
     if not isinstance(value, str):
         return None
     digits = value.replace("-", "").replace(" ", "").strip()
-    # ISBN-13: exactly 13 digits, starts with 978 or 979. ISBN-10 is
-    # accepted too (10 digits, last char may be 'X') — converting it
-    # to a tagged ISBN form is out of scope here.
-    if len(digits) == 13 and digits.isdigit() and digits[:3] in ("978", "979"):
-        return digits
-    if len(digits) == 10 and (digits[:9].isdigit() and digits[9] in "0123456789Xx"):
-        return digits.upper()
+    # Valid ISBN-13 or valid ISBN-10 → convert/return as ISBN-13.
+    if is_valid_isbn(digits):
+        return to_isbn13(digits)
+    # ISBN-10 with wrong check digit: recover by converting the 9-digit
+    # core to ISBN-13 (to_isbn13 uses a format-only regex so it accepts
+    # an ISBN-10 regardless of whether the check digit is correct).
+    if len(digits) == 10 and digits[:9].isdigit():
+        return to_isbn13(digits)
     return None
 
 
@@ -275,12 +339,17 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
     description = _flatten_anotacija(item.get("anotacija"))
 
     # Type — Magento exposes is_book/is_audio_book but no is_ebook flag,
-    # so infer e-book status from category membership (6122).
+    # so infer e-book status from category membership (6122). Pass
+    # `has_book_category` so the type-derivation falls back to category
+    # evidence when Magento's `is_book` is False but the categories
+    # clearly mark it as a book (real cases: 11 pegasas products on
+    # 2026-05-19 — see commit P).
     is_ebook = any(cid in _EBOOK_CATEGORY_IDS for cid in category_ids)
     book_type = derive_book_type(
         item.get("is_book"),
         item.get("is_audio_book"),
         is_ebook=is_ebook,
+        has_book_category=_categories_indicate_book(category_names),
     )
 
     # Stock
@@ -327,9 +396,44 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
         # for sticker kits, puzzles). Only accept 978/979-prefixed
         # 13-digit codes as ISBN (the Bookland prefixes); keep the raw
         # EAN separately in `properties.ean` for completeness.
+        #
+        # Two real-world data-quality patterns to disambiguate:
+        #
+        # 1. "Rikiki skalbia" — ISBN field has a typo'd ISBN-10
+        #    (9986028368, bad check digit), EAN field has the real
+        #    ISBN-13 (9789986028383). Both share the publisher prefix
+        #    `978-9986-02`, so the EAN is the corrected ISBN and we
+        #    should trust it over the recovered-from-typo value.
+        #
+        # 2. "Dina gėdytojos duktė" — ISBN field has a typo'd ISBN-10
+        #    (9955082484), EAN field has a completely unrelated valid
+        #    ISBN-13 (9789955232407 — a different book). The publisher
+        #    prefixes diverge after 4 digits (978-9955-{08 vs 23}…), so
+        #    EAN is unrelated and we recover from the ISBN-10 core.
+        #
+        # Rule: when both fields are populated and the ISBN field needs
+        # recovery, prefer EAN only if the leading 9 digits (Bookland +
+        # group + publisher) match — same publisher means same book.
         raw_isbn = _clean(labels.get(_LABEL_ISBN))
         raw_ean = _clean(labels.get(_LABEL_EAN))
-        isbn = _coerce_isbn(raw_isbn) or _coerce_isbn(raw_ean)
+
+        def _strict(v: str | None) -> str | None:
+            if not isinstance(v, str):
+                return None
+            digits = v.replace("-", "").replace(" ", "").strip()
+            return to_isbn13(digits) if is_valid_isbn(digits) else None
+
+        isbn_strict = _strict(raw_isbn)
+        ean_strict = _strict(raw_ean)
+        isbn_recovered = _coerce_isbn(raw_isbn)
+        if isbn_strict:
+            isbn = isbn_strict  # ISBN field is strictly valid — use as-is
+        elif ean_strict and isbn_recovered and isbn_recovered[:9] == ean_strict[:9]:
+            isbn = ean_strict  # Rikiki case: same publisher, EAN is the truth
+        elif isbn_recovered:
+            isbn = isbn_recovered  # Dina case: EAN unrelated, recover from ISBN-10
+        else:
+            isbn = ean_strict or _coerce_isbn(raw_ean)
         # Keep EAN if it's a real GTIN-13 and differs from the ISBN.
         ean = raw_ean if raw_ean and raw_ean != isbn else None
 
@@ -372,7 +476,11 @@ def _graphql_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
 
     # Properties dict for format-specific extras
     properties: dict[str, object] = {}
-    if pages is not None:
+    # Audiobooks must not carry pages — Magento sometimes populates
+    # numberOfPages with the print edition's page count, which leaks
+    # through both the product_page_attributes and structured_data
+    # fallback. Duration is the correct metric for audio.
+    if pages is not None and book_type != "audio":
         properties["pages"] = pages
     if narrator_str:
         properties["narrator"] = narrator_str
@@ -488,15 +596,32 @@ def _lupasearch_item_to_product(item: dict[str, Any]) -> dict[str, Any] | None:
     cover_list = item.get("virselio_tipas") or []
     cover_type = cover_list[0] if cover_list else None
 
-    # Type — LupaSearch exposes ebook flag as well
+    # Categories — LupaSearch only exposes numeric IDs. Resolve through
+    # the static `CATEGORY_NAMES` mapping (~1,170 entries fetched once
+    # via the Magento `categoryList` GraphQL — see
+    # `category_names.py`) so the downstream
+    # `_categories_indicate_non_book` validator keyword check works on
+    # these rows the same as it does on the GraphQL-discover ones.
+    # Falls back to the stringified ID when an ID isn't in the map
+    # (new pegasas categories — refresh `category_names.py`).
+    cat_ids = item.get("category_ids") or []
+    categories = [
+        CATEGORY_NAMES.get(int(cid), str(cid))
+        for cid in cat_ids
+        if isinstance(cid, int)
+    ]
+
+    # Type — LupaSearch exposes is_book/is_audio_book/is_ebook. Pass
+    # `has_book_category` for the same reason as the GraphQL parser:
+    # Magento's `is_book` is unreliable for educational textbooks and
+    # certain children's books; category evidence overrides.
     book_type = derive_book_type(
-        item.get("is_book"), item.get("is_audio_book"), item.get("is_ebook")
+        item.get("is_book"),
+        item.get("is_audio_book"),
+        item.get("is_ebook"),
+        has_book_category=_categories_indicate_book(categories),
     )
     fmt = _fmt_from_book_type(book_type, cover_type)
-
-    # Categories — numeric ids; stringify for downstream consistency
-    cat_ids = item.get("category_ids") or []
-    categories = [str(cid) for cid in cat_ids]
 
     # Description
     description = _flatten_anotacija(item.get("anotacija"))

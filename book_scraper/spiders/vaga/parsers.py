@@ -35,13 +35,14 @@ _BOOK_CATEGORY_LABELS = (
     "knygos anglų kalba",
     "audioknygos",
 )
-_NON_BOOK_CATEGORY_KEYWORDS = ("žaisl", "žaidim", "dėlion", "puzzle", "lego")
-_NON_BOOK_CATEGORY_LABELS = (
-    "mokyklinės ir raštinės prekės",
-    "dovanų idėjos",
-    "žaislai ir žaidimai",
-    "viskas namams",
-)
+# Keywords that identify clearly non-book product categories.
+# Intentionally narrow: only match product types that can never be books.
+# "žaisl" → toys ("Žaislai", "Žaislai ir žaidimai", "Pliušiniai žaislai")
+# "album"  → photo/music albums ("Nuotraukų albumai")
+# Do NOT include ambiguous marketing/placement categories like "dovanų idėjos"
+# or "viskas namams" — books can appear there and would be falsely blocked.
+_NON_BOOK_CATEGORY_KEYWORDS = ("žaisl", "album")
+
 _AUDIO_FORMATS = ("audiobook", "audio", "audiobookas")
 _EBOOK_FORMATS = (
     "ebook",
@@ -108,9 +109,6 @@ def classify_book_product(data: dict[str, object]) -> BookClassification:
     has_book_category = _categories_contain_labels(categories, _BOOK_CATEGORY_LABELS)
     has_non_book_category = _categories_contain_keywords(
         categories, _NON_BOOK_CATEGORY_KEYWORDS
-    )
-    has_non_book_category = has_non_book_category or _categories_contain_labels(
-        categories, _NON_BOOK_CATEGORY_LABELS
     )
     raw_isbn = data.get("isbn")
     isbn = raw_isbn if isinstance(raw_isbn, str) else None

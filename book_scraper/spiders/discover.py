@@ -593,6 +593,16 @@ class DiscoverSpider(scrapy.Spider):
                 url=url, shop_name=self.shop_name, source="category"
             )
 
+            # Skip non-book items — don't create a shop_book row during
+            # discover for items the parser already classified as non-book.
+            # The URL is still tracked via DiscoveredUrlItem above so the
+            # scan spider will fetch the full page and set url_type='non_product'
+            # authoritatively.  Storing a non-book ShopBookItem here causes
+            # url_type='product' / type='non_book' mismatches (product_url_non_book)
+            # that persist until the next scan corrects them.
+            if product.get("is_book_product") is False:
+                continue
+
             # Yield product data when we have at least a title and price.
             if not (product.get("title") and product.get("price")):
                 continue
@@ -1032,7 +1042,7 @@ class DiscoverSpider(scrapy.Spider):
                 url=url, shop_name=self.shop_name, source="category"
             )
 
-        psi, ps, _yf, _yt = parse_ibiblioteka_url_params(response.url)
+        psi, ps, _df, _dt = parse_ibiblioteka_url_params(response.url)
         n = len(products)
 
         # If the page was full, there may be more — chain to next page.

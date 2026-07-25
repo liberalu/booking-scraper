@@ -230,8 +230,28 @@ def parse_product_page(json_text: str) -> dict[str, Any]:
     rate_avg = raw.get("rateAverage")
     rate_num = raw.get("rateNumber")
 
+    # Multipart works (e.g. "Ana Karenina T.1 + T.2") are exposed by iBiblioteka
+    # as a parent record whose `parts[]` lists each volume's libis_code. The
+    # parent carries the "set" ISBN; per-volume ISBNs only show up when you
+    # fetch the part records directly. Without recursing into parts, the
+    # canonical books table is missing every volume-level ISBN — shop ISBNs
+    # for individual volumes (e.g. pegasas "Ana Karenina II" with ISBN
+    # 9789955088639 → libis C1B0000814702) can never match. Emit the part
+    # URLs so the scan spider can queue them as separate scrape items; each
+    # part will be ingested as its own canonical book via the same path.
+    part_urls: list[str] = []
+    parts_raw = raw.get("parts") or []
+    if raw.get("multipart") and parts_raw:
+        for part in parts_raw:
+            part_code = part.get("code") if isinstance(part, dict) else None
+            if part_code:
+                part_urls.append(
+                    f"{_COVER_BASE}/metis-api/bibliographic-records/public/{part_code}"
+                )
+
     return {
         "_emit_as": "book",
+        "_part_urls": part_urls,
         "is_book_product": True,
         "book_score": 5,
         "book_score_reasons": [{"reason": "ibiblioteka_national_library"}],

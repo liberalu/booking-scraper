@@ -181,7 +181,10 @@ _OLD_PRICE_RE = re.compile(
 # Stock status — patogupirkti emits one of:
 #   <div class="instock stock-status …">Turime sandėlyje</div>
 #   <div class="outstock stock-status …">Šiuo metu neturime</div>
+# A third state exists for discontinued/unlisted items (no stock-status class):
+#   <div class="color-orange font-16 bold mt30">Šiuo metu neparduodama</div>
 _STOCK_RE = re.compile(r'<div\s+class="(instock|outstock)\s+stock-status', re.I)
+_NOT_FOR_SALE_RE = re.compile(r"neparduodama", re.I)
 
 
 def _normalize_price(raw: str | None) -> str | None:
@@ -278,7 +281,12 @@ def parse_category_page(html: str) -> CategoryPageResult:
             price_original = None  # no discount → redundant
         # Stock status from the card's status div.
         stock_m = _STOCK_RE.search(card_html)
-        in_stock = stock_m.group(1).lower() == "instock" if stock_m else True
+        if stock_m:
+            in_stock = stock_m.group(1).lower() == "instock"
+        elif _NOT_FOR_SALE_RE.search(card_html):
+            in_stock = False
+        else:
+            in_stock = True
 
         # variant carries the publisher/year/format/pages joined: e.g.
         # "Jotema, 2026, 15x22, minkšti viršeliai, 352". Splitting it
@@ -465,6 +473,11 @@ def parse_product_page(html: str) -> ProductPageResult:
     )
     if availability is not None:
         data["in_stock"] = availability.strip().lower() == "instock"
+    elif _NOT_FOR_SALE_RE.search(html):
+        # "Šiuo metu neparduodama" — discontinued/unlisted, no availability
+        # microdata emitted by the site.  Treat as out-of-stock so the item
+        # doesn't generate spurious missing_price warnings.
+        data["in_stock"] = False
 
     # og:image fallback for the cover.
     image_url = _meta_content(html, "og:image")

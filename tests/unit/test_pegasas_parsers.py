@@ -515,6 +515,112 @@ class TestParseCategoryPageGraphQL:
         )
         assert len(parse_category_page(text)["products"]) == 1
 
+    def test_invalid_isbn_check_digit_recovered_as_isbn13(self) -> None:
+        """When `ISBN kodas` has a wrong check digit, `_coerce_isbn` must
+        recover the correct ISBN-13 from the 9-digit core rather than
+        discarding it or falling through to the (different) EAN.
+
+        Real-world case: pegasas product 1100242 ("Dina gėdytojos duktė")
+        has ISBN kodas = 9955082484 (ISBN-10 check digit wrong — sum 326,
+        mod11=7 ≠ 0).  The correct ISBN-13 derived from the core 995508248
+        is 9789955082484 (mod10=0).  The EAN kodas = 9789955232407 is a
+        different book entirely and must NOT win.
+        """
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Dina gėdytojos duktė",
+                                "sku": "000000000001100242",
+                                "url_key": "dina-gedytojos-dukte-1100242",
+                                "stock_status": "OUT_OF_STOCK",
+                                "is_book": True,
+                                "categories": [{"id": 5107, "name": "Grožinė"}],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 0.0},
+                                        "regular_price": {"value": 0.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {"label": "Leidinio kalba", "value": "Lietuvių"},
+                                            # Bad ISBN-10 check digit: sum=326, mod11=7 ≠ 0
+                                            {"label": "ISBN kodas", "value": "9955082484"},
+                                            # Valid ISBN-13: sum=120, mod10=0
+                                            {"label": "EAN kodas", "value": "9789955232407"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+        product = parse_category_page(text)["products"][0]
+        # The bad ISBN-10 core must be recovered as its ISBN-13 equivalent.
+        # The EAN kodas (9789955232407) is a different book and must NOT win.
+        assert product["isbn"] == "9789955082484"
+
+    def test_typo_isbn10_with_correct_ean_uses_ean(self) -> None:
+        """When the ISBN field has a typo'd ISBN-10 but the EAN field has
+        a strictly valid ISBN-13 sharing the same publisher prefix, the
+        EAN wins — it's the corrected version of the same book.
+
+        Real-world case: pegasas "Rikiki skalbia" (sb#37915).
+        - ISBN kodas = 9986028368 — typo'd ISBN-10 (bad check digit,
+          recovers to 9789986028369 which is a non-existent ISBN).
+        - EAN kodas = 9789986028383 — valid ISBN-13 matching the
+          canonical book #2322 in the books table.
+        Both share the publisher prefix `978-9986-02` (first 9 digits),
+        so the EAN is treated as the corrected ISBN.
+        """
+        text = json.dumps(
+            {
+                "data": {
+                    "products": {
+                        "items": [
+                            {
+                                "name": "Rikiki skalbia",
+                                "sku": "000000000001106280",
+                                "url_key": "rikiki-skalbia-1106280",
+                                "stock_status": "IN_STOCK",
+                                "is_book": True,
+                                "categories": [{"id": 5107, "name": "Grožinė"}],
+                                "price_range": {
+                                    "minimum_price": {
+                                        "final_price": {"value": 4.0},
+                                        "regular_price": {"value": 4.0},
+                                    }
+                                },
+                                "product_page_attributes": [
+                                    {
+                                        "primary_attributes": [],
+                                        "secondary_attributes": [
+                                            {"label": "Leidinio kalba", "value": "Lietuvių"},
+                                            # Typo'd ISBN-10 (bad check digit)
+                                            {"label": "ISBN kodas", "value": "9986028368"},
+                                            # Valid ISBN-13 with same publisher prefix
+                                            {"label": "EAN kodas", "value": "9789986028383"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+        product = parse_category_page(text)["products"][0]
+        # EAN wins because it shares publisher prefix with the recovered
+        # ISBN — the broken ISBN field is a typo, the EAN has the truth.
+        assert product["isbn"] == "9789986028383"
+
 
 # ---------------------------------------------------------------------------
 # LupaSearch parser
@@ -624,6 +730,86 @@ class TestDeriveBookType:
         assert derive_book_type(0, 0) == "non_book"
         assert derive_book_type(False, False, False) == "non_book"
 
+    def test_has_book_category_overrides_is_book_false(self) -> None:
+        """When Magento's is_book is False but category evidence says
+        otherwise, fall back to type='book'. Real cases: 11 pegasas
+        products on 2026-05-19 (e.g. 'Vyrai ir moterys. Ką sako
+        neuromokslai' had is_book=False yet sits in 'Knygos' /
+        'Mokslo literatūra')."""
+        assert (
+            derive_book_type(False, False, has_book_category=True) == "book"
+        )
+
+    def test_has_book_category_does_not_override_audio(self) -> None:
+        """is_audio_book=True still wins over the category fallback —
+        audiobooks have book-like categories too."""
+        assert (
+            derive_book_type(False, True, has_book_category=True) == "audio"
+        )
+
+    def test_has_book_category_does_not_override_ebook(self) -> None:
+        assert (
+            derive_book_type(False, False, True, has_book_category=True) == "ebook"
+        )
+
+    def test_has_book_category_default_false(self) -> None:
+        """Default `has_book_category=False` preserves the legacy
+        behaviour: when nothing indicates a book, classify as non_book."""
+        assert derive_book_type(False, False) == "non_book"
+
+
+class TestCategoriesIndicateBook:
+    def test_knygos_signal(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(["Knygos"]) is True
+        assert _categories_indicate_book(["Knygos vaikams iki 6 metų"]) is True
+        assert _categories_indicate_book(["Knygelės"]) is True
+
+    def test_literature_signal(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(["Grožinė literatūra"]) is True
+        assert _categories_indicate_book(["Mokslo literatūra"]) is True
+        assert _categories_indicate_book(["Mokomoji literatūra"]) is True
+
+    def test_textbook_signal(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(["Vadovėliai"]) is True
+        assert _categories_indicate_book(["Vadovėliai ir pratybos pagal klases"]) is True
+        assert _categories_indicate_book(["Pratybos"]) is True
+
+    def test_diacritic_insensitive(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        # Lithuanian shops sometimes drop diacritics in category strings.
+        assert _categories_indicate_book(["knygos"]) is True
+        assert _categories_indicate_book(["grozine literatura"]) is True
+        assert _categories_indicate_book(["KNYGOS"]) is True
+
+    def test_non_book_categories(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(["Žaislai"]) is False
+        assert _categories_indicate_book(["Saldainiai"]) is False
+        assert _categories_indicate_book(["Dėlionės", "Žaidimai"]) is False
+
+    def test_unresolved_numeric_ids_do_not_signal(self) -> None:
+        """When a category-ID failed to resolve to a name and was
+        stringified (e.g. '10301'), it must not accidentally match a
+        keyword prefix — the prefixes are alphabetic so digit-only
+        strings can't match anyway, but verify the contract."""
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(["10301", "6208"]) is False
+
+    def test_empty_or_none(self) -> None:
+        from book_scraper.spiders.pegasas.parsers import _categories_indicate_book
+
+        assert _categories_indicate_book(None) is False
+        assert _categories_indicate_book([]) is False
+
 
 class TestStubs:
     def test_sitemap_returns_empty(self) -> None:
@@ -657,18 +843,55 @@ class TestFormatFromCoverType:
 
         assert format_from_cover_type("Minkštas") == "paperback"
 
-    def test_other_cover_types_lowercased(self) -> None:
+    def test_unknown_cover_types_return_none(self) -> None:
+        """Unknown labels are dropped rather than persisted raw — the
+        previous "preserve raw label" behaviour leaked dimension strings
+        like '15x22' into shop_books.format, driving the
+        `format_is_dimensions` validator (~1,200 issues on patogupirkti).
+        """
         from book_scraper.spiders.cover_type import format_from_cover_type
 
-        assert format_from_cover_type("Kita") == "kita"
-        assert format_from_cover_type("Aplankas") == "aplankas"
-        assert format_from_cover_type("Dėžutė") == "dėžutė"
+        assert format_from_cover_type("Kita") is None
+        assert format_from_cover_type("Aplankas") is None
+        assert format_from_cover_type("Dėžutė") is None
 
     def test_empty_or_none_returns_none(self) -> None:
         from book_scraper.spiders.cover_type import format_from_cover_type
 
         assert format_from_cover_type(None) is None
         assert format_from_cover_type("") is None
+
+    def test_dimensions_only_returns_none(self) -> None:
+        """Pure dimension strings must NOT be stored as `format`.
+
+        Real-world patogupirkti `Formatas` values that hit this path:
+        '17x24', '15x21', '170 x 205 mm', '21X30 cm'.
+        """
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        for s in ("17x24", "15x21", "170 x 205 mm", "21X30 cm", "13 x 20"):
+            assert format_from_cover_type(s) is None, f"{s!r} should map to None"
+
+    def test_mixed_dimensions_and_cover_type(self) -> None:
+        """Comma-separated dimensions + cover-type ('15x22, minkšti
+        viršeliai') should pick out the cover-type segment.
+        """
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type("15x22, minkšti viršeliai") == "paperback"
+        assert format_from_cover_type("21x24, kieti viršeliai") == "hardcover"
+        # Typo on patogupirkti: 'keti' instead of 'kieti'.
+        assert format_from_cover_type("21x24, keti viršeliai") == "hardcover"
+        # Half-hard cover ("puskiečiai") — mapped to hardcover bucket.
+        assert format_from_cover_type("13x20, puskiečiai viršeliai") == "hardcover"
+
+    def test_canonical_tokens_pass_through(self) -> None:
+        from book_scraper.spiders.cover_type import format_from_cover_type
+
+        assert format_from_cover_type("hardcover") == "hardcover"
+        assert format_from_cover_type("paperback") == "paperback"
+        assert format_from_cover_type("ebook") == "ebook"
+        assert format_from_cover_type("cd") == "cd"
 
 
 class TestProductFormatFromGraphQL:
@@ -737,6 +960,26 @@ class TestProductFormatFromGraphQL:
         product = self._product(is_audio_book=True)
         assert product is not None
         assert product["format"] == "audiobook"
+
+    def test_audio_book_does_not_carry_pages(self) -> None:
+        """Magento sometimes leaks the print edition's numberOfPages into
+        the audiobook record.  The parser must discard it so we never
+        get a format_mismatch 'audiobook with pages' validation issue."""
+        product = self._product(
+            is_audio_book=True,
+            product_page_attributes=[
+                {
+                    "primary_attributes": [
+                        {"label": "Puslapiai", "value": "320"},
+                    ],
+                    "secondary_attributes": [],
+                }
+            ],
+        )
+        assert product is not None
+        assert product["type"] == "audio"
+        props = product.get("properties") or {}
+        assert "pages" not in props
 
 
 class TestParseProductPageGraphQL:

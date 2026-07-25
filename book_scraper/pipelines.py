@@ -51,16 +51,27 @@ def _validate_year(adapter: ItemAdapter) -> None:
         adapter["year"] = year
         return
 
-    # Possible swap: year has page count, pages has year
+    # Possible swap: year has page count, pages has year.
+    # Pages may live in properties dict (most shops) or at top level
+    # (patogupirkti uses item["pages"] directly, not item["properties"]["pages"]).
     props = adapter.get("properties")
+    pages_val: object = None
     if isinstance(props, dict) and "pages" in props:
+        pages_val = props["pages"]
+    elif adapter.get("pages") is not None:
+        pages_val = adapter.get("pages")
+
+    if pages_val is not None:
         try:
-            pages = int(props["pages"])
+            pages = int(pages_val)
         except (ValueError, TypeError):
             pages = None
         if pages is not None and _MIN_YEAR <= pages <= _MAX_YEAR:
             adapter["year"] = pages
-            props["pages"] = year
+            if isinstance(props, dict) and "pages" in props:
+                props["pages"] = year
+            else:
+                adapter["pages"] = year
             return
 
     # Year out of range and no swap possible — clear it
@@ -108,10 +119,14 @@ class ValidationPipeline:
     def _check_price_anomalies(self, adapter: ItemAdapter, url: str) -> None:
         price = adapter.get("price")
         if price is None:
-            self._warn("missing_price", "price", url)
+            # Out-of-stock items on some shops return no price — suppress the
+            # warning for items explicitly marked as not in stock so we only
+            # flag genuinely missing prices for available books.
+            if adapter.get("in_stock") is not False:
+                self._warn("missing_price", "price", url)
             return
         price_dec = Decimal(str(price))
-        if price_dec == 0:
+        if price_dec == 0 and adapter.get("in_stock") is not False:
             self._warn("zero_price", "price", url, str(price))
         price_original = adapter.get("price_original")
         if price_original is not None:

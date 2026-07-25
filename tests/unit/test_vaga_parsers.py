@@ -322,21 +322,13 @@ def test_infer_shop_book_type_prefers_audio_and_non_book():
     )
 
 
-@pytest.mark.parametrize(
-    "category",
-    [
-        "MOKYKLINĖS IR RAŠTINĖS PREKĖS",
-        "DOVANŲ IDĖJOS",
-        "ŽAISLAI IR ŽAIDIMAI",
-        "VISKAS NAMAMS",
-    ],
-)
-def test_top_level_non_book_categories_get_negative_score(category):
+def test_photo_album_category_triggers_non_book_signal():
+    """Photo albums ("Nuotraukų albumai") should fire non_book_categories signal."""
     data = {
-        "title": "Neutral product title",
+        "title": "Albumas GOLDBUCH Bella Vista artichoke, 200 lapų",
         "author": None,
         "isbn": None,
-        "categories": [category],
+        "categories": ["Dovanų įdėjos", "Jaukiems namams", "Nuotraukų albumai"],
         "pages": None,
         "cover_type": None,
         "year": None,
@@ -348,7 +340,29 @@ def test_top_level_non_book_categories_get_negative_score(category):
     }
     result = classify_book_product(data)
     assert result.is_book_product is False
-    assert result.score == -4
     assert any(
         r["key"] == "non_book_categories" and r["points"] == -4 for r in result.reasons
+    )
+
+
+def test_gift_category_alone_does_not_block_book():
+    """'Dovanų idėjos' alone must not block a book that has a valid ISBN."""
+    data = {
+        "title": "Knyga kaip dovana",
+        "author": "Jonas Jonaitis",
+        "isbn": "9786090244739",
+        "categories": ["Dovanų idėjos"],
+        "pages": None,
+        "cover_type": None,
+        "year": None,
+        "translator": None,
+        "narrator": None,
+        "duration": None,
+        "format": None,
+        "schema_types": ["Product"],
+    }
+    result = classify_book_product(data)
+    assert result.is_book_product is True
+    assert not any(
+        r["key"] == "non_book_categories" and r["points"] != 0 for r in result.reasons
     )

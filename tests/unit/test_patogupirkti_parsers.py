@@ -156,3 +156,35 @@ def test_parse_product_page_handles_missing_microdata():
     assert data["isbn"] is None
     assert data["price"] is None
     assert data["is_book_product"] is False
+
+
+def test_parse_product_page_neparduodama_sets_in_stock_false():
+    """A product page with 'Šiuo metu neparduodama' (no availability
+    microdata) must be detected as out-of-stock so it doesn't generate
+    spurious missing_price validation warnings."""
+    html = """
+    <html><body>
+      <h1 itemprop="name">Mama myli</h1>
+      <div class="color-orange font-16 bold mt30">
+        Šiuo metu neparduodama
+      </div>
+    </body></html>
+    """
+    data = parse_product_page(html)
+    assert data["in_stock"] is False
+    assert data["price"] is None
+
+
+def test_parse_category_page_neparduodama_card_sets_in_stock_false():
+    """A category card containing 'neparduodama' must be marked out-of-stock
+    rather than defaulting to True when no stock-status class is present."""
+    html = """
+    <div class="product">
+      <a href="https://www.patogupirkti.lt/knyga/test-book.html">Test</a>
+      <script>var product_tracking_data_1 = {"id":"1","name":"Test","price":"10.00","brand":"Author","variant":""};</script>
+      <div class="color-orange font-16 bold mt30">Šiuo metu neparduodama</div>
+    </div>
+    """
+    products = parse_category_page(html)["products"]
+    assert len(products) == 1
+    assert products[0]["in_stock"] is False

@@ -13,6 +13,7 @@ Phases (this commit implements 1 + 2; 3 + 4 added in Task 6):
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import UTC
 
@@ -20,6 +21,28 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+# Feature flag — step 3 (shop_inferred canonical synthesis) is disabled by
+# default while we work through the data-quality-rules spec (Rule 1:
+# multi-shop consensus synthesis) and fix the match-phase heartbeat timeout
+# (the per-row synthesis loop on shops with ~2.5k unmatched books blocks the
+# reactor past the 60s reaper threshold, killing the whole run before steps
+# 1 + 2 can commit).
+#
+# With this off:
+#   • Step 1 (ISBN match) still runs and links any shop_book whose ISBN
+#     already exists in book_isbns — the common case.
+#   • Step 2 (author backfill) still runs.
+#   • Unmatched shop_books with an ISBN not yet in book_isbns stay
+#     `unmatched`; the validator will flag them as `unmatched_has_isbn`
+#     and they accumulate harmlessly until synthesis is re-enabled.
+#
+# Re-enable by setting MATCH_SYNTHESIS_ENABLED=1 in the env (or flipping the
+# default below).  When Rule 1 lands with batched commits and heartbeat
+# yields, this whole flag can be removed.
+MATCH_SYNTHESIS_ENABLED: bool = os.environ.get(
+    "MATCH_SYNTHESIS_ENABLED", "0"
+).lower() in ("1", "true", "yes", "on")
 
 
 @dataclass
@@ -75,14 +98,26 @@ class MatchService:
         counters = MatchCounters()
         counters.books_linked = self._step1_isbn_match(shop_name)
         counters.authors_linked = self._step2_author_backfill(shop_name)
-        counters.books_synthesized = self._step3_shop_inferred_synthesis()
-        # Step 4 (LIBIS upgrade) is performed inside _upsert_book; nothing here.
-        # Re-run step 1 so newly synthesised books pick up matches.
-        counters.books_linked += self._step1_isbn_match(shop_name)
+        if MATCH_SYNTHESIS_ENABLED:
+            counters.books_synthesized = self._step3_shop_inferred_synthesis()
+            # Step 4 (LIBIS upgrade) is performed inside _upsert_book; nothing here.
+            # Re-run step 1 so newly synthesised books pick up matches.
+            counters.books_linked += self._step1_isbn_match(shop_name)
+        else:
+            logger.info(
+                "MatchService step 3 (synthesis) skipped — "
+                "MATCH_SYNTHESIS_ENABLED=0. ISBN match + author backfill only."
+            )
         return counters
 
     def _step3_shop_inferred_synthesis(self) -> int:
-        """Find ISBNs on ≥2 shops with no canonical book; create shop_inferred rows."""
+        """Find ISBNs with no canonical book and synthesise shop_inferred records.
+
+        A single shop is sufficient — a valid ISBN-13 from any source is treated
+        as a real book.  The previous ≥2-shop guard was overly conservative: all
+        unmatched ISBNs in practice are single-shop, so the guard blocked every
+        legitimate synthesis.
+        """
         rows = self.session.execute(text("""
             WITH candidates AS (
               SELECT REPLACE(REPLACE(sb.isbn, '-', ''), ' ', '') AS isbn,
@@ -91,7 +126,7 @@ class MatchService:
                WHERE sb.isbn IS NOT NULL
                  AND sb.book_id IS NULL
                GROUP BY 1
-              HAVING COUNT(DISTINCT sb.shop_id) >= 2
+              HAVING COUNT(DISTINCT sb.shop_id) >= 1
             )
             SELECT c.isbn, c.shop_count
               FROM candidates c
@@ -102,17 +137,18 @@ class MatchService:
 
         synthesised = 0
         for isbn_norm, _shop_count in rows:
-            self._synthesise_one(isbn_norm)
-            synthesised += 1
+            if self._synthesise_one(isbn_norm):
+                synthesised += 1
 
         logger.info(
             "MatchService step 3: %d shop_inferred books synthesised", synthesised
         )
         return synthesised
 
-    def _synthesise_one(self, isbn_norm: str) -> None:
+    def _synthesise_one(self, isbn_norm: str) -> bool:
         """Build a shop_inferred Book from the highest-trust shop's data,
-        with the FIRST writer's publisher (sticky)."""
+        with the FIRST writer's publisher (sticky).  Returns True if a new
+        book row was created, False if synthesis was skipped."""
         from datetime import datetime
 
         from sqlalchemy import select
@@ -131,8 +167,8 @@ class MatchService:
              WHERE REPLACE(REPLACE(sb.isbn, '-', ''), ' ', '') = :isbn
         """), {"isbn": isbn_norm}).all()
 
-        if len(candidates) < 2:
-            return
+        if not candidates:
+            return False
 
         scored = sorted(
             candidates,
@@ -173,6 +209,7 @@ class MatchService:
             isbn_type="isbn13" if len(isbn_norm) == 13 else "isbn10",
         ))
         self.session.flush()
+        return True
 
     def _step1_isbn_match(self, shop_name: str) -> int:
         """Link shop_books.book_id by ISBN. Returns rows updated."""

@@ -69,7 +69,9 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      # ponytail: host port 8001 while gpswox-hive-app holds 8000; revert to
+      # "8000:8000" once that project frees the port.
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/book_scraper
     volumes:
