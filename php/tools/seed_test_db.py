@@ -12,11 +12,16 @@ up on both sides.
 
 import argparse
 import sys
+from pathlib import Path
 
 import sqlalchemy as sa
 
+# The test database is named in one place — see _testdb for why the PHP
+# side cannot share the Python suite's database.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _testdb import TEST_DSN  # noqa: E402
+
 PROD = "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
-TEST = "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
 
 # Parents first. publishers/series are here because `books` has FKs to them.
 TABLES = [
@@ -143,7 +148,7 @@ def main() -> int:
     shop = args.shop
 
     prod = sa.create_engine(PROD)
-    test = sa.create_engine(TEST)
+    test = sa.create_engine(TEST_DSN)
 
     with test.begin() as t:
         # Truncate everything so ids can be copied verbatim — a pre-existing

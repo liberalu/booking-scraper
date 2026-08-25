@@ -4,7 +4,7 @@
 PHP := /opt/homebrew/opt/php@8.4/bin/php
 COMPOSER := $(PHP) $(shell which composer)
 
-TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_test
+TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
 .PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage

@@ -156,7 +156,7 @@ final class GraphQlSubdivisionTest extends TestCase
     public function test_each_subdivision_is_recorded_on_the_run_timeline(): void
     {
         Database::boot(getenv('TEST_DATABASE_URL')
-            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_test');
+            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test');
         DB::beginTransaction();
         try {
             $shopId = (int) (DB::table('shops')->where('name', 'subdivide-test')->value('id')

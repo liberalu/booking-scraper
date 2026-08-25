@@ -102,8 +102,37 @@ cd php && PATH="/opt/homebrew/opt/php@8.4/bin:$PATH" composer install
 
 ## Tests
 
-The Postgres array tests need the test database (port 5433), never the
-production one:
+### The two stacks have separate test databases
+
+`book_scraper_php_test` for everything PHP — phpunit and all the differentials.
+`book_scraper_test` belongs to the Python suite.
+
+They cannot share one. `tests/conftest.py` builds an empty schema from
+`Base.metadata` and drops it on teardown; the differentials need the same
+database loaded with a copy of the real catalogue. Whichever ran last won, and
+the other reported failures that had nothing to do with the code under test —
+75 spurious integration failures on one run, 61 on the next, and once the
+schema was gone entirely. Each time it cost a bisect to establish that nothing
+was actually broken.
+
+The name lives in exactly one place, `tools/_testdb.py`, because it used to be
+eight copies of the same DSN literal across eight scripts — which is why it
+could not be changed anywhere. Override with `PHP_TEST_DATABASE_URL`; the guard
+there still refuses anything not on port 5433 with `test` in its name.
+
+Create it with:
+
+```bash
+docker exec book-scraper-postgres-test-1 psql -U postgres -c 'create database book_scraper_php_test'
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_php_test \
+  PYTHONPATH=. uv run alembic upgrade head
+make seed-test-db
+```
+
+### Running them
+
+The Postgres array tests need the test database (port 5433), never the real
+catalogue:
 
 ```bash
 docker compose up -d postgres-test

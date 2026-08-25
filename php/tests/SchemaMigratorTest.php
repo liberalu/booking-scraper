@@ -171,7 +171,7 @@ final class SchemaMigratorTest extends TestCase
     private static function clusterDsn(string $database): string
     {
         $base = getenv('TEST_DATABASE_URL')
-            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_test';
+            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
 
         return preg_replace('#/[^/]*$#', '/' . $database, $base) ?? $base;
     }

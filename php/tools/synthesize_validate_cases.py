@@ -13,10 +13,15 @@ Test database only. Creates its own shop so it never perturbs a copied one.
 """
 
 import sys
+from pathlib import Path
 
 import sqlalchemy as sa
 
-TEST_DSN = "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
+# The test database is named in one place — see _testdb for why the PHP
+# side cannot share the Python suite's database.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _testdb import TEST_DSN  # noqa: E402
+
 SHOP = "synthetic"
 BASE = "https://synthetic.test"
 

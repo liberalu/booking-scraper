@@ -27,8 +27,12 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
+# The test database is named in one place — see _testdb for why the PHP
+# side cannot share the Python suite's database.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _testdb import TEST_DSN  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
-TEST_DSN = "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 RUN_ID_SENTINEL = 999_000  # a run id neither stack will allocate naturally
 

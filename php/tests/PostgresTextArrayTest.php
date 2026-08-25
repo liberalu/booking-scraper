@@ -64,6 +64,6 @@ final class PostgresTextArrayTest extends TestCase
     private static function dsn(): string
     {
         return getenv('TEST_DATABASE_URL')
-            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_test';
+            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
     }
 }

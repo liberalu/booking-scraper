@@ -33,7 +33,7 @@ final class PersisterTest extends TestCase
     {
         self::$capsule ??= Database::boot(
             getenv('TEST_DATABASE_URL')
-                ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_test'
+                ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test'
         );
         DB::beginTransaction();
 

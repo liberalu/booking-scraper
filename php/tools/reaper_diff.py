@@ -24,17 +24,22 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
+# The test database is named in one place — see _testdb for why the PHP
+# side cannot share the Python suite's database.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _testdb import TEST_PORT, database_name, dsn_for  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 
-TEST_HOST, TEST_PORT = "localhost", 5433
-TEST_DB = "book_scraper_test"
+TEST_HOST = "localhost"
+TEST_DB = database_name()   # see _testdb: PHP has its own database
 PY_DB, PHP_DB = f"{TEST_DB}_reap_py", f"{TEST_DB}_reap_php"
 MARK = "reaper-diff"
 
 
 def dsn(database: str) -> str:
-    return f"postgresql+psycopg2://postgres:postgres@{TEST_HOST}:{TEST_PORT}/{database}"
+    return dsn_for(database)
 
 
 def guard() -> None:
