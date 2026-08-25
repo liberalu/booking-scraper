@@ -55,6 +55,10 @@ PY_PORT, PHP_PORT = 8011, 8012
 # Fixtures are marked so a re-run can replace them rather than accumulate.
 MARK = "mutation-diff"
 
+#: Where --freeze writes. Replayed by MutationCharacterisationTest, which drives
+#: the routes in-process and needs neither Python nor a running server.
+FREEZE_TO = ROOT / "php" / "dashboard" / "tests" / "golden" / "mutation_cases.json"
+
 
 def dsn(database: str) -> str:
     return dsn_for(database)
@@ -106,6 +110,16 @@ def seed_fixtures() -> dict[str, int]:
             " returning id")).fetchall()
         if stale:
             print(f"  retired {len(stale)} stale non-terminal run(s) first")
+
+        # Same reasoning one level down: a `processing` row on a terminal run
+        # is swept by sweep_orphaned_processing_items, so whichever stack runs
+        # a reaper first would diverge from the other on rows this comparison
+        # never planted.
+        orphans = c.execute(sa.text(
+            "update scrape_url_items set status = 'failed', done_at = now()"
+            " where status = 'processing' returning id")).fetchall()
+        if orphans:
+            print(f"  retired {len(orphans)} orphaned processing item(s)")
 
         runs: dict[str, int] = {}
         for key, phase, status in (
@@ -494,6 +508,66 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
 FORM_ENDPOINTS = ("/shops/",)
 
 
+#: Keys whose integer value is a row id rather than a count.
+ID_KEYS = frozenset({
+    "id", "run_id", "shop_book_id", "previous_book_id", "existing_book_id",
+    "chain_to_id", "cron_job_id",
+})
+
+
+def normalise_ids(value: object, labels: dict[int, str], key: str = "") -> object:
+    """Replace row ids with stable placeholders so a response can be frozen.
+
+    Responses carry ids — `{"run_id": 412, "status": "stopping"}` — and those
+    move every run. A fixture id becomes its label; any other id becomes
+    `<id>`, because whether one came back is part of the contract and its
+    value is not.
+
+    Deliberately key-aware rather than value-ranged. An earlier version
+    substituted any integer above an arbitrary threshold, which both missed
+    small created ids and would have rewritten counts that happened to be
+    large. Strings are matched on word boundaries for the same reason: a bare
+    `str.replace("13", ...)` corrupts the 13 inside 2013.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        if value in labels:
+            return labels[value]
+        return "<id>" if key in ID_KEYS else value
+    if isinstance(value, str):
+        for row_id, label in labels.items():
+            value = re.sub(rf"\b{row_id}\b", f"<{label}>", value)
+        # Free text that embeds an id the fixtures do not own, e.g.
+        # "A scan run for vaga is already stopping (run #412)."
+        return re.sub(r"(run #)\d+", r"\1<id>", value)
+    if isinstance(value, dict):
+        return {k: normalise_ids(v, labels, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalise_ids(v, labels, key) for v in value]
+    return value
+
+
+def normalise_body(value: object, labels: dict[int, str]) -> object:
+    """Fixture ids in a REQUEST body become labels; nothing else changes.
+
+    A different rule from responses on purpose. Several cases send an id that
+    deliberately does not exist — `chain_to_id: 999999` is how "chain target
+    not found" is provoked — so a blanket `<id>` would destroy the case. Only
+    ids the fixtures own are substituted; the replay resolves them back to
+    whatever it planted.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return labels.get(value, value)
+    if isinstance(value, dict):
+        return {k: normalise_body(v, labels) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalise_body(v, labels) for v in value]
+    return value
+
+
 def call(port: int, method: str, path: str, body: dict | None) -> dict:
     form = any(path.startswith(prefix) for prefix in FORM_ENDPOINTS)
     if body is None:
@@ -648,6 +722,15 @@ def main() -> int:
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--keep", action="store_true",
                         help="leave the two clone databases in place for inspection")
+    parser.add_argument(
+        "--freeze",
+        metavar="PATH",
+        nargs="?",
+        const=str(FREEZE_TO),
+        help="after every case matches, write them out as a characterisation "
+        "golden the dashboard suite can replay. Refuses to write on any "
+        "difference.",
+    )
     args = parser.parse_args()
 
     guard()
@@ -659,6 +742,10 @@ def main() -> int:
     # A fresh ISBN per run: book_isbns.isbn is globally unique and the clone
     # carries the previous run's row.
     marker = f"{int(time.time()) % 10_000_000_000:010d}"
+
+    # id -> fixture label, so responses can be frozen without their row ids.
+    labels = {v: k for k, v in ids.items()}
+    frozen: list[dict] = []
 
     python_server = php_server = None
     failures = 0
@@ -681,6 +768,13 @@ def main() -> int:
                 if len(differences) > len(shown):
                     print(f"         … {len(differences) - len(shown)} more (--verbose)")
             else:
+                frozen.append({
+                    "label": label,
+                    "method": method,
+                    "path": normalise_ids(path, labels),
+                    "body": normalise_body(body, labels),
+                    "expected": normalise_ids(php, labels),
+                })
                 extra = ""
                 body = py.get("body")
                 if isinstance(body, dict):
@@ -709,6 +803,19 @@ def main() -> int:
 
     total = len(cases(ids, marker)) + 1
     print(f"\n{total - failures}/{total} checks identical")
+
+    if args.freeze:
+        if failures:
+            print(
+                f"NOT frozen — {failures} check(s) differ. The golden may only "
+                "record behaviour both stacks agree on."
+            )
+        else:
+            path = Path(args.freeze)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(frozen, indent=1, ensure_ascii=False) + "\n")
+            print(f"froze {len(frozen)} case(s) to {path}")
+
     return failures
 
 

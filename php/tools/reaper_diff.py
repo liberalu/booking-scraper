@@ -128,6 +128,28 @@ def plant_fixtures() -> None:
                 {"r": runs[key], "s": shop_id, "i": index, "k": key, "st": status})
 
 
+def clear_fixtures() -> None:
+    """Remove the planted fixtures from the BASE database.
+
+    They only need to exist long enough to be cloned. Left behind they are a
+    trap for every other tool that clones the same base: the stale
+    `processing` rows get swept by whichever stack happens to run a reaper,
+    and the sibling comparison reports a divergence that is really this tool's
+    litter. That is exactly how it was found.
+    """
+    engine = sa.create_engine(dsn(TEST_DB), poolclass=sa.pool.NullPool)
+    with engine.begin() as c:
+        c.execute(sa.text("delete from scrape_failures where url like :m"),
+                  {"m": f"%{MARK}%"})
+        c.execute(sa.text("delete from scrape_url_items where url like :m"),
+                  {"m": f"%{MARK}%"})
+        c.execute(sa.text(
+            "delete from scrape_run_events where run_id in"
+            " (select id from scrape_runs where close_reason = :m)"), {"m": MARK})
+        c.execute(sa.text("delete from scrape_runs where close_reason = :m"),
+                  {"m": MARK})
+
+
 def clone_databases() -> None:
     admin = sa.create_engine(
         dsn("postgres"), isolation_level="AUTOCOMMIT", poolclass=sa.pool.NullPool
@@ -280,6 +302,8 @@ def main() -> int:
     plant_fixtures()
     print(f"cloning {TEST_DB} -> {PY_DB}, {PHP_DB}")
     clone_databases()
+    # The clones have them now; the base must not keep them.
+    clear_fixtures()
 
     try:
         # Measured as a delta, not an absolute: the test DB already holds

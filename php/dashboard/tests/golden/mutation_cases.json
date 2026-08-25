@@ -1,0 +1,1408 @@
+[
+ {
+  "label": "lifecycle ack",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_new>/lifecycle?state=acknowledged",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "issue_new",
+    "lifecycle_state": "acknowledged"
+   }
+  }
+ },
+ {
+  "label": "lifecycle resolved",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_new>/lifecycle?state=resolved",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "issue_new",
+    "lifecycle_state": "resolved"
+   }
+  }
+ },
+ {
+  "label": "lifecycle bad state",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_new>/lifecycle?state=bogus",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "state must be one of {'new', 'acknowledged', 'snoozed', 'resolved'}"
+   }
+  }
+ },
+ {
+  "label": "lifecycle 404",
+  "method": "PATCH",
+  "path": "/api/issues/999999999/lifecycle?state=new",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Issue not found"
+   }
+  }
+ },
+ {
+  "label": "snooze 30",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_other>/snooze",
+  "body": {
+   "days": 30
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "snoozed_until": "2026-09-24T12:15:58.951197+00:00",
+    "days": 30
+   }
+  }
+ },
+ {
+  "label": "snooze default",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_other>/snooze",
+  "body": {},
+  "expected": {
+   "_status": 200,
+   "body": {
+    "snoozed_until": "2026-09-01T12:15:58.972542+00:00",
+    "days": 7
+   }
+  }
+ },
+ {
+  "label": "snooze bad days",
+  "method": "PATCH",
+  "path": "/api/issues/<issue_other>/snooze",
+  "body": {
+   "days": 5
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "days must be 7, 30, or 90"
+   }
+  }
+ },
+ {
+  "label": "snooze 404",
+  "method": "PATCH",
+  "path": "/api/issues/999999999/snooze",
+  "body": {
+   "days": 7
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Issue not found"
+   }
+  }
+ },
+ {
+  "label": "bulk ack",
+  "method": "POST",
+  "path": "/api/issues/bulk-acknowledge",
+  "body": {
+   "issue_type": "missing_isbn"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 1
+   }
+  }
+ },
+ {
+  "label": "bulk unack",
+  "method": "POST",
+  "path": "/api/issues/bulk-unacknowledge",
+  "body": {
+   "issue_type": "missing_isbn"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "unacknowledged": 2
+   }
+  }
+ },
+ {
+  "label": "bulk ack unknown shop",
+  "method": "POST",
+  "path": "/api/issues/bulk-acknowledge",
+  "body": {
+   "issue_type": "missing_isbn",
+   "shop": "no-such-shop"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 2
+   }
+  }
+ },
+ {
+  "label": "bulk unack shop",
+  "method": "POST",
+  "path": "/api/issues/bulk-unacknowledge",
+  "body": {
+   "issue_type": "missing_isbn",
+   "shop": "vaga"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "unacknowledged": 2
+   }
+  }
+ },
+ {
+  "label": "bulk ack shop",
+  "method": "POST",
+  "path": "/api/issues/bulk-acknowledge",
+  "body": {
+   "issue_type": "missing_isbn",
+   "shop": "vaga"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 2
+   }
+  }
+ },
+ {
+  "label": "bulk ack no type",
+  "method": "POST",
+  "path": "/api/issues/bulk-acknowledge",
+  "body": {},
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "issue_type is required"
+   }
+  }
+ },
+ {
+  "label": "bulk unack no type",
+  "method": "POST",
+  "path": "/api/issues/bulk-unacknowledge",
+  "body": {},
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "issue_type is required"
+   }
+  }
+ },
+ {
+  "label": "unlink",
+  "method": "POST",
+  "path": "/api/shop-books/<shop_book_linked>/unlink-canonical",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "shop_book_id": "shop_book_linked",
+    "previous_book_id": "<id>",
+    "changed": true
+   }
+  }
+ },
+ {
+  "label": "unlink again",
+  "method": "POST",
+  "path": "/api/shop-books/<shop_book_linked>/unlink-canonical",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "shop_book_id": "shop_book_linked",
+    "previous_book_id": null,
+    "changed": false
+   }
+  }
+ },
+ {
+  "label": "unlink 404",
+  "method": "POST",
+  "path": "/api/shop-books/999999999/unlink-canonical",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "shop_book not found"
+   }
+  }
+ },
+ {
+  "label": "book create",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": " Diff Test Book ",
+   "isbn": "9781787660157",
+   "author": "  Jonas   Jonaitis ",
+   "publisher": " Diff Press ",
+   "year": 2001
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "title": "Diff Test Book"
+   }
+  }
+ },
+ {
+  "label": "book create dup isbn",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": "Other",
+   "isbn": "9781787660157"
+  },
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": {
+     "message": "ISBN already belongs to another book.",
+     "existing_book_id": "<id>"
+    }
+   }
+  }
+ },
+ {
+  "label": "book create same author",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": "Second",
+   "author": "jonas jonaitis",
+   "publisher": "Diff Press"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "title": "Second"
+   }
+  }
+ },
+ {
+  "label": "book create blank title",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": "   "
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "title is required"
+   }
+  }
+ },
+ {
+  "label": "book create bad isbn",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": "X",
+   "isbn": "12345"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid ISBN format (expected 10 or 13 digits)"
+   }
+  }
+ },
+ {
+  "label": "book create dashed isbn",
+  "method": "POST",
+  "path": "/api/books",
+  "body": {
+   "title": "Dashed",
+   "isbn": "978-1787-660157"
+  },
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": {
+     "message": "ISBN already belongs to another book.",
+     "existing_book_id": "<id>"
+    }
+   }
+  }
+ },
+ {
+  "label": "run stop",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/stop",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running",
+    "status": "stopping"
+   }
+  }
+ },
+ {
+  "label": "run stop again",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/stop",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running",
+    "status": "stopping"
+   }
+  }
+ },
+ {
+  "label": "run stop 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/stop",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "run pause",
+  "method": "POST",
+  "path": "/api/runs/<run_running2>/pause",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running2",
+    "status": "paused"
+   }
+  }
+ },
+ {
+  "label": "run pause again",
+  "method": "POST",
+  "path": "/api/runs/<run_running2>/pause",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running2",
+    "status": "paused"
+   }
+  }
+ },
+ {
+  "label": "run resume",
+  "method": "POST",
+  "path": "/api/runs/<run_running2>/resume",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running2",
+    "status": "running"
+   }
+  }
+ },
+ {
+  "label": "run resume again",
+  "method": "POST",
+  "path": "/api/runs/<run_running2>/resume",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_running2",
+    "status": "running"
+   }
+  }
+ },
+ {
+  "label": "run pause terminal",
+  "method": "POST",
+  "path": "/api/runs/<run_completed>/pause",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "run_id": "run_completed",
+    "status": "completed"
+   }
+  }
+ },
+ {
+  "label": "run resume 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/resume",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "run pause 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/pause",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "ack bucket",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/failures/ack?error_reason=http_404&http_status=404",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 1,
+    "run_id": "run_running",
+    "error_reason": "http_404",
+    "http_status": 404
+   }
+  }
+ },
+ {
+  "label": "ack bucket again",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/failures/ack?error_reason=http_404&http_status=404&note=dead",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 1,
+    "run_id": "run_running",
+    "error_reason": "http_404",
+    "http_status": 404
+   }
+  }
+ },
+ {
+  "label": "ack null bucket",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/failures/ack?error_reason_is_null=true&http_status_is_null=true",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "acknowledged": 1,
+    "run_id": "run_running",
+    "error_reason": null,
+    "http_status": null
+   }
+  }
+ },
+ {
+  "label": "ack no match",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/failures/ack?error_reason=never_happens",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "No matching scrape_failures rows to acknowledge."
+   }
+  }
+ },
+ {
+  "label": "ack 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/failures/ack?error_reason=http_404",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "cron create",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "discover",
+   "strategy": "sitemap",
+   "cron_expression": "0 3 * * *"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "name": "vaga.discover.sitemap"
+   }
+  }
+ },
+ {
+  "label": "cron create no strategy",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "strategy": "  ",
+   "cron_expression": "15 4 * * 1-5"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "name": "vaga.scan.default"
+   }
+  }
+ },
+ {
+  "label": "cron create chained",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "0 5 * * *",
+   "chain_to_id": "cron_target"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "name": "vaga.scan.default"
+   }
+  }
+ },
+ {
+  "label": "cron create bad shop",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "no-such-shop",
+   "phase": "scan",
+   "cron_expression": "0 3 * * *"
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Shop not found"
+   }
+  }
+ },
+ {
+  "label": "cron create bad phase",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "match",
+   "cron_expression": "0 3 * * *"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "phase must be 'discover' or 'scan'"
+   }
+  }
+ },
+ {
+  "label": "cron create 4 fields",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "0 3 * *"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid cron expression: '0 3 * *' (expected 5 fields)"
+   }
+  }
+ },
+ {
+  "label": "cron create 6 fields",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "0 0 3 * * *"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid cron expression: '0 0 3 * * *' (expected 5 fields)"
+   }
+  }
+ },
+ {
+  "label": "cron create garbage",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "not a cron line"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid cron expression: 'not a cron line' (expected 5 fields)"
+   }
+  }
+ },
+ {
+  "label": "cron create names",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "0 3 * jan mon"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "name": "vaga.scan.default"
+   }
+  }
+ },
+ {
+  "label": "cron create step",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "*/15 2-6 1,15 * *"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "<id>",
+    "name": "vaga.scan.default"
+   }
+  }
+ },
+ {
+  "label": "cron create bad field",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "99 3 * * *"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid cron expression: '99 3 * * *' (expected 5 fields)"
+   }
+  }
+ },
+ {
+  "label": "cron create missing chain",
+  "method": "POST",
+  "path": "/api/cron",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan",
+   "cron_expression": "0 3 * * *",
+   "chain_to_id": 999999
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Chain target job not found"
+   }
+  }
+ },
+ {
+  "label": "cron patch expression",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "cron_expression": "30 4 * * 1"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch bad expression",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "cron_expression": "x"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Invalid cron expression: 'x' (expected 5 fields)"
+   }
+  }
+ },
+ {
+  "label": "cron patch phase",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "phase": "scan"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch bad phase",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "phase": "validate"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "phase must be 'discover' or 'scan'"
+   }
+  }
+ },
+ {
+  "label": "cron patch strategy blank",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "strategy": "  "
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch strategy",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "strategy": " sitemap "
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch self chain",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "chain_to_id": "cron_a"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "A job cannot chain to itself"
+   }
+  }
+ },
+ {
+  "label": "cron patch both chain args",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "chain_to_id": "cron_b",
+   "clear_chain": true
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Provide chain_to_id or clear_chain, not both"
+   }
+  }
+ },
+ {
+  "label": "cron patch chain",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "chain_to_id": "cron_b"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch cycle",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_b>",
+  "body": {
+   "chain_to_id": "cron_a"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "Chain would create a cycle"
+   }
+  }
+ },
+ {
+  "label": "cron patch clear chain",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {
+   "clear_chain": true
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch empty",
+  "method": "PATCH",
+  "path": "/api/cron/<cron_a>",
+  "body": {},
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_a"
+   }
+  }
+ },
+ {
+  "label": "cron patch 404",
+  "method": "PATCH",
+  "path": "/api/cron/9999999",
+  "body": {
+   "phase": "scan"
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Job not found"
+   }
+  }
+ },
+ {
+  "label": "cron toggle",
+  "method": "POST",
+  "path": "/api/cron/<cron_doomed>/toggle",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_doomed",
+    "enabled": false
+   }
+  }
+ },
+ {
+  "label": "cron toggle back",
+  "method": "POST",
+  "path": "/api/cron/<cron_doomed>/toggle",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_doomed",
+    "enabled": true
+   }
+  }
+ },
+ {
+  "label": "cron toggle 404",
+  "method": "POST",
+  "path": "/api/cron/9999999/toggle",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Job not found"
+   }
+  }
+ },
+ {
+  "label": "cron delete dependent target",
+  "method": "DELETE",
+  "path": "/api/cron/<cron_target>",
+  "body": null,
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": {
+     "message": "Cannot delete: other schedules chain to this one.",
+     "dependents": [
+      {
+       "id": "cron_dependent",
+       "name": "vaga.scan.default"
+      },
+      {
+       "id": "<id>",
+       "name": "vaga.scan.default"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "label": "cron delete",
+  "method": "DELETE",
+  "path": "/api/cron/<cron_doomed>",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "id": "cron_doomed"
+   }
+  }
+ },
+ {
+  "label": "cron delete again",
+  "method": "DELETE",
+  "path": "/api/cron/<cron_doomed>",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Job not found"
+   }
+  }
+ },
+ {
+  "label": "cron delete 404",
+  "method": "DELETE",
+  "path": "/api/cron/9999999",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Job not found"
+   }
+  }
+ },
+ {
+  "label": "rate settings save",
+  "method": "POST",
+  "path": "/shops/vaga/rate-settings",
+  "body": {
+   "download_delay": 2.5,
+   "concurrent_requests_per_domain": 4
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "_raw": "<p class=\"success\">Saved.</p>"
+   }
+  }
+ },
+ {
+  "label": "rate settings resave",
+  "method": "POST",
+  "path": "/shops/vaga/rate-settings",
+  "body": {
+   "download_delay": 1.0,
+   "concurrent_requests_per_domain": 2
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "_raw": "<p class=\"success\">Saved.</p>"
+   }
+  }
+ },
+ {
+  "label": "rate settings bad delay",
+  "method": "POST",
+  "path": "/shops/vaga/rate-settings",
+  "body": {
+   "download_delay": 99,
+   "concurrent_requests_per_domain": 2
+  },
+  "expected": {
+   "_status": 400,
+   "body": {
+    "_raw": "<p class=\"error\">download_delay must be 0.1–60 s</p>"
+   }
+  }
+ },
+ {
+  "label": "rate settings bad concurrency",
+  "method": "POST",
+  "path": "/shops/vaga/rate-settings",
+  "body": {
+   "download_delay": 1.0,
+   "concurrent_requests_per_domain": 99
+  },
+  "expected": {
+   "_status": 400,
+   "body": {
+    "_raw": "<p class=\"error\">concurrent_requests_per_domain must be 1–16</p>"
+   }
+  }
+ },
+ {
+  "label": "rate settings bad shop",
+  "method": "POST",
+  "path": "/shops/no-such-shop/rate-settings",
+  "body": {
+   "download_delay": 1.0,
+   "concurrent_requests_per_domain": 2
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "_raw": "<p class=\"error\">Shop not found</p>"
+   }
+  }
+ },
+ {
+  "label": "scrape url 404",
+  "method": "POST",
+  "path": "/scrape/url/999999999",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "URL not found"
+   }
+  }
+ },
+ {
+  "label": "scrape filtered no filter",
+  "method": "POST",
+  "path": "/scrape/filtered",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "At least one filter is required (shop/q/author/publisher/category/format/missing/active/has_isbn/field filters)"
+   }
+  }
+ },
+ {
+  "label": "scrape filtered bad shop",
+  "method": "POST",
+  "path": "/scrape/filtered?shop=no-such-shop",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Unknown shop: no-such-shop"
+   }
+  }
+ },
+ {
+  "label": "scrape filtered no match",
+  "method": "POST",
+  "path": "/scrape/filtered?q=zzzz-no-such-title-zzzz",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "No shop_books matched the filters"
+   }
+  }
+ },
+ {
+  "label": "bulk rescrape",
+  "method": "POST",
+  "path": "/api/issues/bulk-rescrape",
+  "body": {
+   "issue_type": "missing_isbn",
+   "shop": "vaga"
+  },
+  "expected": {
+   "_status": 200,
+   "body": {
+    "urls": "https://synthetic.test/dims-b,https://synthetic.test/dims-ok",
+    "count": 2
+   }
+  }
+ },
+ {
+  "label": "bulk rescrape no type",
+  "method": "POST",
+  "path": "/api/issues/bulk-rescrape",
+  "body": {
+   "shop": "vaga"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "issue_type is required"
+   }
+  }
+ },
+ {
+  "label": "bulk rescrape no shop",
+  "method": "POST",
+  "path": "/api/issues/bulk-rescrape",
+  "body": {
+   "issue_type": "missing_isbn"
+  },
+  "expected": {
+   "_status": 422,
+   "body": {
+    "detail": "shop is required"
+   }
+  }
+ },
+ {
+  "label": "bulk rescrape bad shop",
+  "method": "POST",
+  "path": "/api/issues/bulk-rescrape",
+  "body": {
+   "issue_type": "missing_isbn",
+   "shop": "no-such-shop"
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Unknown shop: no-such-shop"
+   }
+  }
+ },
+ {
+  "label": "create run bad phase",
+  "method": "POST",
+  "path": "/api/runs",
+  "body": {
+   "shop": "vaga",
+   "phase": "sitemap"
+  },
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "Unknown phase: sitemap"
+   }
+  }
+ },
+ {
+  "label": "create run bad shop",
+  "method": "POST",
+  "path": "/api/runs",
+  "body": {
+   "shop": "no-such-shop",
+   "phase": "scan"
+  },
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Unknown shop: no-such-shop"
+   }
+  }
+ },
+ {
+  "label": "create run already active",
+  "method": "POST",
+  "path": "/api/runs",
+  "body": {
+   "shop": "vaga",
+   "phase": "scan"
+  },
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+   }
+  }
+ },
+ {
+  "label": "rerun 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/rerun",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "rerun non-terminal",
+  "method": "POST",
+  "path": "/api/runs/<run_running2>/rerun",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "Only terminal runs can be re-run; status='running'"
+   }
+  }
+ },
+ {
+  "label": "rerun blocked by active",
+  "method": "POST",
+  "path": "/api/runs/<run_completed>/rerun",
+  "body": null,
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+   }
+  }
+ },
+ {
+  "label": "continue 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/continue",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "continue non-failed",
+  "method": "POST",
+  "path": "/api/runs/<run_completed>/continue",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "Only failed runs can be continued; status='completed'"
+   }
+  }
+ },
+ {
+  "label": "continue nothing pending",
+  "method": "POST",
+  "path": "/api/runs/<run_failed_empty>/continue",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "Nothing left to continue: no pending URLs on this run."
+   }
+  }
+ },
+ {
+  "label": "continue blocked by active",
+  "method": "POST",
+  "path": "/api/runs/<run_failed_pending>/continue",
+  "body": null,
+  "expected": {
+   "_status": 409,
+   "body": {
+    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+   }
+  }
+ },
+ {
+  "label": "retry 404",
+  "method": "POST",
+  "path": "/api/runs/999999999/retry",
+  "body": null,
+  "expected": {
+   "_status": 404,
+   "body": {
+    "detail": "Run not found"
+   }
+  }
+ },
+ {
+  "label": "retry non-scan phase",
+  "method": "POST",
+  "path": "/api/runs/<run_discover>/retry",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "Retry is only supported for scan runs; phase='discover_sitemap'"
+   }
+  }
+ },
+ {
+  "label": "retry no match",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/retry?error_reason=http_404&http_status=404",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "No matching failed URLs to retry."
+   }
+  }
+ },
+ {
+  "label": "retry empty run",
+  "method": "POST",
+  "path": "/api/runs/<run_failed_empty>/retry",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "No matching failed URLs to retry."
+   }
+  }
+ },
+ {
+  "label": "retry live run",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/retry?error_reason_is_null=true&http_status_is_null=true",
+  "body": null,
+  "expected": {
+   "_status": 200,
+   "body": {
+    "retried": 1,
+    "run_id": "run_running",
+    "run_status": "stopping",
+    "spawned": false
+   }
+  }
+ },
+ {
+  "label": "retry live run again",
+  "method": "POST",
+  "path": "/api/runs/<run_running>/retry",
+  "body": null,
+  "expected": {
+   "_status": 400,
+   "body": {
+    "detail": "No matching failed URLs to retry."
+   }
+  }
+ }
+]
