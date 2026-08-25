@@ -43,7 +43,7 @@ concurrency, then what users see, then noise.
 
 **All nine landed, in lockstep.** The PHP port is measured against Python's
 behaviour, so every fix moved both sides together: goldens regenerated
-(`make golden`, `make markdown-golden`), and `api-diff` (88/88), `validate-diff`
+(`make golden`, `make markdown-golden`), and `api-diff`, `validate-diff`
 (13,339 issues), `validator-diff` (46/46) and `canonical-diff` all identical
 afterwards. Three of the nine required *removing* deliberate bug-reproduction
 from the PHP side — the string-year comparison, the impossible SKU check, and
