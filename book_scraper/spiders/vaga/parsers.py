@@ -243,6 +243,23 @@ def parse_sitemap_urls(xml_content: str) -> list[str]:
     return [loc.text for loc in root.findall(".//s:loc", ns) if loc.text is not None]
 
 
+# Card price selectors. vaga varies the modifier on the price class
+# ("price special" today, "price coupon" before that, bare "price" on some
+# layouts), and pinning one modifier is how the listing silently stopped
+# yielding prices: the class moved, every card parsed, and every price came
+# back None. The tests assert a real value for exactly that reason.
+#
+# `class="price` followed by `"` or whitespace cannot match `price-old`,
+# `price-filter` or `product-price`, so the modifier stays open-ended without
+# catching the neighbouring classes.
+_CARD_PRICE_RE = re.compile(r'class="price(?:\s+[a-z-]+)*"[^>]*>\s*([0-9,]+)€')
+
+# The "was" price. Today it is `price-old price-in-store` and the text carries
+# a "Knygyne:" label before the number; `price-old strikethrough` and a bare
+# `price-old` also occur.
+_CARD_PRICE_OLD_RE = re.compile(r'class="price-old[^"]*"[^>]*>[^<]*?([0-9,]+)€')
+
+
 def parse_category_page(html: str) -> CategoryPageResult:
     """Parse product cards from a vaga.lt category page.
 
@@ -272,12 +289,12 @@ def parse_category_page(html: str) -> CategoryPageResult:
             author = html_module.unescape(author_match.group(1).strip())
 
         price = None
-        price_match = re.search(r'class="price coupon">([0-9,]+)€', seg)
+        price_match = _CARD_PRICE_RE.search(seg)
         if price_match:
             price = price_match.group(1).replace(",", ".")
 
         price_original = None
-        original_match = re.search(r'class="price-old">([0-9,]+)€', seg)
+        original_match = _CARD_PRICE_OLD_RE.search(seg)
         if original_match:
             price_original = original_match.group(1).replace(",", ".")
 

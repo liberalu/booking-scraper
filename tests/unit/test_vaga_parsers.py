@@ -30,11 +30,77 @@ def test_parse_category_page():
     first = products[0]
     assert "url" in first
     assert "title" in first
-    assert "price" in first
     assert first["url"].startswith("https://vaga.lt/")
+    # A PRICE, not just the key. Asserting `"price" in first` is what let the
+    # listing silently stop yielding prices when vaga renamed the class: every
+    # card still parsed and every price came back None.
+    assert first["price"] is not None
+    priced = [p for p in products if p["price"] is not None]
+    assert len(priced) == len(products), "every card on the page carries a price"
     # OpenCart's "Rodoma nuo 1 iki 100 iš 9910" line carries the catalogue
     # total — the spider uses it to enqueue all pages upfront.
     assert result["total"] == 9910
+
+
+@pytest.mark.parametrize(
+    ("markup", "expected_price", "expected_original"),
+    [
+        # Current layout: `price special`, and the was-price carries a label.
+        (
+            '<span class="price special">14,76€</span>'
+            '<div class="price-old price-in-store">Knygyne: 24,60€</div>',
+            "14.76",
+            "24.60",
+        ),
+        # Previous layout, still accepted.
+        (
+            '<span class="price coupon">10,00€</span>'
+            '<div class="price-old">15,00€</div>',
+            "10.00",
+            "15.00",
+        ),
+        # No modifier on the class at all.
+        ('<span class="price">9,99€</span>', "9.99", None),
+        # A struck-through was-price instead of the in-store one.
+        (
+            '<span class="price special">8,00€</span>'
+            '<div class="price-old strikethrough">9,50€</div>',
+            "8.00",
+            "9.50",
+        ),
+    ],
+)
+def test_parse_category_page_price_class_variants(
+    markup, expected_price, expected_original
+):
+    """vaga varies the modifier on the price class between layouts.
+
+    Pinning one modifier is how the listing stopped yielding prices, so each
+    shape seen in the wild is asserted rather than assumed.
+    """
+    html = (
+        '<div class="product-item-container product-1">'
+        '<p class="name"><a href="https://vaga.lt/a-book">A Book</a></p>'
+        + markup
+        + "</div>"
+    )
+    product = parse_category_page(html)["products"][0]
+    assert product["price"] == expected_price
+    assert product["price_original"] == expected_original
+
+
+def test_parse_category_page_ignores_neighbouring_price_classes():
+    """`price-filter`, `price-old` and `product-price` must not be read as the
+    selling price — they sit in the same card."""
+    html = (
+        '<div class="product-item-container product-1">'
+        '<p class="name"><a href="https://vaga.lt/a-book">A Book</a></p>'
+        '<div class="price-filter">99,00€</div>'
+        '<div class="product-price">88,00€</div>'
+        '<span class="price special">14,76€</span>'
+        "</div>"
+    )
+    assert parse_category_page(html)["products"][0]["price"] == "14.76"
 
 
 def test_parse_product_page():
