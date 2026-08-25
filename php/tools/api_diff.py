@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _testdb import TEST_DSN  # noqa: E402
+from _testdb import TEST_DSN, php_dsn  # noqa: E402
 
 MAIN_DSN = "postgresql+psycopg2://postgres:postgres@localhost:5432/book_scraper"
 
@@ -77,15 +77,28 @@ FREEZE_TO = ROOT / "php" / "dashboard" / "tests" / "golden" / "api_shapes.json"
 #: carried a literal id and 404s against any other database — which would have
 #: frozen "not found" as the expected shape for half the API. A placeholder is
 #: resolved to a row that actually exists, so the route is exercised.
+#: Resolved against the SYNTHETIC shop wherever it can be, not against
+#: "whatever row is first". The synthetic shop is built from nothing by
+#: php/src/Testing/SyntheticShop.php, so its rows are the same every time —
+#: while the copied catalogue moves with every crawl, and a detail route whose
+#: row gained or lost a null would change the frozen shape for no reason.
+SYNTHETIC = "(select id from shops where name = 'synthetic')"
+
 ID_PLACEHOLDERS = {
-    "{run}": "select id from scrape_runs order by id desc limit 1",
-    "{run_scan}": "select id from scrape_runs where phase = 'scan'"
+    "{run}": f"select id from scrape_runs where shop_id = {SYNTHETIC}"
     " order by id desc limit 1",
-    "{book}": "select id from books order by id limit 1",
-    "{shop_book}": "select id from shop_books order by id limit 1",
-    "{issue}": "select id from validation_issues order by id limit 1",
-    "{url}": "select id from discovered_urls order by id limit 1",
-    "{cron}": "select id from cron_jobs order by id limit 1",
+    "{run_scan}": f"select id from scrape_runs where shop_id = {SYNTHETIC}"
+    " and phase = 'scan' order by id desc limit 1",
+    "{book}": "select id from books where source_url like 'https://synthetic.test/%'"
+    " order by id limit 1",
+    "{shop_book}": f"select id from shop_books where shop_id = {SYNTHETIC}"
+    " order by id limit 1",
+    "{issue}": f"select id from validation_issues where shop_id = {SYNTHETIC}"
+    " order by id limit 1",
+    "{url}": f"select id from discovered_urls where shop_id = {SYNTHETIC}"
+    " order by id limit 1",
+    "{cron}": f"select id from cron_jobs where shop_id = {SYNTHETIC}"
+    " order by id limit 1",
 }
 
 #: Ids chosen to be absent, so the 404 paths stay covered on purpose rather
@@ -93,46 +106,23 @@ ID_PLACEHOLDERS = {
 MISSING_ID = "999999999"
 
 
-#: Marker for rows the freeze plants because a route needs one to exercise.
-PLANT_MARK = "api-diff-freeze"
+def build_fixtures(dsn: str) -> None:
+    """Build the synthetic shop, runs, cron job and issue the routes need.
 
-
-def ensure_rows(dsn: str) -> None:
-    """Plant the minimum a detail route needs, if it is missing.
-
-    `/api/cron/{id}/detail` cannot be exercised without a cron job, and the
-    test database legitimately has none — the other tools clean theirs up. One
-    is planted here and removed in remove_planted_rows(), rather than leaving a
-    row behind for the next tool to trip over.
+    Delegated to `php bin/synthesize-validate-cases` rather than planted here:
+    the fixture has to outlive Python, since the goldens are only replayable
+    over data PHP can rebuild identically. Two implementations of one fixture
+    would drift, and the PHP one is the survivor.
     """
-    import sqlalchemy as sa
-
-    engine = sa.create_engine(dsn, poolclass=sa.pool.NullPool)
-    with engine.begin() as conn:
-        if conn.execute(sa.text("select count(*) from cron_jobs")).scalar():
-            return
-        shop_id = conn.execute(
-            sa.text("select id from shops order by id limit 1")
-        ).scalar()
-        conn.execute(
-            sa.text(
-                "insert into cron_jobs (shop_id, phase, strategy, args,"
-                " cron_expression, enabled, created_at)"
-                " values (:s, 'discover', 'sitemap', :m, '0 3 * * *', true, now())"
-            ),
-            {"s": shop_id, "m": PLANT_MARK},
-        )
-        print(f"  planted one cron_jobs row ({PLANT_MARK}) so /cron/{{id}}/detail runs")
-
-
-def remove_planted_rows(dsn: str) -> None:
-    import sqlalchemy as sa
-
-    engine = sa.create_engine(dsn, poolclass=sa.pool.NullPool)
-    with engine.begin() as conn:
-        conn.execute(
-            sa.text("delete from cron_jobs where args = :m"), {"m": PLANT_MARK}
-        )
+    result = subprocess.run(
+        [PHP, "bin/synthesize-validate-cases", f"--database={dsn}"],
+        cwd=ROOT / "php",
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit("could not build fixtures:\n" + result.stderr.strip())
+    print("  " + result.stdout.strip().splitlines()[0])
 
 
 def resolve_placeholders(endpoints: list[str], dsn: str) -> list[tuple[str, str]]:
@@ -574,8 +564,8 @@ def main() -> int:
         # and the main catalogue changes whenever anything is crawled.
         dsn = TEST_DSN
         assert_ports_free(FREEZE_PY_PORT, FREEZE_PHP_PORT)
-        ensure_rows(dsn)
         print(f"starting both dashboards against {dsn.rsplit('/', 1)[-1]}")
+        build_fixtures(php_dsn(dsn))
         # Placeholders resolve BEFORE anything is started. Resolution can fail
         # fatally, and it used to do so after the servers were up but before
         # the try/finally that stops them — leaking two detached processes that
@@ -649,7 +639,6 @@ def main() -> int:
         if args.freeze:
             free_port(FREEZE_PY_PORT)
             free_port(FREEZE_PHP_PORT)
-            remove_planted_rows(TEST_DSN)
 
     total = len(endpoints) + len(envelope_only)
     print(f"\n{total - failures}/{total} endpoints identical")

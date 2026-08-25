@@ -390,9 +390,14 @@ final class RunSpawnController
         }
         // `stopping` counts as active: a second run while the first tears
         // down would double the load on the shop.
+        // orderBy('id'): with two active runs an unordered first() names an
+        // arbitrary one, and which one moves when a status UPDATE rewrites the
+        // row. The oldest active run is the one actually blocking, and it is
+        // the same answer every time. Python orders identically.
         $existing = ScrapeRun::where('shop_id', $shop->id)
             ->where('phase', $runPhase)
             ->whereIn('status', ['running', 'stopping', 'paused'])
+            ->orderBy('id')
             ->first();
         if ($existing !== null) {
             return response()->json([

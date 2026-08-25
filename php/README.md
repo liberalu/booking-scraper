@@ -505,9 +505,12 @@ make validate SHOP=vaga         # run the PHP validator for real
 ### Verified on real catalogue data
 
 An empty database proves nothing here: every suppression rule was tuned
-against shapes that actually occur. So the comparison runs over copies of
-production shops, and the six checks no real shop happens to trigger get
-synthetic rows built for them (`tools/synthesize_validate_cases.py`).
+against shapes that actually occur. So the comparison runs over copies of real
+shops — and separately over a synthetic shop built from nothing
+(`bin/synthesize-validate-cases`) that fires all 20 issue types plus their
+suppression cases. Only the synthetic half is freezable: a copied shop moves
+with the catalogue, so its counts would drift and a golden over it would fail
+for reasons that are not regressions.
 
 | Shop | Books | Findings | Result |
 |---|---|---|---|

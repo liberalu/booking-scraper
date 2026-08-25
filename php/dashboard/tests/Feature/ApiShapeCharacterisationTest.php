@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use BookScraper\Testing\SyntheticShop;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -22,9 +23,16 @@ use Tests\UsesTestDatabase;
  * anything is crawled. A shape breaks when a route disappears, a field is
  * renamed or dropped, or a type changes — the regressions worth catching.
  *
- * Ids in the golden are placeholders ({run}, {book}, …) resolved against
- * whichever database this runs on. Freezing literal ids would pin them to the
- * database the freeze happened to see, and every detail route would 404.
+ * Ids in the golden are placeholders ({run}, {book}, …) resolved against the
+ * synthetic shop, which SyntheticShop builds from nothing before each run.
+ * Freezing literal ids would pin them to the database the freeze happened to
+ * see; resolving them against "whatever row is first" in a copied catalogue
+ * would be worse still, because a detail row that gained or lost a null would
+ * change the frozen shape without anything having regressed.
+ *
+ * Known limit: the LIST endpoints read every shop, so the shape of their first
+ * row still comes from copied catalogue data. That is the part of this golden
+ * that a reseed could move.
  */
 final class ApiShapeCharacterisationTest extends TestCase
 {
@@ -32,18 +40,24 @@ final class ApiShapeCharacterisationTest extends TestCase
 
     private const GOLDEN = __DIR__ . '/../golden/api_shapes.json';
 
-    private const PLANT_MARK = 'api-diff-freeze';
+    private const SYNTHETIC = "(select id from shops where name = 'synthetic')";
 
     /** Kept in step with ID_PLACEHOLDERS in php/tools/api_diff.py. */
     private const PLACEHOLDERS = [
-        '{run}' => 'select id from scrape_runs order by id desc limit 1',
-        '{run_scan}' => "select id from scrape_runs where phase = 'scan'"
+        '{run}' => 'select id from scrape_runs where shop_id = ' . self::SYNTHETIC
             . ' order by id desc limit 1',
-        '{book}' => 'select id from books order by id limit 1',
-        '{shop_book}' => 'select id from shop_books order by id limit 1',
-        '{issue}' => 'select id from validation_issues order by id limit 1',
-        '{url}' => 'select id from discovered_urls order by id limit 1',
-        '{cron}' => 'select id from cron_jobs order by id limit 1',
+        '{run_scan}' => 'select id from scrape_runs where shop_id = ' . self::SYNTHETIC
+            . " and phase = 'scan' order by id desc limit 1",
+        '{book}' => "select id from books where source_url like 'https://synthetic.test/%'"
+            . ' order by id limit 1',
+        '{shop_book}' => 'select id from shop_books where shop_id = ' . self::SYNTHETIC
+            . ' order by id limit 1',
+        '{issue}' => 'select id from validation_issues where shop_id = ' . self::SYNTHETIC
+            . ' order by id limit 1',
+        '{url}' => 'select id from discovered_urls where shop_id = ' . self::SYNTHETIC
+            . ' order by id limit 1',
+        '{cron}' => 'select id from cron_jobs where shop_id = ' . self::SYNTHETIC
+            . ' order by id limit 1',
     ];
 
     /** Endpoints answering with CSV rather than JSON. */
@@ -52,21 +66,10 @@ final class ApiShapeCharacterisationTest extends TestCase
         '/api/books/export?year=1975',
     ];
 
-    private bool $plantedCron = false;
-
     protected function setUp(): void
     {
         parent::setUp();
         $this->useTestDatabase();
-    }
-
-    protected function tearDown(): void
-    {
-        if ($this->plantedCron) {
-            DB::table('cron_jobs')->where('args', self::PLANT_MARK)->delete();
-            $this->plantedCron = false;
-        }
-        parent::tearDown();
     }
 
     #[Group('db')]
@@ -76,8 +79,26 @@ final class ApiShapeCharacterisationTest extends TestCase
         self::assertIsArray($cases);
         self::assertNotEmpty($cases, 'golden is empty — run `make api-diff-freeze`');
 
-        $ids = $this->resolvePlaceholders();
+        // Inside a transaction that is rolled back: the fixture this builds
+        // is committed data otherwise, and a tool that leaves its fixtures
+        // behind breaks the next one. That has already happened three times
+        // in this port. The requests below run in-process on this same
+        // connection, so they see the uncommitted rows.
+        DB::beginTransaction();
+        try {
+            $ids = $this->resolvePlaceholders();
+            $this->compareAll($cases, $ids);
+        } finally {
+            DB::rollBack();
+        }
+    }
 
+    /**
+     * @param list<array<string, mixed>> $cases
+     * @param array<string, string> $ids
+     */
+    private function compareAll(array $cases, array $ids): void
+    {
         foreach ($cases as $case) {
             $endpoint = strtr($case['endpoint'], $ids);
             $response = $this->get($endpoint);
@@ -105,22 +126,10 @@ final class ApiShapeCharacterisationTest extends TestCase
     /** @return array<string, string> placeholder => concrete id */
     private function resolvePlaceholders(): array
     {
-        // /api/cron/{id}/detail cannot be exercised without a cron job, and
-        // the test database legitimately has none — the differential tools
-        // clean theirs up. Plant one and remove it in tearDown, rather than
-        // leaving a row for the next tool to trip over.
-        if (DB::table('cron_jobs')->count() === 0) {
-            DB::table('cron_jobs')->insert([
-                'shop_id' => DB::table('shops')->orderBy('id')->value('id'),
-                'phase' => 'discover',
-                'strategy' => 'sitemap',
-                'args' => self::PLANT_MARK,
-                'cron_expression' => '0 3 * * *',
-                'enabled' => true,
-                'created_at' => now(),
-            ]);
-            $this->plantedCron = true;
-        }
+        // Rebuilt rather than assumed: after a reseed the runs, cron and
+        // issue tables are empty (seed_test_db copies no runs), so half the
+        // detail routes would resolve to nothing. build() is idempotent.
+        SyntheticShop::build(DB::connection());
 
         $ids = [];
         foreach (self::PLACEHOLDERS as $token => $query) {

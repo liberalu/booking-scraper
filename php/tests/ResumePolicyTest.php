@@ -231,17 +231,18 @@ final class ResumePolicyTest extends TestCase
         // failsafe firing afterwards must not rewrite that to failed.
         DB::commit();
         $runId = $this->makeRun('completed');
-        DB::beginTransaction();
 
-        $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+        try {
+            $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
 
-        self::assertFalse($written);
-        self::assertSame(
-            'completed',
-            DB::table('scrape_runs')->where('id', $runId)->value('status')
-        );
-
-        DB::table('scrape_runs')->where('id', $runId)->delete();
+            self::assertFalse($written);
+            self::assertSame(
+                'completed',
+                DB::table('scrape_runs')->where('id', $runId)->value('status')
+            );
+        } finally {
+            $this->cleanUpCommitted($runId);
+        }
     }
 
     public function test_the_failsafe_marks_a_running_run_failed_and_resumable(): void
@@ -250,18 +251,44 @@ final class ResumePolicyTest extends TestCase
         // cannot see this test's open transaction.
         DB::commit();
         $runId = $this->makeRun('running');
-        DB::beginTransaction();
 
-        $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+        try {
+            $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
 
-        $row = DB::table('scrape_runs')->where('id', $runId)->first();
-        self::assertTrue($written);
-        self::assertSame('failed', $row->status);
-        self::assertSame('stall_timeout', $row->close_reason);
-        self::assertTrue((bool) $row->resumable_after_failure);
-        self::assertNotNull($row->finished_at);
+            $row = DB::table('scrape_runs')->where('id', $runId)->first();
+            self::assertTrue($written);
+            self::assertSame('failed', $row->status);
+            self::assertSame('stall_timeout', $row->close_reason);
+            self::assertTrue((bool) $row->resumable_after_failure);
+            self::assertNotNull($row->finished_at);
+        } finally {
+            $this->cleanUpCommitted($runId);
+        }
+    }
 
+    /**
+     * Remove what the two failsafe tests had to commit.
+     *
+     * They cannot lean on tearDown's rollback — the point of committing is
+     * that the failsafe opens its own connection and must see the row. The
+     * cleanup therefore has to be committed too: deleting inside a fresh
+     * transaction, as this used to, left every suite run two `resume-test`
+     * runs in the shared database. They accumulated as the newest runs there,
+     * which silently changed what the dashboard's /api/overview returns and
+     * broke a characterisation golden two packages away.
+     *
+     * tearDown() calls rollBack() unconditionally, so a transaction is opened
+     * again on the way out.
+     */
+    private function cleanUpCommitted(int $runId): void
+    {
         DB::table('scrape_run_events')->where('run_id', $runId)->delete();
-        DB::table('scrape_runs')->where('id', $runId)->delete();
+        // Every run on this shop, not just $runId: the shop exists only for
+        // this test, so anything left on it is litter from an earlier suite
+        // run that could not be deleted while the shop was still referenced.
+        DB::table('scrape_url_items')->where('shop_id', $this->shopId)->delete();
+        DB::table('scrape_runs')->where('shop_id', $this->shopId)->delete();
+        DB::table('shops')->where('id', $this->shopId)->delete();
+        DB::beginTransaction();
     }
 }

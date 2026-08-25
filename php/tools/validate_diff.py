@@ -14,6 +14,12 @@ one already healed. Both passes use the same run id so findings are
 comparable row for row.
 
 Exit code is the number of differences.
+
+--freeze writes the findings as a characterisation golden, and only accepts
+--shop synthetic. A copied real shop's findings are not reproducible: the
+catalogue moves with every crawl, so the counts would drift and the replay
+would fail for reasons that are not regressions. The synthetic shop is built
+from nothing by php/src/Testing/SyntheticShop.php and fires all 20 issue types.
 """
 
 from __future__ import annotations
@@ -30,10 +36,13 @@ import sqlalchemy as sa
 # The test database is named in one place — see _testdb for why the PHP
 # side cannot share the Python suite's database.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _testdb import TEST_DSN  # noqa: E402
+from _testdb import TEST_DSN, php_dsn  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
+FREEZE_TO = ROOT / "php" / "tests" / "golden" / "validate_findings.json"
+#: The only shop whose findings are reproducible — see the module docstring.
+FREEZABLE_SHOP = "synthetic"
 RUN_ID_SENTINEL = 999_000  # a run id neither stack will allocate naturally
 
 
@@ -107,14 +116,21 @@ def clear_issues() -> None:
 def findings(sid: int) -> dict:
     """Everything the validator produced, ordered deterministically."""
     with engine().connect() as conn:
+        # The linked book is reported by URL, not by id: ids are serials that
+        # change every time the fixture is rebuilt, and a golden holding them
+        # would fail on the next rebuild for no reason. The URL still asserts
+        # the linkage points at the right row.
         issues = [
             dict(row)
             for row in conn.execute(
                 sa.text(
-                    "select issue, field, url, raw_value, shop_book_id, "
-                    "lifecycle_state, run_count, acknowledged_at is not null as acked "
-                    "from validation_issues where shop_id = :s "
-                    "order by issue, field, shop_book_id, url"
+                    "select vi.issue, vi.field, vi.url, vi.raw_value, "
+                    "sb.url as shop_book_url, vi.lifecycle_state, vi.run_count, "
+                    "vi.acknowledged_at is not null as acked "
+                    "from validation_issues vi "
+                    "left join shop_books sb on sb.id = vi.shop_book_id "
+                    "where vi.shop_id = :s "
+                    "order by vi.issue, vi.field, sb.url, vi.url"
                 ),
                 {"s": sid},
             ).mappings()
@@ -201,7 +217,34 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shop", default="vaga")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--freeze",
+        action="store_true",
+        help="write the findings as a characterisation golden, if both stacks "
+        "agree. Only for --shop synthetic.",
+    )
     args = parser.parse_args()
+
+    if args.freeze and args.shop != FREEZABLE_SHOP:
+        sys.exit(
+            f"refusing to freeze shop '{args.shop}': only '{FREEZABLE_SHOP}' is "
+            "reproducible. Copied shops move with the catalogue, so a golden "
+            "over one would fail for reasons that are not regressions."
+        )
+
+    if args.freeze:
+        # Rebuild the fixture so the golden describes a known input rather than
+        # whatever the last tool left behind. Owned by PHP because it has to
+        # outlive Python.
+        built = subprocess.run(
+            [PHP, "bin/synthesize-validate-cases", f"--database={php_dsn()}"],
+            cwd=ROOT / "php",
+            capture_output=True,
+            text=True,
+        )
+        if built.returncode != 0:
+            sys.exit(f"could not build the fixture:\n{built.stderr.strip()}")
+        print(built.stdout.strip().splitlines()[0])
 
     sid = shop_id(args.shop)
     ensure_run(sid)
@@ -248,6 +291,19 @@ def main() -> int:
             print(f"   … {len(differences) - len(shown)} more (--verbose)")
     else:
         print("identical — both validators produced the same findings")
+
+    if args.freeze:
+        if differences:
+            print("\nNOT frozen — the golden may only record agreed behaviour.")
+        else:
+            FREEZE_TO.parent.mkdir(parents=True, exist_ok=True)
+            FREEZE_TO.write_text(
+                json.dumps(php_found, indent=1, ensure_ascii=False, sort_keys=True)
+                + "\n"
+            )
+            print(
+                f"\nfroze {sum(php_found['counts'].values())} findings to {FREEZE_TO}"
+            )
 
     return len(differences)
 

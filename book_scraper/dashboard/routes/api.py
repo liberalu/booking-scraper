@@ -625,6 +625,11 @@ def _preflight_checks(
             ScrapeRun.phase == run_phase,
             ScrapeRun.status.in_(("running", "stopping", "paused")),
         )
+        # Ordered: with two active runs an unordered first() names an
+        # arbitrary one, and which one moves when a status UPDATE rewrites
+        # the row — so the 409 detail was not reproducible. The oldest
+        # active run is the one actually blocking.
+        .order_by(ScrapeRun.id)
         .first()
     )
     return shop, existing

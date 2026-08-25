@@ -35,7 +35,15 @@ final class MutationCharacterisationTest extends TestCase
 
     private const GOLDEN = __DIR__ . '/../golden/mutation_cases.json';
 
-    private const MARK = 'mutation-characterisation';
+    /**
+     * The SAME marker mutation_diff.py plants with, deliberately.
+     *
+     * bulk-rescrape answers with a list of URLs, so the marker is part of a
+     * frozen expected value. A second marker here would mean the golden could
+     * never match. The two never run at once, and this test rolls back while
+     * the tool cleans up after itself, so sharing the marker costs nothing.
+     */
+    private const MARK = 'mutation-diff';
 
     /** Keys whose integer value is a row id — everything else is a count. */
     private const ID_KEYS = [
@@ -152,13 +160,27 @@ final class MutationCharacterisationTest extends TestCase
             );
         }
 
-        $linkedBooks = DB::table('shop_books')
-            ->join('discovered_urls', 'discovered_urls.shop_book_id', '=', 'shop_books.id')
-            ->where('discovered_urls.url_type', 'product')
-            ->orderBy('shop_books.id')
-            ->limit(3)
-            ->pluck('shop_books.id')
-            ->all();
+        // Created, not borrowed. Selecting "the three lowest-id books with a
+        // product URL" made bulk-rescrape's expected value — a list of URLs —
+        // depend on which shop happened to hold those ids, so the frozen case
+        // broke whenever the seeded catalogue shifted.
+        $linkedBooks = [];
+        for ($n = 0; $n < 3; $n++) {
+            $url = 'https://example.test/' . self::MARK . '/book/' . $n;
+            $linkedBooks[] = (int) DB::selectOne(
+                "insert into shop_books (shop_id, url, title, type, is_active,
+                     in_stock, match_status, first_seen_at, last_seen_at)
+                 values (?, ?, ?, 'book', true, true, 'unmatched', now(), now())
+                 returning id",
+                [$shopId, $url, "Fixture Book {$n}"]
+            )->id;
+            DB::insert(
+                "insert into discovered_urls (shop_id, url, normalized_url, source,
+                     url_type, fail_count, first_seen_at, last_seen_at, shop_book_id)
+                 values (?, ?, ?, 'sitemap', 'product', 0, now(), now(), ?)",
+                [$shopId, $url, $url, end($linkedBooks)]
+            );
+        }
 
         $index = 0;
         foreach ([

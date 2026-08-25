@@ -1,0 +1,357 @@
+{
+ "counts": {
+  "active_no_price": 1,
+  "book_no_metadata": 2,
+  "book_no_signals": 1,
+  "format_is_dimensions": 2,
+  "in_stock_no_price": 1,
+  "isbn_duplicate": 2,
+  "match_isbn_drift": 1,
+  "no_price_history": 2,
+  "non_book_has_isbn": 1,
+  "non_product_active": 1,
+  "orphan_no_url": 1,
+  "price_zero": 1,
+  "slug_diacritic_loss": 1,
+  "slug_title_mismatch": 3,
+  "stale_active": 1,
+  "title_author_duplicate": 2,
+  "unmatched_has_isbn": 6,
+  "unreachable_active": 1,
+  "url_aliases": 1,
+  "year_out_of_range": 2
+ },
+ "deactivated_count": 1,
+ "issues": [
+  {
+   "acked": false,
+   "field": "price",
+   "issue": "active_no_price",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-price",
+   "url": "https://synthetic.test/no-price"
+  },
+  {
+   "acked": false,
+   "field": "metadata",
+   "issue": "book_no_metadata",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-metadata",
+   "url": "https://synthetic.test/no-metadata"
+  },
+  {
+   "acked": false,
+   "field": "metadata",
+   "issue": "book_no_metadata",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-signals",
+   "url": "https://synthetic.test/no-signals"
+  },
+  {
+   "acked": false,
+   "field": "type",
+   "issue": "book_no_signals",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-signals",
+   "url": "https://synthetic.test/no-signals"
+  },
+  {
+   "acked": false,
+   "field": "format",
+   "issue": "format_is_dimensions",
+   "lifecycle_state": "new",
+   "raw_value": "17x24",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dims-a",
+   "url": "https://synthetic.test/dims-a"
+  },
+  {
+   "acked": false,
+   "field": "format",
+   "issue": "format_is_dimensions",
+   "lifecycle_state": "new",
+   "raw_value": "170 x 205 mm",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dims-b",
+   "url": "https://synthetic.test/dims-b"
+  },
+  {
+   "acked": false,
+   "field": "price",
+   "issue": "in_stock_no_price",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-price",
+   "url": "https://synthetic.test/no-price"
+  },
+  {
+   "acked": false,
+   "field": "isbn",
+   "issue": "isbn_duplicate",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901700",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-isbn-a",
+   "url": "https://synthetic.test/dup-isbn-a"
+  },
+  {
+   "acked": false,
+   "field": "isbn",
+   "issue": "isbn_duplicate",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901700",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-isbn-b",
+   "url": "https://synthetic.test/dup-isbn-b"
+  },
+  {
+   "acked": false,
+   "field": "isbn",
+   "issue": "match_isbn_drift",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901717 vs 9786090905555",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/drift",
+   "url": "https://synthetic.test/drift"
+  },
+  {
+   "acked": false,
+   "field": "type",
+   "issue": "non_book_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901595",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/nonbook-isbn",
+   "url": "https://synthetic.test/nonbook-isbn"
+  },
+  {
+   "acked": false,
+   "field": "url_type",
+   "issue": "non_product_active",
+   "lifecycle_state": "new",
+   "raw_value": "non_product",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/mixed-nonproduct",
+   "url": "https://synthetic.test/mixed-nonproduct"
+  },
+  {
+   "acked": false,
+   "field": "price_history",
+   "issue": "no_price_history",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/no-price",
+   "url": "https://synthetic.test/no-price"
+  },
+  {
+   "acked": false,
+   "field": "price_history",
+   "issue": "no_price_history",
+   "lifecycle_state": "new",
+   "raw_value": null,
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/orphan",
+   "url": "https://synthetic.test/orphan"
+  },
+  {
+   "acked": false,
+   "field": "url",
+   "issue": "orphan_no_url",
+   "lifecycle_state": "new",
+   "raw_value": "https://synthetic.test/orphan",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/orphan",
+   "url": "https://synthetic.test/orphan"
+  },
+  {
+   "acked": false,
+   "field": "price",
+   "issue": "price_zero",
+   "lifecycle_state": "new",
+   "raw_value": "0",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/price-zero",
+   "url": "https://synthetic.test/price-zero"
+  },
+  {
+   "acked": true,
+   "field": "slug",
+   "issue": "slug_diacritic_loss",
+   "lifecycle_state": "acknowledged",
+   "raw_value": "kale-du-pu-ga",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/kale-du-pu-ga",
+   "url": "https://synthetic.test/kale-du-pu-ga"
+  },
+  {
+   "acked": false,
+   "field": "slug",
+   "issue": "slug_title_mismatch",
+   "lifecycle_state": "new",
+   "raw_value": "dup-ta-a",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-ta-a",
+   "url": "https://synthetic.test/dup-ta-a"
+  },
+  {
+   "acked": false,
+   "field": "slug",
+   "issue": "slug_title_mismatch",
+   "lifecycle_state": "new",
+   "raw_value": "dup-ta-b",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-ta-b",
+   "url": "https://synthetic.test/dup-ta-b"
+  },
+  {
+   "acked": false,
+   "field": "slug",
+   "issue": "slug_title_mismatch",
+   "lifecycle_state": "new",
+   "raw_value": "zzz-qqq-xxx",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/zzz-qqq-xxx",
+   "url": "https://synthetic.test/zzz-qqq-xxx"
+  },
+  {
+   "acked": false,
+   "field": "last_seen_at",
+   "issue": "stale_active",
+   "lifecycle_state": "new",
+   "raw_value": "2020-01-01T00:00:00+00:00",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/stale",
+   "url": "https://synthetic.test/stale"
+  },
+  {
+   "acked": false,
+   "field": "title_author",
+   "issue": "title_author_duplicate",
+   "lifecycle_state": "new",
+   "raw_value": "Duplicate Title / Same Author",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-ta-a",
+   "url": "https://synthetic.test/dup-ta-a"
+  },
+  {
+   "acked": false,
+   "field": "title_author",
+   "issue": "title_author_duplicate",
+   "lifecycle_state": "new",
+   "raw_value": "Duplicate Title / Same Author",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-ta-b",
+   "url": "https://synthetic.test/dup-ta-b"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901700",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-isbn-a",
+   "url": "https://synthetic.test/dup-isbn-a"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901700",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/dup-isbn-b",
+   "url": "https://synthetic.test/dup-isbn-b"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "4001234567890",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/nonbook-ean",
+   "url": "https://synthetic.test/nonbook-ean"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901595",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/nonbook-isbn",
+   "url": "https://synthetic.test/nonbook-isbn"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901618",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/nonbook-isbn-dvd",
+   "url": "https://synthetic.test/nonbook-isbn-dvd"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9786090901601",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/nonbook-isbn-puzzle",
+   "url": "https://synthetic.test/nonbook-isbn-puzzle"
+  },
+  {
+   "acked": false,
+   "field": "url_type",
+   "issue": "unreachable_active",
+   "lifecycle_state": "new",
+   "raw_value": "unreachable",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/unreachable",
+   "url": "https://synthetic.test/unreachable"
+  },
+  {
+   "acked": false,
+   "field": "url",
+   "issue": "url_aliases",
+   "lifecycle_state": "new",
+   "raw_value": "1",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/mixed-nonproduct",
+   "url": "https://synthetic.test/mixed-nonproduct"
+  },
+  {
+   "acked": false,
+   "field": "year",
+   "issue": "year_out_of_range",
+   "lifecycle_state": "new",
+   "raw_value": "1500",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/year-ancient",
+   "url": "https://synthetic.test/year-ancient"
+  },
+  {
+   "acked": false,
+   "field": "year",
+   "issue": "year_out_of_range",
+   "lifecycle_state": "new",
+   "raw_value": "2099",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/year-future",
+   "url": "https://synthetic.test/year-future"
+  }
+ ]
+}

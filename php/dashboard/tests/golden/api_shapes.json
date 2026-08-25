@@ -21,12 +21,12 @@
    "recent_runs": [
     {
      "by": "str",
-     "close_reason": "null",
+     "close_reason": "str",
      "elapsed": "str",
      "errors": "number",
      "errors_4xx": "number",
      "errors_5xx": "number",
-     "finished_at": "null",
+     "finished_at": "str",
      "id": "number",
      "items": "number",
      "items_added": "number",
@@ -43,7 +43,7 @@
      "status": "str",
      "type": "str",
      "urls_processed": "number",
-     "urls_total": "null",
+     "urls_total": "number",
      "validation_issues": "number"
     }
    ],
@@ -117,8 +117,8 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "null",
-     "price_max": "null",
-     "price_min": "null",
+     "price_max": "number",
+     "price_min": "number",
      "primary_isbn": "str",
      "publisher": "str",
      "shop_count": "number",
@@ -143,13 +143,13 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "null",
-     "price_max": "null",
-     "price_min": "null",
+     "price_max": "number",
+     "price_min": "number",
      "primary_isbn": "str",
-     "publisher": "str",
+     "publisher": "null",
      "shop_count": "number",
      "title": "str",
-     "year": "number"
+     "year": "null"
     }
    ],
    "page": "number",
@@ -173,21 +173,16 @@
   "endpoint": "/api/books/{book}",
   "status": 200,
   "shape": {
-   "audience": "str",
-   "authors": [
-    {
-     "name": "str",
-     "role": "str"
-    }
-   ],
-   "cover_url": "str",
+   "audience": "null",
+   "authors": [],
+   "cover_url": "null",
    "data_source": "str",
    "description": "null",
-   "dimensions": "str",
+   "dimensions": "null",
    "duration": "null",
    "first_matched_at": "str",
-   "format": "str",
-   "ibiblioteka_page_url": "str",
+   "format": "null",
+   "ibiblioteka_page_url": "null",
    "id": "number",
    "isbns": [
     {
@@ -196,20 +191,20 @@
     }
    ],
    "language": "null",
-   "libis_code": "str",
+   "libis_code": "null",
    "pages": "null",
-   "publisher": "str",
-   "release_place": "str",
+   "publisher": "null",
+   "release_place": "null",
    "scraped_url": "str",
    "series": "null",
    "shops": [
     {
      "author": "str",
      "first_seen_at": "str",
-     "format": "str",
+     "format": "null",
      "in_stock": "bool",
      "is_active": "bool",
-     "isbn": "null",
+     "isbn": "str",
      "last_seen_at": "str",
      "match_method": "null",
      "match_status": "str",
@@ -222,17 +217,13 @@
      "year": "number"
     }
    ],
-   "subjects": [
-    "str"
-   ],
+   "subjects": "null",
    "title": "str",
-   "title_full": "str",
+   "title_full": "null",
    "translated_from": "null",
-   "type": "str",
-   "udc_codes": [
-    "str"
-   ],
-   "year": "number"
+   "type": "null",
+   "udc_codes": "null",
+   "year": "null"
   }
  },
  {
@@ -311,7 +302,7 @@
      "enabled": "bool",
      "id": "number",
      "last": "str",
-     "last_run_at": "null",
+     "last_run_at": "str",
      "last_status": "str",
      "name": "str",
      "next": "str",
@@ -373,35 +364,7 @@
    "name": "str",
    "prices": "number",
    "rate_settings": "{}",
-   "recent_runs": [
-    {
-     "by": "str",
-     "close_reason": "str",
-     "elapsed": "str",
-     "errors": "number",
-     "errors_4xx": "number",
-     "errors_5xx": "number",
-     "finished_at": "str",
-     "id": "number",
-     "items": "number",
-     "items_added": "number",
-     "items_updated": "number",
-     "phase": "str",
-     "phase_mode": "str",
-     "phase_type": "str",
-     "progress": "number",
-     "shop": "str",
-     "started": "str",
-     "startedH": "number",
-     "started_ago": "str",
-     "started_at": "str",
-     "status": "str",
-     "type": "str",
-     "urls_processed": "number",
-     "urls_total": "null",
-     "validation_issues": "number"
-    }
-   ],
+   "recent_runs": [],
    "shop_books": "number"
   }
  },
@@ -431,20 +394,16 @@
    "errors": "number",
    "errors_4xx": "number",
    "errors_5xx": "number",
-   "events": [
-    {
-     "actor": "str",
-     "created_at": "str",
-     "event_type": "str",
-     "id": "number",
-     "payload": {
-      "reason": "str"
-     }
-    }
-   ],
+   "events": [],
    "finished_at": "str",
    "id": "number",
-   "issues": [],
+   "issues": [
+    {
+     "count": "number",
+     "field": "str",
+     "issue": "str"
+    }
+   ],
    "items": "number",
    "items_added": "number",
    "items_updated": "number",
@@ -461,7 +420,7 @@
    "status": "str",
    "type": "str",
    "urls_processed": "number",
-   "urls_total": "null",
+   "urls_total": "number",
    "validation_issues": "number"
   }
  },
@@ -480,7 +439,16 @@
    "book_id": "number",
    "book_score": "null",
    "book_title": "str",
-   "check_history": [],
+   "check_history": [
+    {
+     "done_at": "str",
+     "http_status": "number",
+     "run_id": "number",
+     "started_at": "str",
+     "status": "str",
+     "when": "str"
+    }
+   ],
    "discovered_ago": "str",
    "fail_count": "number",
    "first_seen_at": "str",
@@ -508,216 +476,6 @@
  },
  {
   "endpoint": "/api/issues?per_page=3",
-  "status": 200,
-  "shape": {
-   "counts": {
-    "acknowledged": "number",
-    "new": "number",
-    "resolved": "number",
-    "snoozed": "number",
-    "total": "number"
-   },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "str",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "null",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
-   "kind": "str",
-   "page": "number",
-   "pages": "number",
-   "per_page": "number",
-   "total": "number"
-  }
- },
- {
-  "endpoint": "/api/issues?per_page=3&state=new",
-  "status": 200,
-  "shape": {
-   "counts": {
-    "acknowledged": "number",
-    "new": "number",
-    "resolved": "number",
-    "snoozed": "number",
-    "total": "number"
-   },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "str",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "null",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
-   "kind": "str",
-   "page": "number",
-   "pages": "number",
-   "per_page": "number",
-   "total": "number"
-  }
- },
- {
-  "endpoint": "/api/issues?per_page=3&kind=validation",
-  "status": 200,
-  "shape": {
-   "counts": {
-    "acknowledged": "number",
-    "new": "number",
-    "resolved": "number",
-    "snoozed": "number",
-    "total": "number"
-   },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "null",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "str",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
-   "kind": "str",
-   "page": "number",
-   "pages": "number",
-   "per_page": "number",
-   "total": "number"
-  }
- },
- {
-  "endpoint": "/api/issues?per_page=3&kind=scrape_failure",
-  "status": 200,
-  "shape": {
-   "counts": {
-    "acknowledged": "number",
-    "new": "number",
-    "resolved": "number",
-    "snoozed": "number",
-    "total": "number"
-   },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "str",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "null",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
-   "kind": "str",
-   "page": "number",
-   "pages": "number",
-   "per_page": "number",
-   "total": "number"
-  }
- },
- {
-  "endpoint": "/api/issues?per_page=3&severity=critical",
-  "status": 200,
-  "shape": {
-   "counts": {
-    "acknowledged": "number",
-    "new": "number",
-    "resolved": "number",
-    "snoozed": "number",
-    "total": "number"
-   },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "null",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "str",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
-   "kind": "str",
-   "page": "number",
-   "pages": "number",
-   "per_page": "number",
-   "total": "number"
-  }
- },
- {
-  "endpoint": "/api/issues?per_page=3&severity=warning",
   "status": 200,
   "shape": {
    "counts": {
@@ -759,6 +517,147 @@
   }
  },
  {
+  "endpoint": "/api/issues?per_page=3&state=new",
+  "status": 200,
+  "shape": {
+   "counts": {
+    "acknowledged": "number",
+    "new": "number",
+    "resolved": "number",
+    "snoozed": "number",
+    "total": "number"
+   },
+   "issues": [
+    {
+     "added_ago": "str",
+     "added_at": "str",
+     "book_type": "str",
+     "description": "str",
+     "error_reason": "null",
+     "field": "str",
+     "http_status": "null",
+     "id": "number",
+     "issue": "str",
+     "kind": "str",
+     "lifecycle_state": "str",
+     "raw_value": "str",
+     "scrape_run_id": "number",
+     "severity": "str",
+     "shop_book_id": "number",
+     "shop_book_title": "str",
+     "shop_id": "number",
+     "shop_name": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ],
+   "kind": "str",
+   "page": "number",
+   "pages": "number",
+   "per_page": "number",
+   "total": "number"
+  }
+ },
+ {
+  "endpoint": "/api/issues?per_page=3&kind=validation",
+  "status": 200,
+  "shape": {
+   "counts": {
+    "acknowledged": "number",
+    "new": "number",
+    "resolved": "number",
+    "snoozed": "number",
+    "total": "number"
+   },
+   "issues": [
+    {
+     "added_ago": "str",
+     "added_at": "str",
+     "book_type": "str",
+     "description": "str",
+     "error_reason": "null",
+     "field": "str",
+     "http_status": "null",
+     "id": "number",
+     "issue": "str",
+     "kind": "str",
+     "lifecycle_state": "str",
+     "raw_value": "str",
+     "scrape_run_id": "number",
+     "severity": "str",
+     "shop_book_id": "number",
+     "shop_book_title": "str",
+     "shop_id": "number",
+     "shop_name": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ],
+   "kind": "str",
+   "page": "number",
+   "pages": "number",
+   "per_page": "number",
+   "total": "number"
+  }
+ },
+ {
+  "endpoint": "/api/issues?per_page=3&kind=scrape_failure",
+  "status": 200,
+  "shape": {
+   "counts": {
+    "acknowledged": "number",
+    "new": "number",
+    "resolved": "number",
+    "snoozed": "number",
+    "total": "number"
+   },
+   "issues": [],
+   "kind": "str",
+   "page": "number",
+   "pages": "number",
+   "per_page": "number",
+   "total": "number"
+  }
+ },
+ {
+  "endpoint": "/api/issues?per_page=3&severity=critical",
+  "status": 200,
+  "shape": {
+   "counts": {
+    "acknowledged": "number",
+    "new": "number",
+    "resolved": "number",
+    "snoozed": "number",
+    "total": "number"
+   },
+   "issues": [],
+   "kind": "str",
+   "page": "number",
+   "pages": "number",
+   "per_page": "number",
+   "total": "number"
+  }
+ },
+ {
+  "endpoint": "/api/issues?per_page=3&severity=warning",
+  "status": 200,
+  "shape": {
+   "counts": {
+    "acknowledged": "number",
+    "new": "number",
+    "resolved": "number",
+    "snoozed": "number",
+    "total": "number"
+   },
+   "issues": [],
+   "kind": "str",
+   "page": "number",
+   "pages": "number",
+   "per_page": "number",
+   "total": "number"
+  }
+ },
+ {
   "endpoint": "/api/issues?per_page=3&sort_by=id&order=asc",
   "status": 200,
   "shape": {
@@ -773,24 +672,24 @@
     {
      "added_ago": "str",
      "added_at": "str",
-     "book_type": "null",
+     "book_type": "str",
      "description": "str",
-     "error_reason": "str",
+     "error_reason": "null",
      "field": "str",
      "http_status": "null",
      "id": "number",
      "issue": "str",
      "kind": "str",
      "lifecycle_state": "str",
-     "raw_value": "null",
+     "raw_value": "str",
      "scrape_run_id": "number",
      "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
+     "shop_book_id": "number",
+     "shop_book_title": "str",
      "shop_id": "number",
      "shop_name": "str",
      "url": "str",
-     "url_type": "null"
+     "url_type": "str"
     }
    ],
    "kind": "str",
@@ -815,7 +714,7 @@
     {
      "added_ago": "str",
      "added_at": "str",
-     "book_type": "null",
+     "book_type": "str",
      "description": "str",
      "error_reason": "null",
      "field": "str",
@@ -827,12 +726,12 @@
      "raw_value": "str",
      "scrape_run_id": "number",
      "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
+     "shop_book_id": "number",
+     "shop_book_title": "str",
      "shop_id": "number",
      "shop_name": "str",
      "url": "str",
-     "url_type": "null"
+     "url_type": "str"
     }
    ],
    "kind": "str",
@@ -857,7 +756,7 @@
     {
      "added_ago": "str",
      "added_at": "str",
-     "book_type": "null",
+     "book_type": "str",
      "description": "str",
      "error_reason": "null",
      "field": "str",
@@ -869,12 +768,12 @@
      "raw_value": "str",
      "scrape_run_id": "number",
      "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
+     "shop_book_id": "number",
+     "shop_book_title": "str",
      "shop_id": "number",
      "shop_name": "str",
      "url": "str",
-     "url_type": "null"
+     "url_type": "str"
     }
    ],
    "kind": "str",
@@ -937,30 +836,7 @@
     "snoozed": "number",
     "total": "number"
    },
-   "issues": [
-    {
-     "added_ago": "str",
-     "added_at": "str",
-     "book_type": "null",
-     "description": "str",
-     "error_reason": "str",
-     "field": "str",
-     "http_status": "null",
-     "id": "number",
-     "issue": "str",
-     "kind": "str",
-     "lifecycle_state": "str",
-     "raw_value": "null",
-     "scrape_run_id": "number",
-     "severity": "str",
-     "shop_book_id": "null",
-     "shop_book_title": "null",
-     "shop_id": "number",
-     "shop_name": "str",
-     "url": "str",
-     "url_type": "null"
-    }
-   ],
+   "issues": [],
    "kind": "str",
    "page": "number",
    "pages": "number",
@@ -1035,10 +911,7 @@
   "endpoint": "/api/issues/trend?days=14&state=new",
   "status": 200,
   "shape": {
-   "invalid_isbn": [
-    "number"
-   ],
-   "scrape_run_failed": [
+   "format_is_dimensions": [
     "number"
    ]
   }
@@ -1047,10 +920,7 @@
   "endpoint": "/api/issues/trend?days=7",
   "status": 200,
   "shape": {
-   "invalid_isbn": [
-    "number"
-   ],
-   "scrape_run_failed": [
+   "format_is_dimensions": [
     "number"
    ]
   }
@@ -1063,7 +933,7 @@
    "added_ago": "str",
    "added_at": "str",
    "description": "str",
-   "discovered_url_id": "null",
+   "discovered_url_id": "number",
    "field": "str",
    "id": "number",
    "issue": "str",
@@ -1073,8 +943,8 @@
    "raw_value": "str",
    "scrape_run_id": "number",
    "severity": "str",
-   "shop_book_id": "null",
-   "shop_book_title": "null",
+   "shop_book_id": "number",
+   "shop_book_title": "str",
    "shop_name": "str",
    "url": "str"
   }
@@ -1093,7 +963,7 @@
   "shape": {
    "attributes": "{}",
    "author": "str",
-   "book_id": "number",
+   "book_id": "null",
    "categories": [
     "str"
    ],
@@ -1109,7 +979,17 @@
    "is_active": "bool",
    "isbn": "null",
    "issues": "number",
-   "issues_list": [],
+   "issues_list": [
+    {
+     "field": "str",
+     "id": "number",
+     "issue": "str",
+     "lifecycle_state": "str",
+     "raw_value": "str",
+     "scrape_run_id": "number",
+     "severity": "str"
+    }
+   ],
    "last_seen_at": "str",
    "planned_availability_date": "null",
    "price": "str",
@@ -1161,7 +1041,26 @@
    "page": "number",
    "pages": "number",
    "per_page": "number",
-   "rows": [],
+   "rows": [
+    {
+     "attempts": "number",
+     "claimed_at": "str",
+     "delay_source": "str",
+     "discovered_url_id": "number",
+     "done_at": "str",
+     "duration_ms": "number",
+     "error_reason": "null",
+     "http_status": "number",
+     "item_id": "number",
+     "request_delay_s": "number",
+     "response_bytes": "number",
+     "shop_book_id": "number",
+     "status": "str",
+     "title": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ],
    "sort": "str",
    "source": "str",
    "status": "str",
@@ -1185,7 +1084,26 @@
    "page": "number",
    "pages": "number",
    "per_page": "number",
-   "rows": [],
+   "rows": [
+    {
+     "attempts": "number",
+     "claimed_at": "str",
+     "delay_source": "str",
+     "discovered_url_id": "number",
+     "done_at": "str",
+     "duration_ms": "number",
+     "error_reason": "null",
+     "http_status": "number",
+     "item_id": "number",
+     "request_delay_s": "number",
+     "response_bytes": "number",
+     "shop_book_id": "number",
+     "status": "str",
+     "title": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ],
    "sort": "str",
    "source": "str",
    "status": "str",
@@ -1209,7 +1127,26 @@
    "page": "number",
    "pages": "number",
    "per_page": "number",
-   "rows": [],
+   "rows": [
+    {
+     "attempts": "number",
+     "claimed_at": "str",
+     "delay_source": "str",
+     "discovered_url_id": "number",
+     "done_at": "str",
+     "duration_ms": "number",
+     "error_reason": "null",
+     "http_status": "number",
+     "item_id": "number",
+     "request_delay_s": "number",
+     "response_bytes": "number",
+     "shop_book_id": "number",
+     "status": "str",
+     "title": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ],
    "sort": "str",
    "source": "str",
    "status": "str",
@@ -1224,27 +1161,31 @@
   "status": 200,
   "shape": {
    "eta_min": "null",
-   "events": [
-    {
-     "actor": "str",
-     "created_at": "str",
-     "event_type": "str",
-     "id": "number",
-     "payload": {
-      "reason": "str"
-     }
-    }
-   ],
+   "events": [],
    "failure_groups": [],
    "health": "str",
    "in_flight": [],
-   "last_heartbeat_age_s": "null",
+   "last_heartbeat_age_s": "number",
    "rate": {
     "done": "number",
     "failed": "number",
     "window_s": "number"
    },
-   "recent_activity": [],
+   "recent_activity": [
+    {
+     "claimed_at": "str",
+     "delay_source": "str",
+     "done_age_s": "number",
+     "done_at": "str",
+     "duration_s": "number",
+     "error_reason": "null",
+     "http_status": "number",
+     "request_delay_s": "number",
+     "response_bytes": "number",
+     "status": "str",
+     "url": "str"
+    }
+   ],
    "retry_cap": "number",
    "run_id": "number",
    "status": "str"
@@ -1255,27 +1196,31 @@
   "status": 200,
   "shape": {
    "eta_min": "null",
-   "events": [
-    {
-     "actor": "str",
-     "created_at": "str",
-     "event_type": "str",
-     "id": "number",
-     "payload": {
-      "reason": "str"
-     }
-    }
-   ],
+   "events": [],
    "failure_groups": [],
    "health": "str",
    "in_flight": [],
-   "last_heartbeat_age_s": "null",
+   "last_heartbeat_age_s": "number",
    "rate": {
     "done": "number",
     "failed": "number",
     "window_s": "number"
    },
-   "recent_activity": [],
+   "recent_activity": [
+    {
+     "claimed_at": "str",
+     "delay_source": "str",
+     "done_age_s": "number",
+     "done_at": "str",
+     "duration_s": "number",
+     "error_reason": "null",
+     "http_status": "number",
+     "request_delay_s": "number",
+     "response_bytes": "number",
+     "status": "str",
+     "url": "str"
+    }
+   ],
    "retry_cap": "number",
    "run_id": "number",
    "status": "str"
@@ -1344,7 +1289,7 @@
    "enabled": "bool",
    "id": "number",
    "last24": [],
-   "last_run_at": "null",
+   "last_run_at": "str",
    "name": "str",
    "phase": "str",
    "runs": [],
@@ -1408,7 +1353,7 @@
    "items": [
     {
      "cron_expression": "str",
-     "last_run_at": "null",
+     "last_run_at": "str",
      "last_success_at": "null",
      "next_run_at": "str",
      "next_run_in_s": "number",
@@ -1442,12 +1387,12 @@
    "runs": [
     {
      "by": "str",
-     "close_reason": "null",
+     "close_reason": "str",
      "elapsed": "str",
      "errors": "number",
      "errors_4xx": "number",
      "errors_5xx": "number",
-     "finished_at": "null",
+     "finished_at": "str",
      "id": "number",
      "items": "number",
      "items_added": "number",
@@ -1464,7 +1409,7 @@
      "status": "str",
      "type": "str",
      "urls_processed": "number",
-     "urls_total": "null",
+     "urls_total": "number",
      "validation_issues": "number"
     }
    ],
@@ -1488,12 +1433,12 @@
    "runs": [
     {
      "by": "str",
-     "close_reason": "null",
+     "close_reason": "str",
      "elapsed": "str",
      "errors": "number",
      "errors_4xx": "number",
      "errors_5xx": "number",
-     "finished_at": "null",
+     "finished_at": "str",
      "id": "number",
      "items": "number",
      "items_added": "number",
@@ -1510,7 +1455,7 @@
      "status": "str",
      "type": "str",
      "urls_processed": "number",
-     "urls_total": "null",
+     "urls_total": "number",
      "validation_issues": "number"
     }
    ],
@@ -1531,35 +1476,7 @@
    "page": "number",
    "pages": "number",
    "per_page": "number",
-   "runs": [
-    {
-     "by": "str",
-     "close_reason": "str",
-     "elapsed": "str",
-     "errors": "number",
-     "errors_4xx": "number",
-     "errors_5xx": "number",
-     "finished_at": "str",
-     "id": "number",
-     "items": "number",
-     "items_added": "number",
-     "items_updated": "number",
-     "phase": "str",
-     "phase_mode": "str",
-     "phase_type": "str",
-     "progress": "number",
-     "shop": "str",
-     "started": "str",
-     "startedH": "number",
-     "started_ago": "str",
-     "started_at": "str",
-     "status": "str",
-     "type": "str",
-     "urls_processed": "number",
-     "urls_total": "null",
-     "validation_issues": "number"
-    }
-   ],
+   "runs": [],
    "total": "number"
   }
  },
@@ -1577,35 +1494,7 @@
    "page": "number",
    "pages": "number",
    "per_page": "number",
-   "runs": [
-    {
-     "by": "str",
-     "close_reason": "str",
-     "elapsed": "str",
-     "errors": "number",
-     "errors_4xx": "number",
-     "errors_5xx": "number",
-     "finished_at": "str",
-     "id": "number",
-     "items": "number",
-     "items_added": "number",
-     "items_updated": "number",
-     "phase": "str",
-     "phase_mode": "str",
-     "phase_type": "str",
-     "progress": "number",
-     "shop": "str",
-     "started": "str",
-     "startedH": "number",
-     "started_ago": "str",
-     "started_at": "str",
-     "status": "str",
-     "type": "str",
-     "urls_processed": "number",
-     "urls_total": "null",
-     "validation_issues": "number"
-    }
-   ],
+   "runs": [],
    "total": "number"
   }
  },
@@ -1634,9 +1523,9 @@
    "books": [
     {
      "author": "str",
-     "book_id": "null",
+     "book_id": "number",
      "first_seen_at": "str",
-     "format": "str",
+     "format": "null",
      "id": "number",
      "in_stock": "bool",
      "is_active": "bool",
@@ -1650,7 +1539,7 @@
      "rating": "null",
      "review_count": "null",
      "shop": "str",
-     "sku": "str",
+     "sku": "null",
      "status": "str",
      "title": "str",
      "type": "str",
@@ -1679,7 +1568,7 @@
    "books": [
     {
      "author": "str",
-     "book_id": "null",
+     "book_id": "number",
      "first_seen_at": "str",
      "format": "str",
      "id": "number",
@@ -1693,7 +1582,7 @@
      "price_raw": "number",
      "publisher": "str",
      "rating": "null",
-     "review_count": "null",
+     "review_count": "number",
      "shop": "str",
      "sku": "str",
      "status": "str",
@@ -1740,13 +1629,13 @@
      "rating": "null",
      "review_count": "null",
      "shop": "str",
-     "sku": "str",
+     "sku": "null",
      "status": "str",
      "title": "str",
      "type": "str",
      "updated": "str",
      "url": "str",
-     "year": "null"
+     "year": "number"
     }
    ],
    "kpis": {
@@ -1766,7 +1655,34 @@
   "endpoint": "/api/shop-books?per_page=5&has_isbn=true&linked=linked",
   "status": 200,
   "shape": {
-   "books": [],
+   "books": [
+    {
+     "author": "str",
+     "book_id": "number",
+     "first_seen_at": "str",
+     "format": "null",
+     "id": "number",
+     "in_stock": "bool",
+     "is_active": "bool",
+     "isbn": "str",
+     "issues": "number",
+     "last_seen_at": "str",
+     "planned_availability_date": "null",
+     "price": "str",
+     "price_raw": "number",
+     "publisher": "str",
+     "rating": "null",
+     "review_count": "null",
+     "shop": "str",
+     "sku": "null",
+     "status": "str",
+     "title": "str",
+     "type": "str",
+     "updated": "str",
+     "url": "str",
+     "year": "number"
+    }
+   ],
    "kpis": {
     "active": "number",
     "missing_isbn": "number",
@@ -1789,11 +1705,11 @@
      "author": "str",
      "book_id": "null",
      "first_seen_at": "str",
-     "format": "str",
+     "format": "null",
      "id": "number",
      "in_stock": "bool",
      "is_active": "bool",
-     "isbn": "str",
+     "isbn": "null",
      "issues": "number",
      "last_seen_at": "str",
      "planned_availability_date": "null",
@@ -1809,7 +1725,7 @@
      "type": "str",
      "updated": "str",
      "url": "str",
-     "year": "number"
+     "year": "null"
     }
    ],
    "kpis": {
@@ -1841,7 +1757,7 @@
    "total": "number",
    "urls": [
     {
-     "book_id": "null",
+     "book_id": "number",
      "book_score": "null",
      "book_title": "str",
      "discovered_ago": "str",
@@ -1909,7 +1825,25 @@
     "total": "number"
    },
    "total": "number",
-   "urls": []
+   "urls": [
+    {
+     "book_id": "null",
+     "book_score": "null",
+     "book_title": "str",
+     "discovered_ago": "str",
+     "fail_count": "number",
+     "first_seen_at": "str",
+     "id": "number",
+     "is_book": "null",
+     "last_scraped_ago": "str",
+     "last_seen_ago": "str",
+     "shop": "str",
+     "source": "str",
+     "status": "str",
+     "url": "str",
+     "url_type": "str"
+    }
+   ]
   }
  },
  {
@@ -1975,13 +1909,13 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "null",
-     "price_max": "null",
-     "price_min": "null",
+     "price_max": "number",
+     "price_min": "number",
      "primary_isbn": "str",
-     "publisher": "str",
+     "publisher": "null",
      "shop_count": "number",
      "title": "str",
-     "year": "number"
+     "year": "null"
     }
    ],
    "page": "number",
@@ -2001,13 +1935,13 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "null",
-     "price_max": "null",
-     "price_min": "null",
+     "price_max": "number",
+     "price_min": "number",
      "primary_isbn": "str",
-     "publisher": "str",
+     "publisher": "null",
      "shop_count": "number",
      "title": "str",
-     "year": "number"
+     "year": "null"
     }
    ],
    "page": "number",
@@ -2029,8 +1963,8 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "str",
-     "price_max": "null",
-     "price_min": "null",
+     "price_max": "number",
+     "price_min": "number",
      "primary_isbn": "str",
      "publisher": "str",
      "shop_count": "number",
@@ -2048,7 +1982,22 @@
   "endpoint": "/api/books?per_page=3&has_conflicts=true",
   "status": 200,
   "shape": {
-   "books": [],
+   "books": [
+    {
+     "authors": [],
+     "data_source": "str",
+     "has_conflicts": "bool",
+     "id": "number",
+     "libis_code": "null",
+     "price_max": "number",
+     "price_min": "number",
+     "primary_isbn": "str",
+     "publisher": "str",
+     "shop_count": "number",
+     "title": "str",
+     "year": "number"
+    }
+   ],
    "page": "number",
    "pages": "number",
    "per_page": "number",
@@ -2059,7 +2008,22 @@
   "endpoint": "/api/books?per_page=3&shop_count_min=2",
   "status": 200,
   "shape": {
-   "books": [],
+   "books": [
+    {
+     "authors": [],
+     "data_source": "str",
+     "has_conflicts": "bool",
+     "id": "number",
+     "libis_code": "null",
+     "price_max": "number",
+     "price_min": "number",
+     "primary_isbn": "str",
+     "publisher": "str",
+     "shop_count": "number",
+     "title": "str",
+     "year": "number"
+    }
+   ],
    "page": "number",
    "pages": "number",
    "per_page": "number",
@@ -2073,9 +2037,9 @@
    "books": [
     {
      "author": "str",
-     "book_id": "null",
+     "book_id": "number",
      "first_seen_at": "str",
-     "format": "null",
+     "format": "str",
      "id": "number",
      "in_stock": "bool",
      "is_active": "bool",
@@ -2095,7 +2059,7 @@
      "type": "str",
      "updated": "str",
      "url": "str",
-     "year": "null"
+     "year": "number"
     }
    ],
    "kpis": {

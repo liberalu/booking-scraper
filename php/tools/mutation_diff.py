@@ -82,22 +82,12 @@ def seed_fixtures() -> dict[str, int]:
         if shop_id is None:
             sys.exit("test DB has no shops — run `make seed-test-db` first")
 
-        # Idempotent: drop the previous fixture set (children first).
-        c.execute(sa.text(
-            "delete from scrape_failures where url like :m"), {"m": f"%{MARK}%"})
-        c.execute(sa.text(
-            "delete from scrape_url_items where url like :m"), {"m": f"%{MARK}%"})
-        c.execute(sa.text(
-            "delete from validation_issues where url like :m"), {"m": f"%{MARK}%"})
-        c.execute(sa.text("delete from cron_jobs where args = :m"), {"m": MARK})
-        c.execute(sa.text(
-            "delete from scrape_run_events where run_id in"
-            " (select id from scrape_runs where close_reason = :m)"), {"m": MARK})
-        c.execute(sa.text(
-            "update validation_issues set last_seen_run_id = null,"
-            " first_seen_run_id = null where false"))
-        c.execute(sa.text(
-            "delete from scrape_runs where close_reason = :m"), {"m": MARK})
+        # Idempotent: drop the previous fixture set. One definition, in
+        # clear_fixtures() — this used to be a second copy of the same delete
+        # list, and updating one and not the other left three marked
+        # shop_books behind, which moved the first row of every book list and
+        # broke a frozen API shape.
+        _clear(c)
 
         # Any run left non-terminal by an earlier test carries a stale
         # heartbeat, and the Python dashboard's reaper fires once at startup
@@ -168,10 +158,26 @@ def seed_fixtures() -> dict[str, int]:
         # Half of them carry a shop_book_id whose discovered_url is a real
         # product page — otherwise bulk-rescrape's join matches nothing and
         # the comparison passes without exercising the query.
-        linked_books = [r[0] for r in c.execute(sa.text(
-            "select sb.id from shop_books sb join discovered_urls du"
-            " on du.shop_book_id = sb.id where du.url_type = 'product'"
-            " order by sb.id limit 3"))]
+        #
+        # Those books are CREATED here, not borrowed. Selecting "the three
+        # lowest-id books with a product URL" made bulk-rescrape's expected
+        # value — a list of URLs — depend on which shop happened to hold those
+        # ids, so the frozen case broke whenever the seeded catalogue shifted.
+        linked_books = []
+        for n in range(3):
+            url = f"https://example.test/{MARK}/book/{n}"
+            book = c.execute(sa.text(
+                "insert into shop_books (shop_id, url, title, type, is_active,"
+                " in_stock, match_status, first_seen_at, last_seen_at)"
+                " values (:s, :u, :t, 'book', true, true, 'unmatched', now(), now())"
+                " returning id"),
+                {"s": shop_id, "u": url, "t": f"Fixture Book {n}"}).scalar()
+            c.execute(sa.text(
+                "insert into discovered_urls (shop_id, url, normalized_url, source,"
+                " url_type, fail_count, first_seen_at, last_seen_at, shop_book_id)"
+                " values (:s, :u, :u, 'sitemap', 'product', 0, now(), now(), :b)"),
+                {"s": shop_id, "u": url, "b": book})
+            linked_books.append(book)
         issues: dict[str, int] = {}
         for index, (key, issue, state) in enumerate((
             ("new", "missing_isbn", "new"),
@@ -225,6 +231,27 @@ def seed_fixtures() -> dict[str, int]:
     return ids
 
 
+def _clear(c: sa.Connection) -> None:
+    """Delete every planted row, children before parents.
+
+    The one definition of what the fixture set consists of. Called both before
+    planting (so a re-run is idempotent) and after the clones are taken (so
+    nothing is left in the shared database for the next tool to trip over).
+    """
+    for statement, params in (
+        ("delete from scrape_failures where url like :m", {"m": f"%{MARK}%"}),
+        ("delete from scrape_url_items where url like :m", {"m": f"%{MARK}%"}),
+        ("delete from validation_issues where url like :m", {"m": f"%{MARK}%"}),
+        ("delete from cron_jobs where args = :m", {"m": MARK}),
+        ("delete from scrape_run_events where run_id in"
+         " (select id from scrape_runs where close_reason = :m)", {"m": MARK}),
+        ("delete from scrape_runs where close_reason = :m", {"m": MARK}),
+        ("delete from discovered_urls where url like :m", {"m": f"%{MARK}%"}),
+        ("delete from shop_books where url like :m", {"m": f"%{MARK}%"}),
+    ):
+        c.execute(sa.text(statement), params)
+
+
 def clear_fixtures() -> None:
     """Remove the planted fixtures from the BASE database.
 
@@ -236,18 +263,7 @@ def clear_fixtures() -> None:
     """
     engine = sa.create_engine(dsn(TEST_DB), poolclass=sa.pool.NullPool)
     with engine.begin() as c:
-        c.execute(sa.text("delete from scrape_failures where url like :m"),
-                  {"m": f"%{MARK}%"})
-        c.execute(sa.text("delete from scrape_url_items where url like :m"),
-                  {"m": f"%{MARK}%"})
-        c.execute(sa.text("delete from validation_issues where url like :m"),
-                  {"m": f"%{MARK}%"})
-        c.execute(sa.text("delete from cron_jobs where args = :m"), {"m": MARK})
-        c.execute(sa.text(
-            "delete from scrape_run_events where run_id in"
-            " (select id from scrape_runs where close_reason = :m)"), {"m": MARK})
-        c.execute(sa.text("delete from scrape_runs where close_reason = :m"),
-                  {"m": MARK})
+        _clear(c)
 
 
 def clone_databases() -> None:
@@ -541,14 +557,88 @@ ID_KEYS = frozenset({
 })
 
 
+#: URL prefix -> the label prefix whose ids may appear under it.
+#:
+#: Ids are only unique WITHIN a table, so `labels` (value -> label) collapses
+#: whenever a run and a shop_book happen to share an integer — and then a run
+#: id in a path was rewritten as <shop_book_linked>. Restricting each path to
+#: the labels that can legitimately appear in it removes the guess.
+PATH_LABEL_PREFIX = (
+    ("/api/runs/", "run_"),
+    ("/api/shop-books/", "shop_book_"),
+    ("/api/issues/", "issue_"),
+    ("/api/cron/", "cron_"),
+)
+
+#: Field name -> the label prefix its ids come from. Same reason as above: a
+#: value alone cannot say which table it belongs to. A key absent here (`id`)
+#: is resolved from the request path instead.
+KEY_LABEL_PREFIX = {
+    "run_id": "run_",
+    "shop_book_id": "shop_book_",
+    "chain_to_id": "cron_",
+    "cron_job_id": "cron_",
+}
+
+
+def label_for(
+    value: int, labels: dict[int, str], key: str, path: str
+) -> str | None:
+    """The fixture label for `value`, or None if it is not that kind of id.
+
+    Restricted by kind — by field name where the name says it, otherwise by
+    the path being requested. Ids are unique only within their table, so a run
+    and a shop_book can hold the same integer; without this a run id came back
+    labelled <shop_book_linked>.
+    """
+    prefix = KEY_LABEL_PREFIX.get(key)
+    if prefix is None:
+        prefix = next(
+            (p for url, p in PATH_LABEL_PREFIX if path.startswith(url)), None
+        )
+    label = labels.get(value)
+    if label is None:
+        return None
+    if prefix is not None and not label.startswith(prefix):
+        return None
+    return label
+
+
 def normalise_path(path: str, labels: dict[int, str]) -> str:
-    """Ids in a URL path become labels. Safe here: a path segment IS an id."""
+    """Ids in a URL path become labels.
+
+    The path proper is fair game — a segment there IS an id. The QUERY STRING
+    is not: `?http_status=404` is a status code, and one fixture run's id was
+    404, so it froze as `http_status=<run_failed_empty>` and the replay sent
+    nonsense. Query parameters are therefore gated on the parameter name, the
+    same rule the response and body normalisers already follow.
+    """
+    head, sep, query = path.partition("?")
+    allowed = next(
+        (prefix for url, prefix in PATH_LABEL_PREFIX if head.startswith(url)), None
+    )
     for row_id, label in labels.items():
-        path = re.sub(rf"\b{row_id}\b", f"<{label}>", path)
-    return path
+        if allowed is not None and not label.startswith(allowed):
+            continue
+        head = re.sub(rf"\b{row_id}\b", f"<{label}>", head)
+
+    if sep == "":
+        return head
+
+    pairs = []
+    for pair in query.split("&"):
+        key, eq, value = pair.partition("=")
+        if key in ID_KEYS and value.isdigit():
+            label = label_for(int(value), labels, key, head)
+            if label is not None:
+                value = f"<{label}>"
+        pairs.append(f"{key}{eq}{value}")
+    return f"{head}?{'&'.join(pairs)}"
 
 
-def normalise_response(value: object, labels: dict[int, str], key: str = "") -> object:
+def normalise_response(
+    value: object, labels: dict[int, str], key: str = "", path: str = ""
+) -> object:
     """Ids in a response become placeholders so it can be frozen.
 
     Gated on the KEY, never on the value. Three times over I wrote this the
@@ -562,7 +652,7 @@ def normalise_response(value: object, labels: dict[int, str], key: str = "") -> 
     if isinstance(value, int):
         if key not in ID_KEYS:
             return value
-        return labels.get(value, "<id>")
+        return label_for(value, labels, key, path) or "<id>"
     if isinstance(value, str):
         # A now()-derived timestamp cannot be frozen; that it came back as one
         # is the assertable part.
@@ -574,13 +664,17 @@ def normalise_response(value: object, labels: dict[int, str], key: str = "") -> 
         # the digits of a fixture id.
         return re.sub(r"(run #)\d+", r"\1<id>", value)
     if isinstance(value, dict):
-        return {k: normalise_response(v, labels, k) for k, v in value.items()}
+        return {
+            k: normalise_response(v, labels, k, path) for k, v in value.items()
+        }
     if isinstance(value, list):
-        return [normalise_response(v, labels, key) for v in value]
+        return [normalise_response(v, labels, key, path) for v in value]
     return value
 
 
-def normalise_body(value: object, labels: dict[int, str], key: str = "") -> object:
+def normalise_body(
+    value: object, labels: dict[int, str], key: str = "", path: str = ""
+) -> object:
     """Fixture ids in a REQUEST body become labels; nothing else changes.
 
     Also key-gated, and for a second reason on top of the collision above:
@@ -591,11 +685,13 @@ def normalise_body(value: object, labels: dict[int, str], key: str = "") -> obje
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
-        return labels.get(value, value) if key in ID_KEYS else value
+        if key not in ID_KEYS:
+            return value
+        return label_for(value, labels, key, path) or value
     if isinstance(value, dict):
-        return {k: normalise_body(v, labels, k) for k, v in value.items()}
+        return {k: normalise_body(v, labels, k, path) for k, v in value.items()}
     if isinstance(value, list):
-        return [normalise_body(v, labels, key) for v in value]
+        return [normalise_body(v, labels, key, path) for v in value]
     return value
 
 
@@ -805,8 +901,8 @@ def main() -> int:
                     "label": label,
                     "method": method,
                     "path": normalise_path(path, labels),
-                    "body": normalise_body(body, labels),
-                    "expected": normalise_response(php, labels),
+                    "body": normalise_body(body, labels, path=path),
+                    "expected": normalise_response(php, labels, path=path),
                 })
                 extra = ""
                 body = py.get("body")

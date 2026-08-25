@@ -120,11 +120,12 @@ validate:
 reap:
 	cd dashboard && $(PHP) artisan runs:reap $(ARGS)
 
-## Copy one shop's rows from the live DB into the test DB, plus the
-## synthetic cases for the six checks real data never triggers.
+## Copy one shop's rows from the live DB into the test DB, plus the synthetic
+## shop that fires every validator check. The synthetic half is PHP — it is a
+## fixture the characterisation goldens depend on, so it has to outlive Python.
 seed-test-db:
 	cd .. && PYTHONPATH=. uv run python php/tools/seed_test_db.py --shop $(or $(SHOP),vaga)
-	cd .. && PYTHONPATH=. uv run python php/tools/synthesize_validate_cases.py
+	DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) bin/synthesize-validate-cases
 
 ## Feed identical items to both validation layers and diff the rewritten item,
 ## the drop decision and the issues recorded. No database, no network.
@@ -166,9 +167,12 @@ mutation-diff:
 
 ## Run both validators over identical data and diff every finding.
 ## Needs seed-test-db first. Test database only.
+## FREEZE=1 writes the findings as a characterisation golden — only for
+## SHOP=synthetic, the one shop whose data is reproducible, and only if both
+## validators agreed.
 validate-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/validate_diff.py --shop $(or $(SHOP),vaga) \
-		$(if $(VERBOSE),--verbose,)
+		$(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
 
 ## ---------------------------------------------------------------------------
 ## Schema (phase 1 of removing Python)
