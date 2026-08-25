@@ -154,9 +154,11 @@ match-diff:
 ## Put every write endpoint through both dashboards and diff the result.
 ## Clones the test DB per stack and starts both dashboards itself — nothing
 ## to run first, and it cannot reach the live database.
+## FREEZE=1 also writes the cases as a characterisation golden the dashboard
+## suite replays in-process — only if all 101 checks matched.
 mutation-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/mutation_diff.py \
-		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,)
+		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,) $(if $(FREEZE),--freeze,)
 
 ## Run both validators over identical data and diff every finding.
 ## Needs seed-test-db first. Test database only.

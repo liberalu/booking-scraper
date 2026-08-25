@@ -225,6 +225,31 @@ def seed_fixtures() -> dict[str, int]:
     return ids
 
 
+def clear_fixtures() -> None:
+    """Remove the planted fixtures from the BASE database.
+
+    They only need to survive being cloned. Left behind, they are a trap for
+    anything else that plants the same shapes: the issue rows occupy
+    `(shop_book_id, field, issue)` in a partial unique index, so the next
+    planter gets a constraint violation rather than a clean fixture. Found
+    exactly that way, by the characterisation test that replays these cases.
+    """
+    engine = sa.create_engine(dsn(TEST_DB), poolclass=sa.pool.NullPool)
+    with engine.begin() as c:
+        c.execute(sa.text("delete from scrape_failures where url like :m"),
+                  {"m": f"%{MARK}%"})
+        c.execute(sa.text("delete from scrape_url_items where url like :m"),
+                  {"m": f"%{MARK}%"})
+        c.execute(sa.text("delete from validation_issues where url like :m"),
+                  {"m": f"%{MARK}%"})
+        c.execute(sa.text("delete from cron_jobs where args = :m"), {"m": MARK})
+        c.execute(sa.text(
+            "delete from scrape_run_events where run_id in"
+            " (select id from scrape_runs where close_reason = :m)"), {"m": MARK})
+        c.execute(sa.text("delete from scrape_runs where close_reason = :m"),
+                  {"m": MARK})
+
+
 def clone_databases() -> None:
     """Two byte-identical working copies, so neither stack sees the other's writes."""
     admin = sa.create_engine(
@@ -508,63 +533,69 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
 FORM_ENDPOINTS = ("/shops/",)
 
 
-#: Keys whose integer value is a row id rather than a count.
+#: Keys whose integer value is a row id. Everything else is a count, a day
+#: span, an HTTP status — and must be left alone.
 ID_KEYS = frozenset({
     "id", "run_id", "shop_book_id", "previous_book_id", "existing_book_id",
     "chain_to_id", "cron_job_id",
 })
 
 
-def normalise_ids(value: object, labels: dict[int, str], key: str = "") -> object:
-    """Replace row ids with stable placeholders so a response can be frozen.
+def normalise_path(path: str, labels: dict[int, str]) -> str:
+    """Ids in a URL path become labels. Safe here: a path segment IS an id."""
+    for row_id, label in labels.items():
+        path = re.sub(rf"\b{row_id}\b", f"<{label}>", path)
+    return path
 
-    Responses carry ids — `{"run_id": 412, "status": "stopping"}` — and those
-    move every run. A fixture id becomes its label; any other id becomes
-    `<id>`, because whether one came back is part of the contract and its
-    value is not.
 
-    Deliberately key-aware rather than value-ranged. An earlier version
-    substituted any integer above an arbitrary threshold, which both missed
-    small created ids and would have rewritten counts that happened to be
-    large. Strings are matched on word boundaries for the same reason: a bare
-    `str.replace("13", ...)` corrupts the 13 inside 2013.
+def normalise_response(value: object, labels: dict[int, str], key: str = "") -> object:
+    """Ids in a response become placeholders so it can be frozen.
+
+    Gated on the KEY, never on the value. Three times over I wrote this the
+    other way — substituting any integer that looked id-shaped — and three
+    times it corrupted something: first counts above an arbitrary threshold,
+    then the 13 inside 2013, then `{"days": 30}`, because a fixture row
+    happened to have id 30. A count that collides with an id is not an id.
     """
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
-        if value in labels:
-            return labels[value]
-        return "<id>" if key in ID_KEYS else value
+        if key not in ID_KEYS:
+            return value
+        return labels.get(value, "<id>")
     if isinstance(value, str):
-        for row_id, label in labels.items():
-            value = re.sub(rf"\b{row_id}\b", f"<{label}>", value)
-        # Free text that embeds an id the fixtures do not own, e.g.
-        # "A scan run for vaga is already stopping (run #412)."
+        # A now()-derived timestamp cannot be frozen; that it came back as one
+        # is the assertable part.
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?"
+                        r"([+-]\d{2}:?\d{2}|Z)?", value):
+            return "<timestamp>"
+        # Only the one message shape that embeds an id in prose. Blanket
+        # label-substitution in free text would rewrite any title containing
+        # the digits of a fixture id.
         return re.sub(r"(run #)\d+", r"\1<id>", value)
     if isinstance(value, dict):
-        return {k: normalise_ids(v, labels, k) for k, v in value.items()}
+        return {k: normalise_response(v, labels, k) for k, v in value.items()}
     if isinstance(value, list):
-        return [normalise_ids(v, labels, key) for v in value]
+        return [normalise_response(v, labels, key) for v in value]
     return value
 
 
-def normalise_body(value: object, labels: dict[int, str]) -> object:
+def normalise_body(value: object, labels: dict[int, str], key: str = "") -> object:
     """Fixture ids in a REQUEST body become labels; nothing else changes.
 
-    A different rule from responses on purpose. Several cases send an id that
-    deliberately does not exist — `chain_to_id: 999999` is how "chain target
-    not found" is provoked — so a blanket `<id>` would destroy the case. Only
-    ids the fixtures own are substituted; the replay resolves them back to
-    whatever it planted.
+    Also key-gated, and for a second reason on top of the collision above:
+    several cases deliberately send an id that does not exist —
+    `chain_to_id: 999999` is how "chain target not found" is provoked — so an
+    unknown id must survive as itself.
     """
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
-        return labels.get(value, value)
+        return labels.get(value, value) if key in ID_KEYS else value
     if isinstance(value, dict):
-        return {k: normalise_body(v, labels) for k, v in value.items()}
+        return {k: normalise_body(v, labels, k) for k, v in value.items()}
     if isinstance(value, list):
-        return [normalise_body(v, labels) for v in value]
+        return [normalise_body(v, labels, key) for v in value]
     return value
 
 
@@ -738,6 +769,8 @@ def main() -> int:
     ids = seed_fixtures()
     print(f"cloning {TEST_DB} -> {PY_DB}, {PHP_DB}")
     clone_databases()
+    # The clones have them now; the base must not keep them.
+    clear_fixtures()
 
     # A fresh ISBN per run: book_isbns.isbn is globally unique and the clone
     # carries the previous run's row.
@@ -771,9 +804,9 @@ def main() -> int:
                 frozen.append({
                     "label": label,
                     "method": method,
-                    "path": normalise_ids(path, labels),
+                    "path": normalise_path(path, labels),
                     "body": normalise_body(body, labels),
-                    "expected": normalise_ids(php, labels),
+                    "expected": normalise_response(php, labels),
                 })
                 extra = ""
                 body = py.get("body")

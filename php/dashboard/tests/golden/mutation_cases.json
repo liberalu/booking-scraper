@@ -59,7 +59,7 @@
   "expected": {
    "_status": 200,
    "body": {
-    "snoozed_until": "2026-09-24T12:15:58.951197+00:00",
+    "snoozed_until": "<timestamp>",
     "days": 30
    }
   }
@@ -72,7 +72,7 @@
   "expected": {
    "_status": 200,
    "body": {
-    "snoozed_until": "2026-09-01T12:15:58.972542+00:00",
+    "snoozed_until": "<timestamp>",
     "days": 7
    }
   }
@@ -248,7 +248,7 @@
   "path": "/api/books",
   "body": {
    "title": " Diff Test Book ",
-   "isbn": "9781787660157",
+   "isbn": "9781787660588",
    "author": "  Jonas   Jonaitis ",
    "publisher": " Diff Press ",
    "year": 2001
@@ -267,7 +267,7 @@
   "path": "/api/books",
   "body": {
    "title": "Other",
-   "isbn": "9781787660157"
+   "isbn": "9781787660588"
   },
   "expected": {
    "_status": 409,
@@ -331,7 +331,7 @@
   "path": "/api/books",
   "body": {
    "title": "Dashed",
-   "isbn": "978-1787-660157"
+   "isbn": "978-1787-660588"
   },
   "expected": {
    "_status": 409,
@@ -1242,7 +1242,7 @@
   "expected": {
    "_status": 409,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+    "detail": "A scan run for vaga is already stopping (run #<id>)."
    }
   }
  },
@@ -1278,7 +1278,7 @@
   "expected": {
    "_status": 409,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+    "detail": "A scan run for vaga is already stopping (run #<id>)."
    }
   }
  },
@@ -1326,7 +1326,7 @@
   "expected": {
    "_status": 409,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<run_running>)."
+    "detail": "A scan run for vaga is already stopping (run #<id>)."
    }
   }
  },

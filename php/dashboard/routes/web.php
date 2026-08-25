@@ -32,7 +32,13 @@ use Illuminate\Support\Facades\Response;
  * from one frontend source.
  */
 
-const SPA_INDEX = __DIR__ . '/../../../book_scraper/dashboard/static/hifi/index.html';
+// define(), not const: Laravel reloads the route file for every application
+// instance it boots, and a file-scope `const` fatals on the second one. Only
+// showed up once a second app-booting test existed.
+defined('SPA_INDEX') || define(
+    'SPA_INDEX',
+    __DIR__ . '/../../../book_scraper/dashboard/static/hifi/index.html'
+);
 
 Route::prefix('api')->group(function (): void {
     Route::get('/overview', OverviewController::class);
