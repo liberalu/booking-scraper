@@ -22,6 +22,22 @@ final class Queries
 {
     private const COMPLETENESS_FIELDS = ['author', 'isbn', 'publisher', 'year', 'format'];
 
+    /**
+     * Page count, floored at 1 — `max(1, (total + per_page - 1) // per_page)`,
+     * which is what all seven paginated handlers in
+     * book_scraper/dashboard/routes/api.py do.
+     *
+     * The `/api/books` list is the lone exception: it comes from
+     * queries.py::list_books, which has no floor and reports ZERO pages for an
+     * empty result. BooksController therefore computes its own rather than
+     * calling this. Do not "unify" the two — the difference is observable in
+     * the API and the SPA consumes both as they are.
+     */
+    public static function pageCount(int $total, int $perPage): int
+    {
+        return $total ? max(1, intdiv($total + $perPage - 1, $perPage)) : 1;
+    }
+
     /** @return array<string, int> */
     public static function overviewStats(): array
     {

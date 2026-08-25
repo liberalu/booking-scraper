@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Queries;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -111,7 +112,10 @@ final class BooksController
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => $total > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+            // NOT Queries::pageCount(): queries.py::list_books omits the
+            // max(1, ...) floor that every other handler applies, so an empty
+            // result reports 0 pages here and 1 everywhere else.
+            'pages' => $perPage ? intdiv($total + $perPage - 1, $perPage) : 1,
         ];
     }
 

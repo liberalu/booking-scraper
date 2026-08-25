@@ -54,7 +54,7 @@ final class ShopBooksController
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => $total > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+            'pages' => Queries::pageCount($total, $perPage),
             // KPIs are catalogue-wide, deliberately unaffected by the filters.
             'kpis' => [
                 'total' => ShopBook::count(),
@@ -242,11 +242,14 @@ final class ShopBooksController
         $detail['categories'] = $book->categories ?: [];
         // Format-specific extras the parsers captured (translator, dimensions,
         // language, cover_type, …) that have no first-class column.
+        // ?: new stdClass because json_encode renders an empty PHP array as
+        // [], and Python's dict renders as {} — a key-value map must not
+        // change JSON type just because it happens to be empty.
         $detail['attributes'] = DB::table('shop_book_attributes')
             ->where('shop_book_id', $bookId)
             ->orderBy('key')
             ->pluck('value', 'key')
-            ->all();
+            ->all() ?: new \stdClass();
         $detail['url_count'] = DB::table('discovered_urls')->where('shop_book_id', $bookId)->count();
         $detail['run_count'] = count($uniqueRunIds);
         $detail['runs'] = $recentRuns;

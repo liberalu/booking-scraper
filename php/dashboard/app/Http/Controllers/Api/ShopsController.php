@@ -97,10 +97,12 @@ final class ShopsController
             ))->all(),
             // Operator overrides applied without a redeploy; the middleware
             // reads these ahead of the TOML.
+            // ?: new stdClass — see the note in ShopBooksController: an empty
+            // key-value map must stay {} in JSON, not become [].
             'rate_settings' => DB::table('shop_settings')
                 ->where('shop_id', $shop->id)
                 ->pluck('value', 'key')
-                ->all(),
+                ->all() ?: new \stdClass(),
             'discover_strategies' => self::strategies($shop->name),
         ];
     }

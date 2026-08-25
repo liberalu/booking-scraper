@@ -55,8 +55,10 @@ dashboard:
 
 ## Compare every ported endpoint against the Python dashboard.
 ## Both must be running. Exit code = number of endpoints that differ.
+## FREEZE=1 ignores --py/--php and self-hosts both against the test database,
+## writing dashboard/tests/golden/api_shapes.json — only if all of them agree.
 api-diff:
-	cd .. && python3 php/tools/api_diff.py $(if $(VERBOSE),--verbose,)
+	cd .. && python3 php/tools/api_diff.py $(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
 
 ## Library + crawler suites.
 test-all: test

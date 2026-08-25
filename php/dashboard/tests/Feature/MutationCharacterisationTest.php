@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
+use Tests\UsesTestDatabase;
 
 /**
  * Every write route, pinned to behaviour Python agreed with.
@@ -30,6 +31,8 @@ use Tests\TestCase;
  */
 final class MutationCharacterisationTest extends TestCase
 {
+    use UsesTestDatabase;
+
     private const GOLDEN = __DIR__ . '/../golden/mutation_cases.json';
 
     private const MARK = 'mutation-characterisation';
@@ -46,25 +49,7 @@ final class MutationCharacterisationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        // phpunit.xml pins the skeleton default of sqlite::memory:. These
-        // routes are all raw Postgres — partial indexes, ON CONFLICT, arrays —
-        // so the connection is redirected here rather than globally, leaving
-        // the rest of the suite alone.
-        $dsn = getenv('TEST_DATABASE_URL')
-            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
-        $parts = parse_url($dsn);
-        config([
-            'database.default' => 'pgsql',
-            'database.connections.pgsql.driver' => 'pgsql',
-            'database.connections.pgsql.host' => $parts['host'] ?? '127.0.0.1',
-            'database.connections.pgsql.port' => $parts['port'] ?? 5433,
-            'database.connections.pgsql.database' => ltrim($parts['path'] ?? '', '/'),
-            'database.connections.pgsql.username' => $parts['user'] ?? 'postgres',
-            'database.connections.pgsql.password' => $parts['pass'] ?? 'postgres',
-            'database.connections.pgsql.search_path' => 'public',
-        ]);
-        DB::purge('pgsql');
+        $this->useTestDatabase();
     }
 
     #[Group('db')]

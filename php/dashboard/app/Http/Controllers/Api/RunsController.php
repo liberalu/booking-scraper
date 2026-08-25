@@ -100,7 +100,7 @@ final class RunsController
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => $total > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+            'pages' => Queries::pageCount($total, $perPage),
             'kpis' => [
                 'running_now' => ScrapeRun::where('status', 'running')->count(),
                 // 24h window so the KPI matches what the "24h" filter shows.
@@ -317,7 +317,7 @@ final class RunsController
             'books' => $books,
             'total' => $total,
             'page' => $page,
-            'pages' => max(1, (int) ceil($total / $perPage)),
+            'pages' => Queries::pageCount($total, $perPage),
         ];
     }
 }

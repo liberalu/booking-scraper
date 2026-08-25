@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Queries;
 use BookScraper\Models\ScrapeRun;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -71,7 +72,7 @@ final class RunUrlsController
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => max(1, (int) ceil($total / $perPage)),
+            'pages' => Queries::pageCount($total, $perPage),
         ];
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Queries;
 use App\Support\RunPresenter;
 use BookScraper\Models\DiscoveredUrl;
 use BookScraper\Models\Shop;
@@ -100,7 +101,7 @@ final class UrlsController
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => $total > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+            'pages' => Queries::pageCount($total, $perPage),
             'stats' => self::stats($shopId),
         ];
     }
