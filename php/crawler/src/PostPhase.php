@@ -155,14 +155,9 @@ final class PostPhase
             return [$binary, dirname(__DIR__) . '/bin/validate', "--shop={$shop}"];
         }
         if ($phase === 'match') {
-            // Only step 1 exists as a standalone command; the full match
-            // phase (author backfill + synthesis) has no CLI yet, so say so
-            // rather than quietly running something narrower.
-            fwrite(STDERR, "post-phase: chain targets 'match', which has no"
-                . " crawler command yet — running ISBN linkage only\n");
-
-            return [$binary, dirname(__DIR__) . '/bin/validate', "--shop={$shop}",
-                '--match-first'];
+            // The full phase, not just step 1. Synthesis stays off unless
+            // MATCH_SYNTHESIS_ENABLED says otherwise — bin/match reads it.
+            return [$binary, dirname(__DIR__) . '/bin/match', "--shop={$shop}"];
         }
         fwrite(STDERR, "post-phase: no crawler command for phase '{$phase}'\n");
 

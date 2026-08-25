@@ -7,7 +7,7 @@ COMPOSER := $(PHP) $(shell which composer)
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
-.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
+.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate match reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
 
 install:
 	$(COMPOSER) install
@@ -99,6 +99,13 @@ crawl-diff:
 ## Fail runs left `running` by a killed process. Call on boot.
 reconcile:
 	cd crawler && DATABASE_URL="$(DATABASE_URL)" $(PHP) bin/crawl reconcile
+
+## Run the match phase (steps 1 + 2; SYNTHESIS=1 adds step 3).
+##   make match SHOP=vaga
+##   make match SHOP=vaga SYNTHESIS=1
+match:
+	cd crawler && DATABASE_URL="$(DATABASE_URL)" $(PHP) bin/match --shop=$(or $(SHOP),vaga) \
+		$(if $(SYNTHESIS),--synthesis,)
 
 ## Run the data-quality validator. Writes to DATABASE_URL.
 ##   make validate SHOP=vaga
