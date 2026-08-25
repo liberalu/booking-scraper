@@ -1,0 +1,39 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Run one parsed item through the validation layer and print the result.
+ *
+ *   echo '{"url":"https://x.lt/a","item":{...}}' | bin/validate-item
+ *
+ * No database, no network: this exists so the differential harness can feed
+ * the same item to both stacks' validation layers and compare the rewritten
+ * item and the issues recorded.
+ */
+
+use BookScraper\Crawler\IssueBuffer;
+use BookScraper\Crawler\ItemValidator;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$input = json_decode((string) file_get_contents('php://stdin'), true);
+if (!is_array($input) || !isset($input['item'])) {
+    fwrite(STDERR, "error: expected {\"url\": ..., \"item\": {...}} on stdin\n");
+    exit(1);
+}
+
+IssueBuffer::reset();
+// The buffer narrates to stderr, so stdout stays clean for the caller.
+['item' => $item, 'reject' => $reject] = ItemValidator::apply(
+    $input['item'],
+    (string) ($input['url'] ?? ''),
+    $input['attributes'] ?? null,
+);
+
+echo json_encode([
+    'item' => $item,
+    'reject' => $reject,
+    'issues' => IssueBuffer::drain(),
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), "\n";

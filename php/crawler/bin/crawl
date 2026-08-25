@@ -1,0 +1,597 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Crawl a shop into the database.
+ *
+ *   bin/crawl discover --shop=vaga --strategy=sitemap
+ *   bin/crawl discover --shop=vaga --strategy=categories --max-pages=3
+ *   bin/crawl scan --shop=vaga --max-urls=20
+ *   bin/crawl scan --shop=vaga --urls=https://vaga.lt/some-book
+ *
+ * Writes to whatever DATABASE_URL points at. Default is the LIVE database,
+ * so --database is offered explicitly and --dry-run fetches and parses
+ * without persisting anything.
+ */
+
+use BookScraper\Config;
+use Illuminate\Support\Carbon;
+use BookScraper\Crawler\ActivityExtension;
+use BookScraper\Crawler\IssueBuffer;
+use BookScraper\Crawler\PersistItemProcessor;
+use BookScraper\Crawler\PostPhase;
+use BookScraper\Discovery\GraphQlUrls;
+use BookScraper\Discovery\IbibliotekaApiUrls;
+use BookScraper\Discovery\LupaSearchUrls;
+use BookScraper\Crawler\Persister;
+use BookScraper\Crawler\RoachContainer;
+use BookScraper\Crawler\RunLifecycle;
+use BookScraper\Crawler\DiscoverSpider;
+use BookScraper\Crawler\ScanSpider;
+use BookScraper\Crawler\SerialScanner;
+use BookScraper\Crawler\Watchdog;
+use BookScraper\Runs\ResumePolicy;
+use BookScraper\Runs\RunReconciler;
+use BookScraper\Runs\RunFailsafe;
+use BookScraper\Database;
+use BookScraper\Models\DiscoveredUrl;
+use BookScraper\Models\Shop;
+use BookScraper\Vaga\Parser;
+use RoachPHP\Roach;
+use RoachPHP\Spider\Configuration\Overrides;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/** @return array<string, string> */
+function options(array $argv): array
+{
+    $opts = [];
+    foreach (array_slice($argv, 2) as $arg) {
+        if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $arg, $m) === 1) {
+            $opts[$m[1]] = $m[2] ?? '1';
+        }
+    }
+
+    return $opts;
+}
+
+function fail(string $message): never
+{
+    fwrite(STDERR, "error: {$message}\n");
+    exit(1);
+}
+
+// A leading flag means no command was given (`bin/crawl --help`).
+/**
+ * Fork the heartbeat/stall watchdog for a run.
+ *
+ * Without it a long crawl gets reaped: the dashboard reaper fails any run
+ * whose last_heartbeat goes stale, and nothing in a synchronous PHP crawl
+ * refreshes it.
+ */
+/**
+ * Stop cleanly when the watchdog (or an operator) asks.
+ *
+ * The watchdog sends SIGTERM rather than SIGKILL so the current database
+ * write can finish; a half-written item looks like a data-quality problem
+ * later. The run is finalised here because the watchdog only marks stalls —
+ * an operator-requested stop has a different close reason.
+ */
+function installTerminationHandler(int $runId, callable $onStop): void
+{
+    if (!function_exists('pcntl_signal')) {
+        return;
+    }
+    $handler = static function () use ($runId, $onStop): void {
+        fwrite(STDERR, "\n  received stop signal — finalising run {$runId}\n");
+        $onStop();
+        RunFailsafe::finalize($runId, 'failed', 'stopped', true);
+        exit(1);
+    };
+    pcntl_signal(SIGTERM, $handler);
+    pcntl_signal(SIGINT, $handler);
+    pcntl_async_signals(true);
+}
+
+/**
+ * The two issues a discovery run can only know at the end.
+ *
+ * `url_pattern_filtered` is a tally, not a per-URL complaint: a shop listing
+ * thousands of non-product pages is normal, and one row per run keeps the
+ * inbox usable. `discover_zero_yield` is the one that matters — a run that
+ * finds nothing on a shop that previously had URLs means the markup moved or
+ * the shop started blocking, and it otherwise reports success.
+ */
+function recordDiscoverCloseIssues(
+    string $shopName,
+    string $baseUrl,
+    string $strategy,
+    int $urlsYielded,
+    int $urlsBefore,
+): void {
+    $filtered = DiscoverSpider::filteredCount();
+    if ($filtered > 0) {
+        IssueBuffer::add(
+            'url_pattern_filtered',
+            'url',
+            '',
+            "{$filtered} URLs excluded by pattern"
+        );
+    }
+    if ($urlsYielded === 0 && $urlsBefore > 0) {
+        IssueBuffer::add(
+            'discover_zero_yield',
+            'run',
+            $baseUrl,
+            "phase=discover_{$strategy}, shop had {$urlsBefore} URLs pre-run"
+        );
+    }
+}
+
+function startWatchdog(int $runId, string $shop, string $phase, float $stallTimeout): Watchdog
+{
+    $watchdog = new Watchdog(
+        runId: $runId,
+        shop: $shop,
+        phase: $phase,
+        stallTimeout: $stallTimeout,
+        heartbeatInterval: (float) (getenv('HEARTBEAT_INTERVAL_S') ?: 5),
+        maxResumeAttempts: (int) (getenv('STALL_AUTO_RESUME_MAX') ?: 10),
+        dsn: BookScraper\Database::bootedDsn(),
+    );
+    ActivityExtension::bind($watchdog);
+    installTerminationHandler($runId, static fn () => $watchdog->stop());
+    if ($watchdog->start()) {
+        printf("watchdog: heartbeat %.0fs, stall timeout %.0fs\n",
+            (float) (getenv('HEARTBEAT_INTERVAL_S') ?: 5), $stallTimeout);
+    }
+
+    return $watchdog;
+}
+
+$command = ($argv[1] ?? '') === '' || str_starts_with($argv[1], '--') ? '' : $argv[1];
+$opts = options($command === '' ? array_merge([$argv[0], ''], array_slice($argv, 1)) : $argv);
+
+if ($command === '' || isset($opts['help'])) {
+    fwrite(STDOUT, <<<TXT
+    Usage: bin/crawl <discover|scan|reconcile> [options]
+
+      discover
+        --strategy=S     sitemap (default), categories, graphql, lupasearch
+                         or ibiblioteka_api
+        --max-pages=N    cap category pages (dev runs)
+        --max-bands=N    ibiblioteka_api only: cap how many monthly bands
+                         open. Without it a run covers every month in the
+                         configured year range (444 for 1990-2027).
+
+      scan
+        --max-urls=N     cap the number of URLs (default 20, 0 = uncapped)
+        --mode=M         delta (default: skip URLs already scraped as
+                         products) or full (re-scrape everything)
+        --cron-job-id=N  internal: this run was fired by a cron job. Decides
+                         which follow-up phase runs when it closes.
+        --urls=A,B       scan these URLs instead of the pending queue
+        --dry-run        fetch and parse, persist nothing
+        --resumed-attempt=N
+                         internal: adopt a resumable run's queue. Set by the
+                         watchdog when it restarts a stalled crawl.
+
+      reconcile
+        fail every run still marked `running` (call on boot — such a row
+        belongs to a process the restart killed) and flag it resumable
+
+      --database=DSN     override DATABASE_URL
+
+    Shops: vaga, pegasas, patogupirkti, humanitas, almalittera, ibiblioteka.
+
+    TXT);
+    // Explicit --help succeeds; a missing command is a usage error.
+    exit(isset($opts['help']) ? 0 : 1);
+}
+
+if ($command === 'reconcile') {
+    // Boot reconciliation: any row still `running` belongs to a process the
+    // restart killed. Flag them resumable so the queued work survives.
+    Database::boot($opts['database'] ?? null);
+    $orphans = RunReconciler::markOrphansFailed();
+    if ($orphans === []) {
+        fwrite(STDOUT, "no orphaned runs\n");
+        exit(0);
+    }
+    foreach ($orphans as $orphan) {
+        printf(
+            "orphaned run %d (%s/%s) -> failed, resumable\n",
+            $orphan['id'],
+            $orphan['shop'],
+            $orphan['phase']
+        );
+    }
+    printf("%d orphan(s) reconciled\n", count($orphans));
+    exit(0);
+}
+
+if (!in_array($command, ['scan', 'discover'], true)) {
+    fail("unknown command '{$command}' (expected 'discover', 'scan' or 'reconcile')");
+}
+
+$shopName = $opts['shop'] ?? 'vaga';
+if (!BookScraper\ParserRegistry::has($shopName)) {
+    fail(sprintf(
+        "no parser for shop '%s' — known shops: %s",
+        $shopName,
+        implode(', ', BookScraper\ParserRegistry::shops())
+    ));
+}
+
+$dryRun = isset($opts['dry-run']);
+// 0 means uncapped — what the dashboard passes for a real scan. The CLI
+// default stays small so an interactive `make crawl` cannot start a 30k-URL
+// crawl by accident.
+$maxUrls = (int) ($opts['max-urls'] ?? 20);
+$maxUrls = $maxUrls <= 0 ? PHP_INT_MAX : $maxUrls;
+$scanMode = $opts['mode'] ?? 'delta';
+// Set when a cron job (or a cron chain) fired this run: it decides which
+// follow-up runs once this one closes.
+$cronJobId = isset($opts['cron-job-id']) ? (int) $opts['cron-job-id'] : null;
+if (!in_array($scanMode, ['delta', 'full'], true)) {
+    fail("mode '{$scanMode}' is not valid (delta|full)");
+}
+
+Database::boot($opts['database'] ?? null);
+$config = Config::forShop($shopName);
+// Operator overrides beat the TOML, and this is the only place that can read
+// them — the database is up by now.
+$config->applyShopSettings($shopName);
+$shop = Shop::byName($shopName);
+
+// Default 180s, matching STALL_TIMEOUT on the Python side. Never below the
+// shop's own hard timeout, or a single slow-but-legitimate request trips it.
+$stallTimeout = max(
+    (float) (getenv('STALL_TIMEOUT') ?: 180),
+    $config->requestTimeout() * 2
+);
+
+// ------------------------------------------------------------------- discover
+
+if ($command === 'discover') {
+    $strategy = $opts['strategy'] ?? 'sitemap';
+    $known = ['sitemap', 'categories', 'graphql', 'lupasearch', 'ibiblioteka_api'];
+    if (!in_array($strategy, $known, true)) {
+        fail("strategy '{$strategy}' is not ported (" . implode('|', $known) . ')');
+    }
+    if (!$config->hasStrategy($strategy)) {
+        fail("shop '{$shopName}' has no [discover.{$strategy}] block");
+    }
+
+    $strategyConf = $config->strategy($strategy);
+    $maxPages = (int) ($opts['max-pages'] ?? 0);
+
+    // The JSON APIs synthesise their own seeds from the config; the HTML
+    // strategies read a URL template out of it.
+    $seedUrls = [];
+    $template = '';
+    $startUrl = '';
+    if ($strategy === 'graphql') {
+        $seedUrls = [GraphQlUrls::buildPageUrl(
+            $config->baseUrl(),
+            array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
+            max(1, (int) ($strategyConf['page_size'] ?? 50)),
+            1,
+        )];
+    } elseif ($strategy === 'lupasearch') {
+        $endpoint = (string) ($strategyConf['endpoint'] ?? '');
+        if ($endpoint === '') {
+            fail('[discover.lupasearch] has no endpoint');
+        }
+        $seedUrls = [LupaSearchUrls::buildSeedUrl(
+            $endpoint,
+            array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
+            max(1, (int) ($strategyConf['page_size'] ?? 42)),
+            (array) ($strategyConf['extra_filters'] ?? []),
+        )];
+    } elseif ($strategy === 'ibiblioteka_api') {
+        $seedUrls = IbibliotekaApiUrls::buildSeedUrls(
+            (int) ($strategyConf['year_from'] ?? 1990),
+            (int) ($strategyConf['year_to'] ?? 2027),
+            max(10, (int) ($strategyConf['page_size'] ?? 100)),
+        );
+        // One seed per calendar month, so a 1990-2027 window is 444 of
+        // them. --max-pages caps pagination WITHIN a band (as it does in
+        // Python); --max-bands caps how many bands open at all, which is
+        // what makes a dev run finish. No default cap: the production run
+        // must cover every month.
+        $maxBands = (int) ($opts['max-bands'] ?? 0);
+        if ($maxBands > 0) {
+            $seedUrls = array_slice($seedUrls, 0, $maxBands);
+        }
+    } else {
+        $template = (string) ($strategyConf['url'] ?? '');
+        if ($template === '') {
+            fail("[discover.{$strategy}] has no url");
+        }
+        // page 1 of the template; {page} is absent on sitemap URLs.
+        $startUrl = str_replace('{page}', '1', $template);
+    }
+
+    printf(
+        "discover %s/%s — concurrency %d, delay %.2fs%s\n",
+        $shopName,
+        $strategy,
+        $config->concurrency(),
+        $config->downloadDelay(),
+        $maxPages > 0 ? " (max {$maxPages} pages)" : ''
+    );
+
+    $lifecycle = new RunLifecycle($shop->id, "discover_{$strategy}");
+    $run = $lifecycle->start();
+    printf("scrape_runs id=%d\n", $run->id);
+
+    PersistItemProcessor::bind(
+        new Persister(attributeSchema: $config->attributes()),
+        $shop->id,
+        $run->id
+    );
+    IssueBuffer::reset();
+    DiscoverSpider::resetFiltered();
+    // Counted before the crawl: a run that finds nothing is only alarming if
+    // the shop had URLs to begin with.
+    $urlsBefore = DiscoveredUrl::where('shop_id', $shop->id)->count();
+    $watchdog = startWatchdog($run->id, $shopName, 'discover', $stallTimeout);
+
+    Roach::useContainer(new RoachContainer(
+        requestDelaySeconds: $config->downloadDelay(),
+        requestTimeout: $config->requestTimeout(),
+        connectTimeout: $config->connectTimeout(),
+        userAgent: 'Scrapy',
+    ));
+
+    try {
+        Roach::startSpider(
+            DiscoverSpider::class,
+            new Overrides(concurrency: $config->concurrency()),
+            [
+                'shop' => $shopName,
+                'strategy' => $strategy,
+                'run_id' => $run->id,
+                'start_url' => $startUrl,
+                'seed_urls' => $seedUrls,
+                'url_template' => $template,
+                'base_url' => $config->baseUrl(),
+                'page_size' => (int) ($strategyConf['page_size'] ?? 100),
+                'max_pages' => $maxPages,
+                'url_include_pattern' => $config->urlIncludePattern(),
+                'category_ids' => array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
+                'subdivide_factor' => (int) ($strategyConf['subdivide_factor'] ?? 5),
+                'subdivide_min_page_size' => (int) ($strategyConf['subdivide_min_page_size'] ?? 1),
+            ],
+        );
+
+        $tally = PersistItemProcessor::tally();
+        $lifecycle->progress(
+            processed: $tally['urls'],
+            added: $tally['added'],
+            updated: $tally['updated'],
+            errors: $tally['failed'],
+        );
+        $lifecycle->finish('completed');
+
+        $watchdog->stop();
+        printf(
+            "done — %d url(s), books added %d, updated %d, failed %d\n",
+            $tally['urls'],
+            $tally['added'],
+            $tally['updated'],
+            $tally['failed'],
+        );
+        recordDiscoverCloseIssues($shopName, $config->baseUrl(), $strategy, $tally['urls'], $urlsBefore);
+        $written = IssueBuffer::flush($shop->id, $run->id);
+        if ($written > 0) {
+            printf("validation: %d issue(s) recorded\n", $written);
+        }
+        PostPhase::after('discover', $shopName, $run->id, $cronJobId);
+        exit(0);
+    } catch (Throwable $e) {
+        $watchdog->stop();
+        // Failsafe as well as the lifecycle write: the lifecycle path shares
+        // a connection that may be unusable after a query failure.
+        $lifecycle->fail($e);
+        RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+        IssueBuffer::flush($shop->id, $run->id);
+        PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+        fail('run failed: ' . $e->getMessage());
+    }
+}
+
+// ------------------------------------------------------------------ work list
+
+if (isset($opts['urls'])) {
+    $urls = array_values(array_filter(array_map('trim', explode(',', $opts['urls']))));
+} else {
+    // Mirrors get_pending_scan_urls(): everything not written off as a
+    // non-product, and either still under the failure cap or stale enough
+    // that another attempt is due.
+    $query = DiscoveredUrl::where('shop_id', $shop->id)
+        ->where('url_type', '!=', 'non_product')
+        ->where(static function ($q): void {
+            $q->where('fail_count', '<', 3)
+                ->orWhere('last_checked_at', '<', Carbon::now('UTC')->subDays(7))
+                ->orWhereNull('last_checked_at');
+        });
+    if ($scanMode === 'delta') {
+        // Delta skips URLs already confirmed as products — those have a
+        // shop_book already. `full` re-scrapes them.
+        $query->where('url_type', '!=', 'product');
+    }
+    $urls = $query
+        // Python leaves this unordered; least-recently-checked first makes a
+        // capped run deterministic and costs nothing when uncapped.
+        ->orderByRaw('last_checked_at asc nulls first')
+        ->limit($maxUrls)
+        ->pluck('url')
+        ->all();
+}
+
+if ($urls === []) {
+    fwrite(STDOUT, "nothing to scan\n");
+    exit(0);
+}
+$urls = array_slice($urls, 0, $maxUrls);
+
+printf(
+    "scan %s — %d url(s), concurrency %d, delay %.2fs%s\n",
+    $shopName,
+    count($urls),
+    $config->concurrency(),
+    $config->downloadDelay(),
+    $dryRun ? ' [DRY RUN — nothing will be written]' : ''
+);
+
+// ------------------------------------------------------------------- dry run
+
+if ($dryRun) {
+    foreach ($urls as $url) {
+        $body = @file_get_contents($url, false, stream_context_create([
+            'http' => ['header' => "User-Agent: Scrapy\r\n", 'timeout' => $config->requestTimeout()],
+        ]));
+        if ($body === false) {
+            printf("  FETCH FAIL  %s\n", $url);
+            continue;
+        }
+        $parsed = Parser::parseProductPage($body);
+        printf(
+            "  %-58s %-9s %-14s %s\n",
+            substr($url, 0, 58),
+            $parsed['price'] ?? '—',
+            $parsed['isbn'] ?? '—',
+            substr((string) ($parsed['title'] ?? '(no title)'), 0, 40)
+        );
+        usleep((int) ($config->downloadDelay() * 1_000_000));
+    }
+    exit(0);
+}
+
+// ---------------------------------------------------------------------- run
+
+// A restart adopts the previous run's row and its pending queue rather than
+// opening a new one — that is what keeps the chain a single logical run and
+// lets the depth cap and zero-progress breaker see the whole history.
+$resumedAttempt = isset($opts['resumed-attempt']) ? (int) $opts['resumed-attempt'] : 0;
+$resumable = $resumedAttempt > 0 ? ResumePolicy::findResumable($shop->id, 'scan') : null;
+
+if ($resumable !== null) {
+    $lifecycle = RunLifecycle::adopt((int) $resumable->id);
+    $run = $lifecycle->run();
+    printf("resuming scrape_runs id=%d (attempt %d)\n", $run->id, $resumedAttempt);
+} else {
+    $lifecycle = new RunLifecycle($shop->id, 'scan');
+    $run = $lifecycle->start(count($urls));
+    printf("scrape_runs id=%d\n", $run->id);
+}
+
+$watchdog = startWatchdog($run->id, $shopName, 'scan', $stallTimeout);
+
+// Shops behind a Cloudflare challenge take the serial FlareSolverr path:
+// its single browser session cannot serve concurrent requests safely.
+if ($config->flaresolverr() !== null) {
+    printf("flaresolverr: serial fetch (session cannot be shared concurrently)\n");
+    IssueBuffer::reset();
+    try {
+        $tally = (new SerialScanner(
+            $shopName,
+            $config,
+            new Persister(attributeSchema: $config->attributes()),
+            $shop->id,
+            $run->id,
+            $watchdog,
+        ))->run($urls);
+
+        $lifecycle->progress(
+            processed: $tally['added'] + $tally['updated'] + $tally['non_product']
+                + ($tally['canonical'] ?? 0),
+            added: $tally['added'],
+            updated: $tally['updated'],
+            errors: $tally['failed'],
+        );
+        $lifecycle->finish('completed');
+        $watchdog->stop();
+
+        printf(
+            "done — added %d, updated %d, canonical %d, non-product %d, failed %d\n",
+            $tally['added'],
+            $tally['updated'],
+            $tally['canonical'] ?? 0,
+            $tally['non_product'],
+            $tally['failed']
+        );
+        $written = IssueBuffer::flush($shop->id, $run->id);
+        if ($written > 0) {
+            printf("validation: %d issue(s) recorded\n", $written);
+        }
+        PostPhase::after('scan', $shopName, $run->id, $cronJobId);
+        exit(0);
+    } catch (Throwable $e) {
+        $watchdog->stop();
+        $lifecycle->fail($e);
+        RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+        IssueBuffer::flush($shop->id, $run->id);
+        PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+        fail('run failed: ' . $e->getMessage());
+    }
+}
+
+PersistItemProcessor::bind(
+    new Persister(attributeSchema: $config->attributes()),
+    $shop->id,
+    $run->id
+);
+IssueBuffer::reset();
+
+Roach::useContainer(new RoachContainer(
+    requestDelaySeconds: $config->downloadDelay(),
+    requestTimeout: $config->requestTimeout(),
+    connectTimeout: $config->connectTimeout(),
+    // Matches what the Python crawler sends: no USER_AGENT is configured,
+    // so Scrapy's default goes out. A different UA can yield different HTML.
+    userAgent: 'Scrapy',
+));
+
+try {
+    Roach::startSpider(
+        ScanSpider::class,
+        new Overrides(concurrency: $config->concurrency()),
+        ['shop' => $shopName, 'urls' => $urls],
+    );
+
+    $tally = PersistItemProcessor::tally();
+    $lifecycle->progress(
+        processed: $tally['added'] + $tally['updated'] + ($tally['canonical'] ?? 0),
+        added: $tally['added'],
+        updated: $tally['updated'],
+        errors: $tally['failed'],
+    );
+    $lifecycle->finish('completed');
+    $watchdog->stop();
+
+    printf(
+        "done — added %d, updated %d, canonical %d, non-product %d, failed %d\n",
+        $tally['added'],
+        $tally['updated'],
+        $tally['canonical'] ?? 0,
+        $tally['non_product'],
+        $tally['failed']
+    );
+    $written = IssueBuffer::flush($shop->id, $run->id);
+    if ($written > 0) {
+        printf("validation: %d issue(s) recorded\n", $written);
+    }
+    PostPhase::after('scan', $shopName, $run->id, $cronJobId);
+} catch (Throwable $e) {
+    $watchdog->stop();
+    $lifecycle->fail($e);
+    RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+    IssueBuffer::flush($shop->id, $run->id);
+    PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+    fail('run failed: ' . $e->getMessage());
+}
