@@ -906,9 +906,13 @@ def main() -> int:
     # The clones have them now; the base must not keep them.
     clear_fixtures()
 
-    # A fresh ISBN per run: book_isbns.isbn is globally unique and the clone
-    # carries the previous run's row.
-    marker = f"{int(time.time()) % 10_000_000_000:010d}"
+    # A FIXED ISBN body, not a fresh one per run. book_isbns.isbn is globally
+    # unique, and while the clones were taken from the seeded database they
+    # carried the previous run's row — so this was a timestamp, and the golden
+    # changed on every freeze for no reason. The base is now rebuilt from
+    # nothing each run (bin/fixture-db --recreate), so a constant is safe, and
+    # the replay rolls back rather than keeping the row.
+    marker = "1787667905"
 
     # Fixture ids -> labels, one map per kind, so responses can be frozen
     # without their row ids and without confusing one table's id for another's.
