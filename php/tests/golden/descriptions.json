@@ -67,7 +67,7 @@
  {
   "label": "synthetic:line_breaks",
   "html": "<p>One<br>Two<br/>Three</p>",
-  "markdown": "One  \nTwo"
+  "markdown": "One  \nTwo  \nThree"
  },
  {
   "label": "synthetic:entities",

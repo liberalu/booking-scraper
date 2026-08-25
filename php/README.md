@@ -720,6 +720,15 @@ from `Base.metadata`, and the model never declared what migration
 fired, and the dead code looked covered. The index is now declared on the
 model, which is the fix for the drift as well as for the check.
 
+**markdownify truncated descriptions at a mixed line break — fixed upstream.**
+It dropped everything after a `<br/>` that followed a `<br>` in the same
+paragraph: `<p>One<br>Two<br/>Three</p>` converted to `"One  \nTwo"`, while the
+all-`<br>` and single-`<br/>` forms converted in full. An html.parser artifact,
+not an intention. This port never reproduced it — silent content loss is not
+worth fidelity — and it was the one entry `MarkdownTest` skipped. Upstream now
+normalises `<br/>` to `<br>` before converting, so nothing is skipped: all 31
+golden cases are asserted.
+
 **`year_pages_swap` fired on a year supplied as a string — fixed in both
 stacks.** The issue was decided by `year_before != year_after`, and the
 normalisation turns `"2024"` into `2024`, so a string year read as a swap.

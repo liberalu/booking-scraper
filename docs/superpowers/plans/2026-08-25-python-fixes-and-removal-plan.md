@@ -24,7 +24,7 @@ concurrency, then what users see, then noise.
 | 5 | ✅ **Fixed** — pagination showed duplicates and hid rows | `queries.py` (six sites, not the three first counted) | append an id tiebreaker in the primary sort's direction | 339 books share one `created_at`; page 1 ∩ page 2 was 13 of 50, now 0 in both stacks; `api_diff.py`'s `ENVELOPE_ONLY` is now empty |
 | 6 | ✅ **Fixed** — `year_pages_swap` fired on a year given as a string | `pipelines.py`, `php/src/Crawler/ItemValidator.php` | compare numerically, not by identity, on both sides | `make validator-diff`'s "year as string" case: `year_pages_swap` → no issues, both stacks |
 | 7 | ✅ **Fixed** — `sku_duplicate` looked for a state the schema forbids | `services/validate.py`, `db/models.py` | deleted, with its registry entries; the missing partial unique index that made it look alive is now declared on the model | 0 recorded ever, vs 7,156 `isbn_duplicate`; `make validate-diff` still identical (13,339 issues) |
-| 8 | Descriptions truncate at a mixed line break (markdownify) | `pipelines.py` | normalise `<br/>` → `<br>` before conversion | `<p>One<br>Two<br/>Three</p>` loses "Three" |
+| 8 | ✅ **Fixed** — descriptions truncated at a mixed line break (markdownify) | `pipelines.py` | normalise `<br/>` → `<br>` in a shared `html_to_markdown()` the golden dumper also calls | `<p>One<br>Two<br/>Three</p>` lost "Three"; `MarkdownTest` now skips no cases |
 
 **Every fix moves the reference implementation.** The PHP port is measured
 against Python's behaviour, so each lands in lockstep: regenerate the goldens

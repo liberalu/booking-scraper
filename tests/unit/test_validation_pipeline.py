@@ -179,6 +179,20 @@ def test_year_pages_swap(pipeline):
     assert adapter["properties"]["pages"] == 216
 
 
+def test_description_keeps_text_after_a_mixed_line_break(pipeline):
+    # markdownify drops everything after a `<br/>` that follows a `<br>` in one
+    # paragraph — an html.parser artifact, so normalise the self-closing form.
+    item = ShopBookItem(
+        url="https://vaga.lt/book",
+        shop_name="vaga",
+        title="Book",
+        description="<p>One<br>Two<br/>Three</p>",
+    )
+    result = pipeline.process_item(item)
+
+    assert ItemAdapter(result)["description"] == "One  \nTwo  \nThree"
+
+
 def test_year_as_string_is_not_a_swap(pipeline, stats):
     # _validate_year turns "2024" into 2024; comparing by identity read that
     # as a year/pages swap and filed an issue for a perfectly good year.

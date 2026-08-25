@@ -78,6 +78,27 @@ def _validate_year(adapter: ItemAdapter) -> None:
     adapter["year"] = None
 
 
+# markdownify drops everything after a `<br/>` that follows a `<br>` in the
+# same paragraph — an html.parser artifact, not an intention:
+#   <p>One<br>Two<br/>Three</p>  ->  "One  \nTwo"
+#   <p>One<br>Two<br>Three</p>   ->  "One  \nTwo  \nThree"
+# Normalising the self-closing form away first costs nothing and keeps the text.
+_SELF_CLOSING_BR = re.compile(r"<br\s*/\s*>", re.IGNORECASE)
+
+
+def html_to_markdown(html: str) -> str | None:
+    """Convert an inbound HTML description to the Markdown we store.
+
+    Returns None for an empty conversion, so the column ends up NULL rather
+    than holding an empty string. php/tools/dump_markdown_golden.py calls this
+    rather than markdownify directly, so the golden records what is stored.
+    """
+    converted = _html_to_markdown(
+        _SELF_CLOSING_BR.sub("<br>", html), heading_style="ATX"
+    ).strip()
+    return converted or None
+
+
 def _as_int(value: object) -> int | None:
     """int(value) or None — for comparing a parsed field against its raw form."""
     if isinstance(value, int | float | str):
@@ -285,8 +306,7 @@ class ValidationPipeline:
             # safe to re-render as HTML via the dashboard Jinja filter.
             desc = adapter.get("description")
             if isinstance(desc, str) and "<" in desc and ">" in desc:
-                converted = _html_to_markdown(desc, heading_style="ATX").strip()
-                adapter["description"] = converted or None
+                adapter["description"] = html_to_markdown(desc)
 
             if not adapter.get("title"):
                 self._warn("missing_title", "title", url)

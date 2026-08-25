@@ -1,14 +1,17 @@
 #!/usr/bin/env python
-"""Dump markdownify's output for real product descriptions.
+"""Dump what the pipeline stores for real product descriptions.
 
     PYTHONPATH=. uv run python php/tools/dump_markdown_golden.py
 
 The Python validation pipeline converts every scraped description from HTML to
-Markdown before storing it (`markdownify(desc, heading_style="ATX")`), and
-production holds zero HTML descriptions — so a port that stores the raw HTML
-regresses every book. markdownify's exact output is therefore part of the
-contract, and this captures it over the bundled fixtures plus a set of live
-pages, so the PHP converter can be held to it.
+Markdown before storing it, and production holds zero HTML descriptions — so a
+port that stores the raw HTML regresses every book. That exact output is
+therefore part of the contract, and this captures it over the bundled fixtures
+plus a set of live pages, so the PHP converter can be held to it.
+
+It calls `pipelines.html_to_markdown` rather than markdownify directly: the
+pipeline normalises `<br/>` first and maps an empty conversion to None, and a
+second copy of that logic here would let the golden drift from what is stored.
 
 Written to php/tests/golden/descriptions.json and asserted by MarkdownTest.
 """
@@ -23,8 +26,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from markdownify import markdownify
-
+from book_scraper.pipelines import html_to_markdown as convert
 from book_scraper.spiders.registry import load_parsers
 
 OUT = Path(__file__).resolve().parents[1] / "tests" / "golden" / "descriptions.json"
@@ -80,18 +82,6 @@ def fetch(url: str) -> str | None:
     except (urllib.error.URLError, OSError) as error:
         print(f"  skip {url}: {error}", file=sys.stderr)
         return None
-
-
-def convert(html: str) -> str | None:
-    """What the pipeline STORES, not just what markdownify returns.
-
-    `pipelines.py` does `converted or None`, so an empty conversion becomes a
-    NULL column rather than an empty string — the golden records the stored
-    value so the comparison is against the real contract.
-    """
-    converted = markdownify(html, heading_style="ATX").strip()
-
-    return converted or None
 
 
 def main() -> None:

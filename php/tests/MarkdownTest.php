@@ -18,19 +18,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class MarkdownTest extends TestCase
 {
-    /**
-     * markdownify drops everything after a `<br/>` that follows a `<br>` in
-     * the same paragraph — an html.parser artifact, not an intention:
-     *
-     *   <p>One<br>Two<br/>Three</p>  ->  "One  \nTwo"
-     *   <p>One<br>Two<br>Three</p>   ->  "One  \nTwo  \nThree"
-     *   <p>A<br/>B</p>               ->  "A  \nB"
-     *
-     * Reproducing silent content loss is not worth fidelity, so this one case
-     * diverges on purpose and the port keeps the text.
-     */
-    private const DELIBERATE_DIVERGENCE = 'synthetic:line_breaks';
-
     /** @return list<array{label: string, html: string, markdown: string}> */
     private static function golden(): array
     {
@@ -44,9 +31,6 @@ final class MarkdownTest extends TestCase
     {
         $checked = 0;
         foreach (self::golden() as $case) {
-            if ($case['label'] === self::DELIBERATE_DIVERGENCE) {
-                continue;
-            }
             self::assertSame(
                 $case['markdown'],
                 Markdown::fromHtml($case['html']),
@@ -54,13 +38,18 @@ final class MarkdownTest extends TestCase
             );
             $checked++;
         }
-        // A shrinking corpus would make this test pass by doing nothing.
-        self::assertGreaterThanOrEqual(28, $checked);
+        // A shrinking corpus would make this test pass by doing nothing. No
+        // case is skipped any more: the one deliberate divergence was the
+        // markdownify `<br/>` truncation, and upstream now normalises it.
+        self::assertGreaterThanOrEqual(30, $checked);
     }
 
-    public function testTheBreakQuirkIsNotReproduced(): void
+    public function testABreakAfterABreakKeepsTheRestOfTheParagraph(): void
     {
-        // The content markdownify loses is kept.
+        // markdownify used to drop everything after a `<br/>` that followed a
+        // `<br>` in one paragraph — an html.parser artifact that silently lost
+        // content. This port never reproduced it; upstream now normalises the
+        // self-closing form before converting, so both keep the text.
         self::assertSame(
             "One  \nTwo  \nThree",
             Markdown::fromHtml('<p>One<br>Two<br/>Three</p>')
