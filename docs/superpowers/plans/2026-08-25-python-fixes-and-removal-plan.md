@@ -5,11 +5,22 @@ Rendered version (tables, phase gates): https://claude.ai/code/artifact/3d17d76a
 Found by running the PHP port and the Python stack against identical input and
 diffing the results. Every item below was measured, not inferred.
 
-**Part one is done; part two is still on hold.** All eight defects are fixed in
-both stacks (commits `4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`,
-`8b66faf`, `8828651`). The port's value so far has been as an audit. Removal is
-feasible, but two phases carry the real cost and they are not the obvious ones —
-schema ownership (phase 1) and freezing the verification evidence (phase 6).
+**Part one is done.** All eight defects are fixed in both stacks (commits
+`4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`, `8b66faf`, `8828651`),
+and the undeclared schema drift they surfaced is closed (`09bff38`). Phase 1 of
+part two is landed too (`80ae730`), and the test databases are no longer shared
+(`50a6447`).
+
+**There is no production.** `book-scraper-postgres-1` is a container on this
+machine, every DSN in the repo resolves to `localhost` or the compose service
+name, and the last scrape ran 31 days ago. Earlier drafts of this plan — and
+the estimates in them — were written as though a live service were at stake. It
+is not. Phase 7 stops being meaningful, phase 8 takes minutes, and phases 2–4
+become optional polish.
+
+That leaves **phase 6 as the only one that genuinely bites**, and the only real
+argument against removal: it retires the mechanism that found all eight defects
+above.
 
 ## Part one — the fix ledger
 
@@ -98,17 +109,22 @@ Eight phases, each with the check that must pass before the next starts.
    against that. You keep "did this change"; you permanently lose "does this
    match Python".
    *Gate:* the converted suite passes in a checkout with no Python installed.
-7. **Shadow run** — 2 weeks calendar. Both stacks, non-overlapping schedules
-   (needs fix 4 first). Compare run outcomes, rows written, issues by type,
-   price rows.
-   *Gate:* 14 consecutive days with no unexplained divergence.
-8. **Cutover with a way back** — 1 day + a week's watch. Tag first, then remove
+7. **Shadow run** — ~~2 weeks calendar~~ **redundant.** A shadow period exists
+   to prove the new stack behaves on live traffic before cutover. There is no
+   live service and no traffic. The meaningful version — run both stacks over
+   the same shops and diff what they wrote — is what `crawl_diff`,
+   `validate_diff` and `match_diff` already do, and they agree.
+   *Gate:* the differentials pass on every shop with seeded data.
+8. **Cutover with a way back** — minutes. No scheduled runs to watch, so the
+   week-long observation does not apply either. Tag first, then remove
    `book_scraper/` (66 files), `tests/` (86), `scripts/` (6), `alembic/` (60,
    kept in history), the Python packaging and compose services. Rollback is a
    revert to the tag, cheap because the deletion never touches the database.
-   *Gate:* a full week of scheduled PHP-only runs with no intervention.
+   *Gate:* one full discover + scan + validate cycle on PHP only.
 
-Total: ~2.5 weeks focused work plus 2 weeks shadow.
+Total: **~1 week of focused work, no calendar wait.** Phases 1 (done), 5 and 6
+are the substance. Phases 2, 3 and 4 matter only if you want it running in
+compose on a timer rather than invoked by hand.
 
 ## What removal gives up
 
