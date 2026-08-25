@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\User;
 
 return [
 
@@ -64,7 +63,7 @@ return [
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
-            'model' => env('AUTH_MODEL', User::class),
+            'model' => null,  // no auth: this dashboard has no users table to point at
         ],
 
         // 'users' => [
