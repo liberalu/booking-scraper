@@ -412,7 +412,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--strategy", default="categories",
-        choices=["sitemap", "categories", "graphql", "lupasearch", "ibiblioteka_api"],
+        choices=["sitemap", "categories", "graphql", "lupasearch",
+                 "ibiblioteka_api", "full_crawl"],
     )
     parser.add_argument(
         "--max-pages", type=int, default=2,
@@ -518,9 +519,10 @@ def main() -> int:
         python_rows = shape(python_rows) | canonical_only(python_rows)
         php_rows = shape(php_rows) | canonical_only(php_rows)
 
-    # Categories discovery can't be compared row-for-row: see the module
-    # docstring. Compare shape, and report overlap as a signal.
-    elif args.phase == "discover" and args.strategy == "categories":
+    # full_crawl walks live links breadth-first, so which URLs land inside the
+    # frontier budget depends on the order the site returns them in — the same
+    # reason categories can't be compared row-for-row, one step further out.
+    elif args.phase == "discover" and args.strategy in ("categories", "full_crawl"):
         py_urls = {r["normalized_url"] for r in python_rows["urls"]}
         php_urls = {r["normalized_url"] for r in php_rows["urls"]}
         union = py_urls | php_urls

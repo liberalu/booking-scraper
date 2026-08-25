@@ -10,6 +10,7 @@ use BookScraper\Runs\RunFailsafe;
 use BookScraper\Discovery\IbibliotekaApiUrls;
 use BookScraper\Discovery\LupaSearchUrls;
 use BookScraper\ParserRegistry;
+use BookScraper\UrlUtils;
 use Generator;
 use RoachPHP\Http\Request;
 use RoachPHP\Http\Response;
@@ -29,6 +30,9 @@ use RoachPHP\Spider\BasicSpider;
  *                        ISBN/year/pages; used for daily price rescans.
  *  - `ibiblioteka_api` — the national library's POST search API, walked in
  *                        monthly bands.
+ *  - `full_crawl`      — follows every internal link from one seed. The
+ *                        fallback for shops with neither a usable sitemap nor
+ *                        a paginated listing.
  *
  * The last three are JSON APIs whose every request input is encoded into the
  * URL (see BookScraper\Discovery), so a queued URL is a complete request and
@@ -62,9 +66,21 @@ final class DiscoverSpider extends BasicSpider
      */
     private static int $filtered = 0;
 
+    /**
+     * Every internal URL this run has queued, for `full_crawl`.
+     *
+     * Static for the same reason as $filtered: roach builds the spider through
+     * its container, so there is no instance the CLI can reach. It doubles as
+     * the follow budget — `max_pages` caps the size of this set.
+     *
+     * @var array<string, true>
+     */
+    private static array $seen = [];
+
     public static function resetFiltered(): void
     {
         self::$filtered = 0;
+        self::$seen = [];
     }
 
     public static function filteredCount(): int
@@ -142,6 +158,7 @@ final class DiscoverSpider extends BasicSpider
                 ['page' => 1] + self::guzzleOptions(LupaSearchUrls::postRequest($url))),
             'ibiblioteka_api' => new Request('POST', $url, [$this, 'parseIbiblioteka'],
                 ['page' => 1] + self::guzzleOptions(IbibliotekaApiUrls::postRequest($url))),
+            'full_crawl' => new Request('GET', $url, [$this, 'parseFullCrawl'], ['page' => 1]),
             default => new Request('GET', $url, [$this, 'parseSitemap'], ['page' => 1]),
         };
     }
@@ -197,6 +214,7 @@ final class DiscoverSpider extends BasicSpider
             'graphql' => $this->parseGraphQl($response),
             'lupasearch' => $this->parseLupaSearch($response),
             'ibiblioteka_api' => $this->parseIbiblioteka($response),
+            'full_crawl' => $this->parseFullCrawl($response),
             default => $this->parseSitemap($response),
         };
     }
@@ -629,6 +647,110 @@ final class DiscoverSpider extends BasicSpider
         $nextUrl = IbibliotekaApiUrls::advance($url, $psi + $count);
         yield $this->request('POST', $nextUrl, 'parseIbiblioteka',
             ['page' => $page + 1] + self::guzzleOptions(IbibliotekaApiUrls::postRequest($nextUrl)));
+    }
+
+    // -------------------------------------------------------- full_crawl
+
+    /**
+     * Follow every internal link from one seed.
+     *
+     * The fallback for shops with neither a usable sitemap nor a paginated
+     * listing. Two rules carry the weight:
+     *
+     *  * The include pattern decides *classification*, not just whether to
+     *    emit. A page whose URL matches is parsed as a product; one that does
+     *    not is followed purely as crawl frontier and stamped `non_product`,
+     *    so the scan phase stops revisiting it.
+     *  * `max_pages` caps the number of URLs queued, not the number fetched.
+     *    Pages already in flight are still classified once the budget is
+     *    spent — the response is paid for, so throwing away its verdict would
+     *    be worse than recording it.
+     */
+    public function parseFullCrawl(Response $response): Generator
+    {
+        $baseUrl = rtrim((string) ($this->context['base_url'] ?? ''), '/');
+        $currentUrl = explode('?', (string) $response->getUri())[0];
+
+        if ($this->passesFilter($currentUrl)) {
+            $parsed = ($this->parser())::parseProductPage($response->getBody());
+            // A title is enough: the page was reachable and looks like a
+            // product, and the scan phase will settle the details.
+            if (($parsed['is_book_product'] ?? false) === true || ($parsed['title'] ?? null) !== null) {
+                yield from $this->emitProducts([['url' => $currentUrl] + $parsed]);
+            } else {
+                yield $this->item([
+                    'kind' => 'non_product',
+                    'url' => $currentUrl,
+                    'book_score' => $parsed['book_score'] ?? 0,
+                    'book_score_reasons' => $parsed['book_score_reasons'] ?? [],
+                ]);
+            }
+        } else {
+            yield $this->item([
+                'kind' => 'non_product',
+                'url' => $currentUrl,
+                'book_score' => 0,
+                'book_score_reasons' => [['reason' => 'url_pattern_filtered']],
+            ]);
+        }
+
+        $maxPages = (int) ($this->context['max_pages'] ?? 0);
+        if ($maxPages > 0 && count(self::$seen) >= $maxPages) {
+            return;
+        }
+
+        /** @var array<string, true> $stable */
+        $stable = $this->context['stable_urls'] ?? [];
+
+        foreach ($this->internalLinks($response, $baseUrl) as $link) {
+            if (isset(self::$seen[$link])) {
+                continue;
+            }
+            self::$seen[$link] = true;
+
+            // Already classified recently: follow it to find new outgoing
+            // links, but don't re-emit the URL row.
+            if (isset($stable[UrlUtils::normalize($link)])) {
+                yield $this->request('GET', $link, 'parseFullCrawl', ['page' => 1]);
+                continue;
+            }
+
+            if ($this->passesFilter($link)) {
+                yield $this->item(['kind' => 'url', 'url' => $link, 'source' => 'full_crawl']);
+            }
+            yield $this->request('GET', $link, 'parseFullCrawl', ['page' => 1]);
+        }
+    }
+
+    /**
+     * Absolute internal links on the page, deduplicated in document order.
+     *
+     * Hrefs are trimmed, which a browser does and the Python spider does not.
+     * vaga's homepage carries 65 whitespace-padded hrefs (`href="/atmosfera "`),
+     * and Python follows 62 of them as URLs distinct from their clean twins —
+     * so it crawls each of those products twice and can write a duplicate
+     * `discovered_urls` row. Measured on the same bytes: 629 links Python, 565
+     * here, the 64-link gap being those plus the bare-host and fragment-only
+     * forms.
+     *
+     * Deliberate divergence. Reproducing it would mean doubling the crawl to
+     * copy a defect; the real catalogue holds 3 such rows, so nothing depends
+     * on the old behaviour.
+     *
+     * @return list<string>
+     */
+    private function internalLinks(Response $response, string $baseUrl): array
+    {
+        $links = [];
+        foreach ($response->filter('a')->links() as $link) {
+            $href = $link->getUri();
+            if ($baseUrl !== '' && !str_starts_with($href, $baseUrl)) {
+                continue;
+            }
+            $links[explode('#', $href)[0]] = true;
+        }
+
+        return array_keys($links);
     }
 
     /** @param list<array<string, mixed>> $products */

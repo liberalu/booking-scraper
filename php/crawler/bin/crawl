@@ -159,8 +159,8 @@ if ($command === '' || isset($opts['help'])) {
     Usage: bin/crawl <discover|scan|reconcile> [options]
 
       discover
-        --strategy=S     sitemap (default), categories, graphql, lupasearch
-                         or ibiblioteka_api
+        --strategy=S     sitemap (default), categories, graphql, lupasearch,
+                         ibiblioteka_api or full_crawl
         --max-pages=N    cap category pages (dev runs)
         --max-bands=N    ibiblioteka_api only: cap how many monthly bands
                          open. Without it a run covers every month in the
@@ -257,7 +257,7 @@ $stallTimeout = max(
 
 if ($command === 'discover') {
     $strategy = $opts['strategy'] ?? 'sitemap';
-    $known = ['sitemap', 'categories', 'graphql', 'lupasearch', 'ibiblioteka_api'];
+    $known = ['sitemap', 'categories', 'graphql', 'lupasearch', 'ibiblioteka_api', 'full_crawl'];
     if (!in_array($strategy, $known, true)) {
         fail("strategy '{$strategy}' is not ported (" . implode('|', $known) . ')');
     }
@@ -306,6 +306,15 @@ if ($command === 'discover') {
         if ($maxBands > 0) {
             $seedUrls = array_slice($seedUrls, 0, $maxBands);
         }
+    } elseif ($strategy === 'full_crawl') {
+        $startUrl = (string) ($strategyConf['start_url'] ?? '');
+        if ($startUrl === '') {
+            fail('[discover.full_crawl] has no start_url');
+        }
+        if ($maxPages === 0) {
+            fwrite(STDERR, "  warning: full_crawl with no --max-pages will walk the"
+                . " whole site; pass --max-pages=N to cap it\n");
+        }
     } else {
         $template = (string) ($strategyConf['url'] ?? '');
         if ($template === '') {
@@ -338,6 +347,21 @@ if ($command === 'discover') {
     // Counted before the crawl: a run that finds nothing is only alarming if
     // the shop had URLs to begin with.
     $urlsBefore = DiscoveredUrl::where('shop_id', $shop->id)->count();
+
+    // full_crawl only: URLs already classified and checked recently are
+    // followed for their outgoing links but not re-emitted as rows.
+    $stableUrls = [];
+    if ($strategy === 'full_crawl') {
+        $stableUrls = array_fill_keys(
+            DiscoveredUrl::where('shop_id', $shop->id)
+                ->whereIn('url_type', ['product', 'non_product', 'unreachable'])
+                ->where('last_checked_at', '>=', Carbon::now('UTC')->subDays(7))
+                ->pluck('normalized_url')
+                ->all(),
+            true
+        );
+        printf("full_crawl: %d URL(s) already classified recently\n", count($stableUrls));
+    }
     $watchdog = startWatchdog($run->id, $shopName, 'discover', $stallTimeout);
 
     Roach::useContainer(new RoachContainer(
@@ -362,6 +386,7 @@ if ($command === 'discover') {
                 'page_size' => (int) ($strategyConf['page_size'] ?? 100),
                 'max_pages' => $maxPages,
                 'url_include_pattern' => $config->urlIncludePattern(),
+                'stable_urls' => $stableUrls,
                 'category_ids' => array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
                 'subdivide_factor' => (int) ($strategyConf['subdivide_factor'] ?? 5),
                 'subdivide_min_page_size' => (int) ($strategyConf['subdivide_min_page_size'] ?? 1),
