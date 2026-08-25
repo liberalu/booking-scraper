@@ -58,13 +58,23 @@ share one. Pre-existing, and unrelated to any fix above.
 
 Eight phases, each with the check that must pass before the next starts.
 
-1. **Move schema ownership to PHP** — 3–4 days, the blocker. Alembic owns 118
+1. **Move schema ownership to PHP** — ~half a day, *measured 25 Aug*. Alembic owns 118
    revisions; PHP owns nothing by design. Don't re-express the history: take
    `pg_dump --schema-only` as baseline migration 0001 for a PHP migrator in
    `php/` (shared by crawler and dashboard, never in the Laravel app). Keep
    `alembic/` as read-only history.
    *Gate:* fresh DB from the PHP baseline, `pg_dump --schema-only` both, diff to
    zero — that is what catches enums, partial unique indexes, check constraints.
+
+   **Verified.** The round-trip is faithful, so this phase is one migration that
+   executes that SQL rather than a rewrite of 118 revisions. A 2,163-line schema
+   dump restored into a fresh database produced all 25 tables, 12 enums, 5 unique
+   indexes (partials included) and 3 check constraints; re-dumping differed only
+   in `pg_dump`'s own session tokens plus one CHECK expression Postgres deparses
+   in an equivalent form. The automated gate must normalise that re-render or it
+   reports a permanent false positive. This was the estimate I was least sure of,
+   and it is the cheapest phase rather than the most expensive — which leaves
+   phase 6 as the only one that genuinely bites.
 2. **Package the PHP stack** — 2 days. Compose targets for crawler and
    dashboard, PHP 8.4, via the existing Make wrappers.
    *Trap:* `php/dashboard/public/static` is a symlink into
@@ -98,7 +108,7 @@ Eight phases, each with the check that must pass before the next starts.
    revert to the tag, cheap because the deletion never touches the database.
    *Gate:* a full week of scheduled PHP-only runs with no intervention.
 
-Total: ~3 weeks focused work plus 2 weeks shadow.
+Total: ~2.5 weeks focused work plus 2 weeks shadow.
 
 ## What removal gives up
 
