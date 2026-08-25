@@ -1,0 +1,33 @@
+[
+  {
+    "result": {
+      "headers": {
+        "Accept": "application/json"
+      },
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bsku%3A%7Beq%3A%22000000000001115331%22%7D%7D%2CpageSize%3A1%2CcurrentPage%3A1%29%7Bitems%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D"
+    },
+    "url": "https://www.pegasas.lt/knyga-1115331"
+  },
+  {
+    "result": {
+      "headers": {
+        "Accept": "application/json"
+      },
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bsku%3A%7Beq%3A%22000000000001115331%22%7D%7D%2CpageSize%3A1%2CcurrentPage%3A1%29%7Bitems%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D"
+    },
+    "url": "https://www.pegasas.lt/knyga-1115331/"
+  },
+  {
+    "result": null,
+    "url": "https://www.pegasas.lt/no-sku-here"
+  },
+  {
+    "result": {
+      "headers": {
+        "Accept": "application/json"
+      },
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bsku%3A%7Beq%3A%22000000000000000042%22%7D%7D%2CpageSize%3A1%2CcurrentPage%3A1%29%7Bitems%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D"
+    },
+    "url": "https://www.pegasas.lt/multi-dash-slug-42"
+  }
+]

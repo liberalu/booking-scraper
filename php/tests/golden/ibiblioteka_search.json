@@ -1,0 +1,115 @@
+{
+  "products": [
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Lietuvių literatūros ir tautosakos institutas",
+      "sku": "LIBIS-000000164644",
+      "title": "Mokymo metodas Lietuvos provincijos pijorų mokykloms",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2085468",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": null,
+      "sku": "LIBIS000000335736",
+      "title": "Pavasario įdomybės",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8813189",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Presvika, []",
+      "sku": "LIBIS000000340652",
+      "title": "Kartojimo užduotys antrokams",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8818112",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": null,
+      "sku": "LIBIS000000385737",
+      "title": "Kovas. Kaip augti sveikam?",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8864240",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Kultūros vystymo ir švietimo viešoji įstaiga",
+      "sku": "LIBIS000000411913",
+      "title": "Didžios meilės troškimas",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8890449",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Obuolys [i.e. Lectio divina], []",
+      "sku": "LIBIS000000423042",
+      "title": "Paslaptingas atsitikimas Stailze",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8901622",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Egmont Lietuva",
+      "sku": "LIBIS000000425858",
+      "title": "Greiti kaip vėjas",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8904440",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Vaiga, []",
+      "sku": "LIBIS000000430274",
+      "title": "Augintiniai",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8908859",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Vaiga, []",
+      "sku": "LIBIS000000439757",
+      "title": "Princesių labirintai",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8918354",
+      "year": 2024
+    },
+    {
+      "book_score": 5,
+      "format": null,
+      "is_book_product": true,
+      "publisher": "Vaiga, []",
+      "sku": "LIBIS000000441120",
+      "title": "Mū Mū karvytė",
+      "type": "book",
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/8919717",
+      "year": 2024
+    }
+  ],
+  "total": null
+}

@@ -1,0 +1,56 @@
+{
+  "author": null,
+  "book_score": 2,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 0
+    },
+    {
+      "key": "author_present",
+      "points": 0
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [],
+  "cover_type": "Minkštas",
+  "description": "Sąsiuvinis NETVARKOS NYKŠTUKAS, 2 kl., 12 l., langeliais",
+  "duration": null,
+  "format": "paperback",
+  "image_url": "https://almalittera.lt/cdn/shop/files/5b20f45472ea4.png?v=1777916575",
+  "in_stock": false,
+  "is_book_product": false,
+  "isbn": "4779037810239",
+  "narrator": null,
+  "pages": 24,
+  "planned_availability_date": null,
+  "price": "0.52",
+  "price_original": null,
+  "publisher": null,
+  "rating": null,
+  "review_count": null,
+  "schema_types": [
+    "BreadcrumbList",
+    "Product"
+  ],
+  "sku": "000000000005175705",
+  "title": "Sąsiuvinis NETVARKOS NYKŠTUKAS, 2 kl., 12 l., langeliais",
+  "translator": null,
+  "type": "non_book",
+  "year": 2018
+}

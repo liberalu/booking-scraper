@@ -1,0 +1,56 @@
+{
+  "author": "Loreta Tamulaitienė",
+  "book_score": 7,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [],
+  "cover_type": "Kieti viršeliai",
+  "description": "Loreta Tamulaitienė – Šiaulių Stasio Šalkauskio gimnazijos direkt­rė, trijų suaugusių vaikų mama. Anksčiau dirbo lietuvių kalbos, etikos mokytoja. Ne kartą skelbė straipsnius švietimo, kultūros temomis Lietuvos dienraščiuose, yra laimėjusi įvairių kūrybinio rašymo konkursų, tačiau, kaip teigia autorė, būtent karantino metas suteikė tokią prabangą – parašyti istoriją, į kurią sudėta tai, ką jai teko patirti dirbant Šiaulių jaunimo mokykloje. Knygos „Paraščių vaikai“ autorei puikiai pavyko sukurti autentišką turinį apie jaunimo mokyklos vaikus, jų gyvenimą, taip pat ir mokyklos vadovės, mokytojų patirtį, bendraujant su vaikais, ir tėvais, kurių veiksmai dažnai netelpa į jokius įprasto elgesio rėmus. Visas knygos „Paraščių vaikai“ istorijas jungia bendra erdvė – jaunimo mokykla, į kurią jie išstumiami – turbūt taip būtų tinkamiausia sakyti – dėl elgesio, mokymosi, socialinių ir šeiminių problemų. Kai kuriems vaikams tenka išgyventi tokių patirčių, kurios sunkiai būtų pakeliamos ir suaugusiam, gyvenimo patirties įgijusiam žmogui. Šiaulių jaunimo mokykla, gyvavusi du dešimtmečius, bus uždaryta 2022-aisiais, o visų tokių įstaigų Lietuvoje turėtų nelikti iki 2025 m. Taigi ši knyga – lyg duoklė toms įstaigoms, kuriose užgimusios istorijos nukeliaus užmarštin. Šios istorijos – išties unikalios, nepakartojamos, gebančios skaitytoją permąstyti savo požiūrį į skaudžius, tarytum nustumtus į paraštę gyvenimo reiškinius. Kai kurios istorijos primena Vandos Juknaitės aprašytas dramatiškas patirtis. Visi vardai, situacijos knygoje „Paraščių vaikai“ pakeistos, autentiški įvykiai apipinti kūrybine išmone.",
+  "duration": null,
+  "format": "hardcover",
+  "image_url": "https://www.humanitas.lt/uploads/Products/product_189415/parasciu-vaikai_1649766562.jpg",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786094802966",
+  "narrator": null,
+  "pages": 344,
+  "planned_availability_date": null,
+  "price": "15.10",
+  "price_original": "15.90",
+  "properties": {
+    "language": "Lietuvių"
+  },
+  "publisher": "Lietuvos rašytojų sąjungos leidykla",
+  "rating": null,
+  "review_count": null,
+  "schema_types": [],
+  "sku": "189415",
+  "title": "Paraščių vaikai",
+  "translator": null,
+  "type": "book",
+  "year": 2022
+}

@@ -1,0 +1,53 @@
+{
+  "author": null,
+  "book_score": 0,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 0
+    },
+    {
+      "key": "author_present",
+      "points": 0
+    },
+    {
+      "key": "book_metadata",
+      "points": 0
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [],
+  "cover_type": null,
+  "description": "Pagrindinis knygos tikslas – supažindinti skaitytojus su mūsų krašto savaiminių ir svetimžemių nuodingųjų augalų įvairove, jų keliamais pavojais, augavietėmis ir nuodingųjų augalų toksiškumo priežastimis. Visuose kraštuose nuo nuodingųjų augalų dažniausiai nukenčia mažamečiai dvejų–penkerių metų vaikai, kurie nori savarankiškai pažinti aplinką. Vaikus paprastai vilioja sultingi, dažnokai malonaus kvapo ir skonio nuodingųjų augalų vaisiai. Suaugusieji nuo nuodingųjų augalų dažniausiai nukenčia naudodami iš jiems nepakankamai pažįstamų augalų paruoštus vaistinius preparatus savigydai. Todėl turėti didesnį ar mažesnį kiekį bendrųjų, o ir specialiųjų žinių apie nuodinguosius augalus turėtų būti naudinga kiekvienam asmeniui. Knygoje, remiantis daugiausia botanikos, ekologijos ir chemijos mokslų žiniomis, pateikti 40-ies savaiminių ir 40-ies svetimžemių mūsų krašte nuodingųjų augalų rūšių aprašai. Nurodytos ir svarbiausios daugelio nuodingųjų rūšių augalų vaistingosios ir kai kurios kitos taikomosios savybės. Knyga iliustruota originaliomis nuodingųjų augalų nuotraukomis. Leidinys skiriamas visiems besidomintiems augalais ir savitomis jų savybėmis, tikintis, kad jame pateikta informacija ne tik pagilins skaitytojų žinias apie nuodinguosius augalus, bet ir padės išvengti jų keliamų pavojų.",
+  "duration": null,
+  "format": null,
+  "image_url": "https://www.humanitas.lt/uploads/Products/product_310030/nuodingieji-augalai-salia-musu_1756995415.jpg",
+  "in_stock": true,
+  "is_book_product": false,
+  "isbn": null,
+  "narrator": null,
+  "pages": null,
+  "planned_availability_date": null,
+  "price": null,
+  "price_original": null,
+  "publisher": null,
+  "rating": null,
+  "review_count": null,
+  "schema_types": [],
+  "sku": null,
+  "title": "Nuodingieji augalai šalia mūsų",
+  "translator": null,
+  "type": "non_book",
+  "year": null
+}

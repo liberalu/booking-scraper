@@ -1,0 +1,41 @@
+{
+  "author": "Nėra Autoriaus",
+  "book_score": 100,
+  "book_score_reasons": [
+    {
+      "key": "graphql_sku_match",
+      "points": 100
+    }
+  ],
+  "categories": [
+    "Knygos",
+    "Vaikų ir jaunimo literatūra",
+    "Spalvinimo ir lipdukų knygos",
+    "Knygos vaikams iki 6 metų",
+    "Naujos knygos",
+    "Vaikų knygų naujienos",
+    "Lietuvių autorių knygos vaikams iki 6 metų"
+  ],
+  "cover_type": "Minkštas",
+  "description": "Vaikams nuo 3 metų. Nuo savo kambario iki jūros, nuo miesto iki miško – smalsuolė Kakė Makė keliauja ir susipažįsta su ją supančiu pasauliu. Koks jis įdomus ir įvairus! Keliauk su Kake Make, ieškok ir skaičiuok, klijuok lipdukus ir išsiaiškink: kokie daiktai priklauso namams, o ką gali surasti mieste? Kas auga sode ir ką gali sutikti miške? Ši lipdukų knygelė – ne tik smagus užsiėmimas, bet ir turtina žodyną, lavina smulkiąją motoriką, rankų ir akių koordinaciją, pastabumą ir kruopštumą.  „Kakė Makė. Pasaulis aplink mane. Lipdukų knyga“: • lavina smulkiąją motoriką, rankų ir akių koordinaciją; • turtina žodyną ir padeda suprasti, kokie daiktai kokiai aplinkai priklauso; • pastabumą, kruopštumą ir dėmesio sutelkimą lavinančios užduotys; • 6 atvartai su lipdukais, kuriuos vaikai turės suklijuoti pagal temas; • moko skaičiuoti iki 5. ",
+  "duration": null,
+  "format": "paperback",
+  "image_url": "https://www.pegasas.lt/media/catalog/product/0/0/000000000001115331-b-b-d-f-bbdf38ea7bf0e574f06b33849db1c646c9154301_km_pasaulis_aplink_mane.jpg",
+  "in_stock": false,
+  "is_book_product": true,
+  "isbn": "9786090170915",
+  "narrator": null,
+  "pages": null,
+  "planned_availability_date": null,
+  "price": "8.79",
+  "price_original": "10.99",
+  "publisher": "Alma littera",
+  "rating": null,
+  "review_count": null,
+  "schema_types": [],
+  "sku": "000000000001115331",
+  "title": "Kakė Makė. Pasaulis aplink mane. Lipdukų knyga",
+  "translator": null,
+  "type": "book",
+  "year": 2026
+}

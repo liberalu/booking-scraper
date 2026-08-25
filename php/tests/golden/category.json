@@ -1,0 +1,805 @@
+{
+  "products": [
+    {
+      "author": "Colleen Hoover",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005584-320x470.jpg",
+      "price": "16.32",
+      "price_original": "24.39",
+      "title": "Širdies kauleliai",
+      "url": "https://vaga.lt/sirdies-kauleliai"
+    },
+    {
+      "author": "Julio Cortazar",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09427622_2-320x470.jpg",
+      "price": "20.65",
+      "price_original": "29.50",
+      "title": "Žaidžiame klases",
+      "url": "https://vaga.lt/zaidziame-klases"
+    },
+    {
+      "author": "Phill Joyce, Charlotte Sills",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502825-320x470.jpg",
+      "price": "18.59",
+      "price_original": "28.60",
+      "title": "Geštalto praktika: konsultavimas ir psichoterapija",
+      "url": "https://vaga.lt/gestalto-praktika-konsultavimas-ir-psichoterapija"
+    },
+    {
+      "author": "Paulo Coelho",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502700-320x470.jpg",
+      "price": "8.45",
+      "price_original": "19.60",
+      "title": "Lankininkas",
+      "url": "https://vaga.lt/lankininkas"
+    },
+    {
+      "author": "Paula Hawkins",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7523863-320x470.jpg",
+      "price": "5.62",
+      "price_original": "13.35",
+      "title": "Mergina traukiny",
+      "url": "https://vaga.lt/mergina-traukiny"
+    },
+    {
+      "author": "Tomas Misiukonis, Viktorija Matusevičiūtė, Mindaugas Grajauskas",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7502373-320x470.jpg",
+      "price": "14.04",
+      "price_original": "21.60",
+      "title": "Dėmesio, grupė! I dalis. Praktiški darbo su grupe būdai ir technikos",
+      "url": "https://vaga.lt/demesio-grupe-praktiski-darbo-su-grupe-budai-ir-technikos"
+    },
+    {
+      "author": "Frank Herbert",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09427601_2-320x470.jpg",
+      "price": "19.32",
+      "price_original": "27.60",
+      "title": "Kopos Dievas Imperatorius",
+      "url": "https://vaga.lt/kopos-dievas-imperatorius"
+    },
+    {
+      "author": "Fiona Valpy",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09490373-320x470.jpg",
+      "price": "6.64",
+      "price_original": "15.80",
+      "title": "Sapnų pardavėja iš Kasablankos",
+      "url": "https://vaga.lt/sapnu-pardaveja-is-kasablankos"
+    },
+    {
+      "author": "Colleen Hoover",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008150_2-320x470.jpg",
+      "price": "17.70",
+      "price_original": "25.29",
+      "title": "Sužeista moteris",
+      "url": "https://vaga.lt/suzeista-moteris"
+    },
+    {
+      "author": "Timothée de Fombelle",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746539-320x470.jpg",
+      "price": "6.00",
+      "price_original": "11.30",
+      "title": "Perlo knyga",
+      "url": "https://vaga.lt/perlo-knyga"
+    },
+    {
+      "author": "Dawn Tripp",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1001189-320x470.jpg",
+      "price": "19.25",
+      "price_original": "27.50",
+      "title": "Žaklina. Kenedžio žmona. Pirmoji ponia. Motina. Stiliaus ikona",
+      "url": "https://vaga.lt/zaklina-kenedzio-zmona-pirmoji-ponia-motina-stiliaus-ikona"
+    },
+    {
+      "author": "Cecillia Davidsson, Alex Haridi",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746927-320x470.jpg",
+      "price": "5.00",
+      "price_original": "11.90",
+      "title": "Troliai Mumiai kelia bures",
+      "url": "https://vaga.lt/troliai-mumiai-kelia-bures"
+    },
+    {
+      "author": "Herbjørg Wassmo",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015818_2-320x470.jpg",
+      "price": "9.00",
+      "price_original": "22.30",
+      "title": "Septintas susitikimas",
+      "url": "https://vaga.lt/septintas-susitikimas-1424283134"
+    },
+    {
+      "author": "Stephen King",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005017-320x470.jpg",
+      "price": "19.22",
+      "price_original": "27.69",
+      "title": "Holė",
+      "url": "https://vaga.lt/hole"
+    },
+    {
+      "author": "Michelle Obama",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015840-320x470.jpg",
+      "price": "6.00",
+      "price_original": "25.50",
+      "title": "Mūsų šviesa",
+      "url": "https://vaga.lt/musu-sviesa"
+    },
+    {
+      "author": "Elizabeth DeLozier",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1003983-320x470.jpg",
+      "price": "17.65",
+      "price_original": "25.69",
+      "title": "Eleonora Avinjonietė",
+      "url": "https://vaga.lt/eleonora-avinjoniete"
+    },
+    {
+      "author": "Richard Bach",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/9789955477372-320x470.jpg",
+      "price": "7.49",
+      "price_original": "10.70",
+      "title": "Džonatanas Livingstonas Žuvėdra. Naujas leidimas",
+      "url": "https://vaga.lt/dzonatanas-livingstonas-zuvedra-2024"
+    },
+    {
+      "author": "Joanna Faber, Julie King",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502669-320x470.jpg",
+      "price": "4.00",
+      "price_original": "18.70",
+      "title": "Kaip kalbėti, kai vaikai neklauso",
+      "url": "https://vaga.lt/kaip-kalbeti-kai-vaikai-neklauso"
+    },
+    {
+      "author": "Gisele Pelicot",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008635-320x470.jpg",
+      "price": "18.82",
+      "price_original": "26.89",
+      "title": "Odė gyvenimui. Mums neturi būti gėda",
+      "url": "https://vaga.lt/ode-gyvenimui-mums-neturi-buti-geda"
+    },
+    {
+      "author": "Tomas Šaltmeris-Tomsuons",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008618-320x470.jpg",
+      "price": "15.18",
+      "price_original": "21.69",
+      "title": "A noji? \"Syki Amerikuo\" i kėtas Tomsuona istuorijis",
+      "url": "https://vaga.lt/a-noji-syki-amerikuo-i-ketas-tomsuona-istuorijis"
+    },
+    {
+      "author": "Andrius Tapinas, Šarūnas Černiauskas",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008612-320x470.jpg",
+      "price": "21.90",
+      "price_original": "30.59",
+      "title": "Pagauti Palucką",
+      "url": "https://vaga.lt/pagauti-palucka"
+    },
+    {
+      "author": "Hermann Hesse",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1001157-320x470.jpg",
+      "price": "5.74",
+      "price_original": "8.20",
+      "title": "Sidhartha: indiška poema",
+      "url": "https://vaga.lt/sidhartha-indiska-poema-174521"
+    },
+    {
+      "author": "Beata Nicholson",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005327-320x470.jpg",
+      "price": "37.69",
+      "price_original": "44.50",
+      "title": "Kalėdų knyga",
+      "url": "https://vaga.lt/kaledu-knyga"
+    },
+    {
+      "author": "Margaret Atwood",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09479388_2-320x470.jpg",
+      "price": "9.00",
+      "price_original": "16.30",
+      "title": "Liudijimai",
+      "url": "https://vaga.lt/liudijimai"
+    },
+    {
+      "author": "Erika Amber",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1001297-320x470.jpg",
+      "price": "18.83",
+      "price_original": "26.90",
+      "title": "Vilko dukra",
+      "url": "https://vaga.lt/vilko-dukra"
+    },
+    {
+      "author": "Frank Herbert",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746713-320x470.jpg",
+      "price": "22.40",
+      "price_original": "32.00",
+      "title": "Kopos eretikai. Penkta „Kopa“ kronikų knyga",
+      "url": "https://vaga.lt/kopos-eretikai-penkta-kopa-kroniku-knyga"
+    },
+    {
+      "author": "Mika Waltari",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7466236-320x470.jpg",
+      "price": "19.25",
+      "price_original": "27.50",
+      "title": "Sinuhė egiptietis. Penkiolika knygų apie gydytojo Sinuhės gyvenimą",
+      "url": "https://vaga.lt/sinuhe-egiptietis"
+    },
+    {
+      "author": "Ana Huang",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008744-320x470.jpg",
+      "price": "20.81",
+      "price_original": "31.89",
+      "title": "Suktas pyktis. Twisted. 3 knyga",
+      "url": "https://vaga.lt/suktas-pyktis-twisted-3-knyga"
+    },
+    {
+      "author": "Lindsay C. Gibson",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502640_2-320x470.jpg",
+      "price": "14.30",
+      "price_original": "22.00",
+      "title": "Suaugę emociškai nebrandžių tėvų vaikai",
+      "url": "https://vaga.lt/suauge-emociskai-nebrandziu-tevu-vaikai"
+    },
+    {
+      "author": "Alan Hlad",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1001197-320x470.jpg",
+      "price": "17.31",
+      "price_original": "28.89",
+      "title": "Knygų šnipė",
+      "url": "https://vaga.lt/knygu-snipe"
+    },
+    {
+      "author": "A.F. Steadman",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42747893-320x470.jpg",
+      "price": "10.00",
+      "price_original": "16.90",
+      "title": "Skandaras ir Chaoso išbandymai. 3 knyga",
+      "url": "https://vaga.lt/skandaras-ir-chaoso-isbandymai"
+    },
+    {
+      "author": "Ian McEwan",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09466792-320x470.jpg",
+      "price": "9.53",
+      "price_original": "27.30",
+      "title": "Pamokos",
+      "url": "https://vaga.lt/pamokos"
+    },
+    {
+      "author": "Rolf Dobelli",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502767-320x470.jpg",
+      "price": "9.00",
+      "price_original": "25.30",
+      "title": "Gero gyvenimo vadovas: 52 netikėti būdai pasiekti laimę",
+      "url": "https://vaga.lt/gero-gyvenimo-vadovas-52-netiketi-budai-pasiekti-laime"
+    },
+    {
+      "author": "Raminta Bekešiūtė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746459-320x470.jpg",
+      "price": "10.00",
+      "price_original": "18.40",
+      "title": "Devyni mėnesiai kariuomenėje. Be pagražinimų",
+      "url": "https://vaga.lt/devyni-menesiai-kariuomeneje-be-pagrazinimu"
+    },
+    {
+      "author": "Antonio Iturbe",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09479364_2-320x470.jpg",
+      "price": "8.90",
+      "price_original": "17.80",
+      "title": "Mažiausia pasaulio biblioteka",
+      "url": "https://vaga.lt/maziausia-pasaulio-biblioteka"
+    },
+    {
+      "author": "Hermann Hesse",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1007718-320x470.jpg",
+      "price": "7.35",
+      "price_original": "10.50",
+      "title": "Knulpas. Trys Knulpo gyvenimo istorijos",
+      "url": "https://vaga.lt/knulpas-trys-knulpo-gyvenimo-istorijos"
+    },
+    {
+      "author": "Freida McFadden",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42748170-320x470.jpg",
+      "price": "18.97",
+      "price_original": "27.10",
+      "title": "Tarnaitė",
+      "url": "https://vaga.lt/tarnaite"
+    },
+    {
+      "author": "Julian Fellowes",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7479027-320x470.jpg",
+      "price": "5.60",
+      "price_original": "15.25",
+      "title": "Belgravija",
+      "url": "https://vaga.lt/belgravija"
+    },
+    {
+      "author": "Chanel Cleeton",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09479362_2-320x470.jpg",
+      "price": "6.30",
+      "price_original": "15.90",
+      "title": "Kai sugrįšime į Kubą",
+      "url": "https://vaga.lt/kai-sugrisime-i-kuba"
+    },
+    {
+      "author": "Geltonas karutis / Lina Liubertaitė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015110-320x470.jpg",
+      "price": "5.00",
+      "price_original": "22.45",
+      "title": "Kakė Makė. Sodo detektyvas",
+      "url": "https://vaga.lt/kake-make-sodo-detektyvas"
+    },
+    {
+      "author": "Anna Cima",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1002524-320x470.jpg",
+      "price": "15.50",
+      "price_original": "22.14",
+      "title": "Prabusiu Šibujoj",
+      "url": "https://vaga.lt/prabusiu-sibujoj"
+    },
+    {
+      "author": "Aušra Levanienė, Vaiva Pėtelienė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005488-320x470.jpg",
+      "price": "12.92",
+      "price_original": "21.79",
+      "title": "Šventės lengvai. Kūrybiškų idėjų gidas",
+      "url": "https://vaga.lt/sventes-lengvai-kurybisku-ideju-gidas"
+    },
+    {
+      "author": "Herbjørg Wassmo",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015727-320x470.jpg",
+      "price": "5.00",
+      "price_original": "14.20",
+      "title": "Namas su akla stiklo veranda. Tora 1",
+      "url": "https://vaga.lt/namas-su-akla-stiklo-veranda-tora-1"
+    },
+    {
+      "author": "Jacqueline Bublitz",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1002075-320x470.jpg",
+      "price": "17.75",
+      "price_original": "25.35",
+      "title": "Kol nežinojai mano vardo",
+      "url": "https://vaga.lt/kol-nezinojai-mano-vardo"
+    },
+    {
+      "author": "Frank Herbert",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42751956-320x470.jpg",
+      "price": "22.61",
+      "price_original": "32.30",
+      "title": "Kopa. Kapitulos namai. Šešta „Kopa“ kronikų knyga",
+      "url": "https://vaga.lt/kopa-kapitulos-namai-sesta-kopa-kroniku-knyga"
+    },
+    {
+      "author": "C. W. GORTNER",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015723-320x470.jpg",
+      "price": "4.00",
+      "price_original": "19.80",
+      "title": "Pirmoji aktorė",
+      "url": "https://vaga.lt/pirmoji-aktore"
+    },
+    {
+      "author": "Ayn Rand",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09819824-320x470.jpg",
+      "price": "20.65",
+      "price_original": "29.50",
+      "title": "Šaltinis",
+      "url": "https://vaga.lt/saltinis"
+    },
+    {
+      "author": "Karyl Mcbride",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746449-320x470.jpg",
+      "price": "6.00",
+      "price_original": "11.90",
+      "title": "Narcizas šeimoje",
+      "url": "https://vaga.lt/narcizas-seimoje"
+    },
+    {
+      "author": "Lidia Yuknavitch",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1004362-320x470.jpg",
+      "price": "18.13",
+      "price_original": "25.90",
+      "title": "Vandens chronologija",
+      "url": "https://vaga.lt/vandens-chronologija"
+    },
+    {
+      "author": "Viktorija Butautis",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502703-320x470.jpg",
+      "price": "11.12",
+      "price_original": "17.10",
+      "title": "Kanarų paslaptis",
+      "url": "https://vaga.lt/kanaru-paslaptis"
+    },
+    {
+      "author": "Lorena Hughes",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746716-320x470.jpg",
+      "price": "7.54",
+      "price_original": "21.90",
+      "title": "Slėnio karalienė",
+      "url": "https://vaga.lt/slenio-karaliene"
+    },
+    {
+      "author": "David Lynch",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502671-320x470.jpg",
+      "price": "5.20",
+      "price_original": "12.90",
+      "title": "Pagauti didžiąją žuvį: meditacija, sąmonė, kūrybingumas",
+      "url": "https://vaga.lt/pagauti-didziaja-zuvi-meditacija-samone-kurybingumas"
+    },
+    {
+      "author": "Madeline Puckette, Justin Hammack",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502750_2-320x470.jpg",
+      "price": "30.23",
+      "price_original": "46.50",
+      "title": "Vynas lengvai. Magnum leidimas",
+      "url": "https://vaga.lt/vynas-lengvai-magnum-leidimas"
+    },
+    {
+      "author": "Karen Swan",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1000041-320x470.jpg",
+      "price": "16.66",
+      "price_original": "23.80",
+      "title": "Prarastas mylimasis",
+      "url": "https://vaga.lt/prarastas-mylimasis"
+    },
+    {
+      "author": "Fatma Aydemir",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42750773-320x470.jpg",
+      "price": "12.03",
+      "price_original": "18.50",
+      "title": "Džinai",
+      "url": "https://vaga.lt/dzinai"
+    },
+    {
+      "author": "Frank Herbert",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09427529-320x470.jpg",
+      "price": "16.17",
+      "price_original": "23.10",
+      "title": "Kopa. Mesijas. Antra „Kopa“ kronikų knyga",
+      "url": "https://vaga.lt/kopa-mesijas"
+    },
+    {
+      "author": "Mary Beth Keane",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09479313_2-320x470.jpg",
+      "price": "5.00",
+      "price_original": "15.45",
+      "title": "Šiltinė",
+      "url": "https://vaga.lt/siltine"
+    },
+    {
+      "author": "Rebecca Yarros",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09016419-320x470.jpg",
+      "price": "14.77",
+      "price_original": "21.10",
+      "title": "Labai tikėtina",
+      "url": "https://vaga.lt/labai-tiketina"
+    },
+    {
+      "author": "Elin Persson",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015211-320x470.jpg",
+      "price": "3.00",
+      "price_original": "12.75",
+      "title": "Afganistano sūnūs",
+      "url": "https://vaga.lt/afganistano-sunus"
+    },
+    {
+      "author": "Marius Ivaškevičius",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008613-320x470.jpg",
+      "price": "21.41",
+      "price_original": "30.59",
+      "title": "Išvarymas. Kristus ir Čingischanas",
+      "url": "https://vaga.lt/isvarymas-kristus-ir-cingischanas"
+    },
+    {
+      "author": "Herbjørg Wassmo",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015759-320x470.jpg",
+      "price": "5.00",
+      "price_original": "14.20",
+      "title": "Nebylus kambarys. Tora 2",
+      "url": "https://vaga.lt/nebylus-kambarys-tora-2"
+    },
+    {
+      "author": "Jo Callaghan",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1004863-320x470.jpg",
+      "price": "19.12",
+      "price_original": "27.89",
+      "title": "Dingę akimirksniu",
+      "url": "https://vaga.lt/dinge-akimirksniu"
+    },
+    {
+      "author": "Liu Cixin",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1003871-320x470.jpg",
+      "price": "18.13",
+      "price_original": "25.90",
+      "title": "Mirties pabaiga (minkšti viršeliai)",
+      "url": "https://vaga.lt/mirties-pabaiga-minksti-virseliai"
+    },
+    {
+      "author": "Kristina Petrauskė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09016473-320x470.jpg",
+      "price": "13.92",
+      "price_original": "19.89",
+      "title": "Slanimo raganos",
+      "url": "https://vaga.lt/slanimo-raganos"
+    },
+    {
+      "author": "Romain Gary",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7523284-320x470.jpg",
+      "price": "6.00",
+      "price_original": "11.45",
+      "title": "Moters šviesa",
+      "url": "https://vaga.lt/moters-sviesa"
+    },
+    {
+      "author": "Cecillia Davidsson",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015835-320x470.jpg",
+      "price": "8.24",
+      "price_original": "12.20",
+      "title": "Trolis Mumis ir paskutinis slibinas",
+      "url": "https://vaga.lt/trolis-mumis-ir-paskutinis-slibinas"
+    },
+    {
+      "author": "Gintarė Aukselė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005136-320x470.jpg",
+      "price": "14.18",
+      "price_original": "20.49",
+      "title": "LRezidentė",
+      "url": "https://vaga.lt/lrezidente"
+    },
+    {
+      "author": "Lina DIRMOTĖ",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09466797-320x470.jpg",
+      "price": "6.74",
+      "price_original": "19.50",
+      "title": "Sibilė. Vienas trijų moterų gyvenimas",
+      "url": "https://vaga.lt/sibile-vienas-triju-moteru-gyvenimas"
+    },
+    {
+      "author": "Emily Gunnis",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42747744-320x470.jpg",
+      "price": "7.54",
+      "price_original": "19.90",
+      "title": "Mergaitės, kurias pamiršo",
+      "url": "https://vaga.lt/mergaites-kurias-pamirso"
+    },
+    {
+      "author": "Vienna Pharaon",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502706_2-320x470.jpg",
+      "price": "9.00",
+      "price_original": "27.80",
+      "title": "Jūsų kilmė",
+      "url": "https://vaga.lt/jusu-kilme"
+    },
+    {
+      "author": "Rugilė Audenienė, Alfas Ivanauskas",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1000126-320x470.jpg",
+      "price": "37.63",
+      "price_original": "44.27",
+      "title": "Pirties galia. 50 Lietuvos pirtininkų ir jų paslaptys",
+      "url": "https://vaga.lt/pirties-galia-50-lietuvos-pirtininku-ir-ju-paslaptys"
+    },
+    {
+      "author": "Charlotte Betts",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1002724-320x470.jpg",
+      "price": "18.03",
+      "price_original": "26.09",
+      "title": "Prarastoji Venecijos dukra",
+      "url": "https://vaga.lt/prarastoji-venecijos-dukra"
+    },
+    {
+      "author": "Donatas Klimavičius, Nijolė Vasiliauskienė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/42746658-320x470.jpg",
+      "price": "7.00",
+      "price_original": "20.80",
+      "title": "Daržas: nuo lauko iki stalo",
+      "url": "https://vaga.lt/darzas-nuo-lauko-iki-stalo"
+    },
+    {
+      "author": "Frank Herbert",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09427543-320x470.jpg",
+      "price": "17.78",
+      "price_original": "25.40",
+      "title": "Kopos vaikai",
+      "url": "https://vaga.lt/kopos-vaikai"
+    },
+    {
+      "author": "Gigi Griffis",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015885-320x470.jpg",
+      "price": "6.00",
+      "price_original": "18.45",
+      "title": "Imperatorienė",
+      "url": "https://vaga.lt/imperatoriene"
+    },
+    {
+      "author": "A. F. Steadman",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09832800-320x470.jpg",
+      "price": "10.00",
+      "price_original": "17.20",
+      "title": "Skandaras ir raitelio šmėkla. 2 knyga",
+      "url": "https://vaga.lt/skandaras-ir-raitelio-smekla"
+    },
+    {
+      "author": "Sylvia Frank",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1001167-320x470.jpg",
+      "price": "14.55",
+      "price_original": "24.29",
+      "title": "Neišskiriamieji Gala ir Dali",
+      "url": "https://vaga.lt/neisskiriamieji-gala-ir-dali"
+    },
+    {
+      "author": "Yeonmi Park",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502674-320x470.jpg",
+      "price": "12.00",
+      "price_original": "23.90",
+      "title": "Išgyventi: iš Šiaurės Korėjos - į laisvę",
+      "url": "https://vaga.lt/isgyventi-is-siaures-korejos-i-laisve"
+    },
+    {
+      "author": "Herbjørg Wassmo",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015793-320x470.jpg",
+      "price": "5.00",
+      "price_original": "14.20",
+      "title": "Beodis dangus. Tora 3",
+      "url": "https://vaga.lt/beodis-dangus-tora-3"
+    },
+    {
+      "author": "H.D. Carlton",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1004116-320x470.jpg",
+      "price": "16.92",
+      "price_original": "28.79",
+      "title": "Adelinos medžioklė. Katės & pelės duetas. 2 dalis",
+      "url": "https://vaga.lt/adelinos-medziokle-kates-and-peles-duetas-2-dalis"
+    },
+    {
+      "author": "Matthew Dennison",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09015271-320x470.jpg",
+      "price": "7.00",
+      "price_original": "33.90",
+      "title": "Karalienė",
+      "url": "https://vaga.lt/karaliene"
+    },
+    {
+      "author": "Michelle Marly",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1002725-320x470.jpg",
+      "price": "17.95",
+      "price_original": "25.89",
+      "title": "Maria Callas",
+      "url": "https://vaga.lt/maria-callas"
+    },
+    {
+      "author": "George Orwell",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09490205-320x470.jpg",
+      "price": "7.27",
+      "price_original": "11.90",
+      "title": "1984-ieji",
+      "url": "https://vaga.lt/1984-ieji-693685007"
+    },
+    {
+      "author": "Peter Frankopan",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008616-320x470.jpg",
+      "price": "28.78",
+      "price_original": "38.95",
+      "title": "Šilko keliai. Nauja pasaulio istorija",
+      "url": "https://vaga.lt/silko-keliai-nauja-pasaulio-istorija"
+    },
+    {
+      "author": "Annie Ernaux",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1008634-320x470.jpg",
+      "price": "11.68",
+      "price_original": "16.69",
+      "title": "Paprasta aistra",
+      "url": "https://vaga.lt/paprasta-aistra"
+    },
+    {
+      "author": "Viktorija Daujotytė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1003977-320x470.jpg",
+      "price": "15.37",
+      "price_original": "25.99",
+      "title": "Trumpės",
+      "url": "https://vaga.lt/trumpes"
+    },
+    {
+      "author": "Vygaudas Ušackas",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1000125-320x470.jpg",
+      "price": "27.45",
+      "price_original": "33.99",
+      "title": "Diplomatinė misija. Nuo Skuodo iki Baltųjų rūmų",
+      "url": "https://vaga.lt/diplomatine-misija-nuo-skuodo-iki-baltuju-rumu"
+    },
+    {
+      "author": "",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1010438-320x470.jpg",
+      "price": "5.29",
+      "price_original": "6.20",
+      "title": "Gėlės. Nuspalvink ir padovanok",
+      "url": "https://vaga.lt/geles-nuspalvink-ir-padovanok"
+    },
+    {
+      "author": "Gitana Ginkevičė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1010437-320x470.jpg",
+      "price": "34.81",
+      "price_original": "41.10",
+      "title": "Interneto svetainės kūrimo vadovas",
+      "url": "https://vaga.lt/interneto-svetaines-kurimo-vadovas"
+    },
+    {
+      "author": "Valentina Zeitler",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1010436-320x470.jpg",
+      "price": "15.72",
+      "price_original": "22.45",
+      "title": "Karalienė Bona. Įžvalgi valdovė ar intrigantė?",
+      "url": "https://vaga.lt/karaliene-bona-izvalgi-valdove-ar-intrigante"
+    },
+    {
+      "author": "Angelina Zalatorienė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/95596207-320x470.jpg",
+      "price": "2.17",
+      "price_original": "3.10",
+      "title": "Šimtas laipsnių",
+      "url": "https://vaga.lt/simtas-laipsniu"
+    },
+    {
+      "author": "Emily Bronte",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/8030601-320x470.jpg",
+      "price": "4.59",
+      "price_original": "5.40",
+      "title": "Classics Wuthering Heights",
+      "url": "https://vaga.lt/classics-wuthering-heights"
+    },
+    {
+      "author": "",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1005593-320x470.jpg",
+      "price": "12.87",
+      "price_original": "14.30",
+      "title": "Mis Melody sukurk savo deimantinę paveikslėlių lipdukų knygelę",
+      "url": "https://vaga.lt/mis-melody-sukurk-savo-deimantine-paveiksleliu-lipduku-knygele"
+    },
+    {
+      "author": "Rūta Baublytė-Kaufmann",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/1010254-320x470.jpg",
+      "price": "13.23",
+      "price_original": "18.90",
+      "title": "Pasaulis stiklo burbule",
+      "url": "https://vaga.lt/pasaulis-stiklo-burbule"
+    },
+    {
+      "author": "David D.Burns, M.D.",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7438005_2-320x470.jpg",
+      "price": "14.06",
+      "price_original": "16.95",
+      "title": "Geros nuotaikos vadovas, nauja emocijų terapija",
+      "url": "https://vaga.lt/geros-nuotaikos-vadovas-nauja-emociju-terapija"
+    },
+    {
+      "author": "Paulo Coelho",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7502362_2-320x470.jpg",
+      "price": "15.50",
+      "price_original": "22.14",
+      "title": "Alchemikas",
+      "url": "https://vaga.lt/alchemikas"
+    },
+    {
+      "author": "Gabor Maté",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/41502693-320x470.jpg",
+      "price": "25.32",
+      "price_original": "30.70",
+      "title": "Kai kūnas sako ne",
+      "url": "https://vaga.lt/kai-kunas-sako-ne"
+    },
+    {
+      "author": "Dan Kindlon, Michael Thompson",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7502450-320x470.jpg",
+      "price": "20.38",
+      "price_original": "23.98",
+      "title": "Augant Kainui. Kaip apsaugoti berniukų jausmų pasaulį",
+      "url": "https://vaga.lt/augant-kainui"
+    },
+    {
+      "author": "Tomas Misiukonis, Almanta Jakštaitė - Vinkuvienė",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/7502486-320x470.jpg",
+      "price": "21.93",
+      "price_original": "25.80",
+      "title": "Vadovas per 24 h. Gyvybiškai svarbūs patarimai augantiems vadovams",
+      "url": "https://vaga.lt/vadovas-per-24-h-gyvybiskai-svarbus-patarimai-augantiems-vadovams"
+    },
+    {
+      "author": "Morgan Housel",
+      "image_url": "https://vaga.lt/image/cache/catalog/data/coveriai/09951683-320x470.jpg",
+      "price": "11.44",
+      "price_original": "17.10",
+      "title": "Pinigų psichologija",
+      "url": "https://vaga.lt/pinigu-psichologija"
+    }
+  ],
+  "total": 9910
+}

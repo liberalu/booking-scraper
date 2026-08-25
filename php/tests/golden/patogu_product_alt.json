@@ -1,0 +1,61 @@
+{
+  "author": "Kate Storey",
+  "book_score": 10,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 3
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [
+    "Grožinė literatūra",
+    "Užsienio literatūra",
+    "Šiuolaikinė užsienio literatūra"
+  ],
+  "cover_type": "15x22, kieti viršeliai",
+  "description": "Širdies puslapiai - Kate Storey. ✔ Įsigykite už gerą kainą. ✨ Nemokamas pristatymas į paštomatus nuo 20 ar 25 €.",
+  "duration": null,
+  "format": "hardcover",
+  "image_url": "https://www.patogupirkti.lt/media/catalog/product/cache/1/small_image/200x200/9df78eab33525d08d6e5fb8d27136e95/i/r/irdies-puslapiai.jpg",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786094669354",
+  "narrator": null,
+  "pages": 288,
+  "planned_availability_date": null,
+  "price": "14.93",
+  "price_original": null,
+  "properties": {
+    "original_title": "The Memory Library",
+    "source_language": "anglų"
+  },
+  "publisher": "Tyto alba",
+  "rating": null,
+  "review_count": null,
+  "schema_types": [],
+  "sku": "9786094669354",
+  "title": "Širdies puslapiai",
+  "translator": "Jolita Parvickienė",
+  "type": "book",
+  "year": 2026
+}

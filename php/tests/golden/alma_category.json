@@ -1,0 +1,82 @@
+{
+  "products": [
+    {
+      "author": "Evelina Daciūtė",
+      "categories": [],
+      "image_url": "https://cdn.shopify.com/s/files/1/0552/9521/3655/files/69ea8f0938729.jpg?v=1777938530",
+      "in_stock": true,
+      "price": "16.20",
+      "price_original": null,
+      "properties": {
+        "shopify_tags": [
+          "30",
+          "5PVM",
+          "all",
+          "Geguze",
+          "Naujienos",
+          "ne",
+          "new",
+          "new-vaikų",
+          "promo03",
+          "Taikoma_zema",
+          "Turime sandėlyje",
+          "vaik_ir_paaug_knyg_sar"
+        ]
+      },
+      "sku": "000000000001115408",
+      "title": "Dienos drugelis, nakties drugelis",
+      "type": "book",
+      "url": "https://almalittera.lt/products/dienos-drugelis-nakties-drugelis-1"
+    },
+    {
+      "author": "Azumi Uchitani",
+      "categories": [],
+      "image_url": "https://cdn.shopify.com/s/files/1/0552/9521/3655/files/69b2aa0d1ca6c.jpg?v=1777924203",
+      "in_stock": true,
+      "price": "14.32",
+      "price_original": null,
+      "properties": {
+        "shopify_tags": [
+          "30",
+          "EPUB",
+          "epub_negrozine",
+          "kovas",
+          "Naujienos",
+          "ne",
+          "promo03",
+          "Turime sandėlyje"
+        ]
+      },
+      "sku": "000000000011004976",
+      "title": "Yoshuku. E.knyga",
+      "type": "ebook",
+      "url": "https://almalittera.lt/products/yoshuku-e-knyga"
+    },
+    {
+      "author": "Ignas Šeinius",
+      "categories": [],
+      "image_url": "https://cdn.shopify.com/s/files/1/0552/9521/3655/files/698aef3327c04.jpg?v=1777924192",
+      "in_stock": true,
+      "price": "11.05",
+      "price_original": null,
+      "properties": {
+        "shopify_tags": [
+          "30",
+          "EPUB",
+          "epub_jaunimo",
+          "Geguze",
+          "Naujienos",
+          "ne",
+          "promo03",
+          "Turime sandėlyje",
+          "vasaris"
+        ]
+      },
+      "sku": "000000000011004681",
+      "title": "Kuprelis. E.knyga",
+      "type": "ebook",
+      "url": "https://almalittera.lt/products/kuprelis-e-knyga"
+    }
+  ],
+  "total": null
+}

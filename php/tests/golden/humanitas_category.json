@@ -1,0 +1,275 @@
+{
+  "products": [
+    {
+      "author": "David Markson",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/wittgensteino-meiluze_1777539996-7857d51b852be661e675f787fd7c34d4.webp",
+      "in_stock": true,
+      "price": "14.25",
+      "price_original": "15.00",
+      "title": "Wittgensteino meilužė",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/wittgensteino-meiluze"
+    },
+    {
+      "author": "Indrė Urbelytė",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/knygu-slibinas-fantastinis-pasakojimas-apie-knygu-grozi_1777540042-1fd419f28b05ba7e889cacb298cbf228.webp",
+      "in_stock": true,
+      "price": "17.95",
+      "price_original": "18.90",
+      "title": "Knygų slibinas. Fantastinis pasakojimas...",
+      "url": "https://www.humanitas.lt/produktas/knygos-vaikams-ir-paaugliams/pazintine-ir-mokomoji-literatura/knygu-slibinas-fantastinis-pa-sakojimas-apie-knygu-grozi"
+    },
+    {
+      "author": "Rūta Grigolytė",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/vytautas-grigolis-as-salia-budziu-tyliu_1777539896-2ca17673f096bd3dae1476e37ed32a8e.webp",
+      "in_stock": true,
+      "price": "20.71",
+      "price_original": "21.80",
+      "title": "Vytautas Grigolis: Aš šalia - budžiu, tyliu",
+      "url": "https://www.humanitas.lt/produktas/grozine-literatura/biografijos-eseistika-memuarai-publicistika/vytautas-grigolis-as-salia-budziu-tyliu"
+    },
+    {
+      "author": "Robert Greene",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/meistriskumas_1777540101-91e16c1b9080fd052e5ff46a60efb2e8.webp",
+      "in_stock": true,
+      "price": "12.54",
+      "price_original": "13.20",
+      "title": "Meistriškumas",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/dalykine-ir-moksline-literatura/ekonomika-finansai-vadyba/finansai-apskaita/meistriskumas"
+    },
+    {
+      "author": "Algirdas Antanas Gliožaitis",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/002d0d4f-5f44-424f-ab8a-bf7f50154e6e-1_1777541990-fc6e41db95aee0226231d18b6401ae6c.jpg",
+      "in_stock": true,
+      "price": "48.15",
+      "price_original": "53.50",
+      "title": "Klaipėdos krašto, Mažosios (Prūsų)...",
+      "url": "https://www.humanitas.lt/produktas/dalykine-ir-moksline-literatura/humanitariniu-mokslu-knygos/klaipedos-krasto-mazosios-prusu-lietuvos-dalies-prisi"
+    },
+    {
+      "author": "Ignas Šeinius",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/kuprelis_1777540437-85a7264a8ff11a1b061ded122840f349.webp",
+      "in_stock": true,
+      "price": "11.52",
+      "price_original": "12.80",
+      "title": "Kuprelis",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/kuprelis"
+    },
+    {
+      "author": "Katherine Rundell",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/neitiketinos-butybes_1777540516-092ad6b8e5e629369717eab0e6d46069.webp",
+      "in_stock": true,
+      "price": "18.24",
+      "price_original": "19.20",
+      "title": "Neįtikėtinos būtybės",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/neitiketinos-butybes"
+    },
+    {
+      "author": "Janis Mink",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/hilma-af-klint_1777540576-871b425486426cd65d798ca436e6e400.jpg",
+      "in_stock": true,
+      "price": "15.00",
+      "price_original": null,
+      "title": "Hilma af Klint",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/hilma-af-klint5"
+    },
+    {
+      "author": "Anchee Min",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/chinese-propaganda-posters_1777540629-2b43ca1bcb1f8330ebd0f8a6e4939a8d.webp",
+      "in_stock": true,
+      "price": "25.00",
+      "price_original": null,
+      "title": "Chinese Propaganda Posters",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/chinese-propaganda-posters"
+    },
+    {
+      "author": "Andreas Marks",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/hokusai-th_1777540674-34a668150f4eed35f49c9cddbe95a334.webp",
+      "in_stock": true,
+      "price": "60.00",
+      "price_original": null,
+      "title": "Hokusai. Thirty-six Views of Mount Fuji",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/hokusai-thirty-six-views-of-mount-fuji3"
+    },
+    {
+      "author": "K.M. Moronova",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/81kjt7znbcl-_uf1000-1000_ql80__1769697317-31f5a2bb09dbb7a6ff5b43bca9707afb.webp",
+      "in_stock": true,
+      "price": "13.60",
+      "price_original": "16.00",
+      "title": "Bulletproof",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/pramoginiai-romanai/bulletproof"
+    },
+    {
+      "author": "Adam Price",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/jis-ne-tinginys_1775734673-9f8d5803e911de2a320d96141e9c04fc.webp",
+      "in_stock": true,
+      "price": "15.86",
+      "price_original": "16.70",
+      "title": "Jis ne tinginys. Padėkite sūnui patikėti...",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/dalykine-ir-moksline-literatura/socialiniu-mokslu-knygos/psichologija/jis-ne-tinginys"
+    },
+    {
+      "author": "Ana Huang",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/king-of-gluttony_1771940775-03afc0b8681ae158bbc1af6948d8af2d.webp",
+      "in_stock": true,
+      "price": "13.60",
+      "price_original": "16.00",
+      "title": "King of Gluttony (Kings of Sin 6)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/pramoginiai-romanai/king-of-gluttony-kings-of-sin-6"
+    },
+    {
+      "author": "Bronte, Emily",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/81dva4tu0rl-_ac_uf1000-1000_ql80__1770292719-5f94b003dea93feec1a147e9ffa6126a.webp",
+      "in_stock": true,
+      "price": "5.60",
+      "price_original": "8.00",
+      "title": "Wuthering Heights (Emily Bronte)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/wuthering-heights8"
+    },
+    {
+      "author": null,
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/Dabartines-lietuviu-kalbos-zod_dabartines-lietuviu-kalbos-zodynas-8-fabb2acab892b70169a718c399cd705f.webp",
+      "in_stock": true,
+      "price": "43.70",
+      "price_original": "46.00",
+      "title": "Dabartinės lietuvių kalbos žodynas (8...",
+      "url": "https://www.humanitas.lt/produktas/kalbu-mokymo-literatura/savarankiskas-kalbu-mokymasis/dabartines-lietuviu-kalbos-zod"
+    },
+    {
+      "author": "Tahereh Mafi",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/release-me_1775733201-c210e167d51711c5b555b134028a34ba.jpg",
+      "in_stock": true,
+      "price": "16.10",
+      "price_original": "23.00",
+      "title": "Release Me Special ed. (Shatter Me: The...",
+      "url": "https://www.humanitas.lt/produktas/akcijos/rekomenduojamu-knygu-top-10/release-me-special-ed-shatter-me-the-new-republic"
+    },
+    {
+      "author": "Navessa Allen",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/game-on_1767797875-bdc9a8ef3e76efa180c4301571383653.webp",
+      "in_stock": true,
+      "price": "12.75",
+      "price_original": "15.00",
+      "title": "Game On (Into Darkness 3)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/pramoginiai-romanai/game-on-into-darkness-3"
+    },
+    {
+      "author": "Devney Perry",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/rites_1769007901-2f7a69682b74f284692496d7fc04c57c.webp",
+      "in_stock": true,
+      "price": "29.75",
+      "price_original": "35.00",
+      "title": "Rites of the Starling 2 Deluxe Ed....",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/fantastika-magija/rites-of-the-starling-2-deluxe-ed-shield-of-sparrows"
+    },
+    {
+      "author": "Rebecca Yarros",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/untitled-empyrean-not-book-four_1776686780-4c7338483ad9e09366dc4c5a8e307a27.webp",
+      "in_stock": true,
+      "price": null,
+      "price_original": null,
+      "title": "Untitled Empyrean (Not Book Four)...",
+      "url": "https://www.humanitas.lt/produktas/akcijos/isankstine-prekyba/untitled-empyrean-not-book-four"
+    },
+    {
+      "author": "Laura Bojarskaitė",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/ekrano-kopija-2025-11-13-164743_1763045319-053cea1ef71a114e2ee173cd84be693b.png",
+      "in_stock": true,
+      "price": "32.39",
+      "price_original": "34.10",
+      "title": "300 klausimų ir atsakymų apie miegą",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/dalykine-ir-moksline-literatura/socialiniu-mokslu-knygos/psichologija/300-klausimu-ir-atsakymu-apie-miega"
+    },
+    {
+      "author": "Rachel Gillig",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/two-twisted-crowns-deluxe_1776337354-da831fb79af0b98867b4e03bbd37f7e3.webp",
+      "in_stock": true,
+      "price": "38.25",
+      "price_original": "45.00",
+      "title": "Two Twisted Crowns 2 Deluxe Ed Shepherd King",
+      "url": "https://www.humanitas.lt/produktas/grozine-literatura/fantastika-magija/two-twisted-crowns-2-deluxe-ed-shepherd-king"
+    },
+    {
+      "author": "Oscar Wilde",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/a-poet-can-survive-everything-but-a-misprint_1774529877-adad835f912ba8eb139685c0bd99d0cb.webp",
+      "in_stock": true,
+      "price": "5.60",
+      "price_original": "8.00",
+      "title": "A Poet Can Survive Everything But a Misprint",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/a-poet-can-survive-everything-but-a-misprint"
+    },
+    {
+      "author": "Jack Margolin",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/the-wagner-group_1773408924-87151a7ea2375230382fa4e707841f3f.webp",
+      "in_stock": true,
+      "price": "12.80",
+      "price_original": "16.00",
+      "title": "The Wagner Group: Inside Russia's...",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/dalykine-ir-moksline-literatura/humanitariniu-mokslu-knygos/istorija-ir-archeologija/the-wagner-group-inside-russi-a-s-mercenary-army"
+    },
+    {
+      "author": "Bea Lurie",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/life-must-go-on_1773408883-ee93d5ad716e2c763a0159222a512912.webp",
+      "in_stock": true,
+      "price": "23.20",
+      "price_original": "29.00",
+      "title": "Life Must Go On: The Remarkable Story of...",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/dalykine-ir-moksline-literatura/humanitariniu-mokslu-knygos/istorija-ir-archeologija/life-must-go-on-the-remarkabl-e-story-of-sol-lurie-the-kovn"
+    },
+    {
+      "author": "Friedrich Nietzsche",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/beyond_1772722747-6769f8e9d435fab8e8e184fb9663509c.webp",
+      "in_stock": true,
+      "price": "16.80",
+      "price_original": "21.00",
+      "title": "Beyond Good and Evil (Chiltern Classic)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/beyond-good-and-evil-deluxe-ed-chiltern-classic"
+    },
+    {
+      "author": "Franz Kafka",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/trial_1772724248-c7ea09133491cd60c850f0df4a7b0067.webp",
+      "in_stock": true,
+      "price": "16.80",
+      "price_original": "21.00",
+      "title": "The Trial (Chiltern Classic)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/the-trial-deluxe-ed-chiltern-classic"
+    },
+    {
+      "author": "Lyman Frank Baum",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/wizard-of-oz_1764858547-fe1d902e11577efed11c96504103d6de.webp",
+      "in_stock": true,
+      "price": "12.60",
+      "price_original": "21.00",
+      "title": "The Wizard of Oz Chiltern Classic",
+      "url": "https://www.humanitas.lt/produktas/grozine-literatura/grozine-literaturos-ispardavimas/the-wizard-of-oz-chiltern-classic"
+    },
+    {
+      "author": "Kahlil Gibran",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/prophet_1772724446-b0ee8df529459b8a220e7e485c6f2d6d.webp",
+      "in_stock": true,
+      "price": "16.80",
+      "price_original": "21.00",
+      "title": "The Prophet (Chiltern Classic)",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/the-prophet-deluxe-ed-chiltern-classic"
+    },
+    {
+      "author": "H.G. Wells",
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/classic-science-fiction-collection_1772442096-8caed0a1a619e5c61521986161d16773.webp",
+      "in_stock": true,
+      "price": "19.60",
+      "price_original": "28.00",
+      "title": "The Classic Science Fiction Collection",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/the-classic-science-fiction-collection"
+    },
+    {
+      "author": null,
+      "image_url": "https://www.humanitas.lt/uploads/_CGSmartImage/the-classic-horror-collection_1774356644-a1b11bd806b3a894bb5b01e25451928f.webp",
+      "in_stock": true,
+      "price": "19.60",
+      "price_original": "28.00",
+      "title": "The Classic Horror Collection",
+      "url": "https://www.humanitas.lt/produktas/visos-kategorijos/grozine-literatura/literaturos-klasika-anglu-kalba/the-classic-horror-collection"
+    }
+  ],
+  "total": null
+}

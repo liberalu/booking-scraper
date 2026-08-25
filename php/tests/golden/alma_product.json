@@ -1,0 +1,56 @@
+{
+  "author": "Evelina Daciūtė",
+  "book_score": 7,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [],
+  "cover_type": "Kietas",
+  "description": "„Labas rytas“, – sako dienos drugelis. Daug gėlių jis aplankys per dieną, daug kartų sveikins pievos gražuoles. O kai saulė nusileis, gėlės suskliaus savo žiedus ir drugelis užmigs. Bet visi ar naktį miega?.. Ak, ar girdi? Nakties drugelis jau bunda ir taria: „Labas vakaras!“Vienos garsiausių šių...",
+  "duration": null,
+  "format": "hardcover",
+  "image_url": "https://almalittera.lt/cdn/shop/files/69ea8f0938729.jpg?v=1777938530",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786090171363",
+  "narrator": null,
+  "pages": 24,
+  "planned_availability_date": null,
+  "price": "16.20",
+  "price_original": null,
+  "publisher": null,
+  "rating": null,
+  "review_count": null,
+  "schema_types": [
+    "BreadcrumbList",
+    "Product"
+  ],
+  "sku": "000000000001115408",
+  "title": "Dienos drugelis, nakties drugelis",
+  "translator": null,
+  "type": "book",
+  "year": 2026
+}

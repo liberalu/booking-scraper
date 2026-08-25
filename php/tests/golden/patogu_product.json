@@ -1,0 +1,57 @@
+{
+  "author": "Edita Mildažytė",
+  "book_score": 7,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [
+    "Dalykinė literatūra",
+    "Biografinės, memuarų, atsiminimų knygos",
+    "Biografijos ir autobiografijos"
+  ],
+  "cover_type": "15x21, kieti viršeliai",
+  "description": "Pelynų medus. Mano istorija - Edita Mildažytė. ✔ Įsigykite už gerą kainą. ✨ Nemokamas pristatymas į paštomatus nuo 20 ar 25 €.",
+  "duration": null,
+  "format": "hardcover",
+  "image_url": "https://www.patogupirkti.lt/media/catalog/product/cache/1/small_image/200x200/9df78eab33525d08d6e5fb8d27136e95/p/e/pelynu-medus-mano-istorija-.jpg",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786099658308",
+  "narrator": null,
+  "pages": 288,
+  "planned_availability_date": null,
+  "price": "23.84",
+  "price_original": null,
+  "publisher": "Makas",
+  "rating": null,
+  "review_count": null,
+  "schema_types": [],
+  "sku": "9786099658308",
+  "title": "Pelynų medus. Mano istorija",
+  "translator": null,
+  "type": "book",
+  "year": 2025
+}

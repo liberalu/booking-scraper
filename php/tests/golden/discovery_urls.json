@@ -1,0 +1,433 @@
+{
+  "graphql": [
+    {
+      "label": "multi_category_page1",
+      "base_url": "https://www.pegasas.lt/",
+      "category_ids": [
+        "5107",
+        "5125",
+        "6122"
+      ],
+      "page_size": 50,
+      "page": 1,
+      "subdivision_depth": 0,
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bcategory_id%3A%7Bin%3A%5B%225107%22%2C%225125%22%2C%226122%22%5D%7D%7D%2CpageSize%3A50%2CcurrentPage%3A1%29%7Btotal_count+items%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D",
+      "parsed": {
+        "page": 1,
+        "page_size": 50,
+        "subdivision_depth": 0
+      }
+    },
+    {
+      "label": "multi_category_page7",
+      "base_url": "https://www.pegasas.lt/",
+      "category_ids": [
+        "5107",
+        "5125",
+        "6122"
+      ],
+      "page_size": 50,
+      "page": 7,
+      "subdivision_depth": 0,
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bcategory_id%3A%7Bin%3A%5B%225107%22%2C%225125%22%2C%226122%22%5D%7D%7D%2CpageSize%3A50%2CcurrentPage%3A7%29%7Btotal_count+items%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D",
+      "parsed": {
+        "page": 7,
+        "page_size": 50,
+        "subdivision_depth": 0
+      }
+    },
+    {
+      "label": "single_category",
+      "base_url": "https://www.pegasas.lt/",
+      "category_ids": [
+        "5107"
+      ],
+      "page_size": 25,
+      "page": 3,
+      "subdivision_depth": 0,
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bcategory_id%3A%7Beq%3A%225107%22%7D%7D%2CpageSize%3A25%2CcurrentPage%3A3%29%7Btotal_count+items%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D",
+      "parsed": {
+        "page": 3,
+        "page_size": 25,
+        "subdivision_depth": 0
+      }
+    },
+    {
+      "label": "subdivided",
+      "base_url": "https://www.pegasas.lt/",
+      "category_ids": [
+        "5107",
+        "5125"
+      ],
+      "page_size": 10,
+      "page": 4,
+      "subdivision_depth": 1,
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bcategory_id%3A%7Bin%3A%5B%225107%22%2C%225125%22%5D%7D%7D%2CpageSize%3A10%2CcurrentPage%3A4%29%7Btotal_count+items%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D&_sub=1",
+      "parsed": {
+        "page": 4,
+        "page_size": 10,
+        "subdivision_depth": 1
+      }
+    },
+    {
+      "label": "page_size_one",
+      "base_url": "https://www.pegasas.lt/",
+      "category_ids": [
+        "5107"
+      ],
+      "page_size": 1,
+      "page": 9900,
+      "subdivision_depth": 0,
+      "url": "https://www.pegasas.lt/graphql?query=%7Bproducts%28filter%3A%7Bcategory_id%3A%7Beq%3A%225107%22%7D%7D%2CpageSize%3A1%2CcurrentPage%3A9900%29%7Btotal_count+items%7Bname+sku+url_key+image%7Burl%7D+price_range%7Bminimum_price%7Bfinal_price%7Bvalue+currency%7Dregular_price%7Bvalue+currency%7D%7D%7D+stock_status+is_book+is_audio_book+narrator+author%7Bauthor_label%7D+anotacija+categories%7Bid+name+breadcrumbs%7Bcategory_name%7D%7D+product_page_attributes%7Bprimary_attributes%7Blabel+value%7Dsecondary_attributes%7Blabel+value%7D%7D+structured_data%7D%7D%7D",
+      "parsed": {
+        "page": 9900,
+        "page_size": 1,
+        "subdivision_depth": 0
+      }
+    }
+  ],
+  "lupasearch": [
+    {
+      "label": "plain",
+      "endpoint": "https://api.lupasearch.com/v1/query/pegasas",
+      "category_ids": [
+        "5107",
+        "7352"
+      ],
+      "page_size": 42,
+      "extra_filters": {},
+      "seed_url": "https://api.lupasearch.com/v1/query/pegasas?offset=0&limit=42&category_ids=5107%2C7352",
+      "offsets": [
+        0,
+        42
+      ],
+      "advanced_url": "https://api.lupasearch.com/v1/query/pegasas?offset=126&limit=42&category_ids=5107%2C7352",
+      "advanced_offsets": [
+        126,
+        42
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":0,\"limit\":42,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\",\"7352\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      },
+      "advanced_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":126,\"limit\":42,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\",\"7352\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      }
+    },
+    {
+      "label": "single_category",
+      "endpoint": "https://api.lupasearch.com/v1/query/pegasas",
+      "category_ids": [
+        "5107"
+      ],
+      "page_size": 100,
+      "extra_filters": {},
+      "seed_url": "https://api.lupasearch.com/v1/query/pegasas?offset=0&limit=100&category_ids=5107",
+      "offsets": [
+        0,
+        100
+      ],
+      "advanced_url": "https://api.lupasearch.com/v1/query/pegasas?offset=300&limit=100&category_ids=5107",
+      "advanced_offsets": [
+        300,
+        100
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":0,\"limit\":100,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      },
+      "advanced_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":300,\"limit\":100,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      }
+    },
+    {
+      "label": "with_filters",
+      "endpoint": "https://api.lupasearch.com/v1/query/pegasas",
+      "category_ids": [
+        "5107",
+        "5125"
+      ],
+      "page_size": 42,
+      "extra_filters": {
+        "publisher": [
+          "Alma littera",
+          "Baltos lankos"
+        ],
+        "in_stock": [
+          "1"
+        ]
+      },
+      "seed_url": "https://api.lupasearch.com/v1/query/pegasas?offset=0&limit=42&category_ids=5107%2C5125&f.in_stock=1&f.publisher=Alma+littera%2CBaltos+lankos",
+      "offsets": [
+        0,
+        42
+      ],
+      "advanced_url": "https://api.lupasearch.com/v1/query/pegasas?offset=126&limit=42&category_ids=5107%2C5125&f.in_stock=1&f.publisher=Alma+littera%2CBaltos+lankos",
+      "advanced_offsets": [
+        126,
+        42
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":0,\"limit\":42,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\",\"5125\"],\"in_stock\":[\"1\"],\"publisher\":[\"Alma littera\",\"Baltos lankos\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      },
+      "advanced_request": {
+        "method": "POST",
+        "body": "{\"searchText\":\"\",\"offset\":126,\"limit\":42,\"sort\":[{\"in_stock\":\"desc\"},{\"in_store_only\":\"desc\"},{\"profit\":\"desc\"},{\"sku\":\"desc\"}],\"filters\":{\"category_ids\":[\"5107\",\"5125\"],\"in_stock\":[\"1\"],\"publisher\":[\"Alma littera\",\"Baltos lankos\"]}}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Origin": "https://www.pegasas.lt",
+          "Referer": "https://www.pegasas.lt/"
+        }
+      }
+    }
+  ],
+  "ibiblioteka_api": [
+    {
+      "label": "one_year",
+      "year_from": 2024,
+      "year_to": 2025,
+      "page_size": 100,
+      "seed_urls": [
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-01-01&dt=2024-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-02-01&dt=2024-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-03-01&dt=2024-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-04-01&dt=2024-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-05-01&dt=2024-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-06-01&dt=2024-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-07-01&dt=2024-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-08-01&dt=2024-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-09-01&dt=2024-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-10-01&dt=2024-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-11-01&dt=2024-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=100&df=2024-12-01&dt=2025-01-01"
+      ],
+      "params": [
+        0,
+        100,
+        "2024-01-01",
+        "2024-02-01"
+      ],
+      "advanced_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=200&ps=100&df=2024-01-01&dt=2024-02-01",
+      "advanced_params": [
+        200,
+        100,
+        "2024-01-01",
+        "2024-02-01"
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":0,\"pageSize\":100,\"publicationDateRange\":{\"from\":\"2024-01-01T00:00:00.000Z\",\"to\":\"2024-02-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      },
+      "legacy_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=300&ps=100&yf=2024&yt=2025",
+      "legacy_params": [
+        300,
+        100,
+        "2024-01-01",
+        "2025-01-01"
+      ],
+      "legacy_advanced": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=400&ps=100&yf=2024&yt=2025",
+      "legacy_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":300,\"pageSize\":100,\"publicationDateRange\":{\"from\":\"2024-01-01T00:00:00.000Z\",\"to\":\"2025-01-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      }
+    },
+    {
+      "label": "three_years",
+      "year_from": 2022,
+      "year_to": 2025,
+      "page_size": 500,
+      "seed_urls": [
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-01-01&dt=2022-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-02-01&dt=2022-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-03-01&dt=2022-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-04-01&dt=2022-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-05-01&dt=2022-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-06-01&dt=2022-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-07-01&dt=2022-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-08-01&dt=2022-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-09-01&dt=2022-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-10-01&dt=2022-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-11-01&dt=2022-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2022-12-01&dt=2023-01-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-01-01&dt=2023-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-02-01&dt=2023-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-03-01&dt=2023-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-04-01&dt=2023-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-05-01&dt=2023-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-06-01&dt=2023-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-07-01&dt=2023-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-08-01&dt=2023-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-09-01&dt=2023-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-10-01&dt=2023-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-11-01&dt=2023-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2023-12-01&dt=2024-01-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-01-01&dt=2024-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-02-01&dt=2024-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-03-01&dt=2024-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-04-01&dt=2024-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-05-01&dt=2024-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-06-01&dt=2024-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-07-01&dt=2024-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-08-01&dt=2024-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-09-01&dt=2024-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-10-01&dt=2024-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-11-01&dt=2024-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=500&df=2024-12-01&dt=2025-01-01"
+      ],
+      "params": [
+        0,
+        500,
+        "2022-01-01",
+        "2022-02-01"
+      ],
+      "advanced_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=1000&ps=500&df=2022-01-01&dt=2022-02-01",
+      "advanced_params": [
+        1000,
+        500,
+        "2022-01-01",
+        "2022-02-01"
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":0,\"pageSize\":500,\"publicationDateRange\":{\"from\":\"2022-01-01T00:00:00.000Z\",\"to\":\"2022-02-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      },
+      "legacy_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=300&ps=500&yf=2022&yt=2025",
+      "legacy_params": [
+        300,
+        500,
+        "2022-01-01",
+        "2025-01-01"
+      ],
+      "legacy_advanced": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=400&ps=500&yf=2022&yt=2025",
+      "legacy_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":300,\"pageSize\":500,\"publicationDateRange\":{\"from\":\"2022-01-01T00:00:00.000Z\",\"to\":\"2025-01-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      }
+    },
+    {
+      "label": "year_boundary",
+      "year_from": 2019,
+      "year_to": 2021,
+      "page_size": 10,
+      "seed_urls": [
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-01-01&dt=2019-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-02-01&dt=2019-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-03-01&dt=2019-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-04-01&dt=2019-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-05-01&dt=2019-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-06-01&dt=2019-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-07-01&dt=2019-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-08-01&dt=2019-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-09-01&dt=2019-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-10-01&dt=2019-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-11-01&dt=2019-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2019-12-01&dt=2020-01-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-01-01&dt=2020-02-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-02-01&dt=2020-03-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-03-01&dt=2020-04-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-04-01&dt=2020-05-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-05-01&dt=2020-06-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-06-01&dt=2020-07-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-07-01&dt=2020-08-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-08-01&dt=2020-09-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-09-01&dt=2020-10-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-10-01&dt=2020-11-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-11-01&dt=2020-12-01",
+        "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=0&ps=10&df=2020-12-01&dt=2021-01-01"
+      ],
+      "params": [
+        0,
+        10,
+        "2019-01-01",
+        "2019-02-01"
+      ],
+      "advanced_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=20&ps=10&df=2019-01-01&dt=2019-02-01",
+      "advanced_params": [
+        20,
+        10,
+        "2019-01-01",
+        "2019-02-01"
+      ],
+      "seed_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":0,\"pageSize\":10,\"publicationDateRange\":{\"from\":\"2019-01-01T00:00:00.000Z\",\"to\":\"2019-02-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      },
+      "legacy_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=300&ps=10&yf=2019&yt=2021",
+      "legacy_params": [
+        300,
+        10,
+        "2019-01-01",
+        "2021-01-01"
+      ],
+      "legacy_advanced": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/detailed-search/page?psi=400&ps=10&yf=2019&yt=2021",
+      "legacy_request": {
+        "method": "POST",
+        "body": "{\"hierarchicalListMode\":false,\"selectedFilters\":{\"audiences\":[],\"authors\":[],\"languages\":[],\"typeFilter\":[],\"subjects\":[],\"sources\":[],\"libraries\":[],\"releaseStatus\":[],\"rateAverages\":[],\"accessibleOnline\":[],\"accessiblePublications\":[],\"accessibilityFeatures\":[],\"mediaProperties\":[],\"recordStatuses\":[],\"dateRange\":{}},\"searchFields\":[],\"librariesData\":[{\"bookReceivedDateTypeEnumLastTwoWeeks\":false,\"bookReceivedDateTypeEnumLastMonth\":false,\"bookReceivedDateTypeEnumLastThreeMonths\":false,\"bookReceivedDateTypeEnumLastSixMonths\":false,\"bookReceivedDateTypeEnumLastYear\":false,\"bookReceivedDateTypes\":[]}],\"publicationTypes\":[\"BOOK\"],\"publicationAttributes\":[],\"serialPublicationTypes\":[],\"publicationFormats\":[],\"rubricSubjects\":[],\"audiences\":[],\"udcSubjects\":[],\"articleSubjects\":[],\"publicationCountries\":[],\"translateFromLanguages\":[],\"page\":0,\"sortBy\":\"MATCH\",\"recentlySearchedByFilters\":false,\"accessiblePublications\":[],\"accessibilityType\":[],\"informationAccessibilityMethod\":[],\"accessibilityFeatures\":[],\"accessibilityHazards\":[],\"contentManagement\":[],\"pageStartIndex\":300,\"pageSize\":10,\"publicationDateRange\":{\"from\":\"2019-01-01T00:00:00.000Z\",\"to\":\"2021-01-01T00:00:00.000Z\"},\"languages\":[]}",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-GB,en;q=0.5"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,2120 @@
+{
+  "products": [
+    {
+      "author": "Patricia Gibney",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "12.05",
+      "price_original": "15.39",
+      "properties": {
+        "magento_id": "62181",
+        "variant_raw": "Jotema, 2026, 15x22, minkšti viršeliai, 352"
+      },
+      "title": "Nutildytieji",
+      "url": "https://www.patogupirkti.lt/knyga/nutildytieji.html"
+    },
+    {
+      "author": "David Grann",
+      "categories": [
+        "Užsienio tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "22.17",
+      "price_original": "29.99",
+      "properties": {
+        "magento_id": "62488",
+        "variant_raw": "Helios leidykla, 2026, 15x21, kieti viršeliai, 378"
+      },
+      "title": "Gėlių mėnulio žudikai",
+      "url": "https://www.patogupirkti.lt/knyga/geliu-menulio-zudikai.html"
+    },
+    {
+      "author": "S. A. Cosby",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "20.79",
+      "price_original": "30.99",
+      "properties": {
+        "magento_id": "62693",
+        "variant_raw": "Helios leidykla, 2026, 15x21, minkšti viršeliai, 372"
+      },
+      "title": "Pelenų karalius",
+      "url": "https://www.patogupirkti.lt/knyga/pelenu-karalius.html"
+    },
+    {
+      "author": "Anthony Horowitz",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "23.50",
+      "price_original": "32.19",
+      "properties": {
+        "magento_id": "61989",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 616"
+      },
+      "title": "„Mėnulio gėlės“ žmogžudystės",
+      "url": "https://www.patogupirkti.lt/knyga/menulio-geles-zmogzudystes.html"
+    },
+    {
+      "author": "Asako Yuzuki",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "24.14",
+      "price_original": "34.49",
+      "properties": {
+        "magento_id": "61389",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 496"
+      },
+      "title": "Sviestas",
+      "url": "https://www.patogupirkti.lt/knyga/sviestas.html"
+    },
+    {
+      "author": "Aoife Fitzpatrick",
+      "categories": [
+        "Užsienio tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "11.42",
+      "price_original": "24.71",
+      "properties": {
+        "magento_id": "51408",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 320"
+      },
+      "title": "Raudonasis paukštis gieda",
+      "url": "https://www.patogupirkti.lt/knyga/raudonasis-paukstis-gieda.html"
+    },
+    {
+      "author": "Henrik Fexeus, Camilla Läckberg",
+      "categories": [
+        "Skandinavų detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "20.72",
+      "price_original": "29.69",
+      "properties": {
+        "magento_id": "55458",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 656"
+      },
+      "title": "Miražas",
+      "url": "https://www.patogupirkti.lt/knyga/mirazas-55458.html"
+    },
+    {
+      "author": "Richard Osman",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "9.17",
+      "price_original": "15.29",
+      "properties": {
+        "magento_id": "44019",
+        "variant_raw": "Jotema, 2022, 15x21, kieti viršeliai, 384"
+      },
+      "title": "Žmogus, miręs du kartus",
+      "url": "https://www.patogupirkti.lt/knyga/zmogus-mires-du-kartus.html"
+    },
+    {
+      "author": "Amanda Peters",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "21.86",
+      "price_original": "24.29",
+      "properties": {
+        "magento_id": "59147",
+        "variant_raw": "Obuolys, 2025, 14x21, kieti viršeliai, 288"
+      },
+      "title": "Uogų rinkėjai",
+      "url": "https://www.patogupirkti.lt/knyga/uogu-rinkejai.html"
+    },
+    {
+      "author": "Helen Fields",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "14.85",
+      "price_original": "18.89",
+      "properties": {
+        "magento_id": "62179",
+        "variant_raw": "Jotema, 2026, 15x22, kieti viršeliai, 384"
+      },
+      "title": "Šešėlių žmogus",
+      "url": "https://www.patogupirkti.lt/knyga/seseliu-zmogus.html"
+    },
+    {
+      "author": "Colleen Hoover",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "17.24",
+      "price_original": "22.99",
+      "properties": {
+        "magento_id": "61415",
+        "variant_raw": "Baltos lankos, 2026, 14x21, minkšti viršeliai, 352"
+      },
+      "title": "Sužeista moteris",
+      "url": "https://www.patogupirkti.lt/knyga/suzeista-moteris.html"
+    },
+    {
+      "author": "Charlie Donlea",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "16.87",
+      "price_original": "22.49",
+      "properties": {
+        "magento_id": "61907",
+        "variant_raw": "Tyto alba, 2026, 15x21, kieti viršeliai, 420"
+      },
+      "title": "Netikėk tuo",
+      "url": "https://www.patogupirkti.lt/knyga/netikek-tuo.html"
+    },
+    {
+      "author": "Richard Osman",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "19.04",
+      "price_original": "25.39",
+      "properties": {
+        "magento_id": "61319",
+        "variant_raw": "Baltos lankos, 2026, 14x21, minkšti viršeliai, 464"
+      },
+      "title": "Mes tiriame žmogžudystes",
+      "url": "https://www.patogupirkti.lt/knyga/mes-tiriame-zmogzudystes.html"
+    },
+    {
+      "author": "Harlan Coben",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "14.72",
+      "price_original": "21.29",
+      "properties": {
+        "magento_id": "61634",
+        "variant_raw": "Jotema, 2026, 15x22, kieti viršeliai, 384"
+      },
+      "title": "Kvailių nėra",
+      "url": "https://www.patogupirkti.lt/knyga/kvailiu-nera.html"
+    },
+    {
+      "author": "Jo Nesbo",
+      "categories": [
+        "Siaubo knygos"
+      ],
+      "in_stock": true,
+      "price": "14.82",
+      "price_original": "20.69",
+      "properties": {
+        "magento_id": "62276",
+        "variant_raw": "Baltos lankos, 2026, 14x21, kieti viršeliai, 256"
+      },
+      "title": "Nakties namai",
+      "url": "https://www.patogupirkti.lt/knyga/nakties-namai.html"
+    },
+    {
+      "author": "Tess Gerritsen",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "11.51",
+      "price_original": "15.99",
+      "properties": {
+        "magento_id": "58195",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 352"
+      },
+      "title": "Vasarotojai",
+      "url": "https://www.patogupirkti.lt/knyga/vasarotojai.html"
+    },
+    {
+      "author": "Andreas Gruber",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "12.83",
+      "price_original": "17.79",
+      "properties": {
+        "magento_id": "56129",
+        "variant_raw": "Jotema, 2024, 15x22, kieti viršeliai, 480"
+      },
+      "title": "Keršto ruduo",
+      "url": "https://www.patogupirkti.lt/knyga/kersto-ruduo.html"
+    },
+    {
+      "author": "Camilla Läckberg",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "15.45",
+      "price_original": "23.39",
+      "properties": {
+        "magento_id": "57619",
+        "variant_raw": "Obuolys, 2025, 14x21, kieti viršeliai, 320"
+      },
+      "title": "Bronzinės svajos",
+      "url": "https://www.patogupirkti.lt/knyga/bronzines-svajos.html"
+    },
+    {
+      "author": "Sebastian Fitzek",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "12.93",
+      "price_original": "18.99",
+      "properties": {
+        "magento_id": "58780",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 400"
+      },
+      "title": "Skrydžio baimė 7A",
+      "url": "https://www.patogupirkti.lt/knyga/skrydzio-baime-7a.html"
+    },
+    {
+      "author": "Dot Hutchison",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "14.43",
+      "price_original": "19.99",
+      "properties": {
+        "magento_id": "60813",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 320"
+      },
+      "title": "Plaštakių sodas",
+      "url": "https://www.patogupirkti.lt/knyga/plastakiu-sodas.html"
+    },
+    {
+      "author": "Chris Carter",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "13.86",
+      "price_original": "18.99",
+      "properties": {
+        "magento_id": "44639",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 414"
+      },
+      "title": "Mirusiųjų galerija",
+      "url": "https://www.patogupirkti.lt/knyga/mirusiuju-galerija.html"
+    },
+    {
+      "author": "Andreas Gruber",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "12.57",
+      "price_original": "15.86",
+      "properties": {
+        "magento_id": "51552",
+        "variant_raw": "Jotema, 2024, 15x21, kieti viršeliai, 496"
+      },
+      "title": "Mirties ratas",
+      "url": "https://www.patogupirkti.lt/knyga/mirties-ratas.html"
+    },
+    {
+      "author": "Alex Smith",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "16.76",
+      "price_original": "25.79",
+      "properties": {
+        "magento_id": "62168",
+        "variant_raw": "Terra Publica, 2026, 14x22, kieti viršeliai, 324"
+      },
+      "title": "Trys paršeliai. Detektyvas Robertas Ketas, 3 dalis",
+      "url": "https://www.patogupirkti.lt/knyga/trys-mazi-parsiukai-detektyvas-robertas-ketas-3-dalis.html"
+    },
+    {
+      "author": "Nita Prose",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "10.56",
+      "price_original": "23.89",
+      "properties": {
+        "magento_id": "58309",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 320"
+      },
+      "title": "Paslaptinga viešnia",
+      "url": "https://www.patogupirkti.lt/knyga/paslaptinga-viesnia.html"
+    },
+    {
+      "author": "Sandra Braun (Sandra Brown)",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "15.10",
+      "price_original": "20.77",
+      "properties": {
+        "magento_id": "50863",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 384"
+      },
+      "title": "Teisingumas",
+      "url": "https://www.patogupirkti.lt/knyga/teisingumas.html"
+    },
+    {
+      "author": "Kristijonas Kaikaris",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "10.63",
+      "price_original": "13.29",
+      "properties": {
+        "magento_id": "35929",
+        "variant_raw": "Alma littera, 2020, 14x21, kieti viršeliai, 224"
+      },
+      "title": "Rozmarinas",
+      "url": "https://www.patogupirkti.lt/knyga/rozmarinas.html"
+    },
+    {
+      "author": "Stivenas Kingas (Stephen King)",
+      "categories": [
+        "Siaubo knygos"
+      ],
+      "in_stock": true,
+      "price": "19.80",
+      "price_original": "28.29",
+      "properties": {
+        "magento_id": "59457",
+        "variant_raw": "Alma littera, 2025, 24x14, kieti viršeliai, 464"
+      },
+      "title": "Holė",
+      "url": "https://www.patogupirkti.lt/knyga/hole.html"
+    },
+    {
+      "author": "Jason Rekulak",
+      "categories": [
+        "Siaubo knygos"
+      ],
+      "in_stock": true,
+      "price": "11.52",
+      "price_original": "26.50",
+      "properties": {
+        "magento_id": "54813",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Paslaptingi piešiniai",
+      "url": "https://www.patogupirkti.lt/knyga/paslaptingi-piesiniai.html"
+    },
+    {
+      "author": "Matthew Blake",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "17.58",
+      "price_original": "26.24",
+      "properties": {
+        "magento_id": "55201",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 496"
+      },
+      "title": "Ana O",
+      "url": "https://www.patogupirkti.lt/knyga/ana-o.html"
+    },
+    {
+      "author": "Karsten Dusse",
+      "categories": [
+        "Šiuolaikiniai detektyvai ir trileriai"
+      ],
+      "in_stock": true,
+      "price": "14.08",
+      "price_original": "18.29",
+      "properties": {
+        "magento_id": "39037",
+        "variant_raw": "Alma littera, 2021, 14x21, kieti viršeliai, 400"
+      },
+      "title": "Dėmesingo įsisąmoninimo vadovas žudikui",
+      "url": "https://www.patogupirkti.lt/knyga/demesingo-isisamoninimo-vadovas-zudikui.html"
+    },
+    {
+      "author": "Frank Herbert",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "4.99",
+      "price_original": "18.08",
+      "properties": {
+        "magento_id": "58202",
+        "variant_raw": "Kitos knygos, 2022, 16x24, minkšti viršeliai, 264"
+      },
+      "title": "Kopa 2. Mesijas (minkšti viršeliai)",
+      "url": "https://www.patogupirkti.lt/knyga/kopa-2-mesijas-kopija.html"
+    },
+    {
+      "author": "Sasha Peyton Smith",
+      "categories": [
+        "Fantastinės knygos paaugliams"
+      ],
+      "in_stock": true,
+      "price": "19.92",
+      "price_original": "27.49",
+      "properties": {
+        "magento_id": "62107",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 400"
+      },
+      "title": "Rožių sandoris",
+      "url": "https://www.patogupirkti.lt/knyga/roziu-sandoris.html"
+    },
+    {
+      "author": "Leigh Bardugo",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "24.08",
+      "price_original": "32.99",
+      "properties": {
+        "magento_id": "61444",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 576"
+      },
+      "title": "Devintieji namai",
+      "url": "https://www.patogupirkti.lt/knyga/devintieji-namai.html"
+    },
+    {
+      "author": "Christopher Paolini",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "26.94",
+      "price_original": "34.99",
+      "properties": {
+        "magento_id": "39954",
+        "variant_raw": "Alma littera, 2021, 14x24, kieti virišeliai, 944"
+      },
+      "title": "Miegoti jūroje žvaigždžių",
+      "url": "https://www.patogupirkti.lt/knyga/miegoti-juroje-zvaigzdziu.html"
+    },
+    {
+      "author": "J. R. R. Tolkien",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "12.48",
+      "price_original": "16.29",
+      "properties": {
+        "magento_id": "35553",
+        "variant_raw": "Alma littera, 2020, 14x21, kieti viršeliai, 296"
+      },
+      "title": "Hobitas, arba Ten ir atgal",
+      "url": "https://www.patogupirkti.lt/knyga/hobitas-arba-ten-ir-atgal.html"
+    },
+    {
+      "author": "Rani De Vadder",
+      "categories": [
+        "Fantastinės knygos paaugliams"
+      ],
+      "in_stock": false,
+      "price": "9.02",
+      "price_original": "20.49",
+      "properties": {
+        "magento_id": "55690",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 336"
+      },
+      "title": "Blogis su karūna",
+      "url": "https://www.patogupirkti.lt/knyga/blogis-su-karuna.html"
+    },
+    {
+      "author": "A. F. Steadman",
+      "categories": [
+        "Fantastinės knygos paaugliams"
+      ],
+      "in_stock": true,
+      "price": "11.12",
+      "price_original": "17.99",
+      "properties": {
+        "magento_id": "61392",
+        "variant_raw": "Presa, 2026, 16x24, kieti viršeliai, 400"
+      },
+      "title": "Skandaras ir dvasių stichijos karas, 5 dalis",
+      "url": "https://www.patogupirkti.lt/knyga/skandaras-ir-dvasiu-stichijos-karas-5-dalis.html"
+    },
+    {
+      "author": "Stacia Stark",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "15.33",
+      "price_original": "21.29",
+      "properties": {
+        "magento_id": "61045",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 416"
+      },
+      "title": "Toks žiaurus ir kerintis dvaras",
+      "url": "https://www.patogupirkti.lt/knyga/toks-ziaurus-ir-kerintis-dvaras.html"
+    },
+    {
+      "author": "Penn Cole",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "19.35",
+      "price_original": "25.99",
+      "properties": {
+        "magento_id": "62238",
+        "variant_raw": "Sofoklis, 2026, 14x21, kieti viršeliai, 640"
+      },
+      "title": "Gentainių prakeiksmo saga 2. Amžinosios liepsnos šviesa",
+      "url": "https://www.patogupirkti.lt/knyga/gentainiu-prakeiksmo-saga-2-amzinosios-liepsnos-sviesa.html"
+    },
+    {
+      "author": "Rachel Schneider",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "17.99",
+      "price_original": "23.99",
+      "properties": {
+        "magento_id": "61384",
+        "variant_raw": "Sofoklis, 2026, 14x21, kieti viršeliai, 448"
+      },
+      "title": "Metalo kerėtojas. Ciklo „Ugnis ir metalas“ 1 knyga",
+      "url": "https://www.patogupirkti.lt/knyga/metalo-keretojas-ciklo-ugnis-ir-metalas-1-knyga.html"
+    },
+    {
+      "author": "Andy Weir",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "13.62",
+      "price_original": "18.74",
+      "properties": {
+        "magento_id": "42515",
+        "variant_raw": "Kitos knygos, 2022, 15x21, kieti viršeliai, 536"
+      },
+      "title": "Projektas „Sveika, Marija“",
+      "url": "https://www.patogupirkti.lt/knyga/projektas-sveika-marija.html"
+    },
+    {
+      "author": "Arkadij Strugackij, Boris Strugackij",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "13.04",
+      "price_original": "14.49",
+      "properties": {
+        "magento_id": "21832",
+        "variant_raw": "Kitos knygos, 2024, 14x20, minkšti viršeliai, 216"
+      },
+      "title": "Piknikas šalikelėje",
+      "url": "https://www.patogupirkti.lt/knyga/piknikas-salikeleje.html"
+    },
+    {
+      "author": "Tracy Wolff",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "19.68",
+      "price_original": "27.99",
+      "properties": {
+        "magento_id": "54473",
+        "variant_raw": "Obuolys, 2024, 17x23, minkšti viršeliai, 592"
+      },
+      "title": "Troškimas",
+      "url": "https://www.patogupirkti.lt/knyga/troskimas.html"
+    },
+    {
+      "author": "Pierce Brown",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "20.77",
+      "price_original": "27.69",
+      "properties": {
+        "magento_id": "62620",
+        "variant_raw": "Kitos knygos, 2026, 16x24, kieti viršeliai, 342"
+      },
+      "title": "Raudonasis kyla",
+      "url": "https://www.patogupirkti.lt/knyga/raudonasis-kyla.html"
+    },
+    {
+      "author": "Stanislavas Lemas (Stanislaw Lem)",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "10.70",
+      "price_original": "11.89",
+      "properties": {
+        "magento_id": "18270",
+        "variant_raw": "Kitos knygos, 2021, 15x21, kieti viršeliai, 232"
+      },
+      "title": "Soliaris",
+      "url": "https://www.patogupirkti.lt/knyga/soliaris.html"
+    },
+    {
+      "author": "Kristen Ciccarelli",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "14.84",
+      "price_original": "19.29",
+      "properties": {
+        "magento_id": "58471",
+        "variant_raw": "Sofoklis, 2025, 14x21, kieti viršeliai, 448"
+      },
+      "title": "Purpurinė plaštakė, 2 knyga. Maištinga ragana",
+      "url": "https://www.patogupirkti.lt/knyga/purpurine-plastake-2-knyga-maistinga-ragana.html"
+    },
+    {
+      "author": "Tracy Wolff",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "19.68",
+      "price_original": "27.99",
+      "properties": {
+        "magento_id": "58586",
+        "variant_raw": "Obuolys, 2025, 17x23, minkšti viršeliai, 608"
+      },
+      "title": "Geismas",
+      "url": "https://www.patogupirkti.lt/knyga/geismas.html"
+    },
+    {
+      "author": "Greta Dargienė",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "14.30",
+      "price_original": "15.89",
+      "properties": {
+        "magento_id": "59041",
+        "variant_raw": "2025, 13x19, minkšti viršeliai, 264"
+      },
+      "title": "Padaro širdis",
+      "url": "https://www.patogupirkti.lt/knyga/padaro-sirdis.html"
+    },
+    {
+      "author": "George R. R. Martin",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "26.88",
+      "price_original": "42.49",
+      "properties": {
+        "magento_id": "59375",
+        "variant_raw": "Alma littera, 2025, 14x24, kieti viršeliai, 1024"
+      },
+      "title": "Šokis su drakonais. Ciklo \"Ledo ir ugnies giesmė\" 5 knyga",
+      "url": "https://www.patogupirkti.lt/knyga/sokis-su-drakonais-ciklo-ledo-ir-ugnies-giesme-5-knyga.html"
+    },
+    {
+      "author": "Kristen Ciccarelli",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "15.59",
+      "price_original": "17.39",
+      "properties": {
+        "magento_id": "60058",
+        "variant_raw": "Sofoklis, 2025, 14x21, kieti viršeliai, 384"
+      },
+      "title": "Tamsi užmarštis",
+      "url": "https://www.patogupirkti.lt/knyga/tamsi-uzmarstis.html"
+    },
+    {
+      "author": "George R. R. Martin",
+      "categories": [
+        "Knygos su DEFEKTAIS"
+      ],
+      "in_stock": true,
+      "price": "10.71",
+      "price_original": "29.69",
+      "properties": {
+        "magento_id": "60097",
+        "variant_raw": "Alma littera, 2024, 14x24, kieti viršeliai, 642"
+      },
+      "title": "Sostų žaidimas. Ciklo \"Ledo ir ugnies giesmė“, 1 knyga (knyga su defektais)",
+      "url": "https://www.patogupirkti.lt/knyga/sostu-zaidimas-ciklo-ledo-ir-ugnies-giesme-1-knyga-kopija.html"
+    },
+    {
+      "author": "Hugh Howey",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "14.53",
+      "price_original": "19.99",
+      "properties": {
+        "magento_id": "25109",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 448"
+      },
+      "title": "Dulkės",
+      "url": "https://www.patogupirkti.lt/knyga/dulkes.html"
+    },
+    {
+      "author": "Sarah J. Maas",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "29.32",
+      "price_original": "41.89",
+      "properties": {
+        "magento_id": "57626",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 912"
+      },
+      "title": "Žemės ir kraujo giminė. Ciklo „Pusmėnulio miestas“ 1-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/zemes-ir-kraujo-namai-ciklo-pusmenulio-miestas-1-oji-knyga.html"
+    },
+    {
+      "author": "Carissa Broadbent",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "22.40",
+      "price_original": "30.69",
+      "properties": {
+        "magento_id": "61383",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 528"
+      },
+      "title": "Gyvatė ir nakties sparnai. Dvilogijos „Naktigimiai“ 1-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/gyvate-ir-nakties-sparnai-dvilogijos-naktigimiai-1-oji-knyga.html"
+    },
+    {
+      "author": "Penn Cole",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "19.79",
+      "price_original": "21.99",
+      "properties": {
+        "magento_id": "59382",
+        "variant_raw": "Sofoklis, 2025, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Gentainių prakeiksmo saga 1. Amžinosios liepsnos kibirkštis",
+      "url": "https://www.patogupirkti.lt/knyga/gentainiu-prakeiksmo-saga-1-amzinosios-liepsnos-kibirkstis.html"
+    },
+    {
+      "author": "Beata Ostrowicka",
+      "categories": [
+        "Šiuolaikiniai užsienio autorių romanai paaugliams"
+      ],
+      "in_stock": true,
+      "price": "13.34",
+      "price_original": "17.79",
+      "properties": {
+        "magento_id": "62471",
+        "variant_raw": "Gelmės, 2026, 15x21, minkšti viršeliai, 144"
+      },
+      "title": "Nuotykių eliksyras",
+      "url": "https://www.patogupirkti.lt/knyga/nuotykiu-eliksyras.html"
+    },
+    {
+      "author": "Alex Aster",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "20.63",
+      "price_original": "22.99",
+      "properties": {
+        "magento_id": "62552",
+        "variant_raw": "Sofoklis, 2026, 14x21, kieti viršeliai, 448"
+      },
+      "title": "Laitlarkas",
+      "url": "https://www.patogupirkti.lt/knyga/laitlarkas.html"
+    },
+    {
+      "author": "Jeff VanderMeer",
+      "categories": [
+        "Mokslinės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "10.61",
+      "price_original": "11.79",
+      "properties": {
+        "magento_id": "32086",
+        "variant_raw": "Kitos knygos, 2019, 15x21, kieti viršeliai, 208"
+      },
+      "title": "Sunaikinimas",
+      "url": "https://www.patogupirkti.lt/knyga/sunaikinimas.html"
+    },
+    {
+      "author": "Rachel Gillig",
+      "categories": [
+        "Maginės fantastikos knygos"
+      ],
+      "in_stock": true,
+      "price": "15.74",
+      "price_original": "22.49",
+      "properties": {
+        "magento_id": "58396",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Vienas tamsus langas",
+      "url": "https://www.patogupirkti.lt/knyga/vienas-tamsus-langas.html"
+    },
+    {
+      "author": "Rebecca Yarros",
+      "categories": [
+        "Fantastinės knygos paaugliams"
+      ],
+      "in_stock": false,
+      "price": "23.85",
+      "price_original": "35.69",
+      "properties": {
+        "magento_id": "55281",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 656"
+      },
+      "title": "Ketvirtasis sparnas. Specialus leidimas",
+      "url": "https://www.patogupirkti.lt/knyga/ketvirtasis-sparnas-specialus-leidimas.html"
+    },
+    {
+      "author": "Ilona Skujaitė",
+      "categories": [
+        "Lietuvių istoriniai romanai"
+      ],
+      "in_stock": true,
+      "price": "20.88",
+      "price_original": "28.69",
+      "properties": {
+        "magento_id": "61734",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 544"
+      },
+      "title": "Nemeilė. Ona Jogailaitė-Batorienė ir keturi karaliai",
+      "url": "https://www.patogupirkti.lt/knyga/nemeile-ona-jogailaite-batoriene-ir-keturi-karaliai.html"
+    },
+    {
+      "author": "Irena Buivydaitė-Kupčinskienė, Jolita Herlyn",
+      "categories": [
+        "Lietuvių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "15.00",
+      "price_original": "22.39",
+      "properties": {
+        "magento_id": "61440",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 384"
+      },
+      "title": "Tango šokamas dviese",
+      "url": "https://www.patogupirkti.lt/knyga/tango-sokamas-dviese.html"
+    },
+    {
+      "author": "Irena Buivydaitė-Kupčinskienė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "12.87",
+      "price_original": "18.39",
+      "properties": {
+        "magento_id": "56585",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 320"
+      },
+      "title": "Trečias kartas nemeluoja",
+      "url": "https://www.patogupirkti.lt/knyga/trecias-kartas-nemeluoja.html"
+    },
+    {
+      "author": "Tomas Mylista",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": false,
+      "price": "17.84",
+      "price_original": "25.49",
+      "properties": {
+        "magento_id": "58825",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 480"
+      },
+      "title": "Blogos manieros",
+      "url": "https://www.patogupirkti.lt/knyga/blogos-manieros.html"
+    },
+    {
+      "author": "Viktorija Vitkauskaitė",
+      "categories": [
+        "Miestų ir kraštų istorija"
+      ],
+      "in_stock": true,
+      "price": "20.12",
+      "price_original": "25.99",
+      "properties": {
+        "magento_id": "59487",
+        "variant_raw": "Tyto alba, 2025, 17x24, minkšti viršeliai, 300"
+      },
+      "title": "Namai ir likimai. 10 tarpukario Kauno istorijų",
+      "url": "https://www.patogupirkti.lt/knyga/namai-ir-likimai-10-tarpukario-kauno-istoriju.html"
+    },
+    {
+      "author": "Austėja Brikytė",
+      "categories": [
+        "Šiuolaikiniai lietuvių autorių romanai paaugliams"
+      ],
+      "in_stock": true,
+      "price": "9.52",
+      "price_original": "12.69",
+      "properties": {
+        "magento_id": "62724",
+        "variant_raw": "Kriventa, 2026, 18x18, minkšti viršeliai, 112"
+      },
+      "title": "Ežeryn",
+      "url": "https://www.patogupirkti.lt/knyga/ezeryn.html"
+    },
+    {
+      "author": "Ina Ogenskienė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "12.74",
+      "price_original": "16.99",
+      "properties": {
+        "magento_id": "62557",
+        "variant_raw": "Gelmės, 2026, 15x21, minkšti viršeliai, 352"
+      },
+      "title": "Ten debesys mėnulį pakorė",
+      "url": "https://www.patogupirkti.lt/knyga/ten-debesys-menuli-pakore.html"
+    },
+    {
+      "author": "Audrius Skačkauskas, Aušra Giedrimaitė",
+      "categories": [
+        "Lietuvių eseistika"
+      ],
+      "in_stock": true,
+      "price": "13.27",
+      "price_original": "16.96",
+      "properties": {
+        "magento_id": "43403",
+        "variant_raw": "Amalkeros leidyba, 2022, 15x19, minkšti viršeliai, 184"
+      },
+      "title": "Neleisk angelui nukristi nuo peties 3",
+      "url": "https://www.patogupirkti.lt/knyga/neleisk-angelui-nukristi-nuo-peties-3.html"
+    },
+    {
+      "author": "Vytautas Mačernis",
+      "categories": [
+        "Lietuvių eilėraščiai ir dramos"
+      ],
+      "in_stock": true,
+      "price": "13.04",
+      "price_original": "14.49",
+      "properties": {
+        "magento_id": "37103",
+        "variant_raw": "Lietuvos rašytojų sąjungos leidykla, 2025, 14x21, kieti viršeliai, 256"
+      },
+      "title": "Praeinančiam pasaulyje praeisiu",
+      "url": "https://www.patogupirkti.lt/knyga/praeinanciam-pasaulyje-praeisiu.html"
+    },
+    {
+      "author": "Audrius Skačkauskas",
+      "categories": [
+        "Lietuvių eseistika"
+      ],
+      "in_stock": true,
+      "price": "24.74",
+      "price_original": "32.99",
+      "properties": {
+        "magento_id": "62846",
+        "variant_raw": "2026, 15x19, minkšti viršeliai, 670"
+      },
+      "title": "Neleisk angelui nukristi nuo peties. Trilogija",
+      "url": "https://www.patogupirkti.lt/knyga/neleisk-angelui-nukristi-nuo-peties-trilogija.html"
+    },
+    {
+      "author": "Marius Ivaškevičius",
+      "categories": [
+        "Lietuvių eilėraščiai ir dramos"
+      ],
+      "in_stock": true,
+      "price": "14.66",
+      "price_original": "16.29",
+      "properties": {
+        "magento_id": "14048",
+        "variant_raw": "Apostrofa, 2024, 13x17, kieti viršeliai, 176"
+      },
+      "title": "Madagaskaras: trijų veiksmų pjesė",
+      "url": "https://www.patogupirkti.lt/knyga/madagaskaras-triju-veiksmu-pjese.html"
+    },
+    {
+      "author": "Daiva Vaitkevičiūtė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": false,
+      "price": "13.65",
+      "price_original": "18.39",
+      "properties": {
+        "magento_id": "62087",
+        "variant_raw": "Kopos, 2026, 14x22, kieti viršeliai, 224"
+      },
+      "title": "Kitas sezonas",
+      "url": "https://www.patogupirkti.lt/knyga/kitas-sezonas.html"
+    },
+    {
+      "author": "Violeta Palčinskaitė",
+      "categories": [
+        "Literatūros memuarai"
+      ],
+      "in_stock": true,
+      "price": "14.24",
+      "price_original": "18.99",
+      "properties": {
+        "magento_id": "21420",
+        "variant_raw": "Tyto alba, 2026, 15x22, kieti viršeliai, 263"
+      },
+      "title": "Atminties babilonai arba aš vejuos vasarą",
+      "url": "https://www.patogupirkti.lt/knyga/atminties-babilonai-arba-as-vejuos-vasara.html"
+    },
+    {
+      "author": "Marcelijus Martinaitis",
+      "categories": [
+        "Lietuvių eilėraščiai ir dramos"
+      ],
+      "in_stock": false,
+      "price": "11.56",
+      "price_original": "21.16",
+      "properties": {
+        "magento_id": "14291",
+        "variant_raw": "Vaga, 2024, 13x21, kieti viršeliai, 152"
+      },
+      "title": "Kukučio baladės",
+      "url": "https://www.patogupirkti.lt/knyga/kukucio-balades.html"
+    },
+    {
+      "author": "Valdas Papievis",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "9.42",
+      "price_original": "14.49",
+      "properties": {
+        "magento_id": "58584",
+        "variant_raw": "Odilė, 2025, 13x20, minšti viršeliai, 160"
+      },
+      "title": "Ankančiam pasauly",
+      "url": "https://www.patogupirkti.lt/knyga/ankanciam-pasauly.html"
+    },
+    {
+      "author": "Eva Mattsson",
+      "categories": [
+        "Užsienio istoriniai romanai"
+      ],
+      "in_stock": true,
+      "price": "12.35",
+      "price_original": "19.59",
+      "properties": {
+        "magento_id": "60491",
+        "variant_raw": "Obuolys, 2025, 13x19, minkšti viršeliai, 368"
+      },
+      "title": "Kotryna Jogailaitė. Rožės ir akmens karalienė",
+      "url": "https://www.patogupirkti.lt/knyga/kotryna-jogailaite-rozes-ir-akmens-karaliene.html"
+    },
+    {
+      "author": "Sofija Tyzenhauzaitė",
+      "categories": [
+        "Lietuvių istoriniai romanai"
+      ],
+      "in_stock": true,
+      "price": "11.02",
+      "price_original": "12.42",
+      "properties": {
+        "magento_id": "38436",
+        "variant_raw": "Regionų kultūrinių iniciatyvų centras, 2021, 15x21, minkšti viršeliai, 153"
+      },
+      "title": "Vladislovas Jogaila ir Jadvyga, arba Lietuvos sąjunga su Lenkija",
+      "url": "https://www.patogupirkti.lt/knyga/vladislovas-jogaila-ir-jadvyga-arba-lietuvos-sajunga-su-lenkija.html"
+    },
+    {
+      "author": "Algirdas Kaušpėdas",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "20.24",
+      "price_original": "22.49",
+      "properties": {
+        "magento_id": "59144",
+        "variant_raw": "Lapas, 2025, 13x20, mikšti viršeliai, 512"
+      },
+      "title": "Koplyčia",
+      "url": "https://www.patogupirkti.lt/knyga/koplycia-59144.html"
+    },
+    {
+      "author": "Vaiva Rykštaitė",
+      "categories": [
+        "Lietuvių tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "24.16",
+      "price_original": "29.40",
+      "properties": {
+        "magento_id": "60091",
+        "variant_raw": "2025, 16x22, kieti viršeliai, 242"
+      },
+      "title": "Mama namuose. Trys valandos iki rytojaus",
+      "url": "https://www.patogupirkti.lt/knyga/mama-namuose.html"
+    },
+    {
+      "author": "Jurgis Kunčinas",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "11.42",
+      "price_original": "12.69",
+      "properties": {
+        "magento_id": "20917",
+        "variant_raw": "Lietuvos rašytojų sąjungos leidykla, 2024, 14x21, kieti viršeliai, 258"
+      },
+      "title": "Tūla",
+      "url": "https://www.patogupirkti.lt/knyga/tula-6-as-leidimas.html"
+    },
+    {
+      "author": "Marius Burokas",
+      "categories": [
+        "Lietuvių eilėraščiai ir dramos"
+      ],
+      "in_stock": true,
+      "price": "13.12",
+      "price_original": "17.49",
+      "properties": {
+        "magento_id": "58897",
+        "variant_raw": "Lapas, 2025, 13x20, minkšti viršeliai, 104"
+      },
+      "title": "Seismografas",
+      "url": "https://www.patogupirkti.lt/knyga/seismografas.html"
+    },
+    {
+      "author": "Gintaras Grajauskas",
+      "categories": [
+        "Lietuvių eilėraščiai ir dramos"
+      ],
+      "in_stock": true,
+      "price": "14.30",
+      "price_original": "15.89",
+      "properties": {
+        "magento_id": "59042",
+        "variant_raw": "Bazilisko ambasada, 2025, 12x19, kieti viršeliai, 72"
+      },
+      "title": "Vandens skonis",
+      "url": "https://www.patogupirkti.lt/knyga/vandens-skonis-59042.html"
+    },
+    {
+      "author": "Sondra Rankelienė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "19.57",
+      "price_original": "26.89",
+      "properties": {
+        "magento_id": "58829",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 504"
+      },
+      "title": "Manuskriptas",
+      "url": "https://www.patogupirkti.lt/knyga/manuskriptas.html"
+    },
+    {
+      "author": "Ruta Sepetys",
+      "categories": [
+        "Lietuvių tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "11.51",
+      "price_original": "14.39",
+      "properties": {
+        "magento_id": "46003",
+        "variant_raw": "Alma littera, 2023, 14x21, kieti viršeliai, 336"
+      },
+      "title": "Tarp pilkų debesų",
+      "url": "https://www.patogupirkti.lt/knyga/tarp-pilku-debesu-46003.html"
+    },
+    {
+      "author": "Jurga Baltrukonytė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "15.04",
+      "price_original": "21.49",
+      "properties": {
+        "magento_id": "56965",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 240"
+      },
+      "title": "Karštas autobusas",
+      "url": "https://www.patogupirkti.lt/knyga/karstas-autobusas.html"
+    },
+    {
+      "author": "Juozas Gaižauskas",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "12.80",
+      "price_original": "18.29",
+      "properties": {
+        "magento_id": "59163",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 184"
+      },
+      "title": "Nojaus Arkos dienoraštis",
+      "url": "https://www.patogupirkti.lt/knyga/nojaus-arkos-dienorastis.html"
+    },
+    {
+      "author": "Liudas Mažylis",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "8.99",
+      "price_original": "9.99",
+      "properties": {
+        "magento_id": "28579",
+        "variant_raw": "Alma littera, 2018, 15x21, kieti viršeliai, 320"
+      },
+      "title": "99 šimtosios",
+      "url": "https://www.patogupirkti.lt/knyga/99-simtosios.html"
+    },
+    {
+      "author": "Jurga Baltrukonytė",
+      "categories": [
+        "Šiuolaikinė lietuvių literatūra"
+      ],
+      "in_stock": true,
+      "price": "16.93",
+      "price_original": "23.19",
+      "properties": {
+        "magento_id": "61318",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 256"
+      },
+      "title": "Mano nekaltas melagis",
+      "url": "https://www.patogupirkti.lt/knyga/mano-nekaltas-melagis.html"
+    },
+    {
+      "author": "Juozas Gaižauskas",
+      "categories": [
+        "Lietuvių tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "9.35",
+      "price_original": "11.69",
+      "properties": {
+        "magento_id": "35786",
+        "variant_raw": "Alma littera, 2025, 14x21, minkšti viršeliai, 192"
+      },
+      "title": "Dievas su šlepetėmis",
+      "url": "https://www.patogupirkti.lt/knyga/dievas-su-slepetemis.html"
+    },
+    {
+      "author": "Danielle Steel",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "17.07",
+      "price_original": "24.39",
+      "properties": {
+        "magento_id": "59480",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 288"
+      },
+      "title": "Vitjerų šeima",
+      "url": "https://www.patogupirkti.lt/knyga/vitjeru-seima.html"
+    },
+    {
+      "author": "Brynne Weaver",
+      "categories": [
+        "Magiškos meilės istorijos"
+      ],
+      "in_stock": true,
+      "price": "20.43",
+      "price_original": "27.99",
+      "properties": {
+        "magento_id": "62243",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 352"
+      },
+      "title": "Mėsininkas ir Juodoji Strazdė. Trilogijos „Pražūtinga meilė“ 1-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/mesininkas-ir-juodoji-strazde-trilogijos-prazutinga-meile-1-oji-knyga.html"
+    },
+    {
+      "author": "Clare Marchant",
+      "categories": [
+        "Istoriniai meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "19.65",
+      "price_original": "28.79",
+      "properties": {
+        "magento_id": "61991",
+        "variant_raw": "Svajonių knygos, 2026, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Šafrano dvaro moterys",
+      "url": "https://www.patogupirkti.lt/knyga/safrano-dvaro-moterys.html"
+    },
+    {
+      "author": "Lucy Score",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "11.19",
+      "price_original": "13.99",
+      "properties": {
+        "magento_id": "47997",
+        "variant_raw": "Jotema, 2023, 21x14, kieti viršeliai, 512"
+      },
+      "title": "Tai, kas niekada nesibaigia",
+      "url": "https://www.patogupirkti.lt/knyga/tai-kas-niekada-nesibaigia.html"
+    },
+    {
+      "author": "Tyla Audroje",
+      "categories": [
+        "Lietuvių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "14.99",
+      "price_original": "19.99",
+      "properties": {
+        "magento_id": "61736",
+        "variant_raw": "3D Servisas, 2026, 14x20, minkšti viršeliai, 360"
+      },
+      "title": "Ne tavo",
+      "url": "https://www.patogupirkti.lt/knyga/ne-tavo.html"
+    },
+    {
+      "author": "Elle Kennedy",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "14.83",
+      "price_original": "21.35",
+      "properties": {
+        "magento_id": "49896",
+        "variant_raw": "Svajonių knygos, 2024, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Susitarimas. Ciklo „Off-Campus“ 1-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/susitarimas-ciklo-off-campus-1-oji-knyga.html"
+    },
+    {
+      "author": "Elsie Silver",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "12.83",
+      "price_original": "17.79",
+      "properties": {
+        "magento_id": "60814",
+        "variant_raw": "Jotema, 2025, 14x21, minkšti viršeliai, 400"
+      },
+      "title": "Bejėgis",
+      "url": "https://www.patogupirkti.lt/knyga/bejegis.html"
+    },
+    {
+      "author": "Agnė Bausienė",
+      "categories": [
+        "Erotiniai romanai"
+      ],
+      "in_stock": true,
+      "price": "9.27",
+      "price_original": "13.99",
+      "properties": {
+        "magento_id": "60054",
+        "variant_raw": "Obuolys, 2025, 13x19, minkšti viršeliai, 240"
+      },
+      "title": "Nepadorūs žodžiai",
+      "url": "https://www.patogupirkti.lt/knyga/nepadorus-zodziai.html"
+    },
+    {
+      "author": "Elsie Silver",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "12.11",
+      "price_original": "16.59",
+      "properties": {
+        "magento_id": "58782",
+        "variant_raw": "Jotema, 2025, 15x22, minkšti viršeliai, 352"
+      },
+      "title": "Beširdis",
+      "url": "https://www.patogupirkti.lt/knyga/besirdis.html"
+    },
+    {
+      "author": "Elle Kennedy",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "13.43",
+      "price_original": "18.07",
+      "properties": {
+        "magento_id": "51069",
+        "variant_raw": "Svajonių knygos, 2024, 14x21, kieti viršeliai, 352"
+      },
+      "title": "Klaida. Ciklo „Off-Campus“ 2-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/klaida-ciklo-off-campus-2-oji-knyga.html"
+    },
+    {
+      "author": "Candace Camp",
+      "categories": [
+        "Istoriniai meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "9.65",
+      "price_original": "20.59",
+      "properties": {
+        "magento_id": "51401",
+        "variant_raw": "Svajonių knygos, 2024, 14x21, kieti viršeliai, 380"
+      },
+      "title": "Atgimusi meilė Stounklife. Ciklo „Stounklifo intrigos“ 2-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/atgimusi-meile-stounklife.html"
+    },
+    {
+      "author": "Elle Kennedy",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "13.49",
+      "price_original": "21.59",
+      "properties": {
+        "magento_id": "55369",
+        "variant_raw": "Svajonių knygos, 2024, 14x21, kieti viršeliai, 352"
+      },
+      "title": "Pratęsimas. Ciklo „Off-Campus“ 5-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/pratesimas-ciklo-off-campus-5-oji-knyga.html"
+    },
+    {
+      "author": "Candace Camp",
+      "categories": [
+        "Istoriniai meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "10.19",
+      "price_original": "21.99",
+      "properties": {
+        "magento_id": "56968",
+        "variant_raw": "Svajonių knygos, 2025, 14x21, kieti viršeliai, 382"
+      },
+      "title": "Skandalas Stounklife. Ciklo „Stounklifo intrigos“ 2-oji knyga",
+      "url": "https://www.patogupirkti.lt/knyga/skandalas-stounklife-ciklo-stounklifo-intrigos-2-oji-knyga.html"
+    },
+    {
+      "author": "Lavisa Spell",
+      "categories": [
+        "Lietuvių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "11.63",
+      "price_original": "12.99",
+      "properties": {
+        "magento_id": "45228",
+        "variant_raw": "Lietuvių laisvalaikio literatūros lyga, 2022, 14x21, minkšti viršeliai, 447"
+      },
+      "title": "Būti (su) ragana. Magiškas, erotiškas ir įtampos kupinas pasakojimas apie amžiną meilę",
+      "url": "https://www.patogupirkti.lt/knyga/buti-su-ragana-magiskas-erotiskas-ir-itampos-kupinas-pasakojimas-apie-amzina-meile.html"
+    },
+    {
+      "author": "Elsie Silver",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "11.23",
+      "price_original": "15.39",
+      "properties": {
+        "magento_id": "57640",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 352"
+      },
+      "title": "Nepriekaištinga",
+      "url": "https://www.patogupirkti.lt/knyga/nepriekaistinga.html"
+    },
+    {
+      "author": "Tyla Audroje",
+      "categories": [
+        "Lietuvių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "17.99",
+      "price_original": "19.99",
+      "properties": {
+        "magento_id": "61191",
+        "variant_raw": "3D Servisas, 2025, 15x21, minkšti viršeliai, 392"
+      },
+      "title": "33 laipteliai laimingo gyvenimo link",
+      "url": "https://www.patogupirkti.lt/knyga/33-laipteliai-laimingo-gyvenimo-link.html"
+    },
+    {
+      "author": "Lavisa Spell",
+      "categories": [
+        "Lietuvių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "13.64",
+      "price_original": "18.19",
+      "properties": {
+        "magento_id": "61223",
+        "variant_raw": "Knygų gūsis, 2025, 12x19, minkšti viršeliai, 372"
+      },
+      "title": "Pavojingas meilės romanas",
+      "url": "https://www.patogupirkti.lt/knyga/pavojingas-meiles-romanas.html"
+    },
+    {
+      "author": "Diana Gabaldon",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "27.99",
+      "price_original": "39.99",
+      "properties": {
+        "magento_id": "17323",
+        "variant_raw": "Alma littera, 2025, 14x24, kieti viršeliai, 944"
+      },
+      "title": "Svetimšalė, VII dalis. Praeities aidas",
+      "url": "https://www.patogupirkti.lt/knyga/svetimsale-rudens-bugnai-vii-knyga.html"
+    },
+    {
+      "author": "Diana Gabaldon",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "29.39",
+      "price_original": "41.99",
+      "properties": {
+        "magento_id": "18524",
+        "variant_raw": "Alma littera, 2025, 14x24, kieti viršeliai, 976"
+      },
+      "title": "Svetimšalė, VIII dalis. Užrašyta mano širdies krauju",
+      "url": "https://www.patogupirkti.lt/knyga/svetimsale-rudens-bugnai-astunta-knyga.html"
+    },
+    {
+      "author": "Julia Quinn",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "8.31",
+      "price_original": "16.39",
+      "properties": {
+        "magento_id": "48490",
+        "variant_raw": "Alma littera, 2023, 14x21, kieti viršeliai, 400"
+      },
+      "title": "Bridžertonai 6. Kai jis buvo pašėlęs",
+      "url": "https://www.patogupirkti.lt/knyga/bridzertonai-kai-jis-buvo-paseles.html"
+    },
+    {
+      "author": "Julia Quinn",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "6.98",
+      "price_original": "15.61",
+      "properties": {
+        "magento_id": "39970",
+        "variant_raw": "Alma littera, 2021, 14x21, kieti viršeliai, 416"
+      },
+      "title": "Bridžertonai 2. Vikontas, kuris mane mylėjo",
+      "url": "https://www.patogupirkti.lt/knyga/vikontas-kuris-mane-mylejo.html"
+    },
+    {
+      "author": "Julia Quinn",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "8.31",
+      "price_original": "18.86",
+      "properties": {
+        "magento_id": "51805",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 432"
+      },
+      "title": "Bridžertonai 8. Prieš vestuves",
+      "url": "https://www.patogupirkti.lt/knyga/bridzertonai-pries-vestuves.html"
+    },
+    {
+      "author": "Katelyn Doyle",
+      "categories": [
+        "Šiuolaikinių autorių meilės romanai"
+      ],
+      "in_stock": true,
+      "price": "7.89",
+      "price_original": "23.58",
+      "properties": {
+        "magento_id": "52753",
+        "variant_raw": "Alma littera, 2024, 14x21, minkšti viršeliai, 464"
+      },
+      "title": "Tik kvaila meilės istorija",
+      "url": "https://www.patogupirkti.lt/knyga/tik-kvaila-meiles-istorija.html"
+    },
+    {
+      "author": "E L James",
+      "categories": [
+        "Erotiniai romanai"
+      ],
+      "in_stock": true,
+      "price": "19.42",
+      "price_original": "27.74",
+      "properties": {
+        "magento_id": "53245",
+        "variant_raw": "Alma littera, 2024, 1424, kieti viršeliai, 440"
+      },
+      "title": "Ledi",
+      "url": "https://www.patogupirkti.lt/knyga/ledi.html"
+    },
+    {
+      "author": "Stephenie Meyer",
+      "categories": [
+        "Fantastinės knygos paaugliams"
+      ],
+      "in_stock": true,
+      "price": "11.19",
+      "price_original": "13.99",
+      "properties": {
+        "magento_id": "4722",
+        "variant_raw": "Alma littera, 2020, 14x21, kieti viršeliai, 488"
+      },
+      "title": "Jaunatis (galimi minimalūs pažeidimai)",
+      "url": "https://www.patogupirkti.lt/knyga/jaunatis-knyga.html"
+    },
+    {
+      "author": "Kristin Hannah",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "14.59",
+      "price_original": "19.99",
+      "properties": {
+        "magento_id": "28800",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 512"
+      },
+      "title": "Sugrįžimas į Aliaską",
+      "url": "https://www.patogupirkti.lt/knyga/sugrizimas-i-aliaska.html"
+    },
+    {
+      "author": "Abraham Verghese",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "20.26",
+      "price_original": "30.32",
+      "properties": {
+        "magento_id": "54886",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 856"
+      },
+      "title": "Vandens pažadas",
+      "url": "https://www.patogupirkti.lt/knyga/vandens-pazadas.html"
+    },
+    {
+      "author": "Shelley Read",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "9.78",
+      "price_original": "22.46",
+      "properties": {
+        "magento_id": "50452",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 336"
+      },
+      "title": "Tekėk lyg upė",
+      "url": "https://www.patogupirkti.lt/knyga/tekek-lyg-upe.html"
+    },
+    {
+      "author": "Diana Gabaldon",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": false,
+      "price": "32.11",
+      "price_original": "43.99",
+      "properties": {
+        "magento_id": "61923",
+        "variant_raw": "Alma littera, 2026, 14x24, kieti viršeliai, 1040"
+      },
+      "title": "Svetimšalė, IX dalis. Pasakyk bitėms, kad manęs nebėra",
+      "url": "https://www.patogupirkti.lt/knyga/svetimsale-ix-dalis-pasakyk-bitems-kad-manes-nebera.html"
+    },
+    {
+      "author": "Onorė de Balzakas (Honore de Balzac)",
+      "categories": [
+        "Klasika. Užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "12.87",
+      "price_original": "18.39",
+      "properties": {
+        "magento_id": "9340",
+        "variant_raw": "Alma littera, 2025, 14x21, kieti viršeliai, 296"
+      },
+      "title": "Šagrenės oda",
+      "url": "https://www.patogupirkti.lt/knyga/sagrenes-oda.html"
+    },
+    {
+      "author": "C. W. Gortner",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "14.12",
+      "price_original": "19.43",
+      "properties": {
+        "magento_id": "50364",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 480"
+      },
+      "title": "Panelė Chanel. Nepakartojamas Coco Chanel gyvenimas",
+      "url": "https://www.patogupirkti.lt/knyga/panele-chanel-nepakartojamas-coco-chanel-gyvenimas.html"
+    },
+    {
+      "author": "Gianluca Gotto",
+      "categories": [
+        "Užsienio tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "17.98",
+      "price_original": "23.99",
+      "properties": {
+        "magento_id": "45923",
+        "variant_raw": "Lietuvos rašytojų sąjungos leidykla, 2026, 15x22, minkšti viršeliai, 488"
+      },
+      "title": "Tikrai nutiks kas nors nuostabaus",
+      "url": "https://www.patogupirkti.lt/knyga/tikrai-nutiks-kas-nors-nuostabaus.html"
+    },
+    {
+      "author": "Kristin Hannah",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "13.79",
+      "price_original": "18.89",
+      "properties": {
+        "magento_id": "22522",
+        "variant_raw": "Jotema, 2024, 15x21, kieti viršeliai, 496"
+      },
+      "title": "Lakštingala",
+      "url": "https://www.patogupirkti.lt/knyga/lakstingala.html"
+    },
+    {
+      "author": "Ayn Rand",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "19.79",
+      "price_original": "21.99",
+      "properties": {
+        "magento_id": "34236",
+        "variant_raw": "Lapas, 2022, 15x21, kieti viršeliai, 782"
+      },
+      "title": "Šaltinis",
+      "url": "https://www.patogupirkti.lt/knyga/saltinis.html"
+    },
+    {
+      "author": "David Markson",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "13.34",
+      "price_original": "17.79",
+      "properties": {
+        "magento_id": "62558",
+        "variant_raw": "Rara, 2026, 14x21, minkšti viršeliai, 240"
+      },
+      "title": "Wittgensteino meilužė",
+      "url": "https://www.patogupirkti.lt/knyga/wittgensteino-meiluze.html"
+    },
+    {
+      "author": "Harper Lee",
+      "categories": [
+        "Klasika. Užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "10.03",
+      "price_original": "16.99",
+      "properties": {
+        "magento_id": "48761",
+        "variant_raw": "Jotema, 2023, 15x22, kieti viršeliai, 400"
+      },
+      "title": "Nežudyk strazdo giesmininko",
+      "url": "https://www.patogupirkti.lt/knyga/nezudyk-strazdo-giesmininko-munken-premium.html"
+    },
+    {
+      "author": "Gianluca Gotto",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "20.47",
+      "price_original": "27.49",
+      "properties": {
+        "magento_id": "61633",
+        "variant_raw": "Lietuvos rašytojų sąjungos leidykla, 2026, 14x21, minkšti viršeliai, 444"
+      },
+      "title": "Pura vida, arba Tikras gyvenimas",
+      "url": "https://www.patogupirkti.lt/knyga/pura-vida-arba-tikras-gyvenimas.html"
+    },
+    {
+      "author": "Jane McLelland",
+      "categories": [
+        "Užsienio tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "13.81",
+      "price_original": "15.34",
+      "properties": {
+        "magento_id": "34134",
+        "variant_raw": "Vitae litera, 2020, 15x21, kieti viršeliai, 476"
+      },
+      "title": "Kaip priversti badauti vėžį… pačiam nebadaujant",
+      "url": "https://www.patogupirkti.lt/knyga/kaip-priversti-badauti-vezi-paciam-nebadaujant.html"
+    },
+    {
+      "author": "John Steinbeck",
+      "categories": [
+        "Klasika. Užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "10.77",
+      "price_original": "13.99",
+      "properties": {
+        "magento_id": "38914",
+        "variant_raw": "Jotema, 2021, 15x22, kieti viršeliai, 752"
+      },
+      "title": "Į Rytus nuo Edeno",
+      "url": "https://www.patogupirkti.lt/knyga/i-rytus-nuo-edeno.html"
+    },
+    {
+      "author": "Maggie O'Farrell",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "15.52",
+      "price_original": "20.69",
+      "properties": {
+        "magento_id": "37371",
+        "variant_raw": "Baltos lankos, 2026, 15x21, kieti viršeliai, 372"
+      },
+      "title": "Hamnetas",
+      "url": "https://www.patogupirkti.lt/knyga/hamnetas.html"
+    },
+    {
+      "author": "Kristin Hannah",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "13.70",
+      "price_original": "18.99",
+      "properties": {
+        "magento_id": "60314",
+        "variant_raw": "Jotema, 2025, 15x22, kieti viršeliai, 384"
+      },
+      "title": "Vasaros sala",
+      "url": "https://www.patogupirkti.lt/knyga/vasaros-sala.html"
+    },
+    {
+      "author": "Michailas Bulgakovas",
+      "categories": [
+        "Klasika. Užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "9.94",
+      "price_original": "12.99",
+      "properties": {
+        "magento_id": "26601",
+        "variant_raw": "Trigrama, 2017, 15x22, kieti viršeliai, 400"
+      },
+      "title": "Meistras ir Margarita",
+      "url": "https://www.patogupirkti.lt/knyga/meistras-ir-margarita.html"
+    },
+    {
+      "author": "Emily Bronte",
+      "categories": [
+        "Klasika. Užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "18.45",
+      "price_original": "24.49",
+      "properties": {
+        "magento_id": "6607",
+        "variant_raw": "Obuolys, 2026, 14x20, kieti viršeliai, 400"
+      },
+      "title": "Vėtrų kalnas",
+      "url": "https://www.patogupirkti.lt/knyga/vetru-kalnas.html"
+    },
+    {
+      "author": "L. R. Salgado",
+      "categories": [
+        "Publicistika"
+      ],
+      "in_stock": true,
+      "price": "15.45",
+      "price_original": "22.99",
+      "properties": {
+        "magento_id": "59314",
+        "variant_raw": "Obuolys, 2025, 14x21, kieti viršeliai, 240"
+      },
+      "title": "Juodosios Vatikano paslaptys. Kas valdo paslaptis – tas kuria istoriją",
+      "url": "https://www.patogupirkti.lt/knyga/juodosios-vatikano-paslaptys-kas-valdo-paslaptis-tas-kuria-istorija.html"
+    },
+    {
+      "author": "Kate Storey",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "14.93",
+      "price_original": "20.79",
+      "properties": {
+        "magento_id": "62102",
+        "variant_raw": "Tyto alba, 2026, 15x22, kieti viršeliai, 288"
+      },
+      "title": "Širdies puslapiai",
+      "url": "https://www.patogupirkti.lt/knyga/sirdies-puslapiai.html"
+    },
+    {
+      "author": "Percival Everett",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "15.33",
+      "price_original": "21.29",
+      "properties": {
+        "magento_id": "61725",
+        "variant_raw": "Jotema, 2026, 15x22, kieti viršeliai, 320"
+      },
+      "title": "Džeimsas",
+      "url": "https://www.patogupirkti.lt/knyga/dzeimsas.html"
+    },
+    {
+      "author": "Hanya Yanagihara",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "17.00",
+      "price_original": "18.89",
+      "properties": {
+        "magento_id": "61781",
+        "variant_raw": "Baltos lankos, 2025, 17x24, kieti viršeliai, 624"
+      },
+      "title": "Į rojų (knyga su defektais)",
+      "url": "https://www.patogupirkti.lt/knyga/i-roju-kopija.html"
+    },
+    {
+      "author": "Carley Fortune",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "11.23",
+      "price_original": "21.99",
+      "properties": {
+        "magento_id": "46913",
+        "variant_raw": "Alma littera, 2023, 14x21, minkšti viršeliai, 336"
+      },
+      "title": "Vasara po vasaros",
+      "url": "https://www.patogupirkti.lt/knyga/vasara-po-vasaros.html"
+    },
+    {
+      "author": "Fredrik Backman",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "11.19",
+      "price_original": "15.99",
+      "properties": {
+        "magento_id": "60505",
+        "variant_raw": "Alma littera, 2026, 14x21, kieti viršeliai, 128"
+      },
+      "title": "Svarbiausias gyvenimo sandoris ir kitos istorijos",
+      "url": "https://www.patogupirkti.lt/knyga/svarbiausias-gyvenimo-sandoris-ir-kitos-istorijos.html"
+    },
+    {
+      "author": "Fredrik Backman",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "10.93",
+      "price_original": "14.19",
+      "properties": {
+        "magento_id": "17368",
+        "variant_raw": "Alma littera, 2021, 14x24, kieti viršeliai, 328"
+      },
+      "title": "Gyveno kartą Uvė",
+      "url": "https://www.patogupirkti.lt/knyga/gyveno-karta-uve.html"
+    },
+    {
+      "author": "Tania Pjankova",
+      "categories": [
+        "Šiuolaikinė užsienio literatūra"
+      ],
+      "in_stock": true,
+      "price": "15.82",
+      "price_original": "23.62",
+      "properties": {
+        "magento_id": "54988",
+        "variant_raw": "Alma littera, 2024, 14x21, kieti viršeliai, 304"
+      },
+      "title": "Raudonųjų skruzdžių amžius",
+      "url": "https://www.patogupirkti.lt/knyga/raudonuju-skruzdziu-amzius.html"
+    },
+    {
+      "author": "Waris Dirie, Miller Cathleen",
+      "categories": [
+        "Užsienio tikros istorijos"
+      ],
+      "in_stock": true,
+      "price": "10.10",
+      "price_original": "13.47",
+      "properties": {
+        "magento_id": "13123",
+        "variant_raw": "Alma littera, 2024, 14x24, kieti viršeliai, 266"
+      },
+      "title": "Dykumų gėlė",
+      "url": "https://www.patogupirkti.lt/knyga/dykumu-gele.html"
+    }
+  ],
+  "total": null
+}

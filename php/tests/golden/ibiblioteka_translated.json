@@ -1,0 +1,66 @@
+{
+  "_emit_as": "book",
+  "_part_urls": [],
+  "audience": "Suaugusiesiems, bendra",
+  "authors": [
+    {
+      "libis_code": "LNB:DanB;=Bl",
+      "name": "León, Borja de",
+      "position": 0,
+      "role": "compiler"
+    },
+    {
+      "libis_code": "LNB:CgWX;=Bv",
+      "name": "Karpauskaitė, Gabija",
+      "position": 0,
+      "role": "translator"
+    },
+    {
+      "libis_code": "LNB:DanE;=Bo",
+      "name": "Kriščiūnas, Lukas",
+      "position": 1,
+      "role": "translator"
+    }
+  ],
+  "book_score": 5,
+  "book_score_reasons": [
+    {
+      "reason": "ibiblioteka_national_library"
+    }
+  ],
+  "cover_url": "https://ibiblioteka.lt/bibliographic/record-attachments/442619172/attachments/get/libis-bi/202502/2C/F6/2CF684B6FEA7E7E97BD9911894E99142B36195E16ADF0DD2A8FE8B076BE40541.jpg",
+  "data_source": "ibiblioteka",
+  "description": null,
+  "dimensions": "21 cm",
+  "duration": null,
+  "format": "PRINTED",
+  "is_book_product": true,
+  "isbns": [
+    {
+      "isbn": "978-9955-717-09-6",
+      "type": "isbn13"
+    }
+  ],
+  "language": null,
+  "libis_code": "LIBIS000000411913",
+  "libis_rating": null,
+  "libis_review_count": null,
+  "pages": 122,
+  "publisher": "Kultūros vystymo ir švietimo viešoji įstaiga",
+  "release_place": "Vilnius [i.e. Tadarava, Kaišiadorių rajonas]",
+  "series": null,
+  "subjects": [
+    "Dvasinis gyvenimas — Krikščionybė",
+    "Pašaukimas"
+  ],
+  "title": "Didžios meilės troškimas",
+  "title_full": "Didžios meilės troškimas : apie asmeninio gyvenimo pašaukimo atpažinimą, nes Dievas turi planą kiekvienam iš mūsų / sudarė Borja de León ; iš anglų kalbos vertė Gabija Karpauskaitė ir Lukas Kriščiūnas",
+  "translated_from": null,
+  "type": "book",
+  "udc_codes": [
+    "27-46",
+    "27-584"
+  ],
+  "upcoming_release": false,
+  "year": 2024
+}

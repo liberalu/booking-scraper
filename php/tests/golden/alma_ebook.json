@@ -1,0 +1,56 @@
+{
+  "author": "Azumi Uchitani",
+  "book_score": 7,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [],
+  "cover_type": "Kietas",
+  "description": "Japonų manifestavimo menas SENOVĖS JAPONŲ IŠMINTIS ŠIUOLAIKINIAM GYVENIMUIGražiai iliustruotas vadovas apie senovės japonų meną manifestuoti ir švęsti iš anksto. Jame rasite praktinių patarimų, kaip sulėtinti tempą, prisiderinti prie visatos ritmo ir pasiekti savo tikslus.Senovės tradicijomis gri...",
+  "duration": null,
+  "format": "ebook",
+  "image_url": "https://almalittera.lt/cdn/shop/files/69b2aa0d1ca6c.jpg?v=1777924203",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786090170694",
+  "narrator": null,
+  "pages": 208,
+  "planned_availability_date": null,
+  "price": "14.32",
+  "price_original": null,
+  "publisher": null,
+  "rating": null,
+  "review_count": null,
+  "schema_types": [
+    "BreadcrumbList",
+    "Product"
+  ],
+  "sku": "000000000011004976",
+  "title": "Yoshuku. E.knyga",
+  "translator": "Indrė Poliuškevičienė",
+  "type": "ebook",
+  "year": 2026
+}

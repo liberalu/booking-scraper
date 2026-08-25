@@ -1,0 +1,61 @@
+{
+  "author": "Colleen Hoover",
+  "book_score": 7,
+  "book_score_reasons": [
+    {
+      "key": "book_categories",
+      "points": 0
+    },
+    {
+      "key": "valid_isbn",
+      "points": 3
+    },
+    {
+      "key": "author_present",
+      "points": 2
+    },
+    {
+      "key": "book_metadata",
+      "points": 2
+    },
+    {
+      "key": "game_toy_title",
+      "points": 0
+    },
+    {
+      "key": "non_book_categories",
+      "points": 0
+    }
+  ],
+  "categories": [
+    "Meilės romanai",
+    "Jausmų romanai",
+    "Širdies kauleliai"
+  ],
+  "cover_type": "Minkštas",
+  "description": "<p><i><b>„Prieš ropšdamasi į lovą, ištraukiu Motiną Teresę iš kelioninio plastikinio maišelio ir pastatau ant komodos. <...> Reikia, kad namų dalelė primintų, jog šis kambarys, šie namai ir šis miestas – ne mano gyvenimas.“</b></i></p><p>Nuo pat mažų dienų Bėja mokėsi išgyventi net atšiauriausiomis sąlygomis. Priklausomybių kankinama motina, vos kartą per metus matomas tėvas, nuolatinis maisto ir rūpesčio stygius išmokė nepasitikėti niekuo – tik pačia savimi. Tačiau kai iki kruvinu prakaitu pelnytos išsvajotos laisvės lieka vos žingsnis, namuose įvyksta tragedija. Bėjai nelieka nieko kito – tik kreiptis pagalbos į tėvą.</p><p>Tėvo namai – nepažintas pasaulis: čia niekada netrūksta maisto, pro miegamojo langą atsiveria beribis vandenynas ir pasakiški saulėtekiai, o netikra sesuo Sara, atrodo, visą laiką mėgaujasi nerūpestingomis dienomis pajūryje su draugais. Bėja nedrąsiai įsitraukia į lengvabūdišką vasaros ritmą, o jos atlėgstanti širdis ima linkti prie dailaus kaimyno Samsono. Tačiau tai tik trumpas, neįpareigojantis vasaros romanas – atėjus rudeniui viskas vėl stos į savas vėžes. Bent jau taip atrodo Bėjai.</p><p>***</p><p>„The New York Times“ bestselerių nr. 1 autorė <b>Colleen Hoover</b> (Kolyn Hūver, gim. 1979) iš pradžių dirbo socialine darbuotoja, vėliau pasuko rašytojos keliu ir sulaukė didelės sėkmės visame pasaulyje. Autorės romanai jau subūrė milžinišką gerbėjų ratą ir Lietuvoje. „Širdies kauleliai“ – jautri meilės ir savęs paieškų istorija.</p><br>",
+  "duration": null,
+  "format": "paperback",
+  "image_url": "https://vaga.lt/image/catalog/data/coveriai/1005584.jpg",
+  "in_stock": true,
+  "is_book_product": true,
+  "isbn": "9786090901595",
+  "narrator": null,
+  "pages": 336,
+  "planned_availability_date": null,
+  "price": "16.32",
+  "price_original": "24.39",
+  "publisher": "Baltos lankos",
+  "rating": null,
+  "review_count": 0,
+  "schema_types": [
+    "Book",
+    "BreadcrumbList",
+    "Product"
+  ],
+  "sku": "1005584",
+  "title": "Širdies kauleliai",
+  "translator": null,
+  "type": "book",
+  "year": 2025
+}

@@ -1,0 +1,68 @@
+{
+  "_emit_as": "book",
+  "_part_urls": [],
+  "audience": "Suaugusiesiems, bendra",
+  "authors": [
+    {
+      "libis_code": "LNB:Hd0;=BC",
+      "name": "Mildažytė, Edita",
+      "position": 0,
+      "role": "author"
+    },
+    {
+      "libis_code": "LNB:Hd0;=BC",
+      "name": "Mildažytė, Edita",
+      "position": 0,
+      "role": "narrator"
+    },
+    {
+      "libis_code": "LNB:9H+;=uY",
+      "name": "Ražkovskytė, Jūratė",
+      "position": 0,
+      "role": "compiler"
+    }
+  ],
+  "book_score": 5,
+  "book_score_reasons": [
+    {
+      "reason": "ibiblioteka_national_library"
+    }
+  ],
+  "cover_url": "https://ibiblioteka.lt/bibliographic/record-attachments/469801177/attachments/get/libis-bi/202603/4A/DF/4ADF54473533B128154CC4499EC6E9310A8F01D7AA048362E6DC2ADC199E8220.jpg",
+  "data_source": "ibiblioteka",
+  "description": null,
+  "dimensions": null,
+  "duration": "9 val., 25 min., 1 sek.",
+  "format": "ELECTRONIC",
+  "is_book_product": true,
+  "isbns": [
+    {
+      "isbn": "978-609-491-262-7",
+      "type": "isbn13"
+    }
+  ],
+  "language": null,
+  "libis_code": "LIBIS000000983955",
+  "libis_rating": 4.0,
+  "libis_review_count": 2,
+  "pages": null,
+  "publisher": "[AMK]",
+  "release_place": "[Vilnius]",
+  "series": null,
+  "subjects": [
+    "Autobiografinė literatūra, lietuvių",
+    "Garsinės knygos",
+    "Mildažytė, Edita 1966–",
+    "Žurnalistės — Lietuva — Biografijos"
+  ],
+  "title": "Pelynų medus",
+  "title_full": "Pelynų medus : mano istorija / Edita Mildažytė ; užrašė Jūratė Ražkovskytė; įgarsino autorė Edita Mildažytė",
+  "translated_from": null,
+  "type": "audio",
+  "udc_codes": [
+    "821.172-94",
+    "070-055.2(474.5)(092)"
+  ],
+  "upcoming_release": false,
+  "year": 2026
+}
