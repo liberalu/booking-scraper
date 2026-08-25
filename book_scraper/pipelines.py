@@ -78,6 +78,16 @@ def _validate_year(adapter: ItemAdapter) -> None:
     adapter["year"] = None
 
 
+def _as_int(value: object) -> int | None:
+    """int(value) or None — for comparing a parsed field against its raw form."""
+    if isinstance(value, int | float | str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _is_valid_isbn(raw: str) -> bool:
     return is_valid_isbn(raw)
 
@@ -287,7 +297,9 @@ class ValidationPipeline:
             year_after = adapter.get("year")
             if year_before is not None and year_after is None:
                 self._warn("invalid_year", "year", url, str(year_before))
-            elif year_before is not None and year_before != year_after:
+            # Compare numerically: _validate_year turns "2024" into 2024, and
+            # comparing by identity read that as a year/pages swap.
+            elif year_before is not None and _as_int(year_before) != year_after:
                 self._warn("year_pages_swap", "year", url, str(year_before))
 
             isbn = adapter.get("isbn")

@@ -707,11 +707,14 @@ docstring. Both now read `titleLt` first and fall back to the old keys, which is
 what the checked-in fixtures still carry. Measured on the three
 `make canonical-diff` records: 0 authors before, 5 after, on both sides.
 
-**`year_pages_swap` fires on a year supplied as a string.** The issue is
-decided by `year_before != year_after`, and the normalisation turns `"2024"`
-into `2024`, so a string year reads as a swap. Latent today — all 14 production
-occurrences carry a genuine page count (20, 50, 320, 784…) — and reproduced on
-purpose so the port cannot drift. The upstream fix is to compare numerically.
+**`year_pages_swap` fired on a year supplied as a string — fixed in both
+stacks.** The issue was decided by `year_before != year_after`, and the
+normalisation turns `"2024"` into `2024`, so a string year read as a swap.
+Latent rather than active — all 14 production occurrences carry a genuine page
+count (20, 50, 320, 784…) — but a shop changing its parser to yield strings
+would have flooded the inbox. Both sides now compare numerically;
+`make validator-diff`'s "year as string" case went from `year_pages_swap` to
+no issues on both, and the genuine swap case still fires.
 
 ## Two bugs the JSON strategies surfaced
 

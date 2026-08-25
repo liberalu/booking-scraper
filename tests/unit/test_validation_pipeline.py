@@ -179,6 +179,18 @@ def test_year_pages_swap(pipeline):
     assert adapter["properties"]["pages"] == 216
 
 
+def test_year_as_string_is_not_a_swap(pipeline, stats):
+    # _validate_year turns "2024" into 2024; comparing by identity read that
+    # as a year/pages swap and filed an issue for a perfectly good year.
+    item = ShopBookItem(
+        url="https://vaga.lt/book", shop_name="vaga", title="Book", year="2024"
+    )
+    result = pipeline.process_item(item)
+
+    assert ItemAdapter(result)["year"] == 2024
+    assert "validation/year_pages_swap" not in stats.values
+
+
 def test_year_pages_no_swap_when_pages_not_year(pipeline):
     item = ShopBookItem(
         url="https://vaga.lt/book",

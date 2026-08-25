@@ -157,8 +157,8 @@ final class ItemValidator
      *
      * Split exactly as upstream splits it: the normalisation is silent, and
      * the issue is decided afterwards by comparing the value before and
-     * after. That comparison is an identity check, which is where a latent
-     * upstream bug lives — see yearIssue().
+     * after. That comparison is numeric — see yearIssue() for why it cannot be
+     * an identity check.
      *
      * @param  array<string, mixed>  $parsed
      * @return array<string, mixed>
@@ -181,14 +181,12 @@ final class ItemValidator
      * `year_pages_swap` when the value changed, `invalid_year` when it was
      * cleared.
      *
-     * The change test is identity, not numeric equality, so a year supplied
-     * as the STRING "2024" — normalised to the int 2024 — reads as a swap and
-     * reports `year_pages_swap` with raw_value 2024. That is wrong, and it is
-     * reproduced on purpose: every parser returns an int today (all 14
-     * production occurrences of this issue carry a genuine page count: 20,
-     * 50, 320, 784…), so the path is latent, and silently "fixing" it here
-     * would make the port diverge from the behaviour it is measured against.
-     * The upstream fix is to compare numerically.
+     * The change test is numeric, not identity. It used to be identity in both
+     * stacks, so a year supplied as the STRING "2024" — normalised to the int
+     * 2024 — read as a swap and reported `year_pages_swap` with raw_value
+     * 2024. Latent rather than active (all 14 production occurrences carry a
+     * genuine page count: 20, 50, 320, 784…), but a shop changing its parser
+     * to yield strings would have flooded the inbox. Fixed in both stacks.
      */
     private static function yearIssue(string $url, mixed $before, mixed $after): void
     {
@@ -197,7 +195,7 @@ final class ItemValidator
 
             return;
         }
-        if ($before !== $after) {
+        if (!is_numeric($before) || (int) $before !== $after) {
             IssueBuffer::add('year_pages_swap', 'year', $url, (string) $before);
         }
     }
