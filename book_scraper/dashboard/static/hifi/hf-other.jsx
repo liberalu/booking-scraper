@@ -291,7 +291,6 @@ function HFIssues({ nav, goto }) {
     { key:'non_book_has_isbn',   sev:'warning',  desc:'Type=non_book but has a valid ISBN' },
     { key:'unmatched_has_isbn',  sev:'warning',  desc:'Has ISBN but not matched to canonical book' },
     { key:'match_isbn_drift',    sev:'warning',  desc:'Matched book\'s ISBN differs from shop_book ISBN' },
-    { key:'sku_duplicate',       sev:'warning',  desc:'Same SKU, two rows in same shop' },
     // info
     { key:'book_no_metadata',       sev:'info', desc:'type=book but no ISBN, author, or year' },
     { key:'no_price_history',       sev:'info', desc:'Active but zero rows in prices table' },

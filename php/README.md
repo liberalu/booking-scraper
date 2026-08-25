@@ -337,7 +337,7 @@ remembers the DSN `boot()` used and that value is authoritative.
 
 ## Validator + match
 
-`Services\ValidateService` is the port of `services/validate.py` — 21 issue
+`Services\ValidateService` is the port of `services/validate.py` — 20 issue
 types across nine check groups. The SQL is carried over verbatim; only the
 control flow and the Python post-filters are rewritten.
 `Services\MatchService` covers match step 1 (ISBN linkage), which the Python
@@ -363,7 +363,7 @@ synthetic rows built for them (`tools/synthesize_validate_cases.py`).
 | pegasas | 17,247 | 13,961 | identical |
 | synthetic | 15 | 14 | identical |
 
-**All 21 issue types covered**, and the auto-heal deactivation counts match
+**All 20 issue types covered**, and the auto-heal deactivation counts match
 too (6,160 on vaga, 101 on patogupirkti, 3,461 on pegasas). The synthetic
 set deliberately includes suppression cases — a puzzle and a DVD that carry
 real ISBNs, and a plain EAN — so it proves the noise filters agree, not just
@@ -706,6 +706,19 @@ record. Same class of breakage as the endpoint move noted in that module's
 docstring. Both now read `titleLt` first and fall back to the old keys, which is
 what the checked-in fixtures still carry. Measured on the three
 `make canonical-diff` records: 0 authors before, 5 after, on both sides.
+
+**`sku_duplicate` looked for a state the schema forbids — deleted from both
+stacks.** Both sides of the pair are scoped to one shop by the mandatory
+filter, and `uq_shop_books_shop_sku` is unique on `(shop_id, sku)`, so the
+check could never fire: zero recorded in production, ever, against 7,156
+`isbn_duplicate` and 6,272 `title_author_duplicate`. A cross-shop SKU
+collision would be meaningless anyway — SKUs are shop-local.
+
+It read as alive because the *test* database lacked that index: it is built
+from `Base.metadata`, and the model never declared what migration
+`f6a2b3c4d5e7` created. So an integration test inserted the pair, the check
+fired, and the dead code looked covered. The index is now declared on the
+model, which is the fix for the drift as well as for the check.
 
 **`year_pages_swap` fired on a year supplied as a string — fixed in both
 stacks.** The issue was decided by `year_before != year_after`, and the

@@ -3,11 +3,10 @@
 
     PYTHONPATH=. uv run python php/tools/synthesize_validate_cases.py
 
-Six of the 21 issue types never fired across vaga, patogupirkti or pegasas:
-format_is_dimensions, non_book_has_isbn, non_product_active, orphan_no_url,
-sku_duplicate and unreachable_active. Without these the parity check simply
-doesn't exercise those code paths, so this builds a synthetic shop that hits
-each one — including the suppression cases, which matter as much as the
+Five of the 20 issue types never fired across vaga, patogupirkti or pegasas:
+format_is_dimensions, non_book_has_isbn, non_product_active, orphan_no_url and
+unreachable_active. Without these the parity check simply doesn't exercise
+those code paths, so this builds a synthetic shop that hits each one — including the suppression cases, which matter as much as the
 positives.
 
 Test database only. Creates its own shop so it never perturbs a copied one.
@@ -88,13 +87,6 @@ def main() -> int:
         }),
         # Not flagged: plain EAN on a non-book is just a GTIN.
         ("nonbook-ean", {"type": "non_book", "isbn": "4001234567890"}),
-
-        # sku_duplicate: two active rows sharing a SKU.
-        ("sku-dup-a", {"sku": "SHARED-SKU"}),
-        ("sku-dup-b", {"sku": "SHARED-SKU"}),
-        # Must not fire: the sibling is inactive.
-        ("sku-dup-inactive-a", {"sku": "HALF-SKU"}),
-        ("sku-dup-inactive-b", {"sku": "HALF-SKU", "is_active": False}),
 
         # orphan_no_url: no discovered_urls row at all.
         ("orphan", {"_no_url": True}),
@@ -181,7 +173,7 @@ def main() -> int:
     engine.dispose()
     print(f"synthesised {len(books)} rows on shop '{SHOP}' (id {sid})")
     print("  targets: format_is_dimensions, non_book_has_isbn, non_product_active,")
-    print("           orphan_no_url, sku_duplicate, unreachable_active (+ suppressions)")
+    print("           orphan_no_url, unreachable_active (+ suppressions)")
     return 0
 
 

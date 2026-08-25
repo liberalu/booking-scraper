@@ -53,11 +53,12 @@ final class ValidateServiceGatesTest extends TestCase
         // — the catalogue no longer contains them.
         //
         // Deliberately NOT a duplicate SKU: `uq_shop_books_shop_sku` is a
-        // unique index on (shop_id, sku), and the sku_duplicate check
-        // constrains both sides of the pair to one shop, so the state it looks
-        // for cannot exist. Production has recorded zero of them. An earlier
-        // version of this fixture inserted the pair anyway and only passed
-        // because the test database's schema had drifted from the migrations.
+        // unique index on (shop_id, sku), so that state cannot exist. An
+        // earlier version of this fixture inserted the pair anyway and only
+        // passed because the test database's schema had drifted from the
+        // migrations. Both are fixed now: the dead sku_duplicate check is
+        // gone, and the index is declared on the model the test schema is
+        // built from.
         foreach ([1, 2] as $n) {
             $id = DB::table('shop_books')->insertGetId([
                 'shop_id' => $this->shopId,

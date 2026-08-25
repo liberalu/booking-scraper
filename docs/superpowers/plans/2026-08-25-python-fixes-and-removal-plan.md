@@ -23,7 +23,7 @@ concurrency, then what users see, then noise.
 | 4 | ✅ **Fixed** — two processes could hold the same exclusive scan lock | `db/repo.py` | `abs(hash(phase))` → `zlib.crc32` via `scan_lock_key()`, matching PHP's `crc32()` | keys 975101118 vs 136925746 for one phase; now byte-identical across processes and stacks |
 | 5 | ✅ **Fixed** — pagination showed duplicates and hid rows | `queries.py` (six sites, not the three first counted) | append an id tiebreaker in the primary sort's direction | 339 books share one `created_at`; page 1 ∩ page 2 was 13 of 50, now 0 in both stacks; `api_diff.py`'s `ENVELOPE_ONLY` is now empty |
 | 6 | ✅ **Fixed** — `year_pages_swap` fired on a year given as a string | `pipelines.py`, `php/src/Crawler/ItemValidator.php` | compare numerically, not by identity, on both sides | `make validator-diff`'s "year as string" case: `year_pages_swap` → no issues, both stacks |
-| 7 | `sku_duplicate` looks for a state the schema forbids | `services/validate.py:468` | delete it, plus its `ISSUE_KEYS` / `ISSUE_DESCRIPTIONS` entries | 0 recorded ever, vs 7,156 `isbn_duplicate` |
+| 7 | ✅ **Fixed** — `sku_duplicate` looked for a state the schema forbids | `services/validate.py`, `db/models.py` | deleted, with its registry entries; the missing partial unique index that made it look alive is now declared on the model | 0 recorded ever, vs 7,156 `isbn_duplicate`; `make validate-diff` still identical (13,339 issues) |
 | 8 | Descriptions truncate at a mixed line break (markdownify) | `pipelines.py` | normalise `<br/>` → `<br>` before conversion | `<p>One<br>Two<br/>Three</p>` loses "Three" |
 
 **Every fix moves the reference implementation.** The PHP port is measured

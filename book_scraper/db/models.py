@@ -152,7 +152,20 @@ class ShopBook(Base):
         DateTime(timezone=True), default=datetime.utcnow
     )
 
-    __table_args__ = (UniqueConstraint("shop_id", "url", name="uq_shop_book_shop_url"),)
+    __table_args__ = (
+        UniqueConstraint("shop_id", "url", name="uq_shop_book_shop_url"),
+        # Mirrors migration f6a2b3c4d5e7. Declared here because the test
+        # database is built from this metadata, not from the migrations: while
+        # it was missing, tests could insert a state production forbids, and a
+        # validator looking for that state read as alive when it was dead.
+        Index(
+            "uq_shop_books_shop_sku",
+            "shop_id",
+            "sku",
+            unique=True,
+            postgresql_where=sa_text("sku IS NOT NULL"),
+        ),
+    )
 
     shop: Mapped["Shop"] = relationship(back_populates="shop_books")
     prices: Mapped[list["Price"]] = relationship(back_populates="shop_book")

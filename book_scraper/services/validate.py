@@ -1,7 +1,7 @@
 """Validate service: runs data-quality checks over shop_books rows.
 
 Checks implemented here (plans 02 + 03):
-  - Structural duplicates: isbn_duplicate, title_author_duplicate, sku_duplicate
+  - Structural duplicates: isbn_duplicate, title_author_duplicate
   - Slug-title mismatch: slug_title_mismatch
   - Data completeness: active_no_price, in_stock_no_price, book_no_metadata,
       no_price_history
@@ -323,7 +323,6 @@ ISSUE_KEYS: frozenset[str] = frozenset(
         "non_product_active",
         "orphan_no_url",
         "price_zero",
-        "sku_duplicate",
         "slug_diacritic_loss",
         "slug_title_mismatch",
         "stale_active",
@@ -462,34 +461,6 @@ class ValidateService:
                     "field": "title_author",
                     "issue": "title_author_duplicate",
                     "raw_value": f"{row.title} / {row.author}",
-                    "shop_book_id": row.id,
-                }
-            )
-
-        # SKU duplicates (non-null). is_active filter — see ISBN block above.
-        sku_rows = self._session.execute(
-            text(
-                "SELECT sb.id, sb.url, sb.sku "
-                "FROM shop_books sb "
-                f"WHERE {_live_books_where('sb')} "
-                "  AND sb.sku IS NOT NULL "
-                "  AND EXISTS ("
-                "      SELECT 1 FROM shop_books sb2 "
-                f"      WHERE {_live_books_where('sb2')} "
-                "        AND sb2.sku = sb.sku "
-                "        AND sb2.id != sb.id"
-                "  )"
-            ),
-            {"shop_id": shop_id},
-        ).all()
-        for row in sku_rows:
-            results.append(
-                {
-                    "scrape_run_id": run_id,
-                    "url": row.url,
-                    "field": "sku",
-                    "issue": "sku_duplicate",
-                    "raw_value": row.sku,
                     "shop_book_id": row.id,
                 }
             )

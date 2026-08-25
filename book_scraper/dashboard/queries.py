@@ -170,10 +170,6 @@ ISSUE_DESCRIPTIONS: dict[str, str] = {
         "A URL classified as a product page but the shop book at that URL is classified as"
         " non-book. The product exists but is not a book — review classification."
     ),
-    "sku_duplicate": (
-        "Two shop books share the same shop SKU. SKUs should be unique identifiers —"
-        " one entry is likely stale or mislabelled."
-    ),
     "slug_title_mismatch": (
         "The URL slug and the scraped title diverge significantly. The parser may be"
         " picking up a wrong title element, or the shop renamed the product without"
@@ -244,7 +240,6 @@ ISSUE_SEVERITY: dict[str, str] = {
     "orphan_no_url": "info",
     "price_zero": "critical",
     "product_url_non_book": "info",
-    "sku_duplicate": "warning",
     "slug_diacritic_loss": "info",
     "slug_title_mismatch": "info",
     "stale_active": "warning",

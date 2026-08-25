@@ -197,37 +197,6 @@ def test_title_author_duplicate_flags_both_rows(db_session):
     assert {i.shop_book_id for i in issues} == {sb1.id, sb2.id}
 
 
-@pytest.mark.integration
-def test_sku_duplicate_flags_both_rows(db_session):
-    shop = _make_shop(db_session, "c")
-    run = _make_run(db_session, shop.id)
-
-    sb1 = ShopBook(
-        shop_id=shop.id, url="https://testshopc.lt/p/1", title="SKU1", sku="SKU-001"
-    )
-    sb2 = ShopBook(
-        shop_id=shop.id, url="https://testshopc.lt/p/2", title="SKU2", sku="SKU-001"
-    )
-    db_session.add_all([sb1, sb2])
-    db_session.commit()
-
-    ValidateService(db_session).run(shop.id, run.id)
-    db_session.commit()
-
-    issues = (
-        db_session.execute(
-            select(ValidationIssue).where(
-                ValidationIssue.shop_book_id.in_([sb1.id, sb2.id]),
-                ValidationIssue.issue == "sku_duplicate",
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert len(issues) == 2
-    assert {i.shop_book_id for i in issues} == {sb1.id, sb2.id}
-
-
 # ---------------------------------------------------------------------------
 # Slug-title mismatch check
 # ---------------------------------------------------------------------------
@@ -901,14 +870,16 @@ def test_no_validator_fires_on_a_fully_inactive_shop(db_session):
     run = _make_run(db_session, shop.id)
     long_ago = datetime.now(UTC) - timedelta(days=4 * VALIDATE_STALE_CADENCE_DAYS)
 
-    # Duplicate ISBN + title/author + SKU pair, both delisted.
+    # Duplicate ISBN + title/author pair, both delisted. NOT a duplicate SKU:
+    # uq_shop_books_shop_sku forbids it, which is why sku_duplicate was dead
+    # code and is gone.
     dup_a = ShopBook(
         shop_id=shop.id,
         url="https://testshopinactive.lt/p/dup-a",
         title="Ta Pati Knyga",
         author="Jonas Jonaitis",
         isbn="9780000000123",
-        sku="SKU-DUP",
+        sku="SKU-DUP-A",
         is_active=False,
         last_seen_at=long_ago,
     )
@@ -918,7 +889,7 @@ def test_no_validator_fires_on_a_fully_inactive_shop(db_session):
         title="Ta Pati Knyga",
         author="Jonas Jonaitis",
         isbn="9780000000123",
-        sku="SKU-DUP",
+        sku="SKU-DUP-B",
         is_active=False,
         last_seen_at=long_ago,
     )

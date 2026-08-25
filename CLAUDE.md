@@ -153,7 +153,7 @@ Two regression guards keep this honest: a source-level check that `is_active = t
 
 New issue types must be added to `ISSUE_KEYS` (validate.py) **and** `ISSUE_DESCRIPTIONS` (dashboard/queries.py) — `run()` raises on an unregistered key, because a typo'd key makes `resolve_gone_issues` silently close the real backlog and open a bogus one.
 
-**Structural duplicate validators** (`isbn_duplicate`, `title_author_duplicate`, `sku_duplicate`) require `is_active = true` on **both** sides of the duplicate pair, not just the flagged book. Otherwise deactivated shop_books generate spurious duplicate issues against their still-active counterparts.
+**Structural duplicate validators** (`isbn_duplicate`, `title_author_duplicate`) require `is_active = true` on **both** sides of the duplicate pair, not just the flagged book. Otherwise deactivated shop_books generate spurious duplicate issues against their still-active counterparts. (`sku_duplicate` was deleted in 2026-08: `uq_shop_books_shop_sku` makes the state it looked for impossible, and it only looked alive because the model was missing that index so the test schema allowed it.)
 
 ### Per-shop runtime settings
 

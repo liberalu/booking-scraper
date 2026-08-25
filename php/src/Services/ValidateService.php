@@ -40,7 +40,6 @@ final class ValidateService
         'non_product_active',
         'orphan_no_url',
         'price_zero',
-        'sku_duplicate',
         'slug_diacritic_loss',
         'slug_title_mismatch',
         'stale_active',
@@ -168,20 +167,6 @@ final class ValidateService
                 $runId, $row->url, 'title_author', 'title_author_duplicate',
                 "{$row->title} / {$row->author}", $row->id
             );
-        }
-
-        foreach (DB::select(
-            'select sb.id, sb.url, sb.sku from shop_books sb
-             where ' . self::liveBooks('sb') . '
-               and sb.sku is not null
-               and exists (
-                   select 1 from shop_books sb2
-                   where ' . self::liveBooks('sb2') . '
-                     and sb2.sku = sb.sku and sb2.id != sb.id
-               )',
-            [$shopId, $shopId]
-        ) as $row) {
-            $results[] = self::issue($runId, $row->url, 'sku', 'sku_duplicate', $row->sku, $row->id);
         }
 
         return $results;
