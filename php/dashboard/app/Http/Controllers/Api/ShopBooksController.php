@@ -42,8 +42,10 @@ final class ShopBooksController
         $sortBy = (string) $request->query('sort_by', '');
         $column = in_array($sortBy, self::SORT_COLUMNS, true) ? $sortBy : 'last_seen_at';
         $direction = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
-        // Python uses nulls_last() in both directions.
+        // Python uses nulls_last() in both directions, plus an id tiebreaker
+        // in the same direction — the sort columns are not unique.
         $query->orderByRaw(sprintf('%s %s nulls last', $column, $direction));
+        $query->orderBy('shop_books.id', $direction);
 
         $books = $query->offset(($page - 1) * $perPage)->limit($perPage)->get();
 

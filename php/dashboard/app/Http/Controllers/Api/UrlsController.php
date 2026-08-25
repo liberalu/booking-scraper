@@ -91,6 +91,7 @@ final class UrlsController
         $column = self::SORT_COLUMNS[$sortBy] ?? self::SORT_COLUMNS['discovered'];
         $direction = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
         $query->orderByRaw("{$column} {$direction} nulls last");
+        $query->orderBy('discovered_urls.id', $direction);
 
         $urls = $query->offset(($page - 1) * $perPage)->limit($perPage)->get();
 

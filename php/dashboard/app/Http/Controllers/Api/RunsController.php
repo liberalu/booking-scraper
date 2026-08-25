@@ -283,7 +283,10 @@ final class RunsController
         $perPage = max(1, min((int) $request->query('per_page', 50), 100));
 
         if ($type === 'added') {
-            $query = ShopBook::with('shop')->where('created_run_id', $runId)->orderBy('title');
+            // id breaks ties: titles repeat, and without a tiebreaker a book
+            // can land on two pages while another never appears at all.
+            $query = ShopBook::with('shop')->where('created_run_id', $runId)
+                ->orderBy('title')->orderBy('id');
             $total = (clone $query)->count();
             $books = $query->offset(($page - 1) * $perPage)->limit($perPage)->get()
                 ->map(fn (ShopBook $b): array => BookPresenter::toArray($b))
@@ -300,7 +303,7 @@ final class RunsController
             $query = ShopBook::with('shop')
                 ->joinSub($changed, 'c', 'c.shop_book_id', '=', 'shop_books.id')
                 ->select('shop_books.*', 'c.changed_fields')
-                ->orderBy('shop_books.title');
+                ->orderBy('shop_books.title')->orderBy('shop_books.id');
 
             $total = DB::query()->fromSub($changed, 'c')->count();
             $books = $query->offset(($page - 1) * $perPage)->limit($perPage)->get()

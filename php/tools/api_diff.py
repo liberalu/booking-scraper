@@ -110,38 +110,34 @@ ENDPOINTS = [
     "/api/urls?per_page=5&failing=true",
     "/api/urls?per_page=5&has_book=true&sort_by=book",
     "/api/urls?per_page=5&shop=pegasas&url_type=product",
-]
-
-# Sorting on a non-unique column has no tiebreaker in either stack, so the
-# rows returned for a page are genuinely arbitrary among ties (65 books
-# share price 0.00). Those queries can't be compared row-for-row; the
-# envelope still can. This is a pre-existing quirk of the Python endpoint,
-# not something the port introduced — see php/README.md.
-ENVELOPE_ONLY = {
-    "/api/shop-books?per_page=3&sort_by=price&sort_order=asc",
-    "/api/urls?per_page=5&sort_by=fails&sort_order=desc",
-    # /api/books orders by created_at with no tiebreaker, and 339 books
-    # share one created_at. Two identical PYTHON calls return different
-    # rows, and 13 books appear on both page 1 and page 2 — paginating the
-    # list shows duplicates and hides others. Pre-existing; see README.
+    # These used to be envelope-only: both stacks sorted on a non-unique
+    # column with no tiebreaker, so the rows on a page were arbitrary among
+    # ties (339 books share one created_at, 65 shop_books share price 0.00)
+    # and two identical calls to the SAME stack disagreed. Both now append an
+    # id tiebreaker, so they compare row for row.
     "/api/books?per_page=3",
     "/api/books?per_page=3&has_isbn=true",
     "/api/books?per_page=3&search=Tolkien",
-    # Same root cause. Row TOTALS match exactly (14,588 and 19,665), so the
-    # filters agree; only which rows land on a page differs, because the
-    # created_at ties have no tiebreaker.
     "/api/books?per_page=3&has_conflicts=true",
     "/api/books?per_page=3&shop_count_min=2",
-}
+    "/api/shop-books?per_page=3&sort_by=price&sort_order=asc",
+    "/api/urls?per_page=5&sort_by=fails&sort_order=desc",
+]
+
+# Endpoints compared on the envelope only. Empty since the id tiebreakers
+# landed: every paginated list now has a total order, so page contents are
+# reproducible and comparable row for row. Add an entry here only with a
+# reason that is not "the sort is unstable" — fix the sort instead.
+ENVELOPE_ONLY: set[str] = set()
 
 ENVELOPE_KEYS = ("total", "page", "per_page", "pages", "kpis", "stats", "counts", "kind")
 
 # CSV endpoints, compared as parsed rows rather than as JSON.
 #
-# Kept under the 500-row export page size on purpose: paging the export walks
-# an unstable sort, so a larger filter yields different rows per page in each
-# run — Python's own export duplicates 227 of ~6,300 rows. That is a
-# pre-existing bug (see README), not something this check should mask.
+# These stay under the 500-row export page size, which used to be load-bearing:
+# paging the export walked an unstable sort and Python's own export duplicated
+# 227 of ~6,300 rows. The list query now has an id tiebreaker, so a larger
+# filter would be safe to add here.
 CSV_ENDPOINTS = {
     "/api/books/export?search=Tolkien",
     "/api/books/export?year=1975",

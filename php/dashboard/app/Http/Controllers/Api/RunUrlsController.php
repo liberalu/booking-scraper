@@ -231,6 +231,7 @@ final class RunUrlsController
         $total = (clone $query)->count();
         $rows = $query
             ->orderByRaw('last_checked_at desc nulls last')
+            ->orderByDesc('id')
             ->offset(($page - 1) * $perPage)
             ->limit($perPage)
             ->get();

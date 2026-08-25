@@ -678,7 +678,9 @@ def get_run_books_added(
         session.query(ShopBook)
         .options(joinedload(ShopBook.shop))
         .filter(ShopBook.created_run_id == run_id)
-        .order_by(ShopBook.title)
+        # id breaks ties: titles repeat, and without a tiebreaker a book can
+        # land on two pages while another never appears at all.
+        .order_by(ShopBook.title, ShopBook.id.asc())
     )
     total = query.count()
     books = query.offset((page - 1) * per_page).limit(per_page).all()
@@ -708,7 +710,7 @@ def get_run_books_updated(
         session.query(ShopBook, subq.c.changed_fields)
         .options(joinedload(ShopBook.shop))
         .join(subq, ShopBook.id == subq.c.shop_book_id)
-        .order_by(ShopBook.title)
+        .order_by(ShopBook.title, ShopBook.id.asc())
     )
     total = query.count()
     rows = query.offset((page - 1) * per_page).limit(per_page).all()
@@ -1376,7 +1378,10 @@ def get_run_discovered_urls(
         query = query.filter(DiscoveredUrl.source == source)
     total = query.count()
     rows = (
-        query.order_by(DiscoveredUrl.last_checked_at.desc().nulls_last())
+        query.order_by(
+            DiscoveredUrl.last_checked_at.desc().nulls_last(),
+            DiscoveredUrl.id.desc(),
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
@@ -2253,9 +2258,9 @@ def get_shop_books_page(
     total = query.count()
     order_col = SORT_COLUMNS.get(sort_by, ShopBook.last_seen_at)
     if sort_order == "asc":
-        query = query.order_by(order_col.asc().nulls_last())
+        query = query.order_by(order_col.asc().nulls_last(), ShopBook.id.asc())
     else:
-        query = query.order_by(order_col.desc().nulls_last())
+        query = query.order_by(order_col.desc().nulls_last(), ShopBook.id.desc())
     shop_books = query.offset((page - 1) * per_page).limit(per_page).all()
     return shop_books, total
 
@@ -2744,9 +2749,9 @@ def get_discovered_urls_page(
     total = query.count()
     order_col = DISCOVERED_URL_SORT_COLUMNS.get(sort_by, DiscoveredUrl.first_seen_at)
     if sort_order == "asc":
-        query = query.order_by(order_col.asc().nulls_last())
+        query = query.order_by(order_col.asc().nulls_last(), DiscoveredUrl.id.asc())
     else:
-        query = query.order_by(order_col.desc().nulls_last())
+        query = query.order_by(order_col.desc().nulls_last(), DiscoveredUrl.id.desc())
     urls = query.offset((page - 1) * per_page).limit(per_page).all()
     return urls, total
 
@@ -2901,7 +2906,7 @@ def list_books(
 
     rows = (
         session.execute(
-            base.order_by(Book.created_at.desc())
+            base.order_by(Book.created_at.desc(), Book.id.desc())
             .limit(per_page)
             .offset((page - 1) * per_page)
         )

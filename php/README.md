@@ -491,22 +491,23 @@ three-row JSON sample; both show up across 6,300 CSV rows.
 
 ### Pre-existing bugs found while porting
 
-**Unstable sorts corrupt pagination.** Several list queries order by a
-non-unique column with no tiebreaker, so which rows land on a page is
-arbitrary among ties. Measured, not inferred:
+**Unstable sorts corrupted pagination — fixed in both stacks.** Six list
+queries ordered by a non-unique column with no tiebreaker, so which rows
+landed on a page was arbitrary among ties. Measured, not inferred:
 
 | Query | Evidence |
 |---|---|
 | `shop-books?sort_by=price` | 65 books share `price = 0.00` |
-| `books` (orders by `created_at`) | 339 books share one `created_at`; **13 books appear on both page 1 and page 2** |
-| `books/export` | Python's own CSV contains **227 duplicate rows** out of ~6,300, and omits others |
+| `books` (orders by `created_at`) | 339 books share one `created_at`; **13 books appeared on both page 1 and page 2** |
+| `books/export` | Python's own CSV contained **227 duplicate rows** out of ~6,300, and omitted others |
 
-Row *totals* always agree (14,588 / 19,665 / 34,801 across the filters), so
-the filters are correct — only row placement drifts. PHP reproduces
-Python's behaviour rather than silently diverging, and `api_diff.py`
-compares only the envelope for those queries. Fixing it means adding `id`
-as a final sort key **in both stacks**; not done here because it changes
-Python behaviour.
+Row *totals* always agreed (14,588 / 19,665 / 34,801 across the filters), so
+the filters were correct — only row placement drifted. Both stacks now append
+`id` as a final sort key, in the same direction as the primary sort, on all
+six: canonical books, shop_books, discovered URLs, a run's added and updated
+books, and a discover run's URLs. `api_diff.py`'s `ENVELOPE_ONLY` set is
+consequently empty — every paginated endpoint is compared row for row, and
+page 1 ∩ page 2 is now 0 of 50 on production data in both stacks.
 
 **`primary_isbn` is arbitrary.** Python selects one ISBN with `LIMIT 1` and
 no `ORDER BY`, and 138,033 books have more than one. PHP matches the

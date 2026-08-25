@@ -101,6 +101,7 @@ final class BooksController
         // created_at, not id: ordering by id would put back-filled canonical
         // records ahead of newly matched ones.
         $books = $query->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->offset(($page - 1) * $perPage)
             ->limit($perPage)
             ->get();
