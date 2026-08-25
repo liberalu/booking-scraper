@@ -154,7 +154,7 @@
   "path": "/api/issues/bulk-unacknowledge",
   "body": {
    "issue_type": "missing_isbn",
-   "shop": "vaga"
+   "shop": "synthetic"
   },
   "expected": {
    "_status": 200,
@@ -169,7 +169,7 @@
   "path": "/api/issues/bulk-acknowledge",
   "body": {
    "issue_type": "missing_isbn",
-   "shop": "vaga"
+   "shop": "synthetic"
   },
   "expected": {
    "_status": 200,
@@ -248,7 +248,7 @@
   "path": "/api/books",
   "body": {
    "title": " Diff Test Book ",
-   "isbn": "9781787665773",
+   "isbn": "9781787667025",
    "author": "  Jonas   Jonaitis ",
    "publisher": " Diff Press ",
    "year": 2001
@@ -267,7 +267,7 @@
   "path": "/api/books",
   "body": {
    "title": "Other",
-   "isbn": "9781787665773"
+   "isbn": "9781787667025"
   },
   "expected": {
    "_status": 409,
@@ -331,7 +331,7 @@
   "path": "/api/books",
   "body": {
    "title": "Dashed",
-   "isbn": "978-1787-665773"
+   "isbn": "978-1787-667025"
   },
   "expected": {
    "_status": 409,
@@ -544,7 +544,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "discover",
    "strategy": "sitemap",
    "cron_expression": "0 3 * * *"
@@ -553,7 +553,7 @@
    "_status": 200,
    "body": {
     "id": "<id>",
-    "name": "vaga.discover.sitemap"
+    "name": "synthetic.discover.sitemap"
    }
   }
  },
@@ -562,7 +562,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "strategy": "  ",
    "cron_expression": "15 4 * * 1-5"
@@ -571,7 +571,7 @@
    "_status": 200,
    "body": {
     "id": "<id>",
-    "name": "vaga.scan.default"
+    "name": "synthetic.scan.default"
    }
   }
  },
@@ -580,7 +580,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "0 5 * * *",
    "chain_to_id": "cron_target"
@@ -589,7 +589,7 @@
    "_status": 200,
    "body": {
     "id": "<id>",
-    "name": "vaga.scan.default"
+    "name": "synthetic.scan.default"
    }
   }
  },
@@ -614,7 +614,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "match",
    "cron_expression": "0 3 * * *"
   },
@@ -630,7 +630,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "0 3 * *"
   },
@@ -646,7 +646,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "0 0 3 * * *"
   },
@@ -662,7 +662,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "not a cron line"
   },
@@ -678,7 +678,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "0 3 * jan mon"
   },
@@ -686,7 +686,7 @@
    "_status": 200,
    "body": {
     "id": "<id>",
-    "name": "vaga.scan.default"
+    "name": "synthetic.scan.default"
    }
   }
  },
@@ -695,7 +695,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "*/15 2-6 1,15 * *"
   },
@@ -703,7 +703,7 @@
    "_status": 200,
    "body": {
     "id": "<id>",
-    "name": "vaga.scan.default"
+    "name": "synthetic.scan.default"
    }
   }
  },
@@ -712,7 +712,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "99 3 * * *"
   },
@@ -728,7 +728,7 @@
   "method": "POST",
   "path": "/api/cron",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan",
    "cron_expression": "0 3 * * *",
    "chain_to_id": 999999
@@ -972,11 +972,11 @@
      "dependents": [
       {
        "id": "cron_dependent",
-       "name": "vaga.scan.default"
+       "name": "synthetic.scan.default"
       },
       {
        "id": "<id>",
-       "name": "vaga.scan.default"
+       "name": "synthetic.scan.default"
       }
      ]
     }
@@ -1022,7 +1022,7 @@
  {
   "label": "rate settings save",
   "method": "POST",
-  "path": "/shops/vaga/rate-settings",
+  "path": "/shops/synthetic/rate-settings",
   "body": {
    "download_delay": 2.5,
    "concurrent_requests_per_domain": 4
@@ -1037,7 +1037,7 @@
  {
   "label": "rate settings resave",
   "method": "POST",
-  "path": "/shops/vaga/rate-settings",
+  "path": "/shops/synthetic/rate-settings",
   "body": {
    "download_delay": 1.0,
    "concurrent_requests_per_domain": 2
@@ -1052,7 +1052,7 @@
  {
   "label": "rate settings bad delay",
   "method": "POST",
-  "path": "/shops/vaga/rate-settings",
+  "path": "/shops/synthetic/rate-settings",
   "body": {
    "download_delay": 99,
    "concurrent_requests_per_domain": 2
@@ -1067,7 +1067,7 @@
  {
   "label": "rate settings bad concurrency",
   "method": "POST",
-  "path": "/shops/vaga/rate-settings",
+  "path": "/shops/synthetic/rate-settings",
   "body": {
    "download_delay": 1.0,
    "concurrent_requests_per_domain": 99
@@ -1148,7 +1148,7 @@
   "path": "/api/issues/bulk-rescrape",
   "body": {
    "issue_type": "missing_isbn",
-   "shop": "vaga"
+   "shop": "synthetic"
   },
   "expected": {
    "_status": 200,
@@ -1163,7 +1163,7 @@
   "method": "POST",
   "path": "/api/issues/bulk-rescrape",
   "body": {
-   "shop": "vaga"
+   "shop": "synthetic"
   },
   "expected": {
    "_status": 422,
@@ -1206,7 +1206,7 @@
   "method": "POST",
   "path": "/api/runs",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "sitemap"
   },
   "expected": {
@@ -1236,13 +1236,13 @@
   "method": "POST",
   "path": "/api/runs",
   "body": {
-   "shop": "vaga",
+   "shop": "synthetic",
    "phase": "scan"
   },
   "expected": {
-   "_status": 409,
+   "_status": 400,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<id>)."
+    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
    }
   }
  },
@@ -1276,9 +1276,9 @@
   "path": "/api/runs/<run_completed>/rerun",
   "body": null,
   "expected": {
-   "_status": 409,
+   "_status": 400,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<id>)."
+    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
    }
   }
  },
@@ -1324,9 +1324,9 @@
   "path": "/api/runs/<run_failed_pending>/continue",
   "body": null,
   "expected": {
-   "_status": 409,
+   "_status": 400,
    "body": {
-    "detail": "A scan run for vaga is already stopping (run #<id>)."
+    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
    }
   }
  },

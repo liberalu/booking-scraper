@@ -42,13 +42,22 @@ import sqlalchemy as sa
 # The test database is named in one place — see _testdb for why the PHP
 # side cannot share the Python suite's database.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _testdb import TEST_PORT, database_name, dsn_for  # noqa: E402
+from _testdb import FIXTURE_DB, TEST_PORT, dsn_for  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 
 TEST_HOST = "localhost"
-TEST_DB = database_name()   # see _testdb: PHP has its own database
+# The fixture database, not the seeded one. Every case here is replayed from a
+# golden, and a golden can only describe data that comes back the same way
+# every time — see FIXTURE_DB in _testdb.
+TEST_DB = FIXTURE_DB
+
+#: The fixture's shop. Must match SyntheticShop::SHOP — it is a constant in
+#: code on both sides, which is what makes it safe to write into a golden.
+#: Resolving "whatever shop is first" instead would put a copied catalogue's
+#: name in there.
+SHOP = "synthetic"
 PY_DB, PHP_DB = f"{TEST_DB}_py", f"{TEST_DB}_php"
 PY_PORT, PHP_PORT = 8011, 8012
 
@@ -66,7 +75,7 @@ def dsn(database: str) -> str:
 
 def guard() -> None:
     """The whole tool writes; make it impossible to point at production."""
-    if TEST_PORT != 5433 or not TEST_DB.endswith("_test"):
+    if TEST_PORT != 5433 or "test" not in TEST_DB:
         sys.exit(f"refusing to run: {TEST_DB}@{TEST_PORT} is not the test cluster")
 
 
@@ -78,9 +87,14 @@ def guard() -> None:
 def seed_fixtures() -> dict[str, int]:
     engine = sa.create_engine(dsn(TEST_DB))
     with engine.begin() as c:
-        shop_id = c.execute(sa.text("select id from shops order by id limit 1")).scalar()
+        shop_id = c.execute(
+            sa.text("select id from shops where name = :s"), {"s": SHOP}
+        ).scalar()
         if shop_id is None:
-            sys.exit("test DB has no shops — run `make seed-test-db` first")
+            sys.exit(
+                f"the fixture database has no shop '{SHOP}'. Build it first:\n"
+                f"    cd php && make fixture-db"
+            )
 
         # Idempotent: drop the previous fixture set. One definition, in
         # clear_fixtures() — this used to be a second copy of the same delete
@@ -397,9 +411,9 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
         ("bulk ack unknown shop", "POST", "/api/issues/bulk-acknowledge",
          {"issue_type": "missing_isbn", "shop": "no-such-shop"}),
         ("bulk unack shop", "POST", "/api/issues/bulk-unacknowledge",
-         {"issue_type": "missing_isbn", "shop": "vaga"}),
+         {"issue_type": "missing_isbn", "shop": SHOP}),
         ("bulk ack shop", "POST", "/api/issues/bulk-acknowledge",
-         {"issue_type": "missing_isbn", "shop": "vaga"}),
+         {"issue_type": "missing_isbn", "shop": SHOP}),
         ("bulk ack no type", "POST", "/api/issues/bulk-acknowledge", {}),
         ("bulk unack no type", "POST", "/api/issues/bulk-unacknowledge", {}),
         # Unlink canonical
@@ -440,32 +454,32 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
         ("ack 404", "POST", "/api/runs/999999999/failures/ack?error_reason=http_404", None),
         # Cron CRUD
         ("cron create", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "discover", "strategy": "sitemap",
+         {"shop": SHOP, "phase": "discover", "strategy": "sitemap",
           "cron_expression": "0 3 * * *"}),
         ("cron create no strategy", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "strategy": "  ",
+         {"shop": SHOP, "phase": "scan", "strategy": "  ",
           "cron_expression": "15 4 * * 1-5"}),
         ("cron create chained", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "0 5 * * *",
+         {"shop": SHOP, "phase": "scan", "cron_expression": "0 5 * * *",
           "chain_to_id": target}),
         ("cron create bad shop", "POST", "/api/cron",
          {"shop": "no-such-shop", "phase": "scan", "cron_expression": "0 3 * * *"}),
         ("cron create bad phase", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "match", "cron_expression": "0 3 * * *"}),
+         {"shop": SHOP, "phase": "match", "cron_expression": "0 3 * * *"}),
         ("cron create 4 fields", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "0 3 * *"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "0 3 * *"}),
         ("cron create 6 fields", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "0 0 3 * * *"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "0 0 3 * * *"}),
         ("cron create garbage", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "not a cron line"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "not a cron line"}),
         ("cron create names", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "0 3 * jan mon"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "0 3 * jan mon"}),
         ("cron create step", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "*/15 2-6 1,15 * *"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "*/15 2-6 1,15 * *"}),
         ("cron create bad field", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "99 3 * * *"}),
+         {"shop": SHOP, "phase": "scan", "cron_expression": "99 3 * * *"}),
         ("cron create missing chain", "POST", "/api/cron",
-         {"shop": "vaga", "phase": "scan", "cron_expression": "0 3 * * *",
+         {"shop": SHOP, "phase": "scan", "cron_expression": "0 3 * * *",
           "chain_to_id": 999999}),
         ("cron patch expression", "PATCH", f"/api/cron/{a}", {"cron_expression": "30 4 * * 1"}),
         ("cron patch bad expression", "PATCH", f"/api/cron/{a}", {"cron_expression": "x"}),
@@ -489,13 +503,13 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
         ("cron delete again", "DELETE", f"/api/cron/{doomed}", None),
         ("cron delete 404", "DELETE", "/api/cron/9999999", None),
         # ── Pre-SPA form endpoints (outside /api) ────────────────────────
-        ("rate settings save", "POST", "/shops/vaga/rate-settings",
+        ("rate settings save", "POST", f"/shops/{SHOP}/rate-settings",
          {"download_delay": 2.5, "concurrent_requests_per_domain": 4}),
-        ("rate settings resave", "POST", "/shops/vaga/rate-settings",
+        ("rate settings resave", "POST", f"/shops/{SHOP}/rate-settings",
          {"download_delay": 1.0, "concurrent_requests_per_domain": 2}),
-        ("rate settings bad delay", "POST", "/shops/vaga/rate-settings",
+        ("rate settings bad delay", "POST", f"/shops/{SHOP}/rate-settings",
          {"download_delay": 99, "concurrent_requests_per_domain": 2}),
-        ("rate settings bad concurrency", "POST", "/shops/vaga/rate-settings",
+        ("rate settings bad concurrency", "POST", f"/shops/{SHOP}/rate-settings",
          {"download_delay": 1.0, "concurrent_requests_per_domain": 99}),
         ("rate settings bad shop", "POST", "/shops/no-such-shop/rate-settings",
          {"download_delay": 1.0, "concurrent_requests_per_domain": 2}),
@@ -506,8 +520,8 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
          "/scrape/filtered?q=zzzz-no-such-title-zzzz", None),
         # Bulk rescrape only reads.
         ("bulk rescrape", "POST", "/api/issues/bulk-rescrape",
-         {"issue_type": "missing_isbn", "shop": "vaga"}),
-        ("bulk rescrape no type", "POST", "/api/issues/bulk-rescrape", {"shop": "vaga"}),
+         {"issue_type": "missing_isbn", "shop": SHOP}),
+        ("bulk rescrape no type", "POST", "/api/issues/bulk-rescrape", {"shop": SHOP}),
         ("bulk rescrape no shop", "POST", "/api/issues/bulk-rescrape",
          {"issue_type": "missing_isbn"}),
         ("bulk rescrape bad shop", "POST", "/api/issues/bulk-rescrape",
@@ -519,11 +533,11 @@ def cases(ids: dict[str, int], marker: str) -> list[tuple[str, str, str, dict | 
         # stop at a 4xx before the spawn; the success paths are exercised
         # against the test DB by hand, per php/README.md.
         ("create run bad phase", "POST", "/api/runs",
-         {"shop": "vaga", "phase": "sitemap"}),
+         {"shop": SHOP, "phase": "sitemap"}),
         ("create run bad shop", "POST", "/api/runs",
          {"shop": "no-such-shop", "phase": "scan"}),
         ("create run already active", "POST", "/api/runs",
-         {"shop": "vaga", "phase": "scan"}),
+         {"shop": SHOP, "phase": "scan"}),
         ("rerun 404", "POST", "/api/runs/999999999/rerun", None),
         ("rerun non-terminal", "POST", f"/api/runs/{run2}/rerun", None),
         ("rerun blocked by active", "POST", f"/api/runs/{done}/rerun", None),
@@ -878,6 +892,13 @@ def main() -> int:
     args = parser.parse_args()
 
     guard()
+    print(f"building {TEST_DB} from php/schema + SyntheticShop")
+    built = subprocess.run(
+        [PHP, "bin/fixture-db", "--recreate", f"--database={dsn(TEST_DB)}"],
+        cwd=ROOT / "php", capture_output=True, text=True)
+    if built.returncode != 0:
+        sys.exit(f"could not build the fixture database:\n{built.stderr.strip()}")
+
     print(f"seeding fixtures into {TEST_DB}")
     ids = seed_fixtures()
     print(f"cloning {TEST_DB} -> {PY_DB}, {PHP_DB}")

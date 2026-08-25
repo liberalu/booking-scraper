@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use BookScraper\Testing\FixtureDatabase;
+use BookScraper\Testing\SyntheticShop;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
@@ -51,13 +53,42 @@ final class MutationCharacterisationTest extends TestCase
         'chain_to_id', 'cron_job_id',
     ];
 
+    /**
+     * URL prefix -> the label prefix whose ids may appear under it, and field
+     * name -> the same. Ids are unique only within their table, so a run and a
+     * cron job holding the same integer is normal — and a plain value -> label
+     * map then labelled a canonical book id as <cron_a>. Mirrors
+     * PATH_LABEL_PREFIX / KEY_LABEL_PREFIX in php/tools/mutation_diff.py.
+     */
+    private const PATH_LABEL_PREFIX = [
+        '/api/runs/' => 'run_',
+        '/api/shop-books/' => 'shop_book_',
+        '/api/issues/' => 'issue_',
+        '/api/cron/' => 'cron_',
+    ];
+
+    private const KEY_LABEL_PREFIX = [
+        'run_id' => 'run_',
+        'shop_book_id' => 'shop_book_',
+        'chain_to_id' => 'cron_',
+        'cron_job_id' => 'cron_',
+    ];
+
     /** @var array<string, int> label => planted row id */
     private array $ids = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->useTestDatabase();
+        // The fixture database, dropped and rebuilt exactly as the freeze does
+        // it. The seeded database cannot serve: the cases name their shop, and
+        // on a copied catalogue that name — and the rows behind it — come from
+        // whatever was last copied in.
+        $this->useTestDatabase(FixtureDatabase::ensure(
+            getenv('TEST_DATABASE_URL')
+                ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test',
+            recreate: true
+        ));
     }
 
     #[Group('db')]
@@ -69,7 +100,11 @@ final class MutationCharacterisationTest extends TestCase
         DB::beginTransaction();
         try {
             $this->plantFixtures();
-            $labels = array_flip($this->ids);
+            // One map per kind. array_flip() over all of them kept whichever
+            // label came last for a given integer, so a run id whose value
+            // matched a cron id resolved to the cron label — and then failed
+            // the kind check and froze as <id>.
+            $labels = self::groupLabels($this->ids);
 
             foreach ($cases as $case) {
                 $path = $this->resolveLabels($case['path']);
@@ -98,7 +133,7 @@ final class MutationCharacterisationTest extends TestCase
 
                 self::assertEquals(
                     $case['expected'],
-                    self::normalise($actual, $labels),
+                    self::normalise($actual, $labels, '', $case['path']),
                     "write-route behaviour changed for: {$case['label']} "
                     . "({$case['method']} {$case['path']})"
                 );
@@ -111,7 +146,9 @@ final class MutationCharacterisationTest extends TestCase
     /** The same shapes mutation_diff plants, so the frozen cases still apply. */
     private function plantFixtures(): void
     {
-        $shopId = (int) DB::table('shops')->orderBy('id')->value('id');
+        // By name, not "the first shop": the golden's request bodies carry
+        // this name, and it is a constant in code on both sides.
+        $shopId = (int) DB::table('shops')->where('name', SyntheticShop::SHOP)->value('id');
         self::assertNotSame(0, $shopId, 'the test database has no shops — seed it first');
 
         foreach ([
@@ -262,10 +299,14 @@ final class MutationCharacterisationTest extends TestCase
      * corrupts a count that happens to collide with a fixture id — `days: 30`
      * did exactly that while this was being written.
      *
-     * @param array<int, string> $labels
+     * @param array<string, array<int, string>> $labels
      */
-    private static function normalise(mixed $value, array $labels, string $key = ''): mixed
-    {
+    private static function normalise(
+        mixed $value,
+        array $labels,
+        string $key = '',
+        string $path = ''
+    ): mixed {
         if (is_bool($value)) {
             return $value;
         }
@@ -274,7 +315,7 @@ final class MutationCharacterisationTest extends TestCase
                 return $value;
             }
 
-            return $labels[$value] ?? '<id>';
+            return self::labelFor($value, $labels, $key, $path) ?? '<id>';
         }
         if (is_string($value)) {
             if (preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?'
@@ -287,13 +328,65 @@ final class MutationCharacterisationTest extends TestCase
         if (is_array($value)) {
             $out = [];
             foreach ($value as $k => $v) {
-                $out[$k] = self::normalise($v, $labels, is_string($k) ? $k : $key);
+                $out[$k] = self::normalise($v, $labels, is_string($k) ? $k : $key, $path);
             }
 
             return $out;
         }
 
         return $value;
+    }
+
+    /**
+     * The label for `$value`, restricted to the kind of id the field name — or
+     * failing that the path — says it is. Null when the value is not one of
+     * those, which freezes as <id>.
+     *
+     * @param array<string, array<int, string>> $labels
+     */
+    private static function labelFor(
+        int $value,
+        array $labels,
+        string $key,
+        string $path
+    ): ?string {
+        $prefix = self::KEY_LABEL_PREFIX[$key] ?? null;
+        if ($prefix === null) {
+            foreach (self::PATH_LABEL_PREFIX as $url => $candidate) {
+                if (str_starts_with($path, $url)) {
+                    $prefix = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($prefix === null) {
+            // No merged fallback, deliberately: `POST /api/books` returns the
+            // id it just created, under the generic key `id` at a path with no
+            // id in it, and matching that against every label labelled a
+            // brand-new row <cron_b> because the integers happened to agree.
+            return null;
+        }
+        return $labels[$prefix][$value] ?? null;
+    }
+
+    /**
+     * Planted ids as one map per kind: prefix => [id => label].
+     *
+     * @param array<string, int> $ids label => id
+     * @return array<string, array<int, string>>
+     */
+    private static function groupLabels(array $ids): array
+    {
+        $grouped = array_fill_keys(array_values(self::PATH_LABEL_PREFIX), []);
+        foreach ($ids as $label => $id) {
+            foreach ($grouped as $prefix => $_) {
+                if (str_starts_with($label, $prefix)) {
+                    $grouped[$prefix][$id] = $label;
+                }
+            }
+        }
+
+        return $grouped;
     }
 
     /** @return list<array<string, mixed>> */

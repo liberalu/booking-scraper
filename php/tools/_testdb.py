@@ -27,6 +27,14 @@ TEST_PORT = 5433
 
 TEST_DB = "book_scraper_php_test"
 
+#: A database holding NOTHING but the fixture, built from php/schema's baseline
+#: by `php bin/fixture-db`. Everything frozen as a golden is taken over this
+#: one: the seeded database carries a copy of the live catalogue, which moves,
+#: so a shape or a count taken over it stops matching for reasons that are not
+#: regressions — and after Python is gone there is nothing left to re-freeze
+#: against.
+FIXTURE_DB = "book_scraper_php_test_fixture"
+
 #: SQLAlchemy form (psycopg2). PHP's PDO wants the bare form — see `php_dsn`.
 TEST_DSN = os.environ.get(
     "PHP_TEST_DATABASE_URL",
