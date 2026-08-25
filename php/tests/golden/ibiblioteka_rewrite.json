@@ -1,0 +1,20 @@
+[
+  {
+    "result": {
+      "headers": {
+        "Accept": "application/json"
+      },
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094"
+    },
+    "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094"
+  },
+  {
+    "result": {
+      "headers": {
+        "Accept": "application/json"
+      },
+      "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/C1B0000814700"
+    },
+    "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/C1B0000814700"
+  }
+]

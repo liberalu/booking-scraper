@@ -41,6 +41,22 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         );
     }
 
+    public function test_scan_url_rewrite_matches_python(): void
+    {
+        $golden = json_decode(
+            (string) file_get_contents(self::GOLDEN . '/ibiblioteka_rewrite.json'),
+            true,
+            flags: JSON_THROW_ON_ERROR
+        );
+        foreach ($golden as $case) {
+            self::assertSame(
+                self::sorted($case['result']),
+                self::sorted(Parser::rewriteScanUrl($case['url'])),
+                "rewriteScanUrl diverged for {$case['url']}"
+            );
+        }
+    }
+
     public function test_category_page_is_an_alias_for_the_search_response(): void
     {
         // The registry calls parse_category_page for every shop; ibiblioteka
@@ -163,6 +179,23 @@ final class IbibliotekaParserDifferentialTest extends TestCase
             ['name' => 'Primary Author', 'libis_code' => 'A1', 'role' => 'author', 'position' => 0],
             ['name' => 'A Translator', 'libis_code' => 'T1', 'role' => 'translator', 'position' => 0],
             ['name' => 'A Narrator', 'libis_code' => 'N1', 'role' => 'narrator', 'position' => 0],
+        ], $result['authors']);
+    }
+
+    public function test_the_renamed_titlelt_name_field_is_read(): void
+    {
+        // Live shape as of record 115594: names arrive in `titleLt`, not in
+        // the `value` / `name` keys the fixtures were captured with.
+        $result = Parser::parseProductPage(json_encode([
+            'authorViews' => [['titleLt' => 'Maceina, Antanas', 'code' => 'A1']],
+            'persons' => [
+                ['titleLt' => 'Karpauskaite, Gabija', 'code' => 'T1', 'types' => [['code' => '730']]],
+            ],
+        ]));
+
+        self::assertSame([
+            ['name' => 'Maceina, Antanas', 'libis_code' => 'A1', 'role' => 'author', 'position' => 0],
+            ['name' => 'Karpauskaite, Gabija', 'libis_code' => 'T1', 'role' => 'translator', 'position' => 0],
         ], $result['authors']);
     }
 

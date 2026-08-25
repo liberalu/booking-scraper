@@ -18,8 +18,8 @@ concurrency, then what users see, then noise.
 | # | Defect | Where | Fix | Evidence |
 |---|---|---|---|---|
 | 1 | ✅ **Fixed** — vaga listings recorded no prices | `spiders/vaga/parsers.py` | done (`4e274bc`) | live listing 100 products / 0 prices → 100 of 100 |
-| 2 | ibiblioteka's scan phase cannot work: the browser `Accept` gets the SPA shell | `spiders/ibiblioteka/parsers.py`, `download_handler.py:47` | add `rewrite_scan_url` returning `Accept: application/json` (the pegasas mechanism; `download_handler.py:459` already forwards it) | record 2097094: 30,995 B xhtml vs 19,593 B JSON. Why the shop has no production rows. |
-| 3 | ibiblioteka extracts no authors, ever — API fields renamed | `spiders/ibiblioteka/parsers.py:129,147` | `.value` → `titleLt`, `.name` → `titleLt` | record 115594 has `persons[0].titleLt` + role code 070; extraction returns `[]` |
+| 2 | ✅ **Fixed** — ibiblioteka's scan phase could not work: the browser `Accept` got the SPA shell | `spiders/ibiblioteka/parsers.py` | `rewrite_scan_url` returns the URL unchanged with `Accept: application/json` | record 2097094: 30,995 B xhtml vs 19,593 B JSON. Why the shop has no production rows. |
+| 3 | ✅ **Fixed** — ibiblioteka extracted no authors, ever: API fields renamed | `spiders/ibiblioteka/parsers.py` | read `titleLt` first, old keys as fallback (the fixtures predate the rename) | `make canonical-diff` on 3 live records: 0 authors → 5, both stacks |
 | 4 | Two processes can hold the same exclusive scan lock | `db/repo.py:834` | `abs(hash(phase))` → `zlib.crc32` (what the PHP crawler already uses) | keys 975101118 vs 136925746 for one phase |
 | 5 | Pagination shows duplicates and hides rows | `queries.py:2904`, `:2254`, `:1379` | append an id tiebreaker — the `_id_tie` idiom already exists at `queries.py:1639` | 339 books share one `created_at`; 13 books on both page 1 and 2; CSV export duplicates 227 of ~6,300 |
 | 6 | `year_pages_swap` fires on a year given as a string | `pipelines.py` | compare numerically, not by identity | latent: all 14 production occurrences carry a real page count |

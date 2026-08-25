@@ -4,6 +4,7 @@ from pathlib import Path
 from book_scraper.spiders.ibiblioteka.parsers import (
     parse_ibiblioteka_search_response,
     parse_product_page,
+    rewrite_scan_url,
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "ibiblioteka"
@@ -54,6 +55,55 @@ def test_parse_search_response_handles_empty_json():
 def test_parse_search_response_handles_invalid_json():
     result = parse_ibiblioteka_search_response("Bad request")
     assert result["products"] == []
+
+
+# ── author extraction ──────────────────────────────────────────────────────
+
+
+def test_parse_product_page_reads_the_renamed_titlelt_name_field():
+    # Live shape as of record 115594: LIBIS carries names in `titleLt`,
+    # not the `value` / `name` keys the checked-in fixtures were captured with.
+    record = {
+        "authorViews": [
+            {"code": "LNB:V*16233;=BB", "titleLt": "Maceina, Antanas (1908\u20131987)"}
+        ],
+        "persons": [
+            {
+                "code": "LNB:CgWX;=Bv",
+                "titleLt": "Karpauskait\u0117, Gabija",
+                "types": [{"code": "730"}],
+            }
+        ],
+    }
+    authors = parse_product_page(json.dumps(record))["authors"]
+
+    assert authors == [
+        {
+            "name": "Maceina, Antanas (1908\u20131987)",
+            "libis_code": "LNB:V*16233;=BB",
+            "role": "author",
+            "position": 0,
+        },
+        {
+            "name": "Karpauskait\u0117, Gabija",
+            "libis_code": "LNB:CgWX;=Bv",
+            "role": "translator",
+            "position": 0,
+        },
+    ]
+
+
+# ── scan URL rewrite ───────────────────────────────────────────────────────
+
+
+def test_rewrite_scan_url_asks_for_json_without_touching_the_url():
+    # The detail endpoint content-negotiates: the browser Accept that
+    # HttpxMiddleware injects gets the SPA shell, which has no title.
+    url = _BASE_URL + "2097094"
+    assert rewrite_scan_url(url) == {
+        "url": url,
+        "headers": {"Accept": "application/json"},
+    }
 
 
 # ── translated printed book ────────────────────────────────────────────────

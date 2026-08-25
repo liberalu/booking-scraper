@@ -679,29 +679,32 @@ drifted, and the copies only handled `running` runs — so a run failing out of
 
 ## Pre-existing bugs found in the shops' own paths
 
-Measured, not inferred, and left unfixed — fixing them changes the reference
-implementation this port is measured against.
+Measured, not inferred. The two ibiblioteka ones are now **fixed in both
+stacks**; the rest are still reproduced on purpose, because fixing them changes
+the reference implementation this port is measured against.
 
-**ibiblioteka's scan cannot work at all.** The detail endpoint
+**ibiblioteka's scan could not work at all.** The detail endpoint
 content-negotiates: with a browser `Accept` it serves the SPA shell (30,995
 bytes of xhtml), with `application/json` the record (19,593 bytes). Measured on
 record 2097094. Python's download handler injects an HTML-preferring `Accept`
-on every request and its scan spider never overrides it, so every fetch returns
-200 with a shell the parser finds no title in — a run that reports `completed`
-having scraped nothing. It is also why ibiblioteka has no production rows.
+on every request and its scan spider never overrode it, so every fetch returned
+200 with a shell the parser found no title in — a run that reported `completed`
+having scraped nothing, and the reason ibiblioteka has no production rows.
+Both stacks now expose `rewriteScanUrl` / `rewrite_scan_url` on the ibiblioteka
+parser, returning the URL unchanged with `Accept: application/json`.
 
-This is the one place the port diverges deliberately: `Ibiblioteka\Parser`
-asks for JSON, because replicating the bug would mean shipping a scan phase
-that provably cannot work. `make canonical-diff` therefore compares the two
-writers on the same bytes rather than end-to-end — that is the only way to
-compare a path one stack cannot execute.
+`make canonical-diff` still fetches each record once and hands the same bytes to
+both writers. That was originally the only way to compare a path one stack could
+not execute; it stays because one fetch for two writers is the cleaner
+comparison anyway.
 
-**ibiblioteka's author extraction is dead code.** The API returns
-`authorViews[].titleLt` and `persons[].titleLt`; the parser reads `.value` and
-`.name`, which no longer exist, so `_extract_authors_canonical` returns `[]` for
-every record. Same class of breakage as the endpoint move already noted in that
-module's docstring. The port reproduces it (the parsers are golden-tested), so
-fixing the `Accept` header alone will not produce authors.
+**ibiblioteka extracted no authors, ever.** The API returns
+`authorViews[].titleLt` and `persons[].titleLt`; both parsers read `.value` and
+`.name`, which no longer exist, so author extraction returned `[]` for every
+record. Same class of breakage as the endpoint move noted in that module's
+docstring. Both now read `titleLt` first and fall back to the old keys, which is
+what the checked-in fixtures still carry. Measured on the three
+`make canonical-diff` records: 0 authors before, 5 after, on both sides.
 
 **`year_pages_swap` fires on a year supplied as a string.** The issue is
 decided by `year_before != year_after`, and the normalisation turns `"2024"`

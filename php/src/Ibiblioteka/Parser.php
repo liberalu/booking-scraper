@@ -119,13 +119,11 @@ final class Parser
      * SPA shell (30,995 bytes of xhtml), and with `application/json` the
      * record (19,593 bytes). Measured on record 2097094, 2026-08-25.
      *
-     * This is why the PYTHON scan of this shop writes nothing: its download
-     * handler injects an HTML-preferring `Accept` on every request and the
-     * scan spider never overrides it, so every fetch returns 200 with a shell
-     * the parser finds no title in — a run that reports `completed` having
-     * scraped nothing. It is also why ibiblioteka has no production rows.
-     * Deliberate divergence: replicating it would mean shipping a scan phase
-     * that provably cannot work. The Python fix is the same one line.
+     * Python shipped without this hook, so its download handler's
+     * HTML-preferring `Accept` stood and every scan fetch returned 200 with a
+     * shell the parser found no title in — a run that reported `completed`
+     * having scraped nothing, and the reason ibiblioteka has no production
+     * rows. Python now carries the same hook; the two agree.
      *
      * The URL is returned unchanged — only the header matters here.
      *
@@ -297,7 +295,9 @@ final class Parser
             if (!is_array($view)) {
                 continue;
             }
-            $name = $view['value'] ?? null;
+            // LIBIS renamed the name field to `titleLt`; `value`/`name` are kept
+            // as fallbacks because the fixtures predate that rename.
+            $name = ($view['titleLt'] ?? null) ?: ($view['value'] ?? null);
             if ($name === null || $name === '') {
                 continue;
             }
@@ -316,7 +316,7 @@ final class Parser
             if (!is_array($person)) {
                 continue;
             }
-            $name = $person['name'] ?? null;
+            $name = ($person['titleLt'] ?? null) ?: ($person['name'] ?? null);
             if ($name === null || $name === '') {
                 continue;
             }

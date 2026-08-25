@@ -6,12 +6,12 @@
 
 Test database only.
 
-This exists because the end-to-end comparison can't reach this code path on
-the Python side: its scan sends an HTML-preferring `Accept`, the endpoint
-content-negotiates, and every fetch returns the SPA shell — so Python's
-ibiblioteka scan writes nothing at all (see php/README.md). The record JSON
-is therefore fetched ONCE, then handed to both writers, which is the
-comparison the port actually needs: same bytes in, same rows out.
+The record JSON is fetched ONCE and handed to both writers: same bytes in,
+same rows out. This started as a workaround — Python's scan of this shop could
+not reach the code path at all, because it sent an HTML-preferring `Accept` to
+a content-negotiating endpoint and got the SPA shell back (see php/README.md).
+Both stacks now ask for JSON, and the single fetch stays because it is the
+cleaner comparison.
 """
 from __future__ import annotations
 

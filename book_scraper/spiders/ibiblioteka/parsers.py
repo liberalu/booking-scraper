@@ -125,8 +125,10 @@ def _extract_authors_canonical(raw: dict[str, Any]) -> list[dict[str, Any]]:
     role_pos: dict[str, int] = {}
 
     # authorViews — primary author list. Maps to role='author'.
+    # LIBIS renamed the name field to `titleLt`; `value`/`name` are kept as
+    # fallbacks because the checked-in fixtures were captured before that.
     for av in raw.get("authorViews") or []:
-        name = av.get("value")
+        name = av.get("titleLt") or av.get("value")
         code = av.get("code")
         if not name:
             continue
@@ -142,7 +144,7 @@ def _extract_authors_canonical(raw: dict[str, Any]) -> list[dict[str, Any]]:
 
     # persons[] — multi-role contributors via UNIMARC type codes.
     for person in raw.get("persons") or []:
-        name = person.get("name")
+        name = person.get("titleLt") or person.get("name")
         code = person.get("code")
         if not name:
             continue
@@ -161,6 +163,21 @@ def _extract_authors_canonical(raw: dict[str, Any]) -> list[dict[str, Any]]:
             role_pos[role] = pos + 1
 
     return out
+
+
+def rewrite_scan_url(url: str) -> dict[str, Any]:
+    """Ask the detail endpoint for JSON explicitly.
+
+    The endpoint content-negotiates: with the browser ``Accept`` that
+    ``HttpxMiddleware`` injects on every request it serves the SPA shell
+    (30,995 bytes of xhtml on record 2097094), and with
+    ``application/json`` it serves the record (19,593 bytes). Without this
+    hook the scan phase fetches 200s the parser finds no title in, so a
+    run reports ``completed`` having stored nothing.
+
+    The URL is returned unchanged — only the header matters here.
+    """
+    return {"url": url, "headers": {"Accept": "application/json"}}
 
 
 def parse_product_page(json_text: str) -> dict[str, Any]:

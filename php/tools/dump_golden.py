@@ -100,6 +100,13 @@ def main() -> None:
         "ibiblioteka_audio": ibiblioteka_parsers.parse_product_page(
             (FIXTURES / "ibiblioteka" / "product_detail_audio.json").read_text()
         ),
+        "ibiblioteka_rewrite": [
+            {"url": url, "result": ibiblioteka_parsers.rewrite_scan_url(url)}
+            for url in (
+                "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094",
+                "https://ibiblioteka.lt/metis-api/bibliographic-records/public/C1B0000814700",
+            )
+        ],
         "pegasas_rewrite": [
             {"url": url, "result": pegasas_parsers.rewrite_scan_url(url)}
             for url in (
