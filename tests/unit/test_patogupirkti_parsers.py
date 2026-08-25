@@ -19,7 +19,7 @@ from book_scraper.spiders.patogupirkti.parsers import (
     parse_sitemap_urls,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures" / "patogupirkti"
+FIXTURES = Path(__file__).parents[2] / "fixtures" / "patogupirkti"
 
 
 def test_parse_sitemap_urls_returns_urls_from_flat_urlset():

@@ -10,7 +10,7 @@ from scrapy.http import HtmlResponse, TextResponse
 from book_scraper.items import DiscoveredUrlItem, ShopBookItem
 from book_scraper.spiders.discover import DiscoverSpider
 
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 
 def _fake_response(url: str, body: str, cls=HtmlResponse, meta=None):

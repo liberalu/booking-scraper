@@ -12,7 +12,7 @@ from book_scraper.spiders.vaga.parsers import (
     title_looks_like_game_or_toy,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 
 def test_parse_sitemap_urls():

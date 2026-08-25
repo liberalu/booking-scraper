@@ -180,7 +180,7 @@ final class DiscoverEmitTest extends TestCase
 
     public function test_sitemap_emits_each_unique_url_once(): void
     {
-        $xml = (string) file_get_contents(__DIR__ . '/../../../tests/fixtures/vaga_sitemap.xml');
+        $xml = (string) file_get_contents(__DIR__ . '/../../../fixtures/vaga_sitemap.xml');
         $spider = $this->spider(['strategy' => 'sitemap']);
 
         $request = new Request('GET', 'https://vaga.lt/sitemap.xml', [$spider, 'parse']);

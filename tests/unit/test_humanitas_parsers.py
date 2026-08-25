@@ -9,7 +9,7 @@ from book_scraper.spiders.humanitas.parsers import (
     parse_sitemap_urls,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures" / "humanitas"
+FIXTURES = Path(__file__).parents[2] / "fixtures" / "humanitas"
 
 
 def test_parse_sitemap_urls_extracts_product_links_from_index_page():

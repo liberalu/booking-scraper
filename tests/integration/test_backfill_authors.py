@@ -14,7 +14,7 @@ import pytest
 from book_scraper.db.repo import upsert_shop, upsert_shop_book
 from scripts import backfill_authors
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "vaga_category_page.html"
+FIXTURE = Path(__file__).parents[2] / "fixtures" / "vaga_category_page.html"
 
 
 class _FakeResponse:

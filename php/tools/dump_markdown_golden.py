@@ -91,7 +91,7 @@ def main() -> None:
         module = load_parsers(shop)
         paths = [
             path
-            for pattern in (f"tests/fixtures/{shop}/*", f"tests/fixtures/{shop}*")
+            for pattern in (f"fixtures/{shop}/*", f"fixtures/{shop}*")
             for path in glob.glob(pattern)
             if os.path.isfile(path)
         ]

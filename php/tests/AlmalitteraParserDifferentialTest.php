@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class AlmalitteraParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../tests/fixtures/almalittera';
+    private const FIXTURES = __DIR__ . '/../../fixtures/almalittera';
     private const GOLDEN = __DIR__ . '/golden';
 
     public function test_products_json_matches_python(): void

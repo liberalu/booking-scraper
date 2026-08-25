@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class IbibliotekaParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../tests/fixtures/ibiblioteka';
+    private const FIXTURES = __DIR__ . '/../../fixtures/ibiblioteka';
     private const GOLDEN = __DIR__ . '/golden';
 
     public function test_search_response_matches_python(): void

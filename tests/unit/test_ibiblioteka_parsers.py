@@ -7,7 +7,7 @@ from book_scraper.spiders.ibiblioteka.parsers import (
     rewrite_scan_url,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures" / "ibiblioteka"
+FIXTURES = Path(__file__).parents[2] / "fixtures" / "ibiblioteka"
 _BASE_URL = "https://ibiblioteka.lt/metis-api/bibliographic-records/public/"
 
 

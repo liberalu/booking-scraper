@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class HumanitasParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../tests/fixtures/humanitas';
+    private const FIXTURES = __DIR__ . '/../../fixtures/humanitas';
     private const GOLDEN = __DIR__ . '/golden';
 
     public function test_index_page_urls_match_python(): void

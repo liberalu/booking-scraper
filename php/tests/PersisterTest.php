@@ -55,7 +55,7 @@ final class PersisterTest extends TestCase
     private function fixture(): array
     {
         return Parser::parseProductPage(
-            (string) file_get_contents(__DIR__ . '/../../tests/fixtures/vaga_product_page.html')
+            (string) file_get_contents(__DIR__ . '/../../fixtures/vaga_product_page.html')
         );
     }
 

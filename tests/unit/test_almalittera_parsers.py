@@ -5,7 +5,7 @@ from book_scraper.spiders.almalittera.parsers import (
     parse_product_page,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures" / "almalittera"
+FIXTURES = Path(__file__).parents[2] / "fixtures" / "almalittera"
 
 
 def test_parse_category_page_extracts_books_from_products_json():

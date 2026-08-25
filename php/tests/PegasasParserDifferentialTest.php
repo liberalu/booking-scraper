@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class PegasasParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../tests/fixtures';
+    private const FIXTURES = __DIR__ . '/../../fixtures';
     private const GOLDEN = __DIR__ . '/golden';
 
     public function test_graphql_category_matches_python(): void

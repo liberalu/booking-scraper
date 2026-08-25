@@ -20,7 +20,7 @@ from book_scraper.spiders.pegasas.parsers import (
     rewrite_scan_url,
 )
 
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 
 @pytest.fixture
