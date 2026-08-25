@@ -671,19 +671,25 @@ class ValidationIssue(Base):
         # conflict targets used by upsert_validation_issues.
         Index(
             "uix_vi_shop_book_field_issue",
-            "shop_book_id", "field", "issue",
+            "shop_book_id",
+            "field",
+            "issue",
             unique=True,
             postgresql_where="shop_book_id IS NOT NULL",
         ),
         Index(
             "uix_vi_discovered_url_field_issue",
-            "discovered_url_id", "field", "issue",
+            "discovered_url_id",
+            "field",
+            "issue",
             unique=True,
             postgresql_where="discovered_url_id IS NOT NULL",
         ),
         Index(
             "uix_vi_url_field_issue",
-            "url", "field", "issue",
+            "url",
+            "field",
+            "issue",
             unique=True,
             postgresql_where="shop_book_id IS NULL AND discovered_url_id IS NULL",
         ),
