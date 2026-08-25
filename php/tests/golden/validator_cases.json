@@ -1,0 +1,1218 @@
+[
+ {
+  "label": "clean item",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "12.99",
+   "in_stock": true
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "12.99",
+    "in_stock": "True"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "missing price in stock",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "in_stock": true
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "in_stock": "True"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "missing_price",
+     "price",
+     "https://vaga.lt/a-book",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "missing price out of stock",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "in_stock": false
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "in_stock": "False"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "missing price, stock unknown",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "missing_price",
+     "price",
+     "https://vaga.lt/a-book",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "zero price in stock",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "0",
+   "in_stock": true
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "0",
+    "in_stock": "True"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "zero_price",
+     "price",
+     "https://vaga.lt/a-book",
+     "0"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "zero price out of stock",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "0",
+   "in_stock": false
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "0",
+    "in_stock": "False"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "price above original",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "20",
+   "price_original": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "20",
+    "price_original": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "price_higher_than_original",
+     "price",
+     "https://vaga.lt/a-book",
+     "20>10"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "price equals original",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "price_original": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "price_original": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "original zero",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "price_original": "0"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "price_original": "0"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "unparseable price",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "n/a"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "n/a"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "invalid_price",
+     "price",
+     "https://vaga.lt/a-book",
+     "n/a"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "unparseable original",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "price_original": "n/a"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_price_original",
+     "price_original",
+     "https://vaga.lt/a-book",
+     "n/a"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "price with scale",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "12.30"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "12.30"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "missing title",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "price": "10"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "missing_title",
+     "title",
+     "https://vaga.lt/a-book",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "empty title",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "",
+    "price": "10"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "missing_title",
+     "title",
+     "https://vaga.lt/a-book",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "one char title",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "suspicious_title",
+     "title",
+     "https://vaga.lt/a-book",
+     "A"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "long title",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "suspicious_title",
+     "title",
+     "https://vaga.lt/a-book",
+     "len=301"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "html in title",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A <b>Book</b>",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A <b>Book</b>",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "html_in_text",
+     "title",
+     "https://vaga.lt/a-book",
+     "A <b>Book</b>"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "html in author",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "author": "<i>Someone</i>",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "author": "<i>Someone</i>",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "html_in_text",
+     "author",
+     "https://vaga.lt/a-book",
+     "<i>Someone</i>"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "whitespace fields",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "  A Book  ",
+   "author": " Someone ",
+   "publisher": " Press ",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "author": "Someone",
+    "publisher": "Press",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "blank author",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "author": "   ",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "valid isbn13",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "isbn": "9786090901595",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "isbn": "9786090901595",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "dashed isbn",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "isbn": "978-609-090-159-5",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "isbn": "9786090901595",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "invalid isbn",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "isbn": "1234567890123",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_isbn",
+     "isbn",
+     "https://vaga.lt/a-book",
+     "1234567890123"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "double prefixed isbn",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "isbn": "9789789609015",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_isbn",
+     "isbn",
+     "https://vaga.lt/a-book",
+     "9789789609015"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "year in range",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": 2024,
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "year": "2024",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "year as string",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": "2024",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "year": "2024",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "year not a number",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": "n/a",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_year",
+     "year",
+     "https://vaga.lt/a-book",
+     "n/a"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "year too small",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": 1200,
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_year",
+     "year",
+     "https://vaga.lt/a-book",
+     "1200"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "year/pages swap in properties",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": 320,
+   "properties": {
+    "pages": 2019
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "year": "2019",
+    "properties": {
+     "pages": 320
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "year_pages_swap",
+     "year",
+     "https://vaga.lt/a-book",
+     "320"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "year out of range, pages too",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "year": 320,
+   "properties": {
+    "pages": 400
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "properties": {
+     "pages": 400
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "invalid_year",
+     "year",
+     "https://vaga.lt/a-book",
+     "320"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "audiobook with pages",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "format": "audiobook",
+   "properties": {
+    "pages": 300
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "format": "audiobook",
+    "properties": {
+     "pages": 300
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "format_mismatch",
+     "format",
+     "https://vaga.lt/a-book",
+     "audiobook with pages"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "book with duration",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "format": "book",
+   "properties": {
+    "duration": "3h"
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "format": "book",
+    "properties": {
+     "duration": "3h"
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "format_mismatch",
+     "format",
+     "https://vaga.lt/a-book",
+     "book with duration"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "paperback with duration",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "format": "paperback",
+   "properties": {
+    "duration": "3h"
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "format": "paperback",
+    "properties": {
+     "duration": "3h"
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "format_mismatch",
+     "format",
+     "https://vaga.lt/a-book",
+     "paperback with duration"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "audiobook with duration",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "format": "audiobook",
+   "properties": {
+    "duration": "3h"
+   },
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "format": "audiobook",
+    "properties": {
+     "duration": "3h"
+    },
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "html description",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "description": "<p>Hello <b>world</b></p>"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "description": "Hello **world**"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "plain description",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "description": "Hello"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "description": "Hello"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "empty html description",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "description": "<p></p>"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "bad url",
+  "url": "not-a-url",
+  "item": {
+   "title": "A Book",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "invalid_url",
+     "url",
+     "not-a-url",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "empty url",
+  "url": "",
+  "item": {
+   "title": "A Book",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "invalid_url",
+     "url",
+     "",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "ftp url",
+  "url": "ftp://vaga.lt/a",
+  "item": {
+   "title": "A Book",
+   "price": "10"
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10"
+   },
+   "reject": true,
+   "issues": [
+    [
+     "invalid_url",
+     "url",
+     "ftp://vaga.lt/a",
+     null
+    ]
+   ]
+  }
+ },
+ {
+  "label": "everything wrong",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A",
+   "author": "<b>x</b>",
+   "isbn": "111",
+   "year": 999,
+   "price": "0",
+   "price_original": "0",
+   "format": "audiobook",
+   "properties": {
+    "pages": 10
+   },
+   "in_stock": true
+  },
+  "attributes": null,
+  "expected": {
+   "item": {
+    "title": "A",
+    "author": "<b>x</b>",
+    "price": "0",
+    "price_original": "0",
+    "format": "audiobook",
+    "properties": {
+     "pages": 10
+    },
+    "in_stock": "True"
+   },
+   "reject": false,
+   "issues": [
+    [
+     "format_mismatch",
+     "format",
+     "https://vaga.lt/a-book",
+     "audiobook with pages"
+    ],
+    [
+     "html_in_text",
+     "author",
+     "https://vaga.lt/a-book",
+     "<b>x</b>"
+    ],
+    [
+     "invalid_isbn",
+     "isbn",
+     "https://vaga.lt/a-book",
+     "111"
+    ],
+    [
+     "invalid_year",
+     "year",
+     "https://vaga.lt/a-book",
+     "999"
+    ],
+    [
+     "suspicious_title",
+     "title",
+     "https://vaga.lt/a-book",
+     "A"
+    ],
+    [
+     "zero_price",
+     "price",
+     "https://vaga.lt/a-book",
+     "0"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "attributes ok",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "properties": {
+    "pages": "300",
+    "cover_type": "Kietas"
+   }
+  },
+  "attributes": {
+   "allowed_keys": [
+    "pages",
+    "cover_type"
+   ],
+   "rules": {
+    "cover_type": {
+     "enum": [
+      "Kietas",
+      "Minkštas"
+     ]
+    },
+    "pages": {
+     "pattern": "\\d+"
+    }
+   }
+  },
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "properties": {
+     "pages": "300",
+     "cover_type": "Kietas"
+    }
+   },
+   "reject": false,
+   "issues": []
+  }
+ },
+ {
+  "label": "attribute unknown key",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "properties": {
+    "weight": "1kg"
+   }
+  },
+  "attributes": {
+   "allowed_keys": [
+    "pages",
+    "cover_type"
+   ],
+   "rules": {
+    "cover_type": {
+     "enum": [
+      "Kietas",
+      "Minkštas"
+     ]
+    },
+    "pages": {
+     "pattern": "\\d+"
+    }
+   }
+  },
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "properties": {
+     "weight": "1kg"
+    }
+   },
+   "reject": false,
+   "issues": [
+    [
+     "attribute_unknown_key",
+     "properties",
+     "https://vaga.lt/a-book",
+     "weight=1kg"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "attribute bad enum",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "properties": {
+    "cover_type": "Squishy"
+   }
+  },
+  "attributes": {
+   "allowed_keys": [
+    "pages",
+    "cover_type"
+   ],
+   "rules": {
+    "cover_type": {
+     "enum": [
+      "Kietas",
+      "Minkštas"
+     ]
+    },
+    "pages": {
+     "pattern": "\\d+"
+    }
+   }
+  },
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "properties": {
+     "cover_type": "Squishy"
+    }
+   },
+   "reject": false,
+   "issues": [
+    [
+     "attribute_invalid_value",
+     "cover_type",
+     "https://vaga.lt/a-book",
+     "not in enum: Squishy"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "attribute bad pattern",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "properties": {
+    "pages": "many"
+   }
+  },
+  "attributes": {
+   "allowed_keys": [
+    "pages",
+    "cover_type"
+   ],
+   "rules": {
+    "cover_type": {
+     "enum": [
+      "Kietas",
+      "Minkštas"
+     ]
+    },
+    "pages": {
+     "pattern": "\\d+"
+    }
+   }
+  },
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "properties": {
+     "pages": "many"
+    }
+   },
+   "reject": false,
+   "issues": [
+    [
+     "attribute_invalid_value",
+     "pages",
+     "https://vaga.lt/a-book",
+     "pattern mismatch: many"
+    ]
+   ]
+  }
+ },
+ {
+  "label": "attribute null value",
+  "url": "https://vaga.lt/a-book",
+  "item": {
+   "title": "A Book",
+   "price": "10",
+   "properties": {
+    "cover_type": null
+   }
+  },
+  "attributes": {
+   "allowed_keys": [
+    "pages",
+    "cover_type"
+   ],
+   "rules": {
+    "cover_type": {
+     "enum": [
+      "Kietas",
+      "Minkštas"
+     ]
+    },
+    "pages": {
+     "pattern": "\\d+"
+    }
+   }
+  },
+  "expected": {
+   "item": {
+    "title": "A Book",
+    "price": "10",
+    "properties": {
+     "cover_type": null
+    }
+   },
+   "reject": false,
+   "issues": []
+  }
+ }
+]

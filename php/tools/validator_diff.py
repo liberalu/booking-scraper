@@ -25,6 +25,10 @@ PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 
 URL = "https://vaga.lt/a-book"
 
+#: Where --freeze writes. Read by ItemValidatorCharacterisationTest,
+#: which needs no Python.
+FREEZE_TO = ROOT / "php" / "tests" / "golden" / "validator_cases.json"
+
 # One case per check, plus the combinations where checks interact.
 CASES: list[tuple[str, dict, str]] = [
     ("clean item", {"title": "A Book", "price": "12.99", "in_stock": True}, URL),
@@ -211,7 +215,18 @@ def diff(a: object, b: object, path: str = "") -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--freeze",
+        metavar="PATH",
+        nargs="?",
+        const=str(FREEZE_TO),
+        help="after every case matches, write them out as a characterisation "
+        "golden the PHP suite can assert against once Python is gone. Refuses "
+        "to write if anything differs — a frozen divergence is worse than no "
+        "golden at all.",
+    )
     args = parser.parse_args()
+    frozen: list[dict] = []
 
     all_cases = [(label, item, url, None) for label, item, url in CASES]
     all_cases += [(label, item, URL, SCHEMA) for label, item in SCHEMA_CASES]
@@ -237,12 +252,33 @@ def main() -> int:
         else:
             found = ", ".join(sorted({i[0] for i in python["issues"]})) or "no issues"
             print(f"  OK     {label:34} {found}")
+            # Only reached when the two stacks agreed, so what gets frozen is
+            # Python's behaviour, captured — not merely PHP's current output.
+            frozen.append({
+                "label": label,
+                "url": url,
+                "item": item,
+                "attributes": schema,
+                "expected": php,
+            })
 
     print(f"\n{len(all_cases) - failures}/{len(all_cases)} cases identical "
           f"({issues_seen} issues compared)")
     if issues_seen == 0:
         print("INCONCLUSIVE — no case produced an issue, so this proves nothing.")
         return 1
+
+    if args.freeze:
+        if failures:
+            print(
+                f"\nNOT frozen — {failures} case(s) differ. The golden may only "
+                "record behaviour both stacks agree on."
+            )
+            return failures
+        path = Path(args.freeze)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(frozen, indent=1, ensure_ascii=False) + "\n")
+        print(f"\nfroze {len(frozen)} case(s) to {path}")
 
     return failures
 
