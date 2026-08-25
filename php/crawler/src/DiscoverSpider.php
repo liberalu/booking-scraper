@@ -725,17 +725,17 @@ final class DiscoverSpider extends BasicSpider
     /**
      * Absolute internal links on the page, deduplicated in document order.
      *
-     * Hrefs are trimmed, which a browser does and the Python spider does not.
-     * vaga's homepage carries 65 whitespace-padded hrefs (`href="/atmosfera "`),
-     * and Python follows 62 of them as URLs distinct from their clean twins —
-     * so it crawls each of those products twice and can write a duplicate
-     * `discovered_urls` row. Measured on the same bytes: 629 links Python, 565
-     * here, the 64-link gap being those plus the bare-host and fragment-only
-     * forms.
+     * Hrefs are trimmed, which is what a browser does. vaga's homepage carries
+     * 65 whitespace-padded hrefs (`href="/atmosfera "`), and untrimmed, 62 of
+     * them are distinct URLs from their clean twins — so each of those products
+     * is fetched twice and can get a duplicate `discovered_urls` row. Measured
+     * on the same bytes: 629 links untrimmed, 565 here, the 64-link gap being
+     * those plus the bare-host and fragment-only forms.
      *
-     * Deliberate divergence. Reproducing it would mean doubling the crawl to
-     * copy a defect; the real catalogue holds 3 such rows, so nothing depends
-     * on the old behaviour.
+     * This started as a deliberate divergence; Python trims too now
+     * (`spiders/discover.py`), so the two agree. Nothing here calls trim()
+     * explicitly — DomCrawler's link resolution does it — which is why
+     * DiscoverEmitTest pins it.
      *
      * @return list<string>
      */

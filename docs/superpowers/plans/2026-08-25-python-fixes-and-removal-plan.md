@@ -5,11 +5,12 @@ Rendered version (tables, phase gates): https://claude.ai/code/artifact/3d17d76a
 Found by running the PHP port and the Python stack against identical input and
 diffing the results. Every item below was measured, not inferred.
 
-**Part one is done.** All eight defects are fixed in both stacks (commits
-`4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`, `8b66faf`, `8828651`),
-and the undeclared schema drift they surfaced is closed (`09bff38`). Phase 1 of
-part two is landed too (`80ae730`), and the test databases are no longer shared
-(`50a6447`).
+**Part one is done.** All nine defects are fixed in both stacks (commits
+`4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`, `8b66faf`, `8828651`,
+`1f5e364`), and the undeclared schema drift they surfaced is closed (`09bff38`).
+Phase 1 of part two is landed too (`80ae730`), the test databases are no longer
+shared (`50a6447`), and **phase 6 — freezing the evidence — is done**: every
+comparison now has a golden a Python-free checkout can replay.
 
 **There is no production.** `book-scraper-postgres-1` is a container on this
 machine, every DSN in the repo resolves to `localhost` or the compose service
@@ -18,9 +19,10 @@ the estimates in them — were written as though a live service were at stake. I
 is not. Phase 7 stops being meaningful, phase 8 takes minutes, and phases 2–4
 become optional polish.
 
-That leaves **phase 6 as the only one that genuinely bites**, and the only real
-argument against removal: it retires the mechanism that found all eight defects
-above.
+Phase 6 was the one that genuinely bit, and it is now done — see the phase
+entry below for what it cost and what it could not preserve. The remaining
+argument against removal is unchanged in kind: removal retires the mechanism
+that found all nine defects above.
 
 ## Part one — the fix ledger
 
@@ -37,12 +39,13 @@ concurrency, then what users see, then noise.
 | 6 | ✅ **Fixed** — `year_pages_swap` fired on a year given as a string | `pipelines.py`, `php/src/Crawler/ItemValidator.php` | compare numerically, not by identity, on both sides | `make validator-diff`'s "year as string" case: `year_pages_swap` → no issues, both stacks |
 | 7 | ✅ **Fixed** — `sku_duplicate` looked for a state the schema forbids | `services/validate.py`, `db/models.py` | deleted, with its registry entries; the missing partial unique index that made it look alive is now declared on the model | 0 recorded ever, vs 7,156 `isbn_duplicate`; `make validate-diff` still identical (13,339 issues) |
 | 8 | ✅ **Fixed** — descriptions truncated at a mixed line break (markdownify) | `pipelines.py` | normalise `<br/>` → `<br>` in a shared `html_to_markdown()` the golden dumper also calls | `<p>One<br>Two<br/>Three</p>` lost "Three"; `MarkdownTest` now skips no cases |
+| 9 | ✅ **Fixed** — `full_crawl` followed whitespace-padded hrefs as separate URLs, fetching those products twice | `spiders/discover.py` | `link.strip()` before resolving, which is what a browser does and what DomCrawler already did on the PHP side | vaga's homepage: 65 padded hrefs, 62 distinct from their clean twins; 629 links before, 565 after. 3 such rows in the catalogue. Pinned by `DiscoverEmitTest` on the surviving stack |
 
-**All eight landed, in lockstep.** The PHP port is measured against Python's
+**All nine landed, in lockstep.** The PHP port is measured against Python's
 behaviour, so every fix moved both sides together: goldens regenerated
 (`make golden`, `make markdown-golden`), and `api-diff` (88/88), `validate-diff`
 (13,339 issues), `validator-diff` (46/46) and `canonical-diff` all identical
-afterwards. Three of the eight required *removing* deliberate bug-reproduction
+afterwards. Three of the nine required *removing* deliberate bug-reproduction
 from the PHP side — the string-year comparison, the impossible SKU check, and
 the markdownify truncation `MarkdownTest` used to skip. That lockstep is the
 standing cost of two stacks, and it is the practical argument for eventually
@@ -60,10 +63,10 @@ Two things the fixes turned up that the ledger did not predict:
   index is now on the model. This is worth remembering for removal phase 1,
   whose gate is exactly a schema diff.
 
-Still open, found while verifying: seeding the test database for the PHP
-differentials (`make seed-test-db`) makes the next full Python `pytest` run
-fail ~61 tests — the Python conftest assumes an empty database, and both stacks
-share one. Pre-existing, and unrelated to any fix above.
+Found while verifying, and since fixed: seeding the test database for the PHP
+differentials made the next full Python `pytest` run fail ~61 tests, because
+the Python conftest assumes an empty database and both stacks shared one. They
+have separate databases now (`50a6447`).
 
 ## Part two — removing Python
 
@@ -99,16 +102,74 @@ Eight phases, each with the check that must pass before the next starts.
 4. **Observability** — 1–2 days. Emit the same `key=value` lines and the JSONL
    per-response log; Loki/Alloy/Grafana are upstream images and don't change.
    *Gate:* existing Grafana dashboards populate from a PHP run.
-5. **Close the feature gaps** — 2–3 days. `full_crawl`; a CLI for the full match
-   phase (steps 2–3 exist and pass `make match-diff`, nothing drives them);
-   decide on `cron_health_check.py` and the backfills.
+5. **Close the feature gaps** — 2–3 days. `full_crawl` (✅ `1f5e364`); a CLI for
+   the full match phase (steps 2–3 exist and pass `make match-diff`, nothing
+   drives them).
+
+   **`scripts/` decided — all four go, and none needs a port.** Measured
+   against the catalogue rather than assumed:
+
+   - `backfill_shop_book_attributes.py` — **delete.** It copies
+     `shop_books.properties` into `shop_book_attributes`, and that column no
+     longer exists (checked `information_schema`); its own docstring says it
+     becomes a no-op after migration `a4bd6135313a`. Already true.
+   - `backfill_html_entities.py` — **delete.** 1 row of 101,105 still carries an
+     entity (in a description). The parsers decode at scrape time now, and one
+     row is a re-scrape, not a script.
+   - `backfill_authors.py` — **delete, but the gap is real.** 12,682 active
+     books have no author: patogupirkti 7,156, humanitas 3,930, vaga 1,527,
+     pegasas 69. This was never a one-off repair — it is a narrower
+     `discover --strategy=categories`, which PHP already has, and the missing
+     authors are already surfaced as `book_no_metadata` / `book_no_signals`.
+     Use the discover pass; the script adds nothing PHP cannot do.
+   - `cron_health_check.py` — **delete.** A heartbeat line for a
+     `tail -f scraper.log` workflow that Loki, Grafana and the dashboard's runs
+     page replaced. Its own docstring calls the dashboard "the rich source".
+
    *Gate:* every phase in `cron_jobs` has a working PHP command.
-6. **Freeze the evidence — before deleting anything** — 2–3 days, do not skip.
-   16 of 17 comparison tools import `book_scraper`. Convert them while both
-   stacks exist: save the PHP side as a characterisation golden and compare
-   against that. You keep "did this change"; you permanently lose "does this
-   match Python".
-   *Gate:* the converted suite passes in a checkout with no Python installed.
+6. **Freeze the evidence — before deleting anything.** ✅ **Done.** Nine of the
+   17 comparison tools import `book_scraper` (the "16 of 17" in an earlier draft
+   was a grep that also matched the database name). Each comparison now writes a
+   golden, and `--freeze` writes one **only when both stacks already agree**, so
+   what is replayed is Python's behaviour captured rather than PHP's output
+   blessed:
+
+   | Comparison | Golden | Replayed by |
+   |---|---|---|
+   | `api-diff` (79 endpoints) | `api_shapes.json` | `ApiShapeCharacterisationTest` |
+   | `mutation-diff` (100 cases) | `mutation_cases.json` | `MutationCharacterisationTest` |
+   | `validate-diff` (34 findings, all 20 issue types) | `validate_findings.json` | `ValidateServiceCharacterisationTest` |
+   | `match-diff` (linkage + author backfill) | `match_linkage.json` | `MatchServiceCharacterisationTest` |
+   | `validator-diff` (46 cases) | `validator_cases.json` | `ItemValidatorCharacterisationTest` |
+   | `reaper-diff` | `reaper_fixtures.json` + `reaper_expected.json` | `ReaperCharacterisationTest` |
+   | `canonical-diff` | `canonical_expected.json` | `CanonicalBookCharacterisationTest` |
+   | `validate-diff` helpers (1,823 cases) | `validate_predicates.json` | `ValidateHelpersDifferentialTest` |
+
+   What this cost, and it is the whole lesson of the phase: **a golden can only
+   describe data that comes back the same way every time.** Goldens taken over
+   the seeded database kept failing for reasons that were not regressions — the
+   seed is a copy of the live catalogue, and a reseed turned a field from `str`
+   into `null`. So the API and write-route goldens are taken over a database
+   built from nothing: `php/schema`'s baseline plus `SyntheticShop`, both code.
+   The validator and matcher goldens are taken over the same synthetic shop,
+   which had to grow from 8 issue types to all 20.
+
+   The other half was litter. Six tools and tests left fixtures behind — 13,339
+   findings, a sentinel run with a fixed id that survived reseeds, a re-matched
+   catalogue, three marked books — and each one moved a golden somewhere else.
+   Two tests carried unscoped assertions that read another fixture's rows.
+
+   Two shared behaviours had to be made deterministic before they could be
+   frozen at all, and both were arbitrary in *Python* too: the "already active"
+   409 named whichever active run Postgres returned first, and the matcher's
+   author backfill picked arbitrarily among candidate authors. Both stacks now
+   order explicitly.
+
+   *Gate:* met. `crawl_diff` is the one comparison that cannot be frozen — it
+   needs live HTTP — but the layers under it are: the parser differentials, the
+   item validator, `PersisterTest` (fixture → rows) and the discovery goldens.
+   What is lost is "the live site still looks like the fixture", which is
+   monitoring, not a regression test.
 7. **Shadow run** — ~~2 weeks calendar~~ **redundant.** A shadow period exists
    to prove the new stack behaves on live traffic before cutover. There is no
    live service and no traffic. The meaningful version — run both stacks over
@@ -131,8 +192,13 @@ compose on a timer rather than invoked by hand.
 - **The differential method.** Afterwards the PHP suite asserts PHP against its
   own frozen past — a regression net, not a correctness proof.
 - **Python's suite** — 504 unit and 416 integration tests.
-- **The audit capability.** Eight defects in one session came from having two
-  implementations to disagree with each other. One cannot disagree with itself.
+- **The audit capability.** Nine defects came from having two implementations to
+  disagree with each other. One cannot disagree with itself.
+- **Not** the test database's contents. Verified after phase 6: the whole PHP
+  suite — library 2,113 tests, dashboard 4, crawler 51 — passes against an
+  *empty* database carrying nothing but `php/schema`'s baseline. Every fixture
+  is built from code, so `seed_test_db.py` needs no port; it exists to give the
+  differentials realistic data, and the differentials are what is being retired.
 
 A smaller first step, if wanted: run the PHP crawler for a single shop in
 parallel, keeping Python for schema, scheduling and observability. Real

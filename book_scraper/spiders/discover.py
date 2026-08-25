@@ -1126,6 +1126,13 @@ class DiscoverSpider(scrapy.Spider):
             return
 
         for link in response.css("a::attr(href)").getall():
+            # Trimmed, which is what a browser does. vaga's homepage carries 65
+            # whitespace-padded hrefs (`href="/atmosfera "`), and untrimmed 62
+            # of them are distinct URLs from their clean twins — so each of
+            # those products was fetched twice and could get a duplicate
+            # discovered_urls row. On identical bytes: 629 links before, 565
+            # after. The real catalogue holds 3 such rows.
+            link = link.strip()
             if not link.startswith("http"):
                 link = response.urljoin(link)
 

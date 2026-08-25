@@ -178,6 +178,41 @@ final class DiscoverEmitTest extends TestCase
 
     // ------------------------------------------------------------- sitemap
 
+    /**
+     * A padded href and its clean twin are ONE link.
+     *
+     * vaga's homepage carries 65 hrefs like `href="/atmosfera "`. Untrimmed,
+     * 62 of them are distinct URLs from their clean twins, so each of those
+     * products is fetched twice and can get a duplicate discovered_urls row —
+     * which is what the Python spider did until it was fixed to trim too.
+     * Nothing in the crawler calls trim() explicitly; DomCrawler's link
+     * resolution does it, so this pins behaviour that a change of HTML library
+     * could silently take away.
+     */
+    public function test_a_padded_href_is_the_same_link_as_its_clean_twin(): void
+    {
+        $html = '<html><body>'
+            . '<a href="/atmosfera ">padded</a>'
+            . '<a href="/atmosfera">clean</a>'
+            . '<a href=" /kitas">leading</a>'
+            . '<a href="https://elsewhere.test/x">external</a>'
+            . '<a href="/atmosfera#reviews">fragment</a>'
+            . '</body></html>';
+
+        $spider = $this->spider(['strategy' => 'full_crawl']);
+        $request = new Request('GET', 'https://vaga.lt/', [$spider, 'parse']);
+        $response = new Response(new \Nyholm\Psr7\Response(200, [], $html), $request);
+
+        $method = (new ReflectionClass($spider))->getMethod('internalLinks');
+        $method->setAccessible(true);
+        $links = $method->invoke($spider, $response, 'https://vaga.lt');
+
+        self::assertSame([
+            'https://vaga.lt/atmosfera',
+            'https://vaga.lt/kitas',
+        ], $links);
+    }
+
     public function test_sitemap_emits_each_unique_url_once(): void
     {
         $xml = (string) file_get_contents(__DIR__ . '/../../../fixtures/vaga_sitemap.xml');
