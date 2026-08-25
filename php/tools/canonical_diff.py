@@ -35,6 +35,13 @@ DETAIL = "https://ibiblioteka.lt/metis-api/bibliographic-records/public/{record}
 
 DEFAULT_RECORDS = ["2097094", "2113082", "2126803"]
 
+#: --freeze writes the fetched bodies here and the resulting rows beside them.
+#: Freezing the bodies is half the point: it takes the network out of the
+#: replay, so the characterisation test does not depend on a library API
+#: staying up or returning the same record.
+FIXTURE_DIR = ROOT / "fixtures" / "ibiblioteka" / "canonical"
+FREEZE_TO = ROOT / "php" / "tests" / "golden" / "canonical_expected.json"
+
 
 def engine():
     return sa.create_engine(TEST_DSN)
@@ -173,6 +180,13 @@ def diff(a: object, b: object, path: str = "") -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--records", default=",".join(DEFAULT_RECORDS))
+    parser.add_argument(
+        "--freeze",
+        action="store_true",
+        help="after both writers agree, save the fetched bodies as fixtures and "
+        "the resulting rows as a characterisation golden. Refuses on any "
+        "difference.",
+    )
     args = parser.parse_args()
 
     records = [r.strip() for r in args.records.split(",") if r.strip()]
@@ -196,6 +210,10 @@ def main() -> int:
         for leftover in scratch.glob("record-*.json"):
             leftover.unlink()
         scratch.rmdir()
+        # Same lesson as reaper_diff and mutation_diff: a tool that writes into
+        # the shared test database cleans up, or it becomes the next tool's
+        # mystery failure.
+        reset(urls)
 
     for name, rows in (("python", python_rows), ("php", php_rows)):
         print(
@@ -215,6 +233,22 @@ def main() -> int:
             print(f"   {line}")
     else:
         print("identical — both writers produced the same canonical rows")
+        if args.freeze:
+            FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+            for record, (url, body) in zip(records, pairs):
+                (FIXTURE_DIR / f"{record}.json").write_text(body)
+            FREEZE_TO.parent.mkdir(parents=True, exist_ok=True)
+            FREEZE_TO.write_text(json.dumps({
+                "records": [
+                    {"record": r, "url": u, "fixture": f"{r}.json"}
+                    for r, (u, _) in zip(records, pairs)
+                ],
+                "expected": php_rows,
+            }, indent=1, ensure_ascii=False) + "\n")
+            print(f"froze {len(records)} record(s) to {FIXTURE_DIR} and {FREEZE_TO}")
+
+    if args.freeze and differences:
+        print("NOT frozen — the golden may only record agreed behaviour.")
 
     return len(differences)
 

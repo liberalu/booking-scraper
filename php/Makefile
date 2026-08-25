@@ -134,9 +134,11 @@ validator-diff:
 
 ## Feed identical library records to both canonical-book writers and diff the
 ## rows. Test database only.
+## FREEZE=1 also saves the fetched records as fixtures and the rows as a
+## characterisation golden — which takes the network out of the replay.
 canonical-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/canonical_diff.py \
-		$(if $(RECORDS),--records $(RECORDS),)
+		$(if $(RECORDS),--records $(RECORDS),) $(if $(FREEZE),--freeze,)
 
 ## Plant the same zombie runs in two clones and diff what each reaper does.
 ## FREEZE=1 also writes the per-fixture outcome as a characterisation golden —

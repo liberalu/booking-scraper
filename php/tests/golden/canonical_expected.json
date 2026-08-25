@@ -1,0 +1,167 @@
+{
+ "records": [
+  {
+   "record": "2097094",
+   "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094",
+   "fixture": "2097094.json"
+  },
+  {
+   "record": "2113082",
+   "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2113082",
+   "fixture": "2113082.json"
+  },
+  {
+   "record": "2126803",
+   "url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+   "fixture": "2126803.json"
+  }
+ ],
+ "expected": {
+  "books": [
+   {
+    "source_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094",
+    "libis_code": "C1BLNB0047E677",
+    "data_source": "ibiblioteka",
+    "title": "Słownik polszczyzny XVI wieku",
+    "title_full": "Słownik polszczyzny XVI wieku / Instytut Badań Literackich Polskiej Akademii Nauk ; [komitet redakcyjny: Stanisław Bąk ... [et al.]",
+    "year": 1966,
+    "release_place": "Wrocław [etc.]",
+    "type": "book",
+    "format": "PRINTED",
+    "pages": null,
+    "duration": null,
+    "dimensions": null,
+    "language": null,
+    "translated_from": null,
+    "description": null,
+    "cover_url": null,
+    "upcoming_release": false,
+    "udc_codes": [
+     "811.162.1'374.8-022.214"
+    ],
+    "subjects": [
+     "Vidurinė lenkų kalba, 16-18 amžius — Žodynai"
+    ],
+    "audience": "Suaugusiesiems, bendra",
+    "libis_rating": null,
+    "libis_review_count": null,
+    "publisher": "Zakład Narodowy im. Ossolińskich",
+    "series": null
+   },
+   {
+    "source_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2113082",
+    "libis_code": "C1BLNB1F0E192F",
+    "data_source": "ibiblioteka",
+    "title": "Ernst Wichert's Gesammelte Werke",
+    "title_full": "Ernst Wichert's Gesammelte Werke",
+    "year": 1904,
+    "release_place": "Dresden",
+    "type": "book",
+    "format": "PRINTED",
+    "pages": null,
+    "duration": null,
+    "dimensions": null,
+    "language": null,
+    "translated_from": null,
+    "description": null,
+    "cover_url": null,
+    "upcoming_release": false,
+    "udc_codes": [
+     "830.2",
+     "830-3"
+    ],
+    "subjects": [
+     "Literatūra lietuviška tematika, vokiečių",
+     "Vokiečių proza"
+    ],
+    "audience": "Suaugusiesiems, bendra",
+    "libis_rating": null,
+    "libis_review_count": null,
+    "publisher": "C. Reissner",
+    "series": null
+   },
+   {
+    "source_url": "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+    "libis_code": "C1BC10000329816",
+    "data_source": "ibiblioteka",
+    "title": "Prababa - Prywowany",
+    "title_full": "Prababa - Prywowany / [redaktorzy: Krystyna Wilczewska, Lucyna Woronczakowa]",
+    "year": 2002,
+    "release_place": null,
+    "type": "book",
+    "format": "PRINTED",
+    "pages": 515,
+    "duration": null,
+    "dimensions": "30 cm",
+    "language": null,
+    "translated_from": null,
+    "description": null,
+    "cover_url": null,
+    "upcoming_release": false,
+    "udc_codes": [
+     "80"
+    ],
+    "subjects": null,
+    "audience": "Suaugusiesiems, bendra",
+    "libis_rating": null,
+    "libis_review_count": null,
+    "publisher": null,
+    "series": null
+   }
+  ],
+  "isbns": [
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+    "8387456969",
+    "isbn10"
+   ],
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+    "9788387456962",
+    "isbn13"
+   ]
+  ],
+  "authors": [
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094",
+    "Bąk, Stanisław (1900-1981)",
+    "bąk stanisław (1900-1981)",
+    "LNB:V*67068;=BN",
+    "editor",
+    0
+   ],
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2097094",
+    "Mayenowa, Maria Renata (1910-1988)",
+    "mayenowa maria renata (1910-1988)",
+    "LNB:V*55990;=BO",
+    "editor",
+    1
+   ],
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2113082",
+    "Wichert, Ernst (1831–1902)",
+    "wichert ernst (1831–1902)",
+    "LNB:V*37733;=BJ",
+    "author",
+    0
+   ],
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+    "Wilczewska, Krystyna",
+    "wilczewska krystyna",
+    "LNB:V*394919;=BV",
+    "editor",
+    0
+   ],
+   [
+    "https://ibiblioteka.lt/metis-api/bibliographic-records/public/2126803",
+    "Woronczakowa, Lucyna",
+    "woronczakowa lucyna",
+    "LNB:K8L;=xs",
+    "editor",
+    1
+   ]
+  ]
+ }
+}
