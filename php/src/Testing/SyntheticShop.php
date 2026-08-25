@@ -26,6 +26,15 @@ final class SyntheticShop
 {
     public const SHOP = 'synthetic';
 
+    /**
+     * A second shop, so the multi-shop views have something to show.
+     *
+     * /api/books?has_conflicts=true and ?shop_count_min=2 are about the same
+     * canonical seen by more than one shop — with a single shop they can only
+     * ever answer with an empty list, which pins nothing about the rows.
+     */
+    public const SHOP_TWO = 'synthetic-two';
+
     private const BASE = 'https://synthetic.test';
 
     /** Author name used by the match case, on both sides of the link. */
@@ -213,7 +222,9 @@ final class SyntheticShop
             foreach ($cases as [$slug, $overrides]) {
                 self::insertCase($db, $shopId, $slug, $overrides);
             }
-            self::insertRunFixtures($db, $shopId);
+            $runId = self::insertRunFixtures($db, $shopId);
+            self::insertHistoryFixtures($db, $shopId, $runId);
+            self::insertSecondShop($db);
         });
 
         return ['shop_id' => $shopId, 'rows' => count($cases)];
@@ -229,7 +240,7 @@ final class SyntheticShop
      * column allows null, so the frozen API shapes pin real types rather than
      * "null".
      */
-    private static function insertRunFixtures(Connection $db, int $shopId): void
+    private static function insertRunFixtures(Connection $db, int $shopId): int
     {
         $runId = (int) $db->selectOne(
             'insert into scrape_runs (shop_id, phase, status, started_at, finished_at, '
@@ -285,6 +296,213 @@ final class SyntheticShop
             . "values (?, ?, 'format', 'format_is_dimensions', '17x24', ?, 'new', ?, ?, 1)",
             [$runId, $book->url, $book->id, $shopId, $runId]
         );
+
+        return $runId;
+    }
+
+    /**
+     * A canonical book, with a year and publisher so the canonical-facing
+     * endpoints (/api/books/years, publisher columns) return values rather
+     * than nulls.
+     */
+    private static function insertCanonical(Connection $db, string $title, string $slug): int
+    {
+        $publisher = $db->selectOne(
+            'select id from publishers where name = ?',
+            ['Synthetic Press']
+        );
+        $publisherId = $publisher !== null ? (int) $publisher->id : (int) $db->selectOne(
+            'insert into publishers (name, created_at) values (?, now()) returning id',
+            ['Synthetic Press']
+        )->id;
+
+        $canonical = (int) $db->selectOne(
+            'insert into books (data_source, title, year, publisher_id, type, format, '
+            . 'language, upcoming_release, created_at, updated_at, source_url) values '
+            . "('shop_inferred', ?, 2024, ?, 'book', 'paperback', 'lt', false, now(), "
+            . 'now(), ?) returning id',
+            [$title, $publisherId, self::BASE . '/canonical/' . $slug]
+        )->id;
+
+        // Every canonical carries an author. Without one the first row of
+        // /api/books froze with an empty authors[], which pins that the field
+        // is a list and nothing about what is in it.
+        $db->statement(
+            "insert into book_authors (book_id, author_id, role, position) "
+            . "values (?, ?, 'author', 0)",
+            [$canonical, self::authorId($db)]
+        );
+
+        return $canonical;
+    }
+
+    /** The fixture's single canonical author, created on first use. */
+    private static function authorId(Connection $db): int
+    {
+        $found = $db->selectOne('select id from authors where name = ?', [self::AUTHOR]);
+
+        return $found !== null ? (int) $found->id : (int) $db->selectOne(
+            'insert into authors (name, normalized_name, created_at) '
+            . 'values (?, ?, now()) returning id',
+            [self::AUTHOR, mb_strtolower(self::AUTHOR)]
+        )->id;
+    }
+
+    /**
+     * The history and failure rows the dashboard's list endpoints show.
+     *
+     * Without these, 38 of the 80 frozen API shapes contained an empty
+     * container somewhere — an empty list pins that a field is a list, and
+     * nothing about the rows in it, which is where a field being renamed or
+     * changing type would actually show.
+     */
+    private static function insertHistoryFixtures(Connection $db, int $shopId, int $runId): void
+    {
+        $book = $db->selectOne(
+            'select id, url, price from shop_books where shop_id = ? and price is not null '
+            . 'order by id limit 1',
+            [$shopId]
+        );
+
+        // An earlier, different price, so the price-change views have a change
+        // to show rather than a single flat reading.
+        $db->statement(
+            'insert into prices (shop_book_id, price, in_stock, scraped_at) '
+            . 'values (?, ?, true, now() - make_interval(days => 3))',
+            [$book->id, '7.49']
+        );
+        $db->statement(
+            'insert into shop_book_changes (shop_book_id, scrape_run_id, field, '
+            . 'old_value, new_value, changed_at) values (?, ?, ?, ?, ?, now())',
+            [$book->id, $runId, 'price', '7.49', (string) $book->price]
+        );
+
+        $db->statement(
+            'insert into scrape_run_events (run_id, event_type, actor, payload, created_at) '
+            . "values (?, 'started', 'fixture', ?::jsonb, now() - make_interval(mins => 30))",
+            [$runId, '{"note": "fixture run started"}']
+        );
+
+        // A failure on the FAILED queue item specifically: the live view's
+        // failure groups join back to scrape_url_items and require
+        // `sui.status = 'failed'`, so a failure hung off the done item grouped
+        // to nothing.
+        $item = $db->selectOne(
+            "select id, url, discovered_url_id from scrape_url_items "
+            . "where run_id = ? and status = 'failed' order by id limit 1",
+            [$runId]
+        );
+        $db->statement(
+            'insert into scrape_failures (scrape_url_item_id, run_id, shop_id, url, '
+            . "occurred_at, error_reason, http_status, lifecycle_state) values "
+            . "(?, ?, ?, ?, now(), 'http_404', 404, 'new')",
+            [$item->id, $runId, $shopId, $item->url]
+        );
+        $db->statement(
+            'update discovered_urls set fail_count = 3, last_http_status = 404, '
+            . 'last_checked_at = now() where id = ?',
+            [$item->discovered_url_id]
+        );
+
+        // Deliberately NO in-flight (`processing`) queue item. The live
+        // view's in_flight list can only show one, but a fixture cannot hold
+        // one: starting a dashboard runs the reaper, which sees a `processing`
+        // row claimed minutes ago on a run that is not running and correctly
+        // fails it — and while doing so writes a run, an event and an issue of
+        // its own. Those extra rows appear when the differential starts real
+        // dashboards and not when a test drives the routes in-process, so the
+        // frozen shapes stopped matching the replay. The reaper is right; the
+        // fixture was wrong to give it something to reap.
+
+        // A streak of failed runs on a phase of its own: the repeated-failure
+        // view wants THRESHOLD consecutive failed runs of one shop+phase
+        // sharing a single error reason, and nothing short of that shows a row.
+        for ($i = 3; $i >= 1; $i--) {
+            $failed = (int) $db->selectOne(
+                'insert into scrape_runs (shop_id, phase, status, started_at, finished_at, '
+                . 'urls_total, urls_processed, items_added, items_updated, errors_4xx, '
+                . 'errors_5xx, error_count, last_heartbeat, resumable_after_failure, '
+                . "close_reason) values (?, 'discover_categories', 'failed', "
+                . 'now() - make_interval(days => ?), now() - make_interval(days => ?), '
+                . "1, 0, 0, 0, 1, 0, 1, now() - make_interval(days => ?), true, 'http_403') "
+                . 'returning id',
+                [$shopId, $i, $i, $i]
+            )->id;
+            // A URL per run: validation_issues is uniquely indexed on
+            // (url, field, issue), so one shared URL would allow only the
+            // first run's issue row.
+            $blocked = self::BASE . '/blocked-category-' . $i;
+            $failedItem = (int) $db->selectOne(
+                'insert into scrape_url_items (run_id, shop_id, url, status, created_at, '
+                . "done_at, url_type, http_status, retry_count, attempts) values "
+                . "(?, ?, ?, 'failed', now(), now(), 'category', 403, 0, 1) returning id",
+                [$failed, $shopId, $blocked]
+            )->id;
+            $db->statement(
+                'insert into scrape_failures (scrape_url_item_id, run_id, shop_id, url, '
+                . "occurred_at, error_reason, http_status, lifecycle_state) values "
+                . "(?, ?, ?, ?, now(), 'http_403', 403, 'new')",
+                [$failedItem, $failed, $shopId, $blocked]
+            );
+            // The repeated-failure view reads the REASON from validation_issues
+            // (`scrape_run_failed`), not from scrape_failures, and skips any
+            // streak whose runs do not share exactly one reason.
+            $db->statement(
+                'insert into validation_issues (last_seen_run_id, url, field, issue, '
+                . 'raw_value, lifecycle_state, shop_id, first_seen_run_id, run_count) '
+                . "values (?, ?, 'run', 'scrape_run_failed', 'http_403', 'new', ?, ?, 1)",
+                [$failed, $blocked, $shopId, $failed]
+            );
+        }
+
+        // Issues at each severity, so the severity filters return rows.
+        foreach ([
+            ['isbn_duplicate', 'isbn', 'warning-severity issue'],
+            ['price_zero', 'price', 'critical-severity issue'],
+        ] as [$issue, $field, $raw]) {
+            $db->statement(
+                'insert into validation_issues (last_seen_run_id, url, field, issue, '
+                . 'raw_value, shop_book_id, lifecycle_state, shop_id, first_seen_run_id, '
+                . "run_count) values (?, ?, ?, ?, ?, ?, 'new', ?, ?, 1)",
+                [$runId, $book->url, $field, $issue, $raw, $book->id, $shopId, $runId]
+            );
+        }
+    }
+
+    /**
+     * A second shop holding one book that DISAGREES with the first about the
+     * same canonical — a different title and year on the same book_id. That is
+     * what /api/books?has_conflicts=true and ?shop_count_min=2 look for.
+     */
+    private static function insertSecondShop(Connection $db): void
+    {
+        $shopId = (int) $db->selectOne(
+            'insert into shops (name, base_url) values (?, ?) '
+            . 'on conflict (name) do update set base_url = excluded.base_url returning id',
+            [self::SHOP_TWO, 'https://synthetic-two.test']
+        )->id;
+
+        $canonical = (int) $db->selectOne(
+            'select book_id from shop_books where book_id is not null order by id limit 1'
+        )->book_id;
+
+        $url = 'https://synthetic-two.test/same-book-different-metadata';
+        $bookId = (int) $db->selectOne(
+            'insert into shop_books (shop_id, url, title, author, publisher, year, format, '
+            . 'type, price, in_stock, is_active, categories, match_status, book_id, '
+            . "first_seen_at, last_seen_at) values (?, ?, ?, ?, ?, 2019, 'hardcover', "
+            . "'book', '11.49', true, true, ?, 'matched', ?, now(), now()) returning id",
+            [
+                $shopId, $url, 'Same Book, Different Title', self::AUTHOR,
+                'Another Press', self::pgArray(['Grožinė literatūra']), $canonical,
+            ]
+        )->id;
+        self::insertUrl($db, $shopId, $url, 'product', $bookId);
+        $db->statement(
+            'insert into prices (shop_book_id, price, in_stock, scraped_at) '
+            . "values (?, '11.49', true, now())",
+            [$bookId]
+        );
     }
 
     /** Everything a previous build created, in reference order. */
@@ -300,33 +518,58 @@ final class SyntheticShop
         // guard()), and because validation_issues is derived data: a validate
         // run rebuilds it from scratch.
         $db->statement('delete from validation_issues');
-        $db->statement(
-            'delete from scrape_url_items where shop_id in '
-            . '(select id from shops where name = ?)',
-            [self::SHOP]
-        );
-        $db->statement(
-            'delete from cron_jobs where shop_id in (select id from shops where name = ?)',
-            [self::SHOP]
-        );
-        $db->statement(
-            'delete from scrape_runs where shop_id in (select id from shops where name = ?)',
-            [self::SHOP]
-        );
+        // Before the runs: shop_book_changes references scrape_runs, so
+        // deleting runs first fails on the foreign key.
         foreach (['prices', 'shop_book_attributes', 'shop_book_authors', 'shop_book_changes'] as $table) {
             $db->statement(
                 "delete from {$table} where shop_book_id in (select sb.id from shop_books sb "
-                . 'join shops s on s.id = sb.shop_id where s.name = ?)',
-                [self::SHOP]
+                . 'join shops s on s.id = sb.shop_id where s.name in (?, ?))',
+                [self::SHOP, self::SHOP_TWO]
             );
         }
         $db->statement(
-            'delete from discovered_urls where shop_id in (select id from shops where name = ?)',
-            [self::SHOP]
+            'delete from scrape_failures where shop_id in '
+            . '(select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
         );
         $db->statement(
-            'delete from shop_books where shop_id in (select id from shops where name = ?)',
-            [self::SHOP]
+            'delete from scrape_url_items where shop_id in '
+            . '(select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
+        );
+        $db->statement(
+            'delete from scrape_run_events where run_id in '
+            . '(select id from scrape_runs where shop_id in '
+            . '(select id from shops where name in (?, ?)))',
+            [self::SHOP, self::SHOP_TWO]
+        );
+        $db->statement(
+            'delete from cron_jobs where shop_id in (select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
+        );
+        // The rows that POINT AT a run but outlive it in this cleanup:
+        // shop_books.created_run_id and discovered_urls.last_seen_run_id are
+        // both foreign keys, and the runs go before the books do.
+        foreach ([
+            'update shop_books set created_run_id = null',
+            'update discovered_urls set last_seen_run_id = null',
+        ] as $statement) {
+            $db->statement(
+                $statement . ' where shop_id in (select id from shops where name in (?, ?))',
+                [self::SHOP, self::SHOP_TWO]
+            );
+        }
+        $db->statement(
+            'delete from scrape_runs where shop_id in (select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
+        );
+        $db->statement(
+            'delete from discovered_urls where shop_id in (select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
+        );
+        $db->statement(
+            'delete from shop_books where shop_id in (select id from shops where name in (?, ?))',
+            [self::SHOP, self::SHOP_TWO]
         );
         // The canonical the drift case disagrees with. Deleted after the
         // shop_books referencing it, and found by source_url — books carry no
@@ -400,12 +643,7 @@ final class SyntheticShop
         )->id;
 
         if (isset($overrides['_canonical_isbn'])) {
-            $canonical = (int) $db->selectOne(
-                'insert into books (data_source, title, upcoming_release, created_at, '
-                . "updated_at, source_url) values ('shop_inferred', ?, false, now(), now(), ?) "
-                . 'returning id',
-                [$row['title'], self::BASE . '/canonical/' . $slug]
-            )->id;
+            $canonical = self::insertCanonical($db, $row['title'], $slug);
             $db->statement(
                 "insert into book_isbns (book_id, isbn, isbn_type) values (?, ?, 'isbn13')",
                 [$canonical, $overrides['_canonical_isbn']]
@@ -417,27 +655,14 @@ final class SyntheticShop
         }
 
         if ($overrides['_canonical_match'] ?? false) {
-            $canonical = (int) $db->selectOne(
-                'insert into books (data_source, title, upcoming_release, created_at, '
-                . "updated_at, source_url) values ('shop_inferred', ?, false, now(), now(), ?) "
-                . 'returning id',
-                [$row['title'], self::BASE . '/canonical/' . $slug]
-            )->id;
+            $canonical = self::insertCanonical($db, $row['title'], $slug);
             $db->statement(
                 "insert into book_isbns (book_id, isbn, isbn_type) values (?, ?, 'isbn13')",
                 [$canonical, $row['isbn']]
             );
-            $authorId = (int) $db->selectOne(
-                'insert into authors (name, normalized_name, created_at) '
-                . 'values (?, ?, now()) returning id',
-                [self::AUTHOR, mb_strtolower(self::AUTHOR)]
-            )->id;
-            $db->statement(
-                "insert into book_authors (book_id, author_id, role, position) "
-                . "values (?, ?, 'author', 0)",
-                [$canonical, $authorId]
-            );
-            // Left unlinked on purpose: linking it is what step 2 does.
+            // The canonical already has its author at position 0 (see
+            // insertCanonical). Left unlinked on purpose: linking the SHOP
+            // author to it is what match step 2 does.
             $shopAuthor = (int) $db->selectOne(
                 'insert into shop_authors (name, normalized_name, created_at) '
                 . 'values (?, ?, now()) returning id',

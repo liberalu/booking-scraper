@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\DB;
  */
 trait UsesTestDatabase
 {
-    protected function useTestDatabase(): void
+    protected function useTestDatabase(?string $dsn = null): void
     {
-        $dsn = getenv('TEST_DATABASE_URL')
+        $dsn ??= getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
         $parts = parse_url($dsn);
         config([

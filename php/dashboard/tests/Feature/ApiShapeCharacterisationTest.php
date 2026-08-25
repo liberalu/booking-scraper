@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use BookScraper\Testing\FixtureDatabase;
 use BookScraper\Testing\SyntheticShop;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
@@ -30,9 +31,20 @@ use Tests\UsesTestDatabase;
  * would be worse still, because a detail row that gained or lost a null would
  * change the frozen shape without anything having regressed.
  *
- * Known limit: the LIST endpoints read every shop, so the shape of their first
- * row still comes from copied catalogue data. That is the part of this golden
- * that a reseed could move.
+ * Run against a database containing NOTHING but the fixture, built here from
+ * php/schema's baseline. The seeded database could not work: its list endpoints
+ * read every shop, so the shape of their first row came from the copied
+ * catalogue — and the copy is taken from the live one, which moves. A reseed
+ * turned a field from `str` into `null` and this test failed with nothing
+ * having regressed. Re-freezing is not an answer once Python is gone: there
+ * would be nothing left to agree with, so the "fix" would be to bless whatever
+ * PHP currently emits.
+ *
+ * Two shapes still contain an empty list, both for a reason:
+ * `discover_strategies` is read from the shop's TOML config, which a fixture
+ * shop deliberately has none of; and the live view's `in_flight` cannot be
+ * populated, because starting a dashboard runs the reaper, which correctly
+ * fails a `processing` row claimed minutes ago on a run that is not running.
  */
 final class ApiShapeCharacterisationTest extends TestCase
 {
@@ -44,12 +56,14 @@ final class ApiShapeCharacterisationTest extends TestCase
 
     /** Kept in step with ID_PLACEHOLDERS in php/tools/api_diff.py. */
     private const PLACEHOLDERS = [
+        // The OLDEST run: that is the one the fixture hangs its queue items,
+        // events, failures and changes off.
         '{run}' => 'select id from scrape_runs where shop_id = ' . self::SYNTHETIC
-            . ' order by id desc limit 1',
-        '{run_scan}' => 'select id from scrape_runs where shop_id = ' . self::SYNTHETIC
-            . " and phase = 'scan' order by id desc limit 1",
-        '{book}' => "select id from books where source_url like 'https://synthetic.test/%'"
             . ' order by id limit 1',
+        '{run_scan}' => 'select id from scrape_runs where shop_id = ' . self::SYNTHETIC
+            . " and phase = 'scan' order by id limit 1",
+        '{book}' => 'select book_id from shop_books where book_id is not null '
+            . 'order by id limit 1',
         '{shop_book}' => 'select id from shop_books where shop_id = ' . self::SYNTHETIC
             . ' order by id limit 1',
         '{issue}' => 'select id from validation_issues where shop_id = ' . self::SYNTHETIC
@@ -58,18 +72,40 @@ final class ApiShapeCharacterisationTest extends TestCase
             . ' order by id limit 1',
         '{cron}' => 'select id from cron_jobs where shop_id = ' . self::SYNTHETIC
             . ' order by id limit 1',
+        // Not ids, but the same problem: literal shop names, titles and ISBNs
+        // from the real catalogue matched nothing here, and the shape froze as
+        // an empty list.
+        '{shop}' => 'select name from shops order by id limit 1',
+        '{isbn}' => 'select isbn from book_isbns order by isbn limit 1',
+        // A CANONICAL title: /api/books and the export both search books,
+        // not shop_books, so a shop-only title matched nothing.
+        '{title}' => 'select title from books order by id limit 1',
+        '{year}' => 'select year from books where year is not null order by year limit 1',
+        '{issue_type}' => 'select issue from validation_issues order by issue limit 1',
     ];
 
-    /** Endpoints answering with CSV rather than JSON. */
+    /**
+     * Endpoints answering with CSV rather than JSON, in the placeholder form
+     * the golden stores them.
+     */
     private const CSV = [
-        '/api/books/export?search=Tolkien',
-        '/api/books/export?year=1975',
+        '/api/books/export?search={title}',
+        '/api/books/export?year={year}',
     ];
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->useTestDatabase();
+        // Dropped and rebuilt, exactly as the freeze does it. Reusing the
+        // database instead left the sequences where the last run stopped, and
+        // several list endpoints order by a timestamp that ties across rows
+        // inserted in one transaction — so the tie broke differently and the
+        // first row of /api/issues was a different kind of issue.
+        $this->useTestDatabase(FixtureDatabase::ensure(
+            getenv('TEST_DATABASE_URL')
+                ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test',
+            recreate: true
+        ));
     }
 
     #[Group('db')]
@@ -79,18 +115,10 @@ final class ApiShapeCharacterisationTest extends TestCase
         self::assertIsArray($cases);
         self::assertNotEmpty($cases, 'golden is empty — run `make api-diff-freeze`');
 
-        // Inside a transaction that is rolled back: the fixture this builds
-        // is committed data otherwise, and a tool that leaves its fixtures
-        // behind breaks the next one. That has already happened three times
-        // in this port. The requests below run in-process on this same
-        // connection, so they see the uncommitted rows.
-        DB::beginTransaction();
-        try {
-            $ids = $this->resolvePlaceholders();
-            $this->compareAll($cases, $ids);
-        } finally {
-            DB::rollBack();
-        }
+        // No transaction: the fixture database exists for this test alone and
+        // is rebuilt from nothing on every run, so there is nothing to protect
+        // and nothing to leave behind.
+        $this->compareAll($cases, $this->resolvePlaceholders());
     }
 
     /**
@@ -126,11 +154,6 @@ final class ApiShapeCharacterisationTest extends TestCase
     /** @return array<string, string> placeholder => concrete id */
     private function resolvePlaceholders(): array
     {
-        // Rebuilt rather than assumed: after a reseed the runs, cron and
-        // issue tables are empty (seed_test_db copies no runs), so half the
-        // detail routes would resolve to nothing. build() is idempotent.
-        SyntheticShop::build(DB::connection());
-
         $ids = [];
         foreach (self::PLACEHOLDERS as $token => $query) {
             $value = DB::selectOne($query);
@@ -138,7 +161,9 @@ final class ApiShapeCharacterisationTest extends TestCase
                 $value,
                 "cannot resolve {$token}: no row for `{$query}`. Seed the test database first."
             );
-            $ids[$token] = (string) ((array) $value)['id'];
+            // First column, whatever it is called: these queries return an
+            // id, a name, a title, an ISBN or a year.
+            $ids[$token] = rawurlencode((string) array_values((array) $value)[0]);
         }
 
         return $ids;

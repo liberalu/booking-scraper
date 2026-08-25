@@ -7,7 +7,7 @@ COMPOSER := $(PHP) $(shell which composer)
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
-.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate match reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
+.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard fixture-db api-diff crawl discover validate match reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
 
 install:
 	$(COMPOSER) install
@@ -55,10 +55,17 @@ dashboard:
 
 ## Compare every ported endpoint against the Python dashboard.
 ## Both must be running. Exit code = number of endpoints that differ.
-## FREEZE=1 ignores --py/--php and self-hosts both against the test database,
-## writing dashboard/tests/golden/api_shapes.json — only if all of them agree.
+## FREEZE=1 ignores --py/--php: it builds a database containing nothing but
+## the fixture (bin/fixture-db), hosts both dashboards against it, and writes
+## dashboard/tests/golden/api_shapes.json — only if all of them agree.
 api-diff:
 	cd .. && python3 php/tools/api_diff.py $(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
+
+## Build the fixture-only database the frozen API shapes are taken over.
+## Dropped and rebuilt from php/schema's baseline plus SyntheticShop, so it
+## needs nothing from the live catalogue.
+fixture-db:
+	DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) bin/fixture-db --recreate
 
 ## Library + crawler suites.
 test-all: test

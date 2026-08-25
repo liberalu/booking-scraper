@@ -544,6 +544,16 @@ def main() -> int:
     else:
         print("identical — both stacks wrote the same rows")
 
+    # This tool DELETED the shop's rows twice and left the PHP pass's in their
+    # place. Everything frozen from a seeded database — the API shapes, the
+    # write-route cases, the validator findings — describes the seeded rows, so
+    # they have to be put back before those tests mean anything.
+    print(
+        f"\n  NOTE: shop '{args.shop}' now holds this run's rows, not the seeded\n"
+        f"  catalogue. Restore it before running the characterisation tests:\n"
+        f"      cd php && make seed-test-db SHOP={args.shop}"
+    )
+
     return len(differences)
 
 

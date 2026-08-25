@@ -85,11 +85,16 @@ FREEZE_TO = ROOT / "php" / "dashboard" / "tests" / "golden" / "api_shapes.json"
 SYNTHETIC = "(select id from shops where name = 'synthetic')"
 
 ID_PLACEHOLDERS = {
+    # The OLDEST run, not the newest: that is the one the fixture hangs its
+    # queue items, events, failures and changes off. Pointed at the newest, the
+    # run detail, queue, live and books endpoints all froze empty.
     "{run}": f"select id from scrape_runs where shop_id = {SYNTHETIC}"
-    " order by id desc limit 1",
+    " order by id limit 1",
     "{run_scan}": f"select id from scrape_runs where shop_id = {SYNTHETIC}"
-    " and phase = 'scan' order by id desc limit 1",
-    "{book}": "select id from books where source_url like 'https://synthetic.test/%'"
+    " and phase = 'scan' order by id limit 1",
+    # A canonical that a shop_book actually points at, so the detail route's
+    # shops[] and price series are populated.
+    "{book}": "select book_id from shop_books where book_id is not null"
     " order by id limit 1",
     "{shop_book}": f"select id from shop_books where shop_id = {SYNTHETIC}"
     " order by id limit 1",
@@ -99,6 +104,19 @@ ID_PLACEHOLDERS = {
     " order by id limit 1",
     "{cron}": f"select id from cron_jobs where shop_id = {SYNTHETIC}"
     " order by id limit 1",
+    # Not ids, but the same problem: the list was written with literal shop
+    # names, titles and ISBNs from the real catalogue, so against any other
+    # database those filters matched nothing and the shape froze as an empty
+    # list — which pins that a field is a list and nothing about its rows.
+    "{shop}": "select name from shops order by id limit 1",
+    # A CANONICAL ISBN: /api/books searches book_isbns, so a shop-only ISBN
+    # matched nothing.
+    "{isbn}": "select isbn from book_isbns order by isbn limit 1",
+    # A CANONICAL title: /api/books and the export both search books, not
+    # shop_books, so a shop-only title matched nothing.
+    "{title}": "select title from books order by id limit 1",
+    "{year}": "select year from books where year is not null order by year limit 1",
+    "{issue_type}": "select issue from validation_issues order by issue limit 1",
 }
 
 #: Ids chosen to be absent, so the 404 paths stay covered on purpose rather
@@ -106,23 +124,29 @@ ID_PLACEHOLDERS = {
 MISSING_ID = "999999999"
 
 
-def build_fixtures(dsn: str) -> None:
-    """Build the synthetic shop, runs, cron job and issue the routes need.
+def build_fixture_db(template_dsn: str) -> str:
+    """Build a database holding NOTHING but the fixture, and return its DSN.
 
-    Delegated to `php bin/synthesize-validate-cases` rather than planted here:
-    the fixture has to outlive Python, since the goldens are only replayable
-    over data PHP can rebuild identically. Two implementations of one fixture
-    would drift, and the PHP one is the survivor.
+    Not the seeded database: its list endpoints read every shop, so the shape
+    of their first row came from the copied catalogue — and the copy is taken
+    from the live one, which moves. A reseed turned a field from `str` into
+    `null` and the golden failed with nothing having regressed. Re-freezing is
+    not an answer once Python is gone: there would be nothing left to agree
+    with, so the "fix" would be to bless whatever PHP currently emits.
+
+    Delegated to `php bin/fixture-db`, which builds the schema from
+    php/schema's baseline and then the fixture. Both are code, so the same
+    database comes back every time — with or without Python.
     """
     result = subprocess.run(
-        [PHP, "bin/synthesize-validate-cases", f"--database={dsn}"],
+        [PHP, "bin/fixture-db", "--recreate", f"--database={template_dsn}"],
         cwd=ROOT / "php",
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise SystemExit("could not build fixtures:\n" + result.stderr.strip())
-    print("  " + result.stdout.strip().splitlines()[0])
+        raise SystemExit("could not build the fixture database:\n" + result.stderr.strip())
+    return result.stdout.strip()
 
 
 def resolve_placeholders(endpoints: list[str], dsn: str) -> list[tuple[str, str]]:
@@ -149,7 +173,10 @@ def resolve_placeholders(endpoints: list[str], dsn: str) -> list[tuple[str, str]
                     f"cannot resolve {token}: the database under test has no row "
                     f"for `{query}`. Seed it first."
                 )
-            resolved[token] = str(value)
+            # Percent-encoded: some of these are titles with spaces and
+            # Lithuanian diacritics, and they land in a query string. PHP's
+            # rawurlencode() produces the same bytes.
+            resolved[token] = urllib.parse.quote(str(value), safe="")
 
     out = []
     for template in endpoints:
@@ -168,16 +195,15 @@ ENDPOINTS = [
     "/api/books/years",
     "/api/books?per_page=3&year=2024",
     "/api/books?per_page=3&data_source=shop_inferred",
-    "/api/books?per_page=3&search=9789986971535",
+    "/api/books?per_page=3&search={isbn}",
     "/api/books/{book}",
     "/api/books/{book}/prices",
     "/api/books/999999999",
     "/api/prices?per_page=3",
     "/api/prices?days=30&per_page=5",
-    "/api/prices?days=30&shop=vaga&per_page=3",
+    "/api/prices?days=30&shop={shop}&per_page=3",
     "/api/cron",
-    "/api/shops/vaga",
-    "/api/shops/pegasas",
+    "/api/shops/{shop}",
     "/api/shops/nope",
     "/api/runs/{run}",
     "/api/runs/{run}",
@@ -195,8 +221,8 @@ ENDPOINTS = [
     "/api/issues?per_page=3&sort_by=type",
     "/api/issues?per_page=3&sort_by=shop",
     "/api/issues?per_page=3&sort_by=sev",
-    "/api/issues?per_page=3&shop=vaga",
-    "/api/issues?per_page=3&issue_type=unmatched_has_isbn",
+    "/api/issues?per_page=3&shop={shop}",
+    "/api/issues?per_page=3&issue_type={issue_type}",
     "/api/issues/groups?group_by=type&state=new",
     "/api/issues/groups?group_by=type_shop&state=new",
     "/api/issues/trend?days=14&state=new",
@@ -224,25 +250,25 @@ ENDPOINTS = [
     "/api/cron/{cron}/detail",
     "/api/cron/{cron}/detail",
     "/api/cron/999999999/detail",
-    "/api/books/export?search=Tolkien",
-    "/api/books/export?year=1975",
+    "/api/books/export?search={title}",
+    "/api/books/export?year={year}",
     "/api/schedule",
     "/api/runs/repeated-failures",
     "/api/runs?per_page=10",
     "/api/runs?per_page=5&status=completed",
-    "/api/runs?per_page=5&shop=vaga",
+    "/api/runs?per_page=5&shop={shop}",
     "/api/runs?per_page=5&phase=discover",
     "/api/runs?status=running&per_page=1",
     "/api/shop-books?per_page=5",
-    "/api/shop-books?per_page=5&shop=vaga&active=true",
+    "/api/shop-books?per_page=5&shop={shop}&active=true",
     "/api/shop-books?per_page=5&missing_field=isbn",
     "/api/shop-books?per_page=5&has_isbn=true&linked=linked",
     "/api/shop-books?per_page=5&sort_by=title&sort_order=asc",
     "/api/urls?per_page=5",
-    "/api/urls?per_page=5&shop=vaga",
+    "/api/urls?per_page=5&shop={shop}",
     "/api/urls?per_page=5&failing=true",
     "/api/urls?per_page=5&has_book=true&sort_by=book",
-    "/api/urls?per_page=5&shop=pegasas&url_type=product",
+    "/api/urls?per_page=5&shop={shop}&url_type=product",
     # These used to be envelope-only: both stacks sorted on a non-unique
     # column with no tiebreaker, so the rows on a page were arbitrary among
     # ties (339 books share one created_at, 65 shop_books share price 0.00)
@@ -250,7 +276,7 @@ ENDPOINTS = [
     # id tiebreaker, so they compare row for row.
     "/api/books?per_page=3",
     "/api/books?per_page=3&has_isbn=true",
-    "/api/books?per_page=3&search=Tolkien",
+    "/api/books?per_page=3&search={title}",
     "/api/books?per_page=3&has_conflicts=true",
     "/api/books?per_page=3&shop_count_min=2",
     "/api/shop-books?per_page=3&sort_by=price&sort_order=asc",
@@ -281,8 +307,8 @@ ENVELOPE_KEYS = (
 # 227 of ~6,300 rows. The list query now has an id tiebreaker, so a larger
 # filter would be safe to add here.
 CSV_ENDPOINTS = {
-    "/api/books/export?search=Tolkien",
-    "/api/books/export?year=1975",
+    "/api/books/export?search={title}",
+    "/api/books/export?year={year}",
 }
 
 
@@ -562,10 +588,9 @@ def main() -> int:
     if args.freeze:
         # Self-hosted against the test database: the golden has to be replayable,
         # and the main catalogue changes whenever anything is crawled.
-        dsn = TEST_DSN
         assert_ports_free(FREEZE_PY_PORT, FREEZE_PHP_PORT)
+        dsn = build_fixture_db(php_dsn(TEST_DSN))
         print(f"starting both dashboards against {dsn.rsplit('/', 1)[-1]}")
-        build_fixtures(php_dsn(dsn))
         # Placeholders resolve BEFORE anything is started. Resolution can fail
         # fatally, and it used to do so after the servers were up but before
         # the try/finally that stops them — leaking two detached processes that
@@ -591,7 +616,8 @@ def main() -> int:
     try:
         envelope_resolved = {resolved for _, resolved in envelope_pairs}
         for template, endpoint in pairs + sorted(envelope_pairs):
-            getter = fetch_csv if endpoint in CSV_ENDPOINTS else fetch
+            # Keyed on the TEMPLATE: CSV_ENDPOINTS holds placeholders.
+            getter = fetch_csv if template in CSV_ENDPOINTS else fetch
             with ThreadPoolExecutor(max_workers=2) as pool:
                 py_future = pool.submit(getter, args.py, endpoint)
                 php_future = pool.submit(getter, args.php, endpoint)
