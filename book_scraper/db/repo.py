@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import zlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -822,6 +823,19 @@ def get_stable_discovered_urls(
 # --- Scrape Runs ---
 
 
+def scan_lock_key(phase: str) -> int:
+    """Advisory-lock key for a phase — stable across processes.
+
+    `hash(phase)` is not: CPython randomises string hashing per interpreter
+    unless PYTHONHASHSEED is set, which this project does not set, so two
+    spiders computed different keys for the same phase and both acquired
+    "the lock" (observed: 975101118 and 136925746 for one phase). crc32 is
+    deterministic and byte-identical to PHP's `crc32()`, so both stacks
+    share one lock namespace.
+    """
+    return zlib.crc32(phase.encode()) & 0x7FFFFFFF
+
+
 def try_acquire_scan_lock(session: Session, shop_id: int, phase: str) -> bool:
     """Acquire a transaction-scoped advisory lock keyed on (shop_id, phase).
 
@@ -831,7 +845,7 @@ def try_acquire_scan_lock(session: Session, shop_id: int, phase: str) -> bool:
     scrapy processes hitting `prepare_scan_create_run` concurrently do not
     both create runs for the same shop+phase.
     """
-    key2 = abs(hash(phase)) & 0x7FFFFFFF  # 32-bit positive
+    key2 = scan_lock_key(phase)
     result = session.execute(
         sa_text("SELECT pg_try_advisory_xact_lock(:k1, :k2)"),
         {"k1": shop_id, "k2": key2},

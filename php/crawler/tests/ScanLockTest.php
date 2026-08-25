@@ -12,10 +12,11 @@ use PHPUnit\Framework\TestCase;
 /**
  * The lock that stops two crawls fetching the same URLs.
  *
- * Python derives the key with `abs(hash(phase))`, which CPython randomises
- * per process unless PYTHONHASHSEED is set — so two processes compute
- * different keys and both "acquire" it. These tests pin the stable key and
- * the exclusion it buys.
+ * Python originally derived the key with `abs(hash(phase))`, which CPython
+ * randomises per process unless PYTHONHASHSEED is set — so two processes
+ * computed different keys and both "acquired" it. It now uses `zlib.crc32`,
+ * identical to the key pinned here. These tests pin that key and the
+ * exclusion it buys.
  */
 final class ScanLockTest extends TestCase
 {
