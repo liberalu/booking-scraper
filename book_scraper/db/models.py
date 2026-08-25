@@ -440,7 +440,13 @@ class UrlClassification(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     discovered_url_id: Mapped[int] = mapped_column(
-        ForeignKey("discovered_urls.id"), nullable=False, unique=True
+        # Cascading: a classification describes one discovered_urls row and has
+        # no meaning once that row is gone. Declared here as well as in the
+        # migration because the test database is built from this metadata, and
+        # the two disagreeing is what let the drift sit unnoticed.
+        ForeignKey("discovered_urls.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
     )
     book_score: Mapped[int] = mapped_column(Integer, nullable=False)
     is_book_product: Mapped[bool] = mapped_column(Boolean, nullable=False)
