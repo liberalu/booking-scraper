@@ -20,6 +20,23 @@ use Symfony\Component\DomCrawler\Crawler;
  */
 final class Parser
 {
+    /**
+     * Card price. vaga varies the modifier on the class ("price special"
+     * today, "price coupon" before that, sometimes none), and pinning one is
+     * how the listing silently stopped yielding prices: every card parsed and
+     * every price came back null. Requiring `"` or whitespace after `price`
+     * keeps this off `price-old`, `price-filter` and `product-price`, which
+     * sit in the same card.
+     */
+    private const CARD_PRICE = '/class="price(?:\s+[a-z-]+)*"[^>]*>\s*([0-9,]+)€/u';
+
+    /**
+     * The "was" price: `price-old price-in-store` today, with a "Knygyne:"
+     * label before the number; `price-old strikethrough` and a bare
+     * `price-old` also occur.
+     */
+    private const CARD_PRICE_OLD = '/class="price-old[^"]*"[^>]*>[^<]*?([0-9,]+)€/u';
+
     private const BOOK_CATEGORY_LABELS = [
         'negrožinė literatūra',
         'grožinė literatūra',
@@ -110,8 +127,8 @@ final class Parser
                 'title' => self::unescape(trim($name[2])),
                 'author' => self::firstGroup('/<p class="Autorius">\s*([^<]+?)\s*<\/p>/u', $seg),
                 // Lithuanian decimal comma: '16,32€' -> '16.32'
-                'price' => self::firstPrice('/class="price coupon">([0-9,]+)€/u', $seg),
-                'price_original' => self::firstPrice('/class="price-old">([0-9,]+)€/u', $seg),
+                'price' => self::firstPrice(self::CARD_PRICE, $seg),
+                'price_original' => self::firstPrice(self::CARD_PRICE_OLD, $seg),
                 'image_url' => self::firstGroup('/data-src="([^"]+)"/u', $seg, unescape: false),
             ];
         }

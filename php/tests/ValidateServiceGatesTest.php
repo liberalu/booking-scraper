@@ -47,10 +47,17 @@ final class ValidateServiceGatesTest extends TestCase
 
     public function test_no_check_fires_on_a_fully_delisted_shop(): void
     {
-        // Every row here is problem-shaped: duplicate ISBN and SKU, no price,
-        // no metadata, a dimension format, a bad year, a slug that shares
-        // nothing with the title. All delisted, so none of it is a
-        // data-quality issue — the catalogue no longer contains them.
+        // Every row here is problem-shaped: duplicate ISBN, no price, no
+        // metadata, a dimension format, a bad year, a slug that shares nothing
+        // with the title. All delisted, so none of it is a data-quality issue
+        // — the catalogue no longer contains them.
+        //
+        // Deliberately NOT a duplicate SKU: `uq_shop_books_shop_sku` is a
+        // unique index on (shop_id, sku), and the sku_duplicate check
+        // constrains both sides of the pair to one shop, so the state it looks
+        // for cannot exist. Production has recorded zero of them. An earlier
+        // version of this fixture inserted the pair anyway and only passed
+        // because the test database's schema had drifted from the migrations.
         foreach ([1, 2] as $n) {
             $id = DB::table('shop_books')->insertGetId([
                 'shop_id' => $this->shopId,
@@ -58,7 +65,7 @@ final class ValidateServiceGatesTest extends TestCase
                 'title' => 'Nothing In Common Here',
                 'author' => null,
                 'isbn' => '9786090901595',
-                'sku' => 'DUPE-SKU',
+                'sku' => "GATES-SKU-{$n}",
                 'year' => 1200,
                 'format' => '17x24',
                 'type' => 'book',
