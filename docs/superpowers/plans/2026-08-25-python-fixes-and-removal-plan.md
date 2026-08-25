@@ -5,10 +5,11 @@ Rendered version (tables, phase gates): https://claude.ai/code/artifact/3d17d76a
 Found by running the PHP port and the Python stack against identical input and
 diffing the results. Every item below was measured, not inferred.
 
-**Recommendation: land part one now; hold off on part two.** The port's value so
-far has been as an audit. Removal is feasible, but two phases carry the real
-cost and they are not the obvious ones — schema ownership (phase 1) and freezing
-the verification evidence (phase 6).
+**Part one is done; part two is still on hold.** All eight defects are fixed in
+both stacks (commits `4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`,
+`8b66faf`, `8828651`). The port's value so far has been as an audit. Removal is
+feasible, but two phases carry the real cost and they are not the obvious ones —
+schema ownership (phase 1) and freezing the verification evidence (phase 6).
 
 ## Part one — the fix ledger
 
@@ -26,12 +27,32 @@ concurrency, then what users see, then noise.
 | 7 | ✅ **Fixed** — `sku_duplicate` looked for a state the schema forbids | `services/validate.py`, `db/models.py` | deleted, with its registry entries; the missing partial unique index that made it look alive is now declared on the model | 0 recorded ever, vs 7,156 `isbn_duplicate`; `make validate-diff` still identical (13,339 issues) |
 | 8 | ✅ **Fixed** — descriptions truncated at a mixed line break (markdownify) | `pipelines.py` | normalise `<br/>` → `<br>` in a shared `html_to_markdown()` the golden dumper also calls | `<p>One<br>Two<br/>Three</p>` lost "Three"; `MarkdownTest` now skips no cases |
 
-**Every fix moves the reference implementation.** The PHP port is measured
-against Python's behaviour, so each lands in lockstep: regenerate the goldens
-(`make golden`, `make discovery-golden`, `make markdown-golden`) and re-run the
-nine differentials. Items 6 and 7 require *removing* the deliberate
-bug-reproduction from the PHP side. That lockstep is the standing cost of two
-stacks.
+**All eight landed, in lockstep.** The PHP port is measured against Python's
+behaviour, so every fix moved both sides together: goldens regenerated
+(`make golden`, `make markdown-golden`), and `api-diff` (88/88), `validate-diff`
+(13,339 issues), `validator-diff` (46/46) and `canonical-diff` all identical
+afterwards. Three of the eight required *removing* deliberate bug-reproduction
+from the PHP side — the string-year comparison, the impossible SKU check, and
+the markdownify truncation `MarkdownTest` used to skip. That lockstep is the
+standing cost of two stacks, and it is the practical argument for eventually
+keeping one.
+
+Two things the fixes turned up that the ledger did not predict:
+
+- **Pagination was six sites, not three.** The other three are the same defect
+  reached from different endpoints (a run's added and updated books, and a
+  discover run's URLs).
+- **`sku_duplicate` looked alive because the test schema had drifted.** The
+  model never declared the partial unique index migration `f6a2b3c4d5e7`
+  created, and the test database is built from the model — so a test could
+  insert a state production forbids and the dead check appeared covered. The
+  index is now on the model. This is worth remembering for removal phase 1,
+  whose gate is exactly a schema diff.
+
+Still open, found while verifying: seeding the test database for the PHP
+differentials (`make seed-test-db`) makes the next full Python `pytest` run
+fail ~61 tests — the Python conftest assumes an empty database, and both stacks
+share one. Pre-existing, and unrelated to any fix above.
 
 ## Part two — removing Python
 
