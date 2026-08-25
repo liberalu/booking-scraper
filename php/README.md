@@ -18,10 +18,11 @@ match steps 2–3, adaptive subdivision and the cron chain.
 
 ## Ground rules
 
-**Alembic owns the schema.** There are no PHP migrations and there must not
-be. Both stacks read one catalogue, which is what makes the differential
-verification below possible; a second migration tool pointed at these
-tables would end that.
+**Alembic owns the live schema.** PHP has a baseline of its own now (see
+[Schema](#schema)), but nothing applies it to the catalogue both stacks read
+— that catalogue is what makes the differential verification below possible,
+and a second migration tool writing to it would end that. Ownership transfer
+is cutover's job, not this one.
 
 **One config source.** `Config` reads the same `config/default.toml` and
 `config/shops/*.toml` as Python. Two drifting copies of `download_delay`
@@ -111,6 +112,129 @@ docker compose up -d postgres-test
 ```bash
 cd php && PATH="/opt/homebrew/opt/php@8.4/bin:$PATH" vendor/bin/phpunit
 ```
+
+## Schema
+
+Alembic's 118 revisions are deliberately **not** re-expressed. `schema/0001_baseline.sql`
+is `pg_dump --schema-only` of the live catalogue, kept verbatim: a dump cannot
+drift from the schema it was dumped from, and hand-translating 12 enums, 5
+unique indexes (4 of them partial) and 3 CHECK expressions is precisely where
+a schema port loses fidelity. `alembic/` stays as read-only history.
+
+```bash
+make schema-gate                 # THE GATE: fresh DB from the baseline, diff to zero
+make schema-gate-sabotage        # prove the gate can fail
+make schema-baseline             # re-dump the baseline (reads the reference only)
+make migrate-status MIGRATE_DATABASE_URL=postgresql://…:5433/somedb
+make migrate        MIGRATE_DATABASE_URL=postgresql://…:5433/somedb
+```
+
+The migrator is `bin/migrate` + `src/Schema/Migrator.php`, ~200 lines, and
+deliberately not `illuminate/database`'s: that one wants PHP migration classes
+built out of the schema builder, and needs `illuminate/filesystem` plus an
+event dispatcher that aren't installed. Plain `.sql` files applied in lexical
+order, each in one transaction, each recorded in `public.php_schema_migrations`
+— **the one table PHP owns.** The ledger is created by the migrator, not by
+0001, so 0001 stays a byte-faithful dump; the gate excludes the ledger from
+*both* sides of the diff, because an asymmetric exclusion is how a gate starts
+comparing two different things.
+
+Migrations live here, in `php/`, shared by crawler and dashboard — never in
+`dashboard/database/migrations/`, whose `.gitkeep` explains why that directory
+must stay empty.
+
+### What stops it reaching production
+
+- `bin/migrate` takes an explicit `--database=DSN` (or `DATABASE_URL`) and has
+  **no** fall-through to `config/default.toml`, whose `[database].url` is
+  production. A migrator that picks a target when you forgot to name one picks
+  production.
+- `apply()` refuses any database that has an `alembic_version` table and no PHP
+  ledger: *Alembic owns this one.* A port-number check would not do — the
+  Python test database is stamped too, and it lives on the test cluster.
+  `--adopt` overrides it, which is cutover's switch and nothing else's.
+- The gate refuses to create its scratch database on port 5432, and touches the
+  reference with exactly one `pg_dump --schema-only`.
+
+### The gate
+
+`tools/schema_gate.sh` creates a scratch database on the test cluster, applies
+the baseline into it with `bin/migrate`, dumps both it and the reference,
+normalises, and diffs. Exit code is non-zero on any difference, so it is a gate
+rather than a report. Currently **2,143 lines identical — 25 tables, 12 enums,
+5 unique indexes, 3 check constraints.**
+
+`REFERENCE_DATABASE_URL` defaults to production (read-only) and
+`SCRATCH_CLUSTER_URL` to the test cluster. Neither `psql` nor `pg_dump` is on
+this machine's PATH — both clusters are containers — so `tools/pg_client.sh`
+borrows one, preferring a host binary, then `docker exec` into the test
+cluster's container, then `docker run --rm postgres:16`.
+
+**Normalisation is three rules and no more.** Two are cosmetic — psql's
+`\restrict` / `\unrestrict` guards carry a random per-invocation token, and the
+`-- Dumped by pg_dump version` header. The third is real, and it is why the
+gate needs a normaliser at all: Postgres deparses one CHECK constraint two
+equivalent ways, and the baseline is a restored dump by construction, so the
+difference is permanent.
+
+```
+= ANY ((ARRAY['started'::character varying, …])::text[])          -- as SQLAlchemy emitted it
+= ANY (ARRAY[('started'::character varying)::text, …])            -- as Postgres re-renders it
+```
+
+Both fold to `ANY (ARRAY['started'::character varying, …])`. The two
+substitutions are pinned to those exact shapes — the outer strips `::text[]`
+only where it is applied to an `ARRAY` inside `ANY (…)`, the inner strips
+`::text` only where it is re-applied to an already-cast `character varying`
+literal. A blanket "strip anything cast-shaped" would silence the false
+positive *and* stop the gate catching real type changes, which is most of what
+it exists for. `SchemaNormalizeTest` asserts both halves: the two renderings
+converge, and a changed value, element type or array cast still differs.
+
+### The gate has teeth
+
+A gate that cannot fail proves nothing, and this repo has been caught by
+exactly that twice — a test asserting `"price" in row` passed while every price
+was `None`, and `sku_duplicate` looked covered because the test schema was
+missing the partial unique index production has.
+
+So `make schema-gate-sabotage` copies the baseline, deletes
+`CREATE UNIQUE INDEX uq_shop_books_shop_sku` from the copy — the very index
+whose absence made that dead check look alive — and requires the gate to exit
+non-zero *and* name it. It does: exit 1, index named. The checked-in baseline
+is never touched; the copy lives in a temp directory.
+
+`SchemaMigratorTest` covers what the gate cannot — that applying twice applies
+nothing twice, that an edited applied migration is reported as drift, that a
+failed migration leaves no ledger row, and that the Alembic guard refuses and
+`--adopt` overrides it. Each test gets its own throwaway database on the test
+cluster.
+
+### Production has one change Alembic never made
+
+Measured while building the baseline, and the reason it is dumped from
+production rather than from a database built by `alembic upgrade head`:
+
+```
+url_classifications_discovered_url_id_fkey
+  production:    FOREIGN KEY (discovered_url_id) REFERENCES discovered_urls(id) ON DELETE CASCADE
+  alembic head:  FOREIGN KEY (discovered_url_id) REFERENCES discovered_urls(id)
+```
+
+`ON DELETE CASCADE` appears in neither migration `6437528439cc` (which created
+the table) nor `db/models.py`, and nothing in the repo mentions it — someone
+`ALTER`ed it on production directly. A pristine `alembic upgrade head` database
+differs from production by that **one line and nothing else**, which is also
+the check that the round-trip is otherwise faithful.
+
+Production is what the code actually runs against, so production is the
+reference. Worth an Alembic revision to close the gap, or a decision that the
+cascade is unwanted — but not something to fix silently inside a dump.
+
+Separately, the **Python test database is not production's schema**: it lacks
+that cascade and carries a blank `COMMENT ON SCHEMA public`, both artifacts of
+pytest rebuilding it from `Base.metadata`. Same class of drift as fix #7. Don't
+use it as the gate's reference.
 
 ## Two upstream ceilings worked around
 

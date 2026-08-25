@@ -7,7 +7,7 @@ COMPOSER := $(PHP) $(shell which composer)
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
-.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db
+.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard api-diff crawl discover validate reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
 
 install:
 	$(COMPOSER) install
@@ -151,3 +151,36 @@ mutation-diff:
 validate-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/validate_diff.py --shop $(or $(SHOP),vaga) \
 		$(if $(VERBOSE),--verbose,)
+
+## ---------------------------------------------------------------------------
+## Schema (phase 1 of removing Python)
+##
+## Alembic still owns the production catalogue. These targets give PHP its own
+## baseline and prove it faithful; they never write to port 5432.
+## ---------------------------------------------------------------------------
+
+## Apply the PHP migrations to a database you name. No default target —
+## config/default.toml's [database].url is production.
+##   make migrate MIGRATE_DATABASE_URL=postgresql://...:5433/somedb
+migrate:
+	$(PHP) bin/migrate apply --database="$(or $(MIGRATE_DATABASE_URL),$(error set MIGRATE_DATABASE_URL))" $(ARGS)
+
+migrate-status:
+	$(PHP) bin/migrate status --database="$(or $(MIGRATE_DATABASE_URL),$(error set MIGRATE_DATABASE_URL))"
+
+## Re-dump schema/0001_baseline.sql from the reference database. Reads only.
+## Run this if Alembic gains revisions before cutover.
+schema-baseline:
+	./tools/schema_baseline.sh
+
+## THE GATE. Fresh database on the test cluster from the PHP baseline,
+## pg_dump --schema-only both sides, normalise, diff. Non-zero on any
+## difference — this is what catches enums, partial unique indexes, CHECK
+## expressions and FK actions.
+schema-gate:
+	./tools/schema_gate.sh
+
+## Prove the gate can fail: drop a unique index from a COPY of the baseline
+## and require a non-zero exit that names it.
+schema-gate-sabotage:
+	./tools/schema_gate_sabotage.sh
