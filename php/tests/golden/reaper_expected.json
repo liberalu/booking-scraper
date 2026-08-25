@@ -1,0 +1,72 @@
+[
+ {
+  "fixture": "0-silent_running",
+  "item_status": "failed",
+  "item_done": true,
+  "item_attempts": 0,
+  "failure_reasons": "run_aborted",
+  "run_status": "failed",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": true
+ },
+ {
+  "fixture": "1-stuck_stopping",
+  "item_status": "failed",
+  "item_done": true,
+  "item_attempts": 0,
+  "failure_reasons": "run_aborted",
+  "run_status": "failed",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": true
+ },
+ {
+  "fixture": "2-paused_alive",
+  "item_status": "failed",
+  "item_done": true,
+  "item_attempts": 0,
+  "failure_reasons": "stuck_in_processing",
+  "run_status": "paused",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": false
+ },
+ {
+  "fixture": "3-fresh_running",
+  "item_status": "processing",
+  "item_done": false,
+  "item_attempts": 0,
+  "failure_reasons": null,
+  "run_status": "running",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": false
+ },
+ {
+  "fixture": "4-terminal_with_orphans",
+  "item_status": "failed",
+  "item_done": true,
+  "item_attempts": 0,
+  "failure_reasons": "run_aborted",
+  "run_status": "completed",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": false
+ },
+ {
+  "fixture": "5-silent_running",
+  "item_status": "pending",
+  "item_done": false,
+  "item_attempts": 0,
+  "failure_reasons": null,
+  "run_status": "failed",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": true
+ },
+ {
+  "fixture": "6-paused_alive",
+  "item_status": "processing",
+  "item_done": false,
+  "item_attempts": 0,
+  "failure_reasons": null,
+  "run_status": "paused",
+  "run_close_reason": "reaper-diff",
+  "run_resumable": false
+ }
+]

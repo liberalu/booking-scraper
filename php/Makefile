@@ -126,8 +126,11 @@ seed-test-db:
 
 ## Feed identical items to both validation layers and diff the rewritten item,
 ## the drop decision and the issues recorded. No database, no network.
+## FREEZE=1 also writes the cases as a characterisation golden — only if every
+## case matched, so a divergence can never be frozen.
 validator-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/validator_diff.py $(if $(VERBOSE),--verbose,)
+	cd .. && PYTHONPATH=. uv run python php/tools/validator_diff.py \
+		$(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
 
 ## Feed identical library records to both canonical-book writers and diff the
 ## rows. Test database only.
@@ -136,9 +139,11 @@ canonical-diff:
 		$(if $(RECORDS),--records $(RECORDS),)
 
 ## Plant the same zombie runs in two clones and diff what each reaper does.
+## FREEZE=1 also writes the per-fixture outcome as a characterisation golden —
+## only if both stacks agreed, so a divergence can never be frozen.
 reaper-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/reaper_diff.py \
-		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,)
+		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,) $(if $(FREEZE),--freeze,)
 
 ## Run both matchers over identical data and diff the linkage they produce.
 ## Test database only. MATCH=1 also exercises canonical synthesis.

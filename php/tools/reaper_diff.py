@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import subprocess
 import sys
@@ -35,7 +36,11 @@ PHP = "/opt/homebrew/opt/php@8.4/bin/php"
 TEST_HOST = "localhost"
 TEST_DB = database_name()   # see _testdb: PHP has its own database
 PY_DB, PHP_DB = f"{TEST_DB}_reap_py", f"{TEST_DB}_reap_php"
-MARK = "reaper-diff"
+#: From the shared spec, so the PHP test plants the same marker.
+MARK = json.loads(
+    (Path(__file__).resolve().parents[2] / "php" / "tests" / "golden"
+     / "reaper_fixtures.json").read_text()
+)["marker"]
 
 
 def dsn(database: str) -> str:
@@ -45,6 +50,18 @@ def dsn(database: str) -> str:
 def guard() -> None:
     if TEST_PORT != 5433 or not TEST_DB.endswith("_test"):
         sys.exit(f"refusing to run: {TEST_DB}@{TEST_PORT} is not the test cluster")
+
+
+SPEC_PATH = ROOT / "php" / "tests" / "golden" / "reaper_fixtures.json"
+
+#: Where --freeze writes the per-fixture outcome.
+FREEZE_TO = ROOT / "php" / "tests" / "golden" / "reaper_expected.json"
+
+
+def fixture_spec() -> dict:
+    """The shapes to plant. Shared with ReaperCharacterisationTest, which plants
+    the same ones and asserts the frozen outcome without Python."""
+    return json.loads(SPEC_PATH.read_text())
 
 
 def interval_expr(age: str | None) -> str:
@@ -77,15 +94,12 @@ def plant_fixtures() -> None:
         # close_reason doubles as the fixture marker. It is also what the
         # reaper writes, so it is set to MARK here and compared as-is: both
         # stacks must overwrite it identically (or leave it, per first-writer).
+        spec = fixture_spec()
         runs = {}
-        for key, status, heartbeat_age, phase in (
-            ("silent_running", "running", "10 minutes", "scan"),
-            ("stuck_stopping", "stopping", "10 minutes", "scan"),
-            ("paused_alive", "paused", "10 minutes", "discover_sitemap"),
-            ("fresh_running", "running", "5 seconds", "scan"),
-            ("terminal_with_orphans", "completed", "10 minutes", "scan"),
-            ("no_heartbeat", "running", None, "scan"),
-        ):
+        for row in spec["runs"]:
+            key, status, heartbeat_age, phase = (
+                row["fixture"], row["status"], row["heartbeat"], row["phase"],
+            )
             heartbeat = interval_expr(heartbeat_age)
             runs[key] = c.execute(sa.text(
                 "insert into scrape_runs (shop_id, phase, status, started_at,"
@@ -99,30 +113,19 @@ def plant_fixtures() -> None:
                 {"s": shop_id, "p": phase, "st": status, "m": MARK}).scalar()
 
         # Rows the sweep has to act on, and rows it must leave alone.
-        for key, status, claimed_age in (
-            ("silent_running", "processing", "10 minutes"),   # aborted with the run
-            ("stuck_stopping", "processing", "10 minutes"),   # ditto
-            ("paused_alive", "processing", "10 minutes"),     # hung worker on a live run
-            ("fresh_running", "processing", "5 seconds"),     # in flight, leave alone
-            ("terminal_with_orphans", "processing", "1 hour"),  # orphan on a done run
-            ("silent_running", "pending", None),             # pending is never touched
-        ):
+        for index, item in enumerate(spec["items"]):
+            key, status, claimed_age = item["run"], item["status"], item["claimed"]
             claimed = interval_expr(claimed_age)
+            # The index is in the URL because (run_id, url) is unique and two
+            # items can share a run and a status — the never-claimed row is a
+            # second `processing` item on the paused run.
             c.execute(sa.text(
                 "insert into scrape_url_items (run_id, shop_id, url, url_type,"
                 " status, created_at, claimed_at, attempts)"
-                f" values (:r, :s, 'https://example.test/{MARK}/' || :k || '/' || :st,"
+                f" values (:r, :s, 'https://example.test/{MARK}/' || :i || '-' || :k,"
                 " 'product', :st, now() - interval '1 hour',"
                 f" {claimed}, 0)"),
-                {"r": runs[key], "s": shop_id, "k": key, "st": status})
-
-        # A claimed-at-null processing row must never be reaped, however old.
-        c.execute(sa.text(
-            "insert into scrape_url_items (run_id, shop_id, url, url_type,"
-            " status, created_at, claimed_at, attempts)"
-            f" values (:r, :s, 'https://example.test/{MARK}/never-claimed',"
-            " 'product', 'processing', now() - interval '1 day', null, 0)"),
-            {"r": runs["paused_alive"], "s": shop_id})
+                {"r": runs[key], "s": shop_id, "i": index, "k": key, "st": status})
 
 
 def clone_databases() -> None:
@@ -195,6 +198,48 @@ STATE = {
 }
 
 
+def fixture_outcome(database: str) -> list[dict]:
+    """What the sweep did to each planted fixture, keyed by label.
+
+    Whole-table state cannot be frozen: it carries row ids and whatever else
+    the database already held. What is stable — and what actually encodes the
+    reaper's behaviour — is the verdict per fixture.
+    """
+    engine = sa.create_engine(dsn(database), poolclass=sa.pool.NullPool)
+    with engine.connect() as c:
+        runs = {
+            row.phase + "|" + str(row.id): row
+            for row in c.execute(sa.text(
+                "select id, phase, status, close_reason, resumable_after_failure"
+                "  from scrape_runs where close_reason = :m or id in ("
+                "     select run_id from scrape_url_items where url like :u)"
+                " order by id"), {"m": MARK, "u": f"%{MARK}%"})
+        }
+        out = []
+        for label_row in c.execute(sa.text(
+            "select sui.url, sui.status, sui.done_at is not null as done,"
+            "       sui.attempts, sr.status as run_status, sr.close_reason,"
+            "       sr.resumable_after_failure,"
+            "       (select string_agg(distinct sf.error_reason, ',' order by"
+            "               sf.error_reason) from scrape_failures sf"
+            "         where sf.scrape_url_item_id = sui.id) as reasons"
+            "  from scrape_url_items sui join scrape_runs sr on sr.id = sui.run_id"
+            f" where sui.url like :u order by sui.url"), {"u": f"%{MARK}%"}):
+            # The URL carries "<index>-<fixture>"; the label is what matters.
+            tail = label_row.url.rsplit("/", 1)[-1]
+            out.append({
+                "fixture": tail,
+                "item_status": label_row.status,
+                "item_done": label_row.done,
+                "item_attempts": label_row.attempts,
+                "failure_reasons": label_row.reasons,
+                "run_status": label_row.run_status,
+                "run_close_reason": label_row.close_reason,
+                "run_resumable": label_row.resumable_after_failure,
+            })
+    return out
+
+
 def read_state(database: str) -> dict:
     engine = sa.create_engine(dsn(database), poolclass=sa.pool.NullPool)
     with engine.connect() as c:
@@ -220,6 +265,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument(
+        "--freeze",
+        metavar="PATH",
+        nargs="?",
+        const=str(FREEZE_TO),
+        help="after both reapers agree, write the per-fixture outcome as a "
+        "characterisation golden. Refuses to write on any difference.",
+    )
     args = parser.parse_args()
 
     guard()
@@ -263,7 +316,16 @@ def main() -> int:
             if len(differences) > len(shown):
                 print(f"  … {len(differences) - len(shown)} more (--verbose)")
             print(f"\n{len(differences)} DIFFERENCES")
+            if args.freeze:
+                print("NOT frozen — the golden may only record agreed behaviour.")
             return len(differences)
+        if args.freeze:
+            outcome = fixture_outcome(PY_DB)
+            path = Path(args.freeze)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(outcome, indent=1, ensure_ascii=False) + "\n")
+            print(f"froze {len(outcome)} fixture outcome(s) to {path}")
+
         print("identical — both reapers left the database in the same state")
         return 0
     finally:
