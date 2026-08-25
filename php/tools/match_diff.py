@@ -1,0 +1,211 @@
+#!/usr/bin/env python
+"""Run both matchers over identical data and compare the resulting linkage.
+
+    PYTHONPATH=. uv run python php/tools/match_diff.py --shop vaga
+    PYTHONPATH=. uv run python php/tools/match_diff.py --shop vaga --synthesis
+
+Test database only. Matching MUTATES data (it writes book_id, match_status,
+match_method and canonical_author_id), so the affected columns are
+snapshotted and restored between the two passes.
+"""
+import argparse, json, os, subprocess, sys
+from pathlib import Path
+import sqlalchemy as sa
+
+ROOT = Path(__file__).resolve().parents[2]
+TEST_DSN = "postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_test"
+PHP = "/opt/homebrew/opt/php@8.4/bin/php"
+
+
+def engine():
+    return sa.create_engine(TEST_DSN)
+
+
+def snapshot_state():
+    with engine().connect() as c:
+        books = {r.id: (r.book_id, r.match_status, r.match_method)
+                 for r in c.execute(sa.text(
+                     "select id, book_id, match_status, match_method from shop_books"))}
+        authors = {r.id: r.canonical_author_id
+                   for r in c.execute(sa.text(
+                       "select id, canonical_author_id from shop_authors"))}
+        max_book = c.execute(sa.text("select coalesce(max(id),0) from books")).scalar()
+    return books, authors, max_book
+
+
+def restore(books, authors, max_book):
+    with engine().begin() as c:
+        # Synthesised books first: shop_books.book_id references them.
+        c.execute(sa.text("delete from book_isbns where book_id > :m"), {"m": max_book})
+        c.execute(sa.text("update shop_books set book_id = null where book_id > :m"), {"m": max_book})
+        c.execute(sa.text("delete from books where id > :m"), {"m": max_book})
+        for sid, (book_id, status, method) in books.items():
+            c.execute(sa.text(
+                "update shop_books set book_id=:b, match_status=:s, match_method=:m "
+                "where id=:i and (book_id, match_status, match_method) is distinct from (:b,:s,:m)"),
+                {"b": book_id, "s": status, "m": method, "i": sid})
+        for aid, canon in authors.items():
+            c.execute(sa.text(
+                "update shop_authors set canonical_author_id=:c where id=:i "
+                "and canonical_author_id is distinct from :c"), {"c": canon, "i": aid})
+
+
+def result_state(shop, max_book):
+    """Everything the matcher can have changed.
+
+    Synthesised books are compared by CONTENT, not just count: the winning
+    title/year/format comes from the highest-trust shop while the publisher
+    is sticky to the first writer, and those two tiebreaks are exactly where
+    a port drifts without the row count moving.
+    """
+    with engine().connect() as c:
+        rows = [dict(r) for r in c.execute(sa.text(
+            "select sb.url, sb.book_id is not null as linked, sb.match_status, sb.match_method "
+            "from shop_books sb join shops s on s.id=sb.shop_id where s.name=:s order by sb.url"),
+            {"s": shop}).mappings()]
+        # Keyed on the author name, since ids differ between passes.
+        authors = [dict(r) for r in c.execute(sa.text(
+            "select sa.name, a.name as canonical_name from shop_authors sa "
+            "join authors a on a.id = sa.canonical_author_id "
+            "order by sa.name, a.name")).mappings()]
+        # Keyed on ISBN: the synthesised books' ids differ between passes.
+        synthesised = [dict(r) for r in c.execute(sa.text(
+            "select bi.isbn, b.title, b.year, b.type, b.format, p.name as publisher "
+            "from books b join book_isbns bi on bi.book_id = b.id "
+            "left join publishers p on p.id = b.publisher_id "
+            "where b.id > :m order by bi.isbn"), {"m": max_book}).mappings()]
+    return {
+        "shop_books": rows,
+        "author_links": authors,
+        "synthesised": synthesised,
+    }
+
+
+def run_python(shop, synthesis):
+    script = (
+        "from book_scraper.db.session import get_session_factory\n"
+        "from book_scraper.services.match import MatchService\n"
+        f"S = get_session_factory('{TEST_DSN}')\n"
+        "with S() as s:\n"
+        f"    c = MatchService(s).run('{shop}')\n"
+        "    s.commit()\n"
+        "print(c)\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "DATABASE_URL": TEST_DSN,
+           "MATCH_SYNTHESIS_ENABLED": "1" if synthesis else "0"}
+    r = subprocess.run(["uv", "run", "python", "-c", script], cwd=ROOT, env=env,
+                       capture_output=True, text=True)
+    if r.returncode: sys.exit(f"python matcher failed:\n{r.stderr[-2500:]}")
+    return r.stdout.strip()
+
+
+def run_php(shop, synthesis):
+    script = (
+        '<?php require "%s/php/crawler/vendor/autoload.php";\n'
+        'BookScraper\\Database::boot("%s");\n'
+        'print_r((new BookScraper\\Services\\MatchService())->run("%s", %s));\n'
+        % (ROOT, TEST_DSN.replace("+psycopg2", ""), shop, "true" if synthesis else "false")
+    )
+    f = ROOT / "php" / "crawler" / "_match_tmp.php"
+    f.write_text(script)
+    try:
+        r = subprocess.run([PHP, str(f)], cwd=ROOT / "php" / "crawler",
+                           capture_output=True, text=True)
+        if r.returncode: sys.exit(f"php matcher failed:\n{r.stderr[-2500:]}")
+        return r.stdout.strip()
+    finally:
+        f.unlink(missing_ok=True)
+
+
+def diff(a, b, path=""):
+    if type(a) is not type(b):
+        return [f"{path}: type {type(a).__name__} vs {type(b).__name__}"]
+    if isinstance(a, dict):
+        out = []
+        for k in sorted(set(a) | set(b)):
+            if k not in a: out.append(f"{path}.{k}: extra in php")
+            elif k not in b: out.append(f"{path}.{k}: MISSING IN PHP")
+            else: out += diff(a[k], b[k], f"{path}.{k}")
+        return out
+    if isinstance(a, list):
+        out = []
+        if len(a) != len(b): out.append(f"{path}: length {len(a)} vs {len(b)}")
+        for i, (x, y) in enumerate(zip(a, b)): out += diff(x, y, f"{path}[{i}]")
+        return out
+    return [] if a == b else [f"{path}: python={a!r} php={b!r}"]
+
+
+def unlink(shop):
+    """Clear the linkage so the matchers have real work.
+
+    Without this the seeded catalogue is already fully matched and BOTH
+    matchers do nothing — an identical result that proves nothing.
+    """
+    with engine().begin() as c:
+        c.execute(sa.text(
+            "update shop_books set book_id = null, match_status = 'unmatched', "
+            "match_method = null where shop_id in (select id from shops where name = :s)"),
+            {"s": shop})
+        c.execute(sa.text("update shop_authors set canonical_author_id = null"))
+        n = c.execute(sa.text(
+            "select count(*) from shop_books sb join shops s on s.id = sb.shop_id "
+            "where s.name = :s and sb.isbn is not null"), {"s": shop}).scalar()
+    return n
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--shop", default="vaga")
+    ap.add_argument("--synthesis", action="store_true")
+    args = ap.parse_args()
+
+    pending = unlink(args.shop)
+    print(f"  unlinked: {pending} shop_books with an ISBN now await matching\n")
+    baseline = snapshot_state()
+    print(f"comparing matchers on '{args.shop}' (synthesis={'on' if args.synthesis else 'off'})\n")
+
+    max_book = baseline[2]
+
+    restore(*baseline)
+    print("  python:", run_python(args.shop, args.synthesis))
+    py = result_state(args.shop, max_book)
+
+    restore(*baseline)
+    print("  php:   ", run_php(args.shop, args.synthesis))
+    ph = result_state(args.shop, max_book)
+
+    for name, state in (("python", py), ("php", ph)):
+        print(f"  {name:<7} {sum(1 for r in state['shop_books'] if r['linked']):>6} linked  "
+              f"{len(state['author_links']):>5} author links  "
+              f"{len(state['synthesised']):>4} synthesised")
+
+    # Guard against a vacuous pass. A previous run's side effects become the
+    # next run's baseline, so synthesis silently has nothing left to do —
+    # reseed to restore the work.
+    if args.synthesis and not py["synthesised"] and not ph["synthesised"]:
+        print(
+            "\nINCONCLUSIVE — neither matcher synthesised anything, so step 3 was\n"
+            "  not exercised. Every unmatched ISBN already has a canonical book,\n"
+            "  most likely from an earlier run of this tool. Reseed first:\n"
+            f"    PYTHONPATH=. uv run python php/tools/seed_test_db.py --shop {args.shop}"
+        )
+        return 1
+    if not py["shop_books"] or all(not r["linked"] for r in py["shop_books"]):
+        print(
+            "\nINCONCLUSIVE — nothing was linked, so step 1 was not exercised.\n"
+            f"  Seed the shop first: php/tools/seed_test_db.py --shop {args.shop}"
+        )
+        return 1
+
+    d = diff(py, ph)
+    print()
+    if d:
+        print(f"{len(d)} DIFFERENCES")
+        for line in d[:20]: print("  ", line)
+    else:
+        print("identical — both matchers produced the same linkage")
+    return len(d)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
