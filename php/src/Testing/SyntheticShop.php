@@ -28,6 +28,28 @@ final class SyntheticShop
 
     private const BASE = 'https://synthetic.test';
 
+    /** Author name used by the match case, on both sides of the link. */
+    private const AUTHOR = 'Synthetic Canonical Author';
+
+    /**
+     * Every ISBN the fixture uses, in a 979-0 block no book catalogue reaches
+     * (979-0 is ISMN space — printed music).
+     *
+     * The first draft used plausible 978-609 Lithuanian numbers, three of
+     * which existed in the copied catalogue. The matcher linked them, so the
+     * linkage this fixture produced depended on the copy and could not be
+     * frozen. assertNoIsbnCollision() now fails loudly if that ever recurs.
+     */
+    private const ISBN = [
+        'nonbook' => '9790000000015',
+        'nonbook_puzzle' => '9790000000022',
+        'nonbook_dvd' => '9790000000039',
+        'dup' => '9790000000046',
+        'drift_shop' => '9790000000053',
+        'drift_canonical' => '9790000000060',
+        'matchable' => '9790000000077',
+    ];
+
     /** The `postgres-test` compose service. 5432 is the real catalogue. */
     private const TEST_PORT = 5433;
 
@@ -50,15 +72,15 @@ final class SyntheticShop
             ['dims-ok', ['format' => 'paperback']],
 
             // non_book_has_isbn: type=non_book carrying a real 978 ISBN.
-            ['nonbook-isbn', ['type' => 'non_book', 'isbn' => '9786090901595']],
+            ['nonbook-isbn', ['type' => 'non_book', 'isbn' => self::ISBN['nonbook']]],
             // Suppressed: category marks it a legitimate non-book product.
             ['nonbook-isbn-puzzle', [
-                'type' => 'non_book', 'isbn' => '9786090901601',
+                'type' => 'non_book', 'isbn' => self::ISBN['nonbook_puzzle'],
                 'categories' => ['Žaislai', 'Dėlionės'],
             ]],
             // Suppressed: title marks it a DVD.
             ['nonbook-isbn-dvd', [
-                'type' => 'non_book', 'isbn' => '9786090901618',
+                'type' => 'non_book', 'isbn' => self::ISBN['nonbook_dvd'],
                 'title' => 'Something (DVD)',
             ]],
             // Not flagged: a plain EAN on a non-book is just a GTIN.
@@ -78,8 +100,8 @@ final class SyntheticShop
 
             // isbn_duplicate: two live books sharing an ISBN. Both sides are
             // flagged, so this is two issues, not one.
-            ['dup-isbn-a', ['isbn' => '9786090901700']],
-            ['dup-isbn-b', ['isbn' => '9786090901700']],
+            ['dup-isbn-a', ['isbn' => self::ISBN['dup']]],
+            ['dup-isbn-b', ['isbn' => self::ISBN['dup']]],
 
             // title_author_duplicate: same title and author, both ISBNs NULL
             // (the check pairs on equal-or-both-null ISBN).
@@ -126,9 +148,21 @@ final class SyntheticShop
             // exercises supersession.
             ['kale-du-pu-ga', ['title' => 'Kalėdų pūga']],
 
+            // Matcher step 1 (ISBN link) and step 2 (author backfill): a
+            // canonical carrying the SAME ISBN and an author at position 0,
+            // with a shop_author at the same position to be backfilled.
+            ['matchable', [
+                'isbn' => self::ISBN['matchable'],
+                'author' => self::AUTHOR,
+                '_canonical_match' => true,
+            ]],
+
             // match_isbn_drift: linked to a canonical whose ISBN disagrees.
             // Not a matcher bug — the shop_book's ISBN mutated after linking.
-            ['drift', ['isbn' => '9786090901717', '_canonical_isbn' => '9786090905555']],
+            ['drift', [
+                'isbn' => self::ISBN['drift_shop'],
+                '_canonical_isbn' => self::ISBN['drift_canonical'],
+            ]],
         ];
     }
 
@@ -163,6 +197,7 @@ final class SyntheticShop
 
         $shopId = $db->transaction(function () use ($db): int {
             self::clear($db);
+            self::assertNoIsbnCollision($db);
 
             return (int) $db->selectOne(
                 'insert into shops (name, base_url) values (?, ?) '
@@ -255,11 +290,16 @@ final class SyntheticShop
     /** Everything a previous build created, in reference order. */
     private static function clear(Connection $db): void
     {
-        $db->statement(
-            'delete from validation_issues where shop_id in '
-            . '(select id from shops where name = ?)',
-            [self::SHOP]
-        );
+        // EVERY issue, not just this shop's. The dashboard's issue lists and
+        // counts read across all shops, so the frozen API shapes are only
+        // reproducible if the fixture defines the whole issue set — otherwise
+        // a `validate-diff vaga` run beforehand leaves 13,339 rows and the
+        // first row of /api/issues is a different shape entirely.
+        //
+        // Safe because this only ever runs against a test database (see
+        // guard()), and because validation_issues is derived data: a validate
+        // run rebuilds it from scratch.
+        $db->statement('delete from validation_issues');
         $db->statement(
             'delete from scrape_url_items where shop_id in '
             . '(select id from shops where name = ?)',
@@ -295,7 +335,39 @@ final class SyntheticShop
             'delete from book_isbns where book_id in (select id from books where source_url like ?)',
             [self::BASE . '/%']
         );
+        $db->statement(
+            'delete from book_authors where book_id in '
+            . '(select id from books where source_url like ?)',
+            [self::BASE . '/%']
+        );
         $db->statement('delete from books where source_url like ?', [self::BASE . '/%']);
+        $db->statement('delete from shop_authors where name = ?', [self::AUTHOR]);
+        $db->statement('delete from authors where name = ?', [self::AUTHOR]);
+    }
+
+    /**
+     * Fail if any fixture ISBN already belongs to a canonical this fixture
+     * does not own.
+     *
+     * Called after clear(), so anything still holding one is foreign — and a
+     * foreign canonical would make the matcher link a fixture book, changing
+     * the linkage the golden froze.
+     */
+    private static function assertNoIsbnCollision(Connection $db): void
+    {
+        $clash = $db->select(
+            'select isbn from book_isbns where isbn in ('
+            . implode(',', array_fill(0, count(self::ISBN), '?')) . ')',
+            array_values(self::ISBN)
+        );
+        if ($clash !== []) {
+            throw new RuntimeException(sprintf(
+                'refusing to build: %s already exist(s) in book_isbns. The fixture '
+                . 'ISBNs must belong to nothing else, or the matcher links these '
+                . 'books to a canonical the fixture does not control.',
+                implode(', ', array_map(static fn ($r) => $r->isbn, $clash))
+            ));
+        }
     }
 
     /** @param array<string, mixed> $overrides */
@@ -341,6 +413,40 @@ final class SyntheticShop
             $db->statement(
                 "update shop_books set book_id = ?, match_status = 'matched' where id = ?",
                 [$canonical, $bookId]
+            );
+        }
+
+        if ($overrides['_canonical_match'] ?? false) {
+            $canonical = (int) $db->selectOne(
+                'insert into books (data_source, title, upcoming_release, created_at, '
+                . "updated_at, source_url) values ('shop_inferred', ?, false, now(), now(), ?) "
+                . 'returning id',
+                [$row['title'], self::BASE . '/canonical/' . $slug]
+            )->id;
+            $db->statement(
+                "insert into book_isbns (book_id, isbn, isbn_type) values (?, ?, 'isbn13')",
+                [$canonical, $row['isbn']]
+            );
+            $authorId = (int) $db->selectOne(
+                'insert into authors (name, normalized_name, created_at) '
+                . 'values (?, ?, now()) returning id',
+                [self::AUTHOR, mb_strtolower(self::AUTHOR)]
+            )->id;
+            $db->statement(
+                "insert into book_authors (book_id, author_id, role, position) "
+                . "values (?, ?, 'author', 0)",
+                [$canonical, $authorId]
+            );
+            // Left unlinked on purpose: linking it is what step 2 does.
+            $shopAuthor = (int) $db->selectOne(
+                'insert into shop_authors (name, normalized_name, created_at) '
+                . 'values (?, ?, now()) returning id',
+                [self::AUTHOR, mb_strtolower(self::AUTHOR)]
+            )->id;
+            $db->statement(
+                'insert into shop_book_authors (shop_book_id, author_id, position) '
+                . 'values (?, ?, 0)',
+                [$bookId, $shopAuthor]
             );
         }
 

@@ -151,10 +151,14 @@ reaper-diff:
 		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,) $(if $(FREEZE),--freeze,)
 
 ## Run both matchers over identical data and diff the linkage they produce.
-## Test database only. MATCH=1 also exercises canonical synthesis.
+## Test database only. SYNTHESIS=1 also exercises canonical synthesis.
+## FREEZE=1 writes the linkage as a characterisation golden — only for
+## SHOP=synthetic, the one shop whose linkage is reproducible, and never
+## together with SYNTHESIS=1 (step 3 cannot be replayed over its own output).
 match-diff:
 	cd .. && PYTHONPATH=. uv run python php/tools/match_diff.py \
-		--shop $(or $(SHOP),vaga) $(if $(SYNTHESIS),--synthesis,)
+		--shop $(or $(SHOP),vaga) $(if $(SYNTHESIS),--synthesis,) \
+		$(if $(FREEZE),--freeze,)
 
 ## Put every write endpoint through both dashboards and diff the result.
 ## Clones the test DB per stack and starts both dashboards itself — nothing

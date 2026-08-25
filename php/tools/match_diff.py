@@ -7,6 +7,13 @@
 Test database only. Matching MUTATES data (it writes book_id, match_status,
 match_method and canonical_author_id), so the affected columns are
 snapshotted and restored between the two passes.
+
+--freeze writes the linkage as a characterisation golden, and only accepts
+--shop synthetic. A copied real shop's linkage is not reproducible: it depends
+on which canonicals the copy happens to carry. The synthetic shop is built from
+nothing by php/src/Testing/SyntheticShop.php, which owns the canonical its
+books link to and refuses to build if any of its ISBNs already belongs to
+something else.
 """
 import argparse, json, os, subprocess, sys
 from pathlib import Path
@@ -15,10 +22,13 @@ import sqlalchemy as sa
 # The test database is named in one place — see _testdb for why the PHP
 # side cannot share the Python suite's database.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _testdb import TEST_DSN  # noqa: E402
+from _testdb import TEST_DSN, php_dsn  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 PHP = "/opt/homebrew/opt/php@8.4/bin/php"
+FREEZE_TO = ROOT / "php" / "tests" / "golden" / "match_linkage.json"
+#: The only shop whose linkage is reproducible — see the module docstring.
+FREEZABLE_SHOP = "synthetic"
 
 
 def engine():
@@ -67,11 +77,18 @@ def result_state(shop, max_book):
             "select sb.url, sb.book_id is not null as linked, sb.match_status, sb.match_method "
             "from shop_books sb join shops s on s.id=sb.shop_id where s.name=:s order by sb.url"),
             {"s": shop}).mappings()]
-        # Keyed on the author name, since ids differ between passes.
+        # Keyed on the author name, since ids differ between passes. Scoped to
+        # THIS shop: shop_authors carries no shop of its own, so an unscoped
+        # query returned every shop's links — which meant the copied
+        # catalogue's authors ended up in a golden that is supposed to describe
+        # a fixture.
         authors = [dict(r) for r in c.execute(sa.text(
-            "select sa.name, a.name as canonical_name from shop_authors sa "
+            "select distinct sa.name, a.name as canonical_name from shop_authors sa "
             "join authors a on a.id = sa.canonical_author_id "
-            "order by sa.name, a.name")).mappings()]
+            "join shop_book_authors sba on sba.author_id = sa.id "
+            "join shop_books sb on sb.id = sba.shop_book_id "
+            "join shops s on s.id = sb.shop_id where s.name = :s "
+            "order by sa.name, a.name"), {"s": shop}).mappings()]
         # Keyed on ISBN: the synthesised books' ids differ between passes.
         synthesised = [dict(r) for r in c.execute(sa.text(
             "select bi.isbn, b.title, b.year, b.type, b.format, p.name as publisher "
@@ -161,10 +178,46 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shop", default="vaga")
     ap.add_argument("--synthesis", action="store_true")
+    ap.add_argument("--freeze", action="store_true",
+                    help="write the linkage as a characterisation golden, if both "
+                         "matchers agree. Only for --shop synthetic.")
     args = ap.parse_args()
 
-    pending = unlink(args.shop)
-    print(f"  unlinked: {pending} shop_books with an ISBN now await matching\n")
+    if args.freeze and args.shop != FREEZABLE_SHOP:
+        sys.exit(
+            f"refusing to freeze shop '{args.shop}': only '{FREEZABLE_SHOP}' is "
+            "reproducible. A copied shop's linkage depends on which canonicals "
+            "the copy carries."
+        )
+    if args.freeze and args.synthesis:
+        sys.exit(
+            "refusing to freeze a synthesis run: step 3 creates canonicals, so "
+            "the second run of the same fixture has nothing left to synthesise "
+            "and the golden would not replay."
+        )
+
+    if args.freeze:
+        # Rebuild the fixture so the golden describes a known input rather than
+        # whatever the last tool left behind. Owned by PHP because it has to
+        # outlive Python.
+        built = subprocess.run(
+            [PHP, "bin/synthesize-validate-cases", f"--database={php_dsn()}"],
+            cwd=ROOT / "php", capture_output=True, text=True)
+        if built.returncode != 0:
+            sys.exit(f"could not build the fixture:\n{built.stderr.strip()}")
+        print(built.stdout.strip().splitlines()[0])
+
+    if args.shop == FREEZABLE_SHOP:
+        # The synthetic fixture is built in the state the matcher should act on
+        # — one book unmatched with an ISBN whose canonical exists, one already
+        # linked to a canonical that disagrees. Unlinking would erase the
+        # second, and the replay test would have to reproduce a preparation
+        # step that belongs to this tool rather than to the matcher.
+        pending = 0
+        print("  fixture shop: taken as built, not unlinked\n")
+    else:
+        pending = unlink(args.shop)
+        print(f"  unlinked: {pending} shop_books with an ISBN now await matching\n")
     baseline = snapshot_state()
     print(f"comparing matchers on '{args.shop}' (synthesis={'on' if args.synthesis else 'off'})\n")
 
@@ -201,6 +254,14 @@ def main():
         )
         return 1
 
+    # Put the linkage back. Matching rewrites book_id, match_status,
+    # match_method and canonical_author_id across the whole shop; left as the
+    # PHP pass wrote it, the next tool or test sees a catalogue that has been
+    # re-matched, which moved /api/books?has_conflicts=true and failed a frozen
+    # shape two packages away.
+    restore(*baseline)
+    print("  restored the linkage this tool found\n")
+
     d = diff(py, ph)
     print()
     if d:
@@ -208,6 +269,16 @@ def main():
         for line in d[:20]: print("  ", line)
     else:
         print("identical — both matchers produced the same linkage")
+
+    if args.freeze:
+        if d:
+            print("\nNOT frozen — the golden may only record agreed behaviour.")
+        else:
+            FREEZE_TO.parent.mkdir(parents=True, exist_ok=True)
+            FREEZE_TO.write_text(
+                json.dumps(ph, indent=1, ensure_ascii=False, sort_keys=True) + "\n")
+            print(f"\nfroze the linkage of {len(ph['shop_books'])} book(s) to {FREEZE_TO}")
+
     return len(d)
 
 

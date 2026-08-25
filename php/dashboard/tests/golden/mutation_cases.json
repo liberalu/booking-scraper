@@ -248,7 +248,7 @@
   "path": "/api/books",
   "body": {
    "title": " Diff Test Book ",
-   "isbn": "9781787664487",
+   "isbn": "9781787665773",
    "author": "  Jonas   Jonaitis ",
    "publisher": " Diff Press ",
    "year": 2001
@@ -267,7 +267,7 @@
   "path": "/api/books",
   "body": {
    "title": "Other",
-   "isbn": "9781787664487"
+   "isbn": "9781787665773"
   },
   "expected": {
    "_status": 409,
@@ -331,7 +331,7 @@
   "path": "/api/books",
   "body": {
    "title": "Dashed",
-   "isbn": "978-1787-664487"
+   "isbn": "978-1787-665773"
   },
   "expected": {
    "_status": 409,

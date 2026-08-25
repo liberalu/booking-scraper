@@ -117,8 +117,8 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "null",
-     "price_max": "number",
-     "price_min": "number",
+     "price_max": "null",
+     "price_min": "null",
      "primary_isbn": "str",
      "publisher": "str",
      "shop_count": "number",
@@ -174,13 +174,18 @@
   "status": 200,
   "shape": {
    "audience": "null",
-   "authors": [],
+   "authors": [
+    {
+     "name": "str",
+     "role": "str"
+    }
+   ],
    "cover_url": "null",
    "data_source": "str",
    "description": "null",
    "dimensions": "null",
    "duration": "null",
-   "first_matched_at": "str",
+   "first_matched_at": "null",
    "format": "null",
    "ibiblioteka_page_url": "null",
    "id": "number",
@@ -197,26 +202,7 @@
    "release_place": "null",
    "scraped_url": "str",
    "series": "null",
-   "shops": [
-    {
-     "author": "str",
-     "first_seen_at": "str",
-     "format": "null",
-     "in_stock": "bool",
-     "is_active": "bool",
-     "isbn": "str",
-     "last_seen_at": "str",
-     "match_method": "null",
-     "match_status": "str",
-     "price": "str",
-     "publisher": "str",
-     "shop": "str",
-     "shop_book_id": "number",
-     "title": "str",
-     "url": "str",
-     "year": "number"
-    }
-   ],
+   "shops": [],
    "subjects": "null",
    "title": "str",
    "title_full": "null",
@@ -231,17 +217,7 @@
   "status": 200,
   "shape": {
    "book_id": "number",
-   "series": [
-    {
-     "series": [
-      {
-       "date": "str",
-       "price": "number"
-      }
-     ],
-     "shop": "str"
-    }
-   ]
+   "series": []
   }
  },
  {
@@ -1568,7 +1544,7 @@
    "books": [
     {
      "author": "str",
-     "book_id": "number",
+     "book_id": "null",
      "first_seen_at": "str",
      "format": "str",
      "id": "number",
@@ -1963,8 +1939,8 @@
      "has_conflicts": "bool",
      "id": "number",
      "libis_code": "str",
-     "price_max": "number",
-     "price_min": "number",
+     "price_max": "null",
+     "price_min": "null",
      "primary_isbn": "str",
      "publisher": "str",
      "shop_count": "number",
@@ -1982,22 +1958,7 @@
   "endpoint": "/api/books?per_page=3&has_conflicts=true",
   "status": 200,
   "shape": {
-   "books": [
-    {
-     "authors": [],
-     "data_source": "str",
-     "has_conflicts": "bool",
-     "id": "number",
-     "libis_code": "null",
-     "price_max": "number",
-     "price_min": "number",
-     "primary_isbn": "str",
-     "publisher": "str",
-     "shop_count": "number",
-     "title": "str",
-     "year": "number"
-    }
-   ],
+   "books": [],
    "page": "number",
    "pages": "number",
    "per_page": "number",
@@ -2008,22 +1969,7 @@
   "endpoint": "/api/books?per_page=3&shop_count_min=2",
   "status": 200,
   "shape": {
-   "books": [
-    {
-     "authors": [],
-     "data_source": "str",
-     "has_conflicts": "bool",
-     "id": "number",
-     "libis_code": "null",
-     "price_max": "number",
-     "price_min": "number",
-     "primary_isbn": "str",
-     "publisher": "str",
-     "shop_count": "number",
-     "title": "str",
-     "year": "number"
-    }
-   ],
+   "books": [],
    "page": "number",
    "pages": "number",
    "per_page": "number",
@@ -2037,7 +1983,7 @@
    "books": [
     {
      "author": "str",
-     "book_id": "number",
+     "book_id": "null",
      "first_seen_at": "str",
      "format": "str",
      "id": "number",

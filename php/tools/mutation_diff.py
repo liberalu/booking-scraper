@@ -581,30 +581,49 @@ KEY_LABEL_PREFIX = {
 }
 
 
+def group_labels(ids: dict[str, int]) -> dict[str, dict[int, str]]:
+    """Fixture ids as ONE MAP PER KIND. There is deliberately no merged map.
+
+    A single value -> label dict cannot work: ids are unique only within their
+    table, and after a reseed every sequence restarts, so a run and a cron job
+    both being id 5 is normal. That dict kept whichever came last, which first
+    mislabelled a run id as <shop_book_linked> and then — once the surviving
+    entry belonged to another kind — stopped substituting at all and froze a
+    raw `5` into a path.
+
+    Nor is there a merged fallback for ids whose kind cannot be determined.
+    `POST /api/cron` returns the id of the row it just created, under the
+    generic key `id` and at a path with no id in it; a merged map labelled that
+    brand-new id as <run_discover> purely because the integers matched. An id
+    of undeterminable kind is an unknown id, which freezes as <id>.
+    """
+    prefixes = [prefix for _, prefix in PATH_LABEL_PREFIX]
+    grouped: dict[str, dict[int, str]] = {prefix: {} for prefix in prefixes}
+    for label, value in ids.items():
+        for prefix in prefixes:
+            if label.startswith(prefix):
+                grouped[prefix][value] = label
+    return grouped
+
+
 def label_for(
-    value: int, labels: dict[int, str], key: str, path: str
+    value: int, labels: dict[str, dict[int, str]], key: str, path: str
 ) -> str | None:
     """The fixture label for `value`, or None if it is not that kind of id.
 
     Restricted by kind — by field name where the name says it, otherwise by
-    the path being requested. Ids are unique only within their table, so a run
-    and a shop_book can hold the same integer; without this a run id came back
-    labelled <shop_book_linked>.
+    the path being requested — because the same integer means different rows
+    in different tables.
     """
     prefix = KEY_LABEL_PREFIX.get(key)
     if prefix is None:
         prefix = next(
             (p for url, p in PATH_LABEL_PREFIX if path.startswith(url)), None
         )
-    label = labels.get(value)
-    if label is None:
-        return None
-    if prefix is not None and not label.startswith(prefix):
-        return None
-    return label
+    return labels.get(prefix or "", {}).get(value)
 
 
-def normalise_path(path: str, labels: dict[int, str]) -> str:
+def normalise_path(path: str, labels: dict[str, dict[int, str]]) -> str:
     """Ids in a URL path become labels.
 
     The path proper is fair game — a segment there IS an id. The QUERY STRING
@@ -617,9 +636,7 @@ def normalise_path(path: str, labels: dict[int, str]) -> str:
     allowed = next(
         (prefix for url, prefix in PATH_LABEL_PREFIX if head.startswith(url)), None
     )
-    for row_id, label in labels.items():
-        if allowed is not None and not label.startswith(allowed):
-            continue
+    for row_id, label in labels.get(allowed or "", {}).items():
         head = re.sub(rf"\b{row_id}\b", f"<{label}>", head)
 
     if sep == "":
@@ -637,7 +654,7 @@ def normalise_path(path: str, labels: dict[int, str]) -> str:
 
 
 def normalise_response(
-    value: object, labels: dict[int, str], key: str = "", path: str = ""
+    value: object, labels: dict[str, dict[int, str]], key: str = "", path: str = ""
 ) -> object:
     """Ids in a response become placeholders so it can be frozen.
 
@@ -673,7 +690,7 @@ def normalise_response(
 
 
 def normalise_body(
-    value: object, labels: dict[int, str], key: str = "", path: str = ""
+    value: object, labels: dict[str, dict[int, str]], key: str = "", path: str = ""
 ) -> object:
     """Fixture ids in a REQUEST body become labels; nothing else changes.
 
@@ -872,8 +889,9 @@ def main() -> int:
     # carries the previous run's row.
     marker = f"{int(time.time()) % 10_000_000_000:010d}"
 
-    # id -> fixture label, so responses can be frozen without their row ids.
-    labels = {v: k for k, v in ids.items()}
+    # Fixture ids -> labels, one map per kind, so responses can be frozen
+    # without their row ids and without confusing one table's id for another's.
+    labels = group_labels(ids)
     frozen: list[dict] = []
 
     python_server = php_server = None

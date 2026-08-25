@@ -152,7 +152,12 @@ final class ValidateServiceGatesTest extends TestCase
         self::assertArrayHasKey('format_is_dimensions', $counters);
         self::assertArrayHasKey('slug_title_mismatch', $counters);
         self::assertArrayHasKey('active_no_price', $counters);
+        // Scoped to this test's shop: unscoped, it read whichever
+        // year_out_of_range issue happened to be lowest-id in the shared
+        // database and failed whenever another fixture had left one.
         self::assertSame($id, (int) DB::table('validation_issues')
-            ->where('issue', 'year_out_of_range')->value('shop_book_id'));
+            ->where('shop_id', $this->shopId)
+            ->where('issue', 'year_out_of_range')
+            ->value('shop_book_id'));
     }
 }

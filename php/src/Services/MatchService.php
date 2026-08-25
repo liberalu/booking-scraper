@@ -88,23 +88,37 @@ final class MatchService
      * sequence, so without it position 0 of the shop's author list would
      * collide with position 0 of the translators.
      *
+     * min(author_id): a shop_author appears on many shop_books, whose
+     * canonicals can name different authors at the same position, so the join
+     * has several candidates and Postgres picked one arbitrarily. Both stacks
+     * did, which made this step unreproducible — two runs over identical data
+     * disagreed on thousands of rows, and the differential only passed because
+     * the column was already populated and the IS NULL guard skipped the work.
+     * min() is still an arbitrary choice among equally valid candidates, but
+     * it is the SAME one every time.
+     *
      * Returns rows updated.
      */
     public function authorBackfill(string $shopName): int
     {
         return DB::update(
             "update shop_authors sa
-                set canonical_author_id = ba.author_id
-               from shop_book_authors sba
-               join shop_books sb on sb.id = sba.shop_book_id
-               join book_authors ba on ba.book_id = sb.book_id
-                                   and ba.position = sba.position
-                                   and ba.role = 'author'
-               join shops s on s.id = sb.shop_id
-              where sa.id = sba.author_id
-                and sa.canonical_author_id is null
-                and sb.match_status = 'matched'
-                and s.name = ?",
+                set canonical_author_id = c.author_id
+               from (
+                     select sba.author_id as shop_author_id,
+                            min(ba.author_id) as author_id
+                       from shop_book_authors sba
+                       join shop_books sb on sb.id = sba.shop_book_id
+                       join book_authors ba on ba.book_id = sb.book_id
+                                           and ba.position = sba.position
+                                           and ba.role = 'author'
+                       join shops s on s.id = sb.shop_id
+                      where sb.match_status = 'matched'
+                        and s.name = ?
+                      group by sba.author_id
+                    ) c
+              where sa.id = c.shop_author_id
+                and sa.canonical_author_id is null",
             [$shopName]
         );
     }

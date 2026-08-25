@@ -236,21 +236,35 @@ class MatchService:
         """Link shop_authors.canonical_author_id where the underlying
         shop_book matched in step 1. role='author' filter prevents
         position=0 collisions with translator/narrator/illustrator.
+
+        A shop_author appears on many shop_books, whose canonicals can name
+        different authors at the same position — so the join has several
+        candidates and Postgres picked one arbitrarily. Both stacks did, which
+        made this step's result unreproducible: two runs over identical data
+        disagreed on thousands of rows, and the differential only ever passed
+        because the column was already populated and the IS NULL guard skipped
+        the work. MIN(author_id) is still an arbitrary choice among equally
+        valid candidates, but it is the SAME one every time.
         """
         result = self.session.execute(
             text("""
                 UPDATE shop_authors sa
-                   SET canonical_author_id = ba.author_id
-                  FROM shop_book_authors sba
-                  JOIN shop_books sb ON sb.id = sba.shop_book_id
-                  JOIN book_authors ba ON ba.book_id = sb.book_id
-                                      AND ba.position = sba.position
-                                      AND ba.role = 'author'
-                  JOIN shops s ON s.id = sb.shop_id
-                 WHERE sa.id = sba.author_id
+                   SET canonical_author_id = c.author_id
+                  FROM (
+                        SELECT sba.author_id AS shop_author_id,
+                               MIN(ba.author_id) AS author_id
+                          FROM shop_book_authors sba
+                          JOIN shop_books sb ON sb.id = sba.shop_book_id
+                          JOIN book_authors ba ON ba.book_id = sb.book_id
+                                              AND ba.position = sba.position
+                                              AND ba.role = 'author'
+                          JOIN shops s ON s.id = sb.shop_id
+                         WHERE sb.match_status = 'matched'
+                           AND s.name = :shop_name
+                         GROUP BY sba.author_id
+                       ) c
+                 WHERE sa.id = c.shop_author_id
                    AND sa.canonical_author_id IS NULL
-                   AND sb.match_status = 'matched'
-                   AND s.name = :shop_name
             """),
             {"shop_name": shop_name},
         )

@@ -292,6 +292,22 @@ def main() -> int:
     else:
         print("identical — both validators produced the same findings")
 
+    # Leave no findings behind: 13,339 rows for vaga, which the dashboard's
+    # issue lists read across all shops, so the next tool sees a database that
+    # does not match what it expects. The counts above are the output; the rows
+    # were only ever the means of producing them.
+    clear_issues()
+
+    # And the sentinel run. It is a fixed id (999000) that outlives every
+    # reseed, which made it the NEWEST run in the database and put a
+    # half-populated `validate` row at the top of the dashboard's recent-runs
+    # list — changing a frozen API shape.
+    with engine().begin() as conn:
+        conn.execute(
+            sa.text("delete from scrape_runs where id = :id"),
+            {"id": RUN_ID_SENTINEL},
+        )
+
     if args.freeze:
         if differences:
             print("\nNOT frozen — the golden may only record agreed behaviour.")

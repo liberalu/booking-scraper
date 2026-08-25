@@ -16,7 +16,7 @@
   "slug_title_mismatch": 3,
   "stale_active": 1,
   "title_author_duplicate": 2,
-  "unmatched_has_isbn": 6,
+  "unmatched_has_isbn": 7,
   "unreachable_active": 1,
   "url_aliases": 1,
   "year_out_of_range": 2
@@ -98,7 +98,7 @@
    "field": "isbn",
    "issue": "isbn_duplicate",
    "lifecycle_state": "new",
-   "raw_value": "9786090901700",
+   "raw_value": "9790000000046",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/dup-isbn-a",
    "url": "https://synthetic.test/dup-isbn-a"
@@ -108,7 +108,7 @@
    "field": "isbn",
    "issue": "isbn_duplicate",
    "lifecycle_state": "new",
-   "raw_value": "9786090901700",
+   "raw_value": "9790000000046",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/dup-isbn-b",
    "url": "https://synthetic.test/dup-isbn-b"
@@ -118,7 +118,7 @@
    "field": "isbn",
    "issue": "match_isbn_drift",
    "lifecycle_state": "new",
-   "raw_value": "9786090901717 vs 9786090905555",
+   "raw_value": "9790000000053 vs 9790000000060",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/drift",
    "url": "https://synthetic.test/drift"
@@ -128,7 +128,7 @@
    "field": "type",
    "issue": "non_book_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901595",
+   "raw_value": "9790000000015",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/nonbook-isbn",
    "url": "https://synthetic.test/nonbook-isbn"
@@ -258,7 +258,7 @@
    "field": "match_status",
    "issue": "unmatched_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901700",
+   "raw_value": "9790000000046",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/dup-isbn-a",
    "url": "https://synthetic.test/dup-isbn-a"
@@ -268,10 +268,20 @@
    "field": "match_status",
    "issue": "unmatched_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901700",
+   "raw_value": "9790000000046",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/dup-isbn-b",
    "url": "https://synthetic.test/dup-isbn-b"
+  },
+  {
+   "acked": false,
+   "field": "match_status",
+   "issue": "unmatched_has_isbn",
+   "lifecycle_state": "new",
+   "raw_value": "9790000000077",
+   "run_count": 1,
+   "shop_book_url": "https://synthetic.test/matchable",
+   "url": "https://synthetic.test/matchable"
   },
   {
    "acked": false,
@@ -288,7 +298,7 @@
    "field": "match_status",
    "issue": "unmatched_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901595",
+   "raw_value": "9790000000015",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/nonbook-isbn",
    "url": "https://synthetic.test/nonbook-isbn"
@@ -298,7 +308,7 @@
    "field": "match_status",
    "issue": "unmatched_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901618",
+   "raw_value": "9790000000039",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/nonbook-isbn-dvd",
    "url": "https://synthetic.test/nonbook-isbn-dvd"
@@ -308,7 +318,7 @@
    "field": "match_status",
    "issue": "unmatched_has_isbn",
    "lifecycle_state": "new",
-   "raw_value": "9786090901601",
+   "raw_value": "9790000000022",
    "run_count": 1,
    "shop_book_url": "https://synthetic.test/nonbook-isbn-puzzle",
    "url": "https://synthetic.test/nonbook-isbn-puzzle"

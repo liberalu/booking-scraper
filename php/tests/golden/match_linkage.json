@@ -1,0 +1,173 @@
+{
+ "author_links": [
+  {
+   "canonical_name": "Synthetic Canonical Author",
+   "name": "Synthetic Canonical Author"
+  }
+ ],
+ "shop_books": [
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/all-nonproduct"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dims-a"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dims-b"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dims-ok"
+  },
+  {
+   "linked": true,
+   "match_method": null,
+   "match_status": "matched",
+   "url": "https://synthetic.test/drift"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dup-isbn-a"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dup-isbn-b"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dup-ta-a"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/dup-ta-b"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/kale-du-pu-ga"
+  },
+  {
+   "linked": true,
+   "match_method": "isbn",
+   "match_status": "matched",
+   "url": "https://synthetic.test/matchable"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/mixed-nonproduct"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/no-metadata"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/no-metadata-dvd"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/nonbook-ean"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/nonbook-isbn"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/nonbook-isbn-dvd"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/nonbook-isbn-puzzle"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/no-price"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/no-signals"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/orphan"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/price-zero"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/stale"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/unreachable"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/year-ancient"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/year-future"
+  },
+  {
+   "linked": false,
+   "match_method": null,
+   "match_status": "unmatched",
+   "url": "https://synthetic.test/zzz-qqq-xxx"
+  }
+ ],
+ "synthesised": []
+}
