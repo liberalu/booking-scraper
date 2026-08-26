@@ -1,194 +1,159 @@
 # Book Price Scraper
 
-Multi-shop book price comparison system for Lithuanian e-shops. Scrapes book data and prices, stores in PostgreSQL, tracks price changes over time.
+Multi-shop book price comparison for Lithuanian e-shops. Scrapes book data and
+prices, stores them in PostgreSQL, tracks price changes over time, and reports
+data-quality problems it finds in its own output.
+
+> This was a Scrapy project until 2026-08-26. It was ported to PHP, verified
+> against the original by differential testing — identical input through both
+> implementations, outputs compared — and the original was then removed. The
+> last commit containing it is tagged `python-final`. See
+> [the removal plan](docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md)
+> for the nine defects the comparison found and how the evidence was preserved.
 
 ## Architecture
 
-Scrapy-based project with per-shop spider directories, shared item pipelines for PostgreSQL storage, and TOML config files for per-shop settings.
+Three composer projects, sharing one library:
 
-### Pipeline Phases
+| Project | What it is |
+|---|---|
+| `php/` | The library: parsers, repositories, validator, matcher, run lifecycle. Framework-free. |
+| `php/crawler/` | The crawler: roach-php spiders, watchdog, scheduling. |
+| `php/dashboard/` | Laravel serving a JSON API plus the React SPA in `public/static/hifi`. |
+
+Per-shop behaviour is configuration plus one parser class; the spiders
+themselves are generic.
+
+### Pipeline phases
 
 | Phase | Command | What it does |
-|-------|---------|-------------|
-| Discover (sitemap) | `discover -a shop=vaga -a strategy=sitemap` | Find product URLs from sitemap |
-| Discover (categories) | `discover -a shop=vaga -a strategy=categories` | Find URLs + extract current prices |
-| Discover (full crawl) | `discover -a shop=vaga -a strategy=full_crawl` | Crawl all internal links (manual) |
-| Prices | `prices -a shop=vaga` | Quick price scan from category pages (alias for discover categories) |
-| Scan | `scan -a shop=vaga` | Scrape full product data (resumable after crashes) |
-| Match | (not yet implemented) | Link listings to canonical books |
+|---|---|---|
+| Discover | `bin/crawl discover --shop=vaga --strategy=sitemap` | Find product URLs |
+| Discover | `bin/crawl discover --shop=vaga --strategy=categories` | Find URLs and extract current prices |
+| Discover | `bin/crawl discover --shop=vaga --strategy=full_crawl` | Follow every internal link from one seed |
+| Discover | `bin/crawl discover --shop=pegasas --strategy=graphql` | Magento GraphQL: full metadata, slow |
+| Discover | `bin/crawl discover --shop=pegasas --strategy=lupasearch` | Third-party search index: fast price/stock rescan |
+| Scan | `bin/crawl scan --shop=vaga` | Scrape full product pages, resumable after a crash |
+| Validate | `bin/validate --shop=vaga` | 20 data-quality checks over what was scraped |
+| Match | `bin/match --shop=vaga` | Link shop books to canonical books by ISBN, backfill authors |
 
-Spiders are generic — shop and strategy passed as arguments. No per-shop spider classes needed.
+For the Magento PWA shops the scan phase is a no-op — those product pages are a
+React shell, so discovery yields the full record inline.
 
-### Supported Shops
+A successful scan or discover triggers match step 1 and a validate run on its
+own (`PostPhase`), so neither needs scheduling.
 
-| Shop | Status | Protection | Scale |
-|------|--------|-----------|-------|
-| [vaga.lt](https://vaga.lt) | Active | None | ~20K products |
-| [knygos.lt](https://knygos.lt) | Planned | Cloudflare | ~3M products |
+### Shops
 
-## Quick Start
+| Shop | Platform | Protection | Rows today |
+|---|---|---|---|
+| [patogupirkti.lt](https://patogupirkti.lt) | — | none | 50,604 |
+| [vaga.lt](https://vaga.lt) | OpenCart | none | 19,605 |
+| [pegasas.lt](https://pegasas.lt) | Magento 2 PWA | none | 17,416 |
+| [humanitas.lt](https://humanitas.lt) | WooCommerce + WPML | Cloudflare Managed Challenge | 13,846 |
+| ibiblioteka.lt | API | none | canonical records only |
+| almalittera.lt | — | none | configured, not yet crawled |
 
-### Prerequisites
+Humanitas goes through the FlareSolverr sidecar, opted into per shop by a
+`[flaresolverr]` block in its TOML.
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
-- Docker (for PostgreSQL)
+## Quick start
 
-### Setup
-
-```bash
-# Install dependencies
-uv sync --all-extras
-
-# Start PostgreSQL
-docker compose up -d postgres
-
-# Run migrations
-PYTHONPATH=. uv run alembic upgrade head
-```
-
-### Run Spiders
+Requires PHP 8.4 (roach-php caps there — Homebrew's default `php` is 8.5, so
+the Makefile pins `/opt/homebrew/opt/php@8.4/bin/php`), composer, and Docker.
 
 ```bash
-# Discover URLs from sitemap (weekly)
-uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap
-
-# Discover URLs + extract prices from category pages (monthly)
-uv run scrapy crawl discover -a shop=vaga -a strategy=categories
-
-# Quick price scan from category pages
-uv run scrapy crawl prices -a shop=vaga
-
-# Full product scan (resumable — just re-run after crash)
-uv run scrapy crawl scan -a shop=vaga
-
-# Quick price scan via category pages
-make prices
-
-# Limit items for testing
-uv run scrapy crawl scan -a shop=vaga -s CLOSESPIDER_ITEMCOUNT=10
+make install                                        # composer install, all three projects
+docker compose up -d postgres                       # the live database
+php php/bin/migrate apply --database=postgresql://postgres:postgres@localhost:5432/book_scraper
 ```
 
-### Run Tests
+Then crawl something:
 
 ```bash
-# Start test database
-docker compose up -d postgres-test
-
-# Run all tests
-uv run pytest -v
-
-# Unit tests only (no DB required)
-uv run pytest tests/unit/ -v
-
-# Integration tests only (requires postgres-test)
-uv run pytest tests/integration/ -v
-
-# With coverage report
-make coverage
-
-# HTML coverage report (opens in browser)
-make coverage-html
+cd php/crawler
+php bin/crawl discover --shop=vaga --strategy=sitemap
+php bin/crawl scan --shop=vaga --max-urls=20         # a small first run
 ```
 
-## Testing Strategy
+`bin/crawl` writes to whatever `DATABASE_URL` points at, so `--database` is
+offered explicitly and `--dry-run` fetches and parses without persisting.
 
-Tests are split into two directories by what they need to run:
+The dashboard:
 
-```
-tests/
-    unit/           # Fast, no external dependencies
-    integration/    # Requires PostgreSQL (Docker on port 5433)
-    fixtures/       # Saved HTML/XML pages for parser + spider tests
+```bash
+cd php/dashboard && php artisan serve --port=8002
 ```
 
-**Unit tests** cover pure logic — parsers, config loading, item validation, session factory, spider registry, and spiders. Spider tests use fake Scrapy responses built from the same HTML fixtures, so they verify the full spider→parser→item chain without network or DB.
+## Tests
 
-**Integration tests** hit a real PostgreSQL instance (not mocks). They cover the DB repository layer (listings, prices, discovered URLs, scrape runs) and the `PostgresPipeline` end-to-end.
+```bash
+docker compose --profile test up -d postgres-test
+php php/bin/migrate apply --database=postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+make test            # library + crawler + dashboard
+make test-offline    # everything that needs no database
+```
 
-Scrapy boilerplate (`settings.py`, `middlewares.py`) and framework lifecycle methods (`from_crawler`, `open_spider`, `close_spider`) are marked `# pragma: no cover` — they have no branching logic and are exercised by real spider runs rather than unit tests.
+Real PostgreSQL, no mocks. Every fixture is planted by the tests themselves, so
+an empty database with the schema applied is all they need — nothing has to be
+copied in from the live catalogue.
 
-## Project Structure
+Eight of those tests replay **characterisation goldens**: recordings of what the
+Python stack did, frozen while it still existed, and only ever written when both
+implementations already agreed. They cannot be regenerated — the tools that
+wrote them were Python. A golden that fails is a regression to explain, not a
+file to refresh. `CLAUDE.md` lists them.
+
+## Project structure
 
 ```
 config/
-    default.toml                # Global settings (delays, DB URL)
-    shops/
-        vaga.toml               # Per-shop settings (URLs, concurrency)
+    default.toml              # global settings (delays, DB URL)
+    shops/<shop>.toml         # per-shop URLs, strategies, concurrency
 
-book_scraper/
-    settings.py                 # Scrapy settings (loads from config/)
-    items.py                    # Scrapy items: ListingItem, PriceItem, DiscoveredUrlItem
-    pipelines.py                # ValidationPipeline, PostgresPipeline
-    config.py                   # TOML config loader
-    db/
-        models.py               # SQLAlchemy ORM models + enums
-        repo.py                 # CRUD operations (listings, prices, discovered URLs, scrape runs)
-        session.py              # DB engine + session factory
-    spiders/
-        discover.py             # Generic discover spider (sitemap/categories/full_crawl)
-        scan.py                 # Generic scan spider (resumable)
-        registry.py             # Dynamic parser loader
-        vaga/
-            parsers.py          # vaga.lt HTML/JSON parsing (testable without Scrapy)
+php/
+    src/                      # the library
+        <Shop>/Parser.php     # per-shop parsing, testable without a spider
+        Services/             # ValidateService, MatchService
+        Repository/           # shop books, canonical books
+        Runs/                 # reaper, failsafe, resume policy, scan lock
+        Testing/              # SyntheticShop, FixtureDatabase — fixtures as code
+    crawler/                  # roach-php spiders, watchdog, scheduling
+    dashboard/                # Laravel API + the React SPA under public/static
+    schema/0001_baseline.sql  # the whole schema; applied by bin/migrate
+    tools/schema_gate.sh      # does the baseline still match the live schema?
+    tests/golden/             # characterisation goldens
 
-tests/
-    unit/                       # Pure logic tests (no DB)
-    integration/                # Tests that hit PostgreSQL
-    fixtures/                   # Saved HTML/XML for parser + spider tests
-
-_prototypes/                    # Old prototype scripts (reference only)
+fixtures/                     # saved HTML/JSON for parser tests
+monitoring/                   # Loki, Alloy, Grafana provisioning
+docs/                         # specs, plans, follow-ups
 ```
 
 ## Database
 
-PostgreSQL with 8 tables:
+25 tables. The ones that matter most:
 
-- **books** - Canonical book records (shop-independent)
-- **shops** - Registered shops (vaga, knygos, etc.)
-- **listings** - Book x shop link with full metadata
-- **prices** - Append-only price history
-- **categories** - Hierarchical category tree
-- **book_categories** - Many-to-many book-category link
-- **discovered_urls** - Accumulate-only URL inventory per shop (tracks url_type, fail_count, source)
-- **scrape_runs** - Phase/status log for crash detection and resume
+- `discovered_urls` — every URL ever found, per shop. Accumulate-only.
+- `shop_books` — one row per book as it appears in one shop.
+- `prices` — append-only, one row per scrape per shop book.
+- `books` + `book_isbns` — canonical, shop-independent records.
+- `scrape_runs` + `scrape_url_items` — run bookkeeping, crash detection, resume.
+- `validation_issues` — what the validator found, with a lifecycle.
 
-### Listings Fields
-
-Each listing stores: title, author, SKU, ISBN, publisher, year, pages, cover type, description, categories, image URL, price, original price, stock status.
+Schema changes go in `php/schema/` and are applied by `php/bin/migrate`.
+`make schema-gate` builds a scratch database from the baseline and diffs it
+against the live schema — that is what catches enums, partial unique indexes,
+CHECK expressions and FK actions.
 
 ## Configuration
 
-Settings are in TOML files under `config/`:
+`config/default.toml` holds global defaults; `config/shops/<shop>.toml`
+overrides them per shop. At runtime the precedence is: a `shop_settings` row in
+the database (an operator override, no restart needed), then the shop's TOML,
+then the global default.
 
-```toml
-# config/shops/vaga.toml
-[shop]
-name = "vaga"
-base_url = "https://vaga.lt"
+## Deployment
 
-[scraping]
-download_delay = 0.5
-concurrent_requests_per_domain = 3
-
-[discover.sitemap]
-url = "https://vaga.lt/sitemap.xml"
-max_age_hours = 168
-
-[discover.categories]
-url = "https://vaga.lt/knygos?limit=100&page={page}"
-max_age_hours = 672
-```
-
-Override at runtime with Scrapy CLI:
-```bash
-uv run scrapy crawl vaga_scan -s DOWNLOAD_DELAY=0.3
-```
-
-## Code Quality
-
-```bash
-uv run ruff check book_scraper/ tests/    # Lint
-uv run ruff format book_scraper/ tests/   # Format
-uv run mypy book_scraper/                 # Type check
-```
+Compose runs infrastructure only — postgres, flaresolverr, loki, alloy,
+grafana. The crawler and dashboard run from the CLI; there are no application
+images yet. Packaging them is phase 2 of the removal plan.

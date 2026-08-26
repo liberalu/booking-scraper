@@ -184,14 +184,46 @@ final class PostPhase
         return $log;
     }
 
+    /**
+     * Where a spawned follow-up writes its output.
+     *
+     * The default is a container path. Running from the CLI on a host, `mkdir
+     * -p` on it fails and the whole spawn dies with it — which silently took
+     * the post-phase validate with it the first time a crawl ran outside a
+     * container. So an unwritable directory falls back to the system temp dir
+     * rather than costing the run its follow-up: the log is a convenience, the
+     * validate is not.
+     */
     private static function logPath(string $role, string $shop): string
     {
         $dir = getenv('SPAWN_LOG_DIR') ?: '/var/log/scrapy_runs';
+        if (! self::isUsableDir($dir)) {
+            $fallback = sys_get_temp_dir() . '/book-scraper-spawn';
+            fwrite(STDERR, "post-phase: {$dir} is not writable, logging to {$fallback}\n");
+            $dir = $fallback;
+        }
         $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Ymd-Hisu');
         $slug = static fn (string $v): string
             => trim(preg_replace('/[^A-Za-z0-9._-]+/', '-', $v) ?? $v, '-') ?: 'unknown';
 
         return sprintf('%s/spawn-%s-%s-%s.log', rtrim($dir, '/'), $stamp, $slug($role), $slug($shop));
+    }
+
+    /** Exists and is writable, or can be created. */
+    private static function isUsableDir(string $dir): bool
+    {
+        if (is_dir($dir)) {
+            return is_writable($dir);
+        }
+
+        // Walk up to the nearest existing ancestor: mkdir -p can only create
+        // the missing part if that part is writable.
+        $parent = \dirname($dir);
+        while ($parent !== '/' && $parent !== '.' && ! is_dir($parent)) {
+            $parent = \dirname($parent);
+        }
+
+        return is_writable($parent);
     }
 
     private static function phpBinary(): ?string

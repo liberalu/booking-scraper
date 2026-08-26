@@ -7,7 +7,7 @@ COMPOSER := $(PHP) $(shell which composer)
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
-.PHONY: install install-all test test-all test-offline parse golden discovery-golden markdown-golden lint dashboard fixture-db api-diff crawl discover validate match reconcile reap crawl-diff discover-diff validate-diff match-diff mutation-diff validator-diff canonical-diff reaper-diff seed-test-db migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
+.PHONY: install install-all test test-all test-offline parse lint dashboard fixture-db crawl discover validate match reconcile reap migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
 
 install:
 	$(COMPOSER) install
@@ -31,20 +31,6 @@ test-offline:
 parse:
 	$(PHP) bin/parse $(if $(URL),--url=$(URL),) $(if $(FILE),--file=$(FILE),) $(if $(KIND),--kind=$(KIND),)
 
-## Regenerate the Python golden files (run from the repo root's uv env).
-golden:
-	cd .. && PYTHONPATH=. uv run python php/tools/dump_golden.py
-	cd .. && PYTHONPATH=. uv run python php/tools/dump_url_golden.py
-	cd .. && PYTHONPATH=. uv run python php/tools/dump_discovery_golden.py
-
-## Just the discovery URL/body goldens (graphql, lupasearch, ibiblioteka).
-discovery-golden:
-	cd .. && PYTHONPATH=. uv run python php/tools/dump_discovery_golden.py
-
-## Re-capture markdownify's output for real descriptions. Fetches live pages.
-markdown-golden:
-	cd .. && PYTHONPATH=. uv run python php/tools/dump_markdown_golden.py
-
 lint:
 	@for f in $$(find src tests -name '*.php'); do $(PHP) -l $$f > /dev/null || exit 1; done
 	@echo "lint ok"
@@ -53,23 +39,17 @@ lint:
 dashboard:
 	cd dashboard && $(PHP) artisan serve --port=8002 --host=127.0.0.1
 
-## Compare every ported endpoint against the Python dashboard.
-## Both must be running. Exit code = number of endpoints that differ.
-## FREEZE=1 ignores --py/--php: it builds a database containing nothing but
-## the fixture (bin/fixture-db), hosts both dashboards against it, and writes
-## dashboard/tests/golden/api_shapes.json — only if all of them agree.
-api-diff:
-	cd .. && python3 php/tools/api_diff.py $(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
-
 ## Build the fixture-only database the frozen API shapes are taken over.
 ## Dropped and rebuilt from php/schema's baseline plus SyntheticShop, so it
 ## needs nothing from the live catalogue.
 fixture-db:
 	DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) bin/fixture-db --recreate
 
-## Library + crawler suites.
+## Every suite: library, crawler, dashboard. The dashboard's goldens build
+## their own fixture-only database, so this needs the test cluster up.
 test-all: test
-	cd crawler && $(PHP) vendor/bin/phpunit
+	cd crawler && TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) vendor/bin/phpunit
+	cd dashboard && TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) vendor/bin/phpunit
 
 ## Scan URLs into the database named by DATABASE_URL.
 ##   make crawl URLS=https://vaga.lt/some-book
@@ -88,22 +68,6 @@ crawl:
 discover:
 	cd crawler && DATABASE_URL="$(DATABASE_URL)" $(PHP) bin/crawl discover --shop=$(or $(SHOP),vaga) \
 		--strategy=$(or $(STRATEGY),sitemap) $(if $(PAGES),--max-pages=$(PAGES),) $(ARGS)
-
-## Discover with both stacks and compare. sitemap, graphql and lupasearch are
-## compared exactly; categories compares aggregates (the live listing reorders
-## between runs) and ibiblioteka_api compares shape (its API has no stable
-## order — two runs of one stack disagree).
-discover-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/crawl_diff.py --phase=discover \
-		--shop $(or $(SHOP),vaga) --strategy=$(or $(STRATEGY),sitemap) \
-		$(if $(PAGES),--max-pages=$(PAGES),)
-
-## Scrape the same URLs with both stacks and diff the rows written.
-## Test database only. This is the check that makes the port trustworthy.
-##   make crawl-diff SHOP=pegasas
-crawl-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/crawl_diff.py \
-		--shop $(or $(SHOP),vaga) $(if $(URLS),--urls=$(URLS),) $(if $(LIMIT),--limit=$(LIMIT),)
 
 ## Fail runs left `running` by a killed process. Call on boot.
 reconcile:
@@ -126,64 +90,6 @@ validate:
 ##   make reap ARGS=--watch    keep sweeping
 reap:
 	cd dashboard && $(PHP) artisan runs:reap $(ARGS)
-
-## Copy one shop's rows from the live DB into the test DB, plus the synthetic
-## shop that fires every validator check. The synthetic half is PHP — it is a
-## fixture the characterisation goldens depend on, so it has to outlive Python.
-seed-test-db:
-	cd .. && PYTHONPATH=. uv run python php/tools/seed_test_db.py --shop $(or $(SHOP),vaga)
-	DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) bin/synthesize-validate-cases
-
-## Feed identical items to both validation layers and diff the rewritten item,
-## the drop decision and the issues recorded. No database, no network.
-## FREEZE=1 also writes the cases as a characterisation golden — only if every
-## case matched, so a divergence can never be frozen.
-validator-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/validator_diff.py \
-		$(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
-
-## Feed identical library records to both canonical-book writers and diff the
-## rows. Test database only.
-## FREEZE=1 also saves the fetched records as fixtures and the rows as a
-## characterisation golden — which takes the network out of the replay.
-canonical-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/canonical_diff.py \
-		$(if $(RECORDS),--records $(RECORDS),) $(if $(FREEZE),--freeze,)
-
-## Plant the same zombie runs in two clones and diff what each reaper does.
-## FREEZE=1 also writes the per-fixture outcome as a characterisation golden —
-## only if both stacks agreed, so a divergence can never be frozen.
-reaper-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/reaper_diff.py \
-		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,) $(if $(FREEZE),--freeze,)
-
-## Run both matchers over identical data and diff the linkage they produce.
-## Test database only. SYNTHESIS=1 also exercises canonical synthesis.
-## FREEZE=1 writes the linkage as a characterisation golden — only for
-## SHOP=synthetic, the one shop whose linkage is reproducible, and never
-## together with SYNTHESIS=1 (step 3 cannot be replayed over its own output).
-match-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/match_diff.py \
-		--shop $(or $(SHOP),vaga) $(if $(SYNTHESIS),--synthesis,) \
-		$(if $(FREEZE),--freeze,)
-
-## Put every write endpoint through both dashboards and diff the result.
-## Clones the test DB per stack and starts both dashboards itself — nothing
-## to run first, and it cannot reach the live database.
-## FREEZE=1 also writes the cases as a characterisation golden the dashboard
-## suite replays in-process — only if all 101 checks matched.
-mutation-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/mutation_diff.py \
-		$(if $(VERBOSE),--verbose,) $(if $(KEEP),--keep,) $(if $(FREEZE),--freeze,)
-
-## Run both validators over identical data and diff every finding.
-## Needs seed-test-db first. Test database only.
-## FREEZE=1 writes the findings as a characterisation golden — only for
-## SHOP=synthetic, the one shop whose data is reproducible, and only if both
-## validators agreed.
-validate-diff:
-	cd .. && PYTHONPATH=. uv run python php/tools/validate_diff.py --shop $(or $(SHOP),vaga) \
-		$(if $(VERBOSE),--verbose,) $(if $(FREEZE),--freeze,)
 
 ## ---------------------------------------------------------------------------
 ## Schema (phase 1 of removing Python)

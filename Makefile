@@ -1,56 +1,35 @@
-.PHONY: lint format test build compose-build compose-build-scraper compose-build-dashboard ci crawl coverage coverage-html audit deps
+# Thin delegator. Everything lives in php/Makefile, which pins the PHP 8.4
+# runtime that roach-php requires; these targets exist so `make test` works
+# from the repository root.
+#
+# This file used to hold the Python stack's lint, test, coverage and image
+# builds. It went with the stack — see
+# docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md.
 
-IMAGE_NAME ?= book-scraper
-IMAGE_TAG  ?= latest
+.PHONY: test test-offline lint ci install fixture-db schema-gate
 
-# OrbStack / Docker Desktop on macOS inject NO_PROXY entries containing IPv6
-# CIDR blocks. These poison the build context — `apt-get` inside the image
-# build cannot reach Debian mirrors and silently reports "Package X not
-# available" (see CLAUDE.md "OrbStack build gotcha"). Clearing the vars at
-# the make-target boundary keeps the workaround out of muscle memory.
-CLEAR_PROXY := HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy=""
+## Every suite: library, crawler, dashboard.
+## Needs the test cluster: docker compose --profile test up -d postgres-test
+test:
+	$(MAKE) -C php test-all
+
+## Everything that needs no database.
+test-offline:
+	$(MAKE) -C php test-offline
 
 lint:
-	uv run ruff check book_scraper/ tests/
-	uv run ruff format --check book_scraper/ tests/
-	uv run mypy book_scraper/
+	$(MAKE) -C php lint
 
-format:
-	uv run ruff format book_scraper/ tests/
-	uv run ruff check --fix book_scraper/ tests/
+ci: lint test
 
-test:
-	uv run pytest -v
+## Composer install for all three projects.
+install:
+	$(MAKE) -C php install-all
 
-build:
-	$(CLEAR_PROXY) docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+## Rebuild the fixture-only database the frozen API shapes are taken over.
+fixture-db:
+	$(MAKE) -C php fixture-db
 
-# Always use these for `docker compose build`. Bare `docker compose build`
-# silently fails on `apt-get install` inside the scraper image when the
-# OrbStack proxy vars are present.
-compose-build:
-	$(CLEAR_PROXY) docker compose build
-
-compose-build-scraper:
-	$(CLEAR_PROXY) docker compose build scraper
-
-compose-build-dashboard:
-	$(CLEAR_PROXY) docker compose build dashboard
-
-ci: lint test deps
-
-crawl:
-	uv run scrapy crawl $(ARGS)
-
-coverage:
-	uv run pytest --cov=book_scraper --cov-report=term-missing -v
-
-coverage-html:
-	uv run pytest --cov=book_scraper --cov-report=html
-	@echo "Open htmlcov/index.html in your browser"
-
-audit:
-	uv run pip-audit
-
-deps:
-	uv run deptry book_scraper/
+## Does php/schema still reproduce the real catalogue's schema?
+schema-gate:
+	$(MAKE) -C php schema-gate

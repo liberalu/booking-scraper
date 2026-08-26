@@ -10,8 +10,8 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 /**
- * Every shop the Python side has a parser module for must resolve here, or
- * the generic spiders silently cannot crawl it.
+ * Every configured shop must resolve to a parser, or the generic spiders
+ * silently cannot crawl it.
  */
 final class ParserRegistryTest extends TestCase
 {
@@ -43,21 +43,23 @@ final class ParserRegistryTest extends TestCase
         }
     }
 
-    public function test_the_registry_matches_the_python_parser_modules(): void
+    public function test_the_registry_matches_the_configured_shops(): void
     {
-        // Drift here means a shop exists on one side only.
-        $pythonShops = array_values(array_filter(
-            array_map('basename', glob(__DIR__ . '/../../book_scraper/spiders/*', GLOB_ONLYDIR) ?: []),
-            static fn (string $dir): bool => is_file(
-                __DIR__ . "/../../book_scraper/spiders/{$dir}/parsers.py"
-            )
-        ));
-        sort($pythonShops);
+        // Drift either way is a runtime failure: a TOML with no parser cannot
+        // be crawled, and a parser with no TOML has no URLs, delay or
+        // strategies to work from. This compared the registry against
+        // book_scraper/spiders/*/parsers.py until Python was removed;
+        // config/shops/ is the list that decides what exists now.
+        $configured = array_map(
+            static fn (string $path): string => basename($path, '.toml'),
+            glob(__DIR__ . '/../../config/shops/*.toml') ?: []
+        );
+        sort($configured);
 
-        $phpShops = ParserRegistry::shops();
-        sort($phpShops);
+        $registered = ParserRegistry::shops();
+        sort($registered);
 
-        self::assertSame($pythonShops, $phpShops);
+        self::assertSame($configured, $registered);
     }
 
     public function test_an_unknown_shop_names_what_does_exist(): void

@@ -6,16 +6,28 @@ on:
   pull_request:
     branches: [main]
 
+# PHP only. This workflow ran ruff, mypy and pytest until the Python stack was
+# removed; the three composer projects and their goldens are the suite now.
+env:
+  PHP_VERSION: "8.4"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --all-extras
-      - run: uv run ruff check book_scraper/ tests/
-      - run: uv run ruff format --check book_scraper/ tests/
-      - run: uv run mypy book_scraper/
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      # What `make lint` does. Deliberately not `pint --test`: the codebase
+      # has never been pint-formatted (24 files differ on concat spacing,
+      # import order and PHPUnit method casing), so gating on it would mean a
+      # reformatting sweep, not a lint.
+      - name: Syntax-check every file
+        run: |
+          find php -name '*.php' -not -path '*/vendor/*' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
 
   test:
     runs-on: ubuntu-latest
@@ -25,7 +37,9 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: book_scraper_test
+          # The suite's default target. Every fixture is planted by the tests
+          # themselves, so an empty database with the schema applied is enough.
+          POSTGRES_DB: book_scraper_php_test
         ports:
           - 5433:5432
         options: >-
@@ -35,15 +49,42 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --all-extras
-      - run: uv run pytest -v
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql, dom
+          coverage: none
 
-  deps:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --all-extras
-      - run: uv run deptry book_scraper/
-      - run: uv run pip-audit --ignore-vuln PYSEC-2017-83
+      - name: Install
+        run: |
+          composer install --no-interaction --no-progress --working-dir=php
+          composer install --no-interaction --no-progress --working-dir=php/crawler
+          composer install --no-interaction --no-progress --working-dir=php/dashboard
+
+      # php/schema's baseline is the whole schema, so this builds it from empty.
+      # Alembic used to own it; the baseline is a dump of what it produced, and
+      # tools/schema_gate.sh is what proves the two still agree.
+      - name: Apply the schema
+        run: php php/bin/migrate apply --database=$DATABASE_URL
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+
+      - name: Library suite
+        working-directory: php
+        run: vendor/bin/phpunit
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+
+      - name: Crawler suite
+        working-directory: php/crawler
+        run: vendor/bin/phpunit
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+
+      # Builds its own fixture-only database (bin/fixture-db) for the frozen
+      # API shapes, so it needs the cluster rather than just this one database.
+      - name: Dashboard suite
+        working-directory: php/dashboard
+        run: vendor/bin/phpunit
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/book_scraper_php_test

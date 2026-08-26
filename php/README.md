@@ -1,7 +1,28 @@
-# PHP port (in progress)
+# The PHP stack
 
-PHP rewrite of the crawler and dashboard, running **beside** the Python
-stack against the same Postgres.
+> **This document was written during the port, while the Python stack was still
+> here to be compared against — and it is kept in that voice, because the
+> measurements are the evidence for the port and rewriting them in the past
+> tense would blur what was actually checked.**
+>
+> Python was removed on 2026-08-26 (`python-final` is the last commit with it).
+> Two consequences for reading this:
+>
+> - **Every `make *-diff` command below is gone.** They needed both stacks. What
+>   replaced them is eight characterisation goldens the suite replays — frozen
+>   from those same comparisons, and only ever written when both stacks already
+>   agreed. `CLAUDE.md` lists them. They cannot be regenerated.
+> - **`make golden` and `make seed-test-db` are gone too.** The goldens were
+>   dumped from Python parsers, and seeding copied the live catalogue for the
+>   differentials to run over. The suite now plants every fixture itself, from
+>   code, and passes against an empty database with only the schema applied.
+>
+> The schema section is the exception that is still live: `tools/schema_gate.sh`
+> compares PHP's baseline against the real catalogue's schema, which needs no
+> Python and remains the gate on schema changes.
+
+The crawler and dashboard. Formerly a rewrite running **beside** a Python
+stack against the same Postgres; now the only implementation.
 
 Three composer projects, not one — see the Guzzle note below for why:
 
@@ -11,25 +32,28 @@ Three composer projects, not one — see the Guzzle note below for why:
 | `crawler/` | roach-php crawler. Requires the library + roach. |
 | `dashboard/` | Laravel API serving the existing React SPA. Requires the library. |
 
-Status: **all six shop parsers, all four crawl phases' read paths, the
-validator, the fault-tolerance layer and every dashboard GET endpoint are
-ported and verified against Python.** What remains: dashboard mutations,
-match steps 2–3, adaptive subdivision and the cron chain.
+Status: **complete and verified against Python** — all six shop parsers, all
+four phases, the validator, the matcher, the fault-tolerance layer, and every
+dashboard endpoint including the 23 write routes. The differential found nine
+defects in the process, all fixed in both stacks; see
+`docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md`.
 
 ## Ground rules
 
-**Alembic owns the live schema.** PHP has a baseline of its own now (see
-[Schema](#schema)), but nothing applies it to the catalogue both stacks read
-— that catalogue is what makes the differential verification below possible,
-and a second migration tool writing to it would end that. Ownership transfer
-is cutover's job, not this one.
+**PHP owns the schema now.** `schema/0001_baseline.sql` is a dump of what
+Alembic produced, and `bin/migrate` applies it. The guard survives the
+handover: `apply()` refuses a database that has an `alembic_version` table and
+no PHP ledger unless `--adopt` is passed, so the live catalogue cannot be
+migrated by accident. `tools/schema_gate.sh` is what proves the baseline still
+reproduces that catalogue's schema.
 
 **One config source.** `Config` reads the same `config/default.toml` and
 `config/shops/*.toml` as Python. Two drifting copies of `download_delay`
 is a rate-limit incident waiting to happen.
 
-**Nothing lands unverified against Python.** A port has no spec of its own
-— its spec is the behaviour of the code it replaces.
+**Nothing landed unverified against Python.** A port has no spec of its own —
+its spec is the behaviour of the code it replaces. That is why the goldens
+exist: the comparison is over, so the recordings are the spec now.
 
 ## Verification method
 
@@ -53,16 +77,13 @@ outputs compared.
 | Canonical-book writer | Rows written from the same library record (`make canonical-diff`) | books + book_isbns + book_authors, keyed on source_url |
 | Reaper | What each one does to identical zombie runs (`make reaper-diff`) | 5 run shapes × 6 tables |
 
-Regenerate the goldens after an intentional Python change:
+These goldens were dumped from the Python implementations, and a git diff on
+`tests/golden/` after re-dumping was the signal that Python behaviour had moved
+and the PHP side needed the same change.
 
-```bash
-PYTHONPATH=. uv run python php/tools/dump_golden.py
-PYTHONPATH=. uv run python php/tools/dump_url_golden.py
-PYTHONPATH=. uv run python php/tools/dump_discovery_golden.py
-```
-
-A git diff on `tests/golden/` after running those is the signal that
-Python behaviour moved and the PHP side needs the same change.
+**That is no longer possible, by design.** The dumpers were Python. What is in
+`tests/golden/` is the last recording of a stack that no longer exists, so a
+failing golden means the PHP side changed — there is nothing else it can mean.
 
 ### What the harness could not see
 
@@ -102,45 +123,52 @@ cd php && PATH="/opt/homebrew/opt/php@8.4/bin:$PATH" composer install
 
 ## Tests
 
-### The two stacks have separate test databases
-
-`book_scraper_php_test` for everything PHP — phpunit and all the differentials.
-`book_scraper_test` belongs to the Python suite.
-
-They cannot share one. `tests/conftest.py` builds an empty schema from
-`Base.metadata` and drops it on teardown; the differentials need the same
-database loaded with a copy of the real catalogue. Whichever ran last won, and
-the other reported failures that had nothing to do with the code under test —
-75 spurious integration failures on one run, 61 on the next, and once the
-schema was gone entirely. Each time it cost a bisect to establish that nothing
-was actually broken.
-
-The name lives in exactly one place, `tools/_testdb.py`, because it used to be
-eight copies of the same DSN literal across eight scripts — which is why it
-could not be changed anywhere. Override with `PHP_TEST_DATABASE_URL`; the guard
-there still refuses anything not on port 5433 with `test` in its name.
-
-Create it with:
+Three suites: the library here, `crawler/`, and `dashboard/`. `make test` runs
+all three; `make test-offline` runs everything that needs no database.
 
 ```bash
-docker exec book-scraper-postgres-test-1 psql -U postgres -c 'create database book_scraper_php_test'
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/book_scraper_php_test \
-  PYTHONPATH=. uv run alembic upgrade head
-make seed-test-db
+docker compose --profile test up -d postgres-test
+php bin/migrate apply --database=postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+make test
 ```
 
-### Running them
+**They need nothing but the schema.** Every fixture is planted by the tests
+themselves — `Testing\SyntheticShop` builds a whole shop from code, and the
+dashboard's goldens build a fixture-only database from
+`schema/0001_baseline.sql` (`make fixture-db`). Verified: the full suite passes
+against an empty database. That is what made removing Python a deletion rather
+than a migration, and it is why `seed_test_db.py` never needed porting — it
+existed to give the differentials realistic data.
 
-The Postgres array tests need the test database (port 5433), never the real
-catalogue:
+### Fixtures get cleaned up, always
 
-```bash
-docker compose up -d postgres-test
-```
+This cost more debugging than anything else while the goldens were being
+frozen. A tool or test that leaves its fixtures behind breaks the next one, and
+the failure surfaces somewhere unrelated:
 
-```bash
-cd php && PATH="/opt/homebrew/opt/php@8.4/bin:$PATH" vendor/bin/phpunit
-```
+- 13,339 validation findings left in place changed the first row of
+  `/api/issues`, which failed a frozen API shape in another package.
+- A sentinel run with a fixed id survived every reseed, became the newest run
+  in the database, and put a half-populated `validate` row at the top of the
+  dashboard's recent-runs list.
+- A re-matched catalogue moved `/api/books?has_conflicts=true`.
+- Three marked books moved the first row of every book list.
+
+If a golden fails for no apparent reason, look for litter before looking at the
+code.
+
+### The test database
+
+`book_scraper_php_test`, on port 5433, created by the `postgres-test` compose
+service (`POSTGRES_DB`) and schema'd by `bin/migrate`. Plus
+`book_scraper_php_test_fixture`, which `bin/fixture-db` drops and rebuilds from
+nothing — that one is where the frozen API shapes and write-route cases are
+taken, precisely because it holds no copy of the live catalogue and therefore
+comes back identical every time.
+
+Both refuse to be anywhere but the test cluster: `SyntheticShop` and
+`FixtureDatabase` check the port first, because the real catalogue is the only
+thing on 5432 and those classes drop and rebuild what they are pointed at.
 
 ## Schema
 
@@ -497,9 +525,9 @@ control flow and the Python post-filters are rewritten.
 auto-trigger runs inline after every successful scan or discover.
 
 ```bash
-make seed-test-db SHOP=vaga     # copy real rows into the test DB
-make validate-diff SHOP=vaga    # both validators, same data, diff findings
-make validate SHOP=vaga         # run the PHP validator for real
+make validate SHOP=vaga         # run the validator for real
+make test                       # includes ValidateServiceCharacterisationTest,
+                                # which replays 34 findings across all 20 types
 ```
 
 ### Verified on real catalogue data

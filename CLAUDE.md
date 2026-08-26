@@ -1,78 +1,94 @@
 # CLAUDE.md
 
+> **The Python stack is gone.** This was a Scrapy project until 2026-08-26;
+> it was ported to PHP, verified against the original by differential testing,
+> and the original was removed. The last commit containing it is tagged
+> `python-final`. Documents dated before then describe the Python
+> implementation and are kept as history — don't take their file paths as
+> current.
+
 ## Project Overview
 
-Multi-shop Lithuanian book price scraper built with Scrapy. Stores data in PostgreSQL. Onboarded shops:
+Multi-shop Lithuanian book price scraper built with **roach-php** (crawler) and
+**Laravel** (dashboard). Stores data in PostgreSQL. Onboarded shops:
 
 - **vaga.lt** — OpenCart, HTML scraping (`sitemap` / `categories` / `full_crawl` strategies).
 - **pegasas.lt** — Magento 2 PWA, scoped to the Lithuanian-language subtree (cats 5107/5125/6122). `graphql` strategy returns full metadata; `lupasearch` strategy is a fast supplementary index for daily price/stock rescans + new-arrivals detection (via `is_new`). Scan phase is a no-op (PWA pages have no parseable HTML — all data comes from discover).
-- **humanitas.lt** — WordPress + WooCommerce + WPML, ~81k-book catalogue (mostly imported German/English academic + Lithuanian originals). Cloudflare **Managed Challenge** on every URL — bypassed via the **FlareSolverr** sidecar (`book_scraper/flaresolverr_middleware.py`, opted in per-shop via the `[flaresolverr]` block in the TOML). Discovery uses the `categories` strategy paginated at `m575a2product_limit=1000` with `cntnt01page` (the 5000 server cap hangs FS Chromium on the 17 MB response); `parse_product_page` reads the `<div class="book-info">` block and gates non-LT books via `Leidinio kalba`. Cron: Sundays 02:00 discover → 04:00 scan. Coverage on calibration: 99.3% ISBN, 96.1% year, 92.7% format.
+- **humanitas.lt** — WordPress + WooCommerce + WPML, ~81k-book catalogue (mostly imported German/English academic + Lithuanian originals). Cloudflare **Managed Challenge** on every URL — bypassed via the **FlareSolverr** sidecar (`php/crawler/src/FlareSolverr.php`, opted in per-shop via the `[flaresolverr]` block in the TOML). Discovery uses the `categories` strategy paginated at `m575a2product_limit=1000` with `cntnt01page` (the 5000 server cap hangs FS Chromium on the 17 MB response); `parseProductPage` reads the `<div class="book-info">` block and gates non-LT books via `Leidinio kalba`. Cron: Sundays 02:00 discover → 04:00 scan. Coverage on calibration: 99.3% ISBN, 96.1% year, 92.7% format.
 
 ## Key Commands
 
+The PHP 8.4 binary is pinned in `php/Makefile` (`roach-php` caps at 8.4 and
+Homebrew's default `php` is 8.5). Outside make, use
+`/opt/homebrew/opt/php@8.4/bin/php`.
+
 ```bash
-uv sync --all-extras                          # Install deps
-docker compose up -d postgres postgres-test   # Start DBs
-PYTHONPATH=. uv run alembic upgrade head      # Run migrations
-uv run scrapy crawl discover -a shop=vaga -a strategy=sitemap      # Discover URLs from sitemap
-uv run scrapy crawl discover -a shop=vaga -a strategy=categories   # Discover URLs + extract prices
-uv run scrapy crawl discover -a shop=vaga -a strategy=full_crawl   # Discover all internal links
-uv run scrapy crawl scan -a shop=vaga                              # Full product scan (resumable)
-uv run scrapy crawl scan -a shop=vaga -a rescrape=true             # Re-scrape all known product URLs
-uv run scrapy crawl scan -a shop=vaga -a max_urls=20               # Cap scan to 20 URLs (dev / smoke)
-uv run scrapy crawl discover -a shop=vaga -a strategy=categories -a max_pages=3  # Cap discovery to 3 category pages
-uv run scrapy crawl discover -a shop=pegasas -a strategy=graphql   # Pegasas: full LT metadata via Magento GraphQL (rich + slow)
-uv run scrapy crawl discover -a shop=pegasas -a strategy=lupasearch  # Pegasas: fast price/stock rescan + is_new detection
-uv run scrapy crawl discover -a shop=humanitas -a strategy=categories  # Humanitas: paginated catalogue via FlareSolverr (~10 min)
-uv run scrapy crawl scan -a shop=humanitas                         # Humanitas: scan via FlareSolverr (slow — first run multi-day, then self-amortises)
-docker compose up -d flaresolverr                                  # FlareSolverr sidecar (required for humanitas)
-RUN_FLARESOLVERR_TESTS=1 uv run pytest tests/integration/test_humanitas_flaresolverr.py -v  # End-to-end FS test (opt-in)
-uv run pytest -v                              # Run tests
-uv run pytest tests/unit/ -v                  # Unit tests only (no DB)
-uv run pytest tests/integration/ -v           # Integration tests only
-make coverage                                 # Tests with coverage report
-uv run ruff check book_scraper/ tests/        # Lint
-uv run ruff format book_scraper/ tests/       # Format
-uv run mypy book_scraper/                     # Type check
-make audit                                    # Check for vulnerable dependencies
-make deps                                     # Check for unused/missing dependencies
-uv run pre-commit run --all-files             # Run pre-commit hooks
-docker compose build dashboard                # Rebuild dashboard image
-docker compose up -d dashboard                # Restart dashboard container
-uv run pytest tests/integration/test_dashboard_routes.py -v  # Smoke test after deploy
-# Observability (v1.2)
-open http://localhost:3000                                           # Grafana — login admin/admin (change on first use)
-docker compose up -d loki alloy grafana                             # bring observability stack up after compose changes
-docker compose restart grafana                                       # reload Grafana provisioning (data sources, dashboards)
-docker compose restart alloy                                         # reload Alloy config (monitoring/alloy/config.alloy)
-curl -s 'http://localhost:3100/loki/api/v1/labels' | jq             # list active Loki labels (sanity check)
-curl -s 'http://localhost:3100/loki/api/v1/query?query={service="dashboard"}&limit=5' | jq  # last 5 dashboard lines
-curl -s 'http://localhost:12345/-/ready'                             # Alloy readiness probe
+make install                                  # composer install, all three projects
+docker compose up -d postgres                 # the live database
+docker compose --profile test up -d postgres-test   # the test database
+php php/bin/migrate status --database=$DATABASE_URL  # schema state
+php php/bin/migrate apply  --database=$DATABASE_URL  # apply php/schema
+
+# Crawling. Writes to DATABASE_URL; pass --database to be explicit, and
+# --dry-run to fetch and parse without persisting.
+cd php/crawler
+php bin/crawl discover --shop=vaga --strategy=sitemap
+php bin/crawl discover --shop=vaga --strategy=categories       # + prices
+php bin/crawl discover --shop=vaga --strategy=full_crawl       # follow internal links
+php bin/crawl discover --shop=vaga --strategy=categories --max-pages=3
+php bin/crawl scan --shop=vaga                                 # resumable
+php bin/crawl scan --shop=vaga --max-urls=20                   # dev / smoke
+php bin/crawl scan --shop=vaga --urls=https://vaga.lt/some-book
+php bin/crawl discover --shop=pegasas --strategy=graphql       # full LT metadata, slow
+php bin/crawl discover --shop=pegasas --strategy=lupasearch    # fast price/stock rescan
+php bin/crawl discover --shop=humanitas --strategy=categories  # via FlareSolverr (~10 min)
+php bin/validate --shop=vaga                                   # data-quality validator
+php bin/match --shop=vaga                                      # steps 1 + 2
+php bin/match --shop=vaga --synthesis                          # + step 3
+docker compose up -d flaresolverr                              # required for humanitas
+
+# Tests
+make test                                     # library + crawler + dashboard
+make test-offline                             # everything that needs no database
+make lint                                     # php -l over every file
+make fixture-db                               # rebuild the fixture-only database
+make schema-gate                              # does php/schema still match the live schema?
+
+# Dashboard
+cd php/dashboard && php artisan serve --port=8002
+php artisan runs:reap                         # fail runs whose heartbeat stopped
+
+# Observability
+open http://localhost:3000                                           # Grafana — admin/admin on first use
+docker compose up -d loki alloy grafana                             # bring the stack up
+docker compose restart grafana                                       # reload provisioning
+docker compose restart alloy                                         # reload monitoring/alloy/config.alloy
+curl -s 'http://localhost:3100/loki/api/v1/labels' | jq             # active Loki labels
+curl -s 'http://localhost:12345/-/ready'                             # Alloy readiness
 ```
 
-> **OrbStack build gotcha:** OrbStack injects `NO_PROXY` entries containing IPv6 CIDR blocks
-> (e.g. `fd07:b51a:cc66:f0::/64`) into container env vars. `httpx.AsyncClient` chokes on
-> these during spider init (treats the CIDR as a port). The spider-side fix is
-> `trust_env=False` (already applied). For `docker compose build` the proxy vars also break
-> `apt-get` inside the build context — use the Make targets which clear the proxy vars:
->
-> ```bash
-> make compose-build-scraper      # rebuild scraper
-> make compose-build-dashboard    # rebuild dashboard
-> make compose-build              # rebuild everything
-> ```
->
-> The Makefile wraps each command with `HTTP_PROXY="" ... docker compose build`. Avoid
-> bare `docker compose build`; it silently produces an image with missing apt packages.
+> **There are no application images.** The `scraper` and `dashboard` compose
+> services were Python and went with it; compose now runs infrastructure only
+> (postgres, flaresolverr, loki, alloy, grafana). The crawler and dashboard run
+> from the CLI. Packaging them is phase 2 of
+> `docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md`.
 
 ## Architecture
 
-- **Framework:** Scrapy with asyncio reactor
-- **DB:** PostgreSQL via SQLAlchemy 2.0, migrations via Alembic
-- **Dashboard:** FastAPI + Jinja2 + Pico CSS, served via Docker at `http://localhost:8000`
+- **Crawler:** roach-php, synchronous (no event loop) — `php/crawler/`
+- **Library:** framework-free, shared by crawler and dashboard — `php/src/`
+- **DB:** PostgreSQL via Eloquent; migrations in `php/schema/`, applied by `php/bin/migrate`
+- **Dashboard:** Laravel serving a JSON API plus the React SPA in `php/dashboard/public/static/hifi`
 - **Config:** TOML files in `config/` (global defaults + per-shop overrides)
-- **Package manager:** uv
-- **Deployment:** Everything runs in Docker via `docker-compose.yml`. Rebuild + restart to see changes.
+- **Package manager:** composer, three projects — `php/`, `php/crawler/`, `php/dashboard/`
+- **Deployment:** CLI. Compose runs infrastructure only; there are no application images.
+
+**Schema ownership.** Alembic owned the schema until the Python stack was
+removed; `php/schema/0001_baseline.sql` is a dump of what it produced, and
+`php/tools/schema_gate.sh` is what proves the baseline still reproduces the
+live catalogue's schema — enums, partial unique indexes, CHECK expressions and
+FK actions included. `bin/migrate` refuses a database that has an
+`alembic_version` table and no PHP ledger unless `--adopt` is passed.
 
 ### Pipeline Phases
 
@@ -80,25 +96,36 @@ curl -s 'http://localhost:12345/-/ready'                             # Alloy rea
 2. **Scan** (`scan` spider) — scrape full product pages for discovered URLs. Resumable after crashes.
 3. **Match** — not yet implemented (link shop_books to canonical books)
 
-Spiders are generic — shop is passed as argument: `scrapy crawl discover -a shop=vaga -a strategy=sitemap`
+Spiders are generic — the shop is an argument: `php bin/crawl discover --shop=vaga --strategy=sitemap`.
+Shop-specific parsing lives in `php/src/<Shop>/Parser.php`, resolved through
+`ParserRegistry`.
 
 ### Run lifecycle & stall recovery
 
-`StallDetector` (`book_scraper/extensions.py`) closes the spider if no `response_received` or `item_scraped` signal lands for `STALL_TIMEOUT` seconds (default 180s). On stall:
+`Watchdog` (`php/crawler/src/Watchdog.php`) writes the heartbeat and detects
+stalls. It runs in a **forked child**, not in-process: roach is synchronous, so
+an in-process timer stops ticking during any blocking call and the dashboard's
+reaper would kill a run that is merely slow. Parent → child signalling is the
+mtime of a marker file — crude on purpose, because it survives a parent stuck
+inside a blocking syscall, which is the case being detected.
+
+It fires when nothing has touched that marker for `STALL_TIMEOUT` seconds
+(default 180). `HEARTBEAT_INTERVAL_S` (default 5) is how often it ticks. On
+stall:
 
 1. Run flipped to `failed` with `resumable_after_failure=True` + `close_reason=stall_timeout`.
-2. Auto-resume queued — fires on `spider_closed` signal, or via a force-exit timer at `STALL_FORCE_EXIT_S` (default 60s) if the natural close drains too slowly. Force-exit calls `os._exit` after spawning the new subprocess.
-3. New scrapy process inherits the queue via `inherit_pending_items`, which also resets retryable failures (`run_aborted` / `stuck_in_processing` / `subdivision_5xx`) to pending.
+2. `RunFailsafe::finalize()` writes that from the child, on its own connection — the parent may be wedged.
+3. The replacement process inherits the queue, which also resets retryable failures (`run_aborted` / `stuck_in_processing` / `subdivision_5xx`) to pending. `RunReconciler::RETRY_CAP` is 3.
 4. Chain depth is tracked via `resumed_after_failure` events in `scrape_run_events`. Capped at `STALL_AUTO_RESUME_MAX` (default 10). When the cap hits, the run stays `failed` and waits for an operator click on Continue.
 
 Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider reschedules the failed range as N smaller pageSize requests (`subdivide_factor` in the shop config, default 5). The depth=1 sub-page carries `_sub=1` in its URL so it can't recurse. Each subdivision is logged as a `subdivided` row on `scrape_run_events` (renders as ⊟ in the dashboard's Timeline card).
 
 ### Post-phase auto-trigger (match step 1 + validate after every scan/discover)
 
-`PostPhaseAutoTrigger` (`book_scraper/extensions.py`) wires every successful `scan` or `discover` spider close into:
+`PostPhase` (`php/crawler/src/PostPhase.php`) wires every successful `scan` or `discover` close into:
 
-1. **Match step 1 (ISBN match) inline** — a single fast `UPDATE shop_books SET book_id = bi.book_id WHERE sb.isbn = bi.isbn AND sb.book_id IS NULL`. Runs in a short-lived session in the spider process (no separate `scrape_runs` row). Links any newly-scraped shop_book to existing canonical books by ISBN within milliseconds.
-2. **Validate as a subprocess** — spawns `scrapy crawl validate -a shop=<shop>` as a fire-and-forget detached process. Creates a regular `scrape_runs` row (phase=`validate`). Picks up data-quality changes immediately and auto-resolves stale issues via `resolve_gone_issues`.
+1. **Match step 1 (ISBN match) inline** — a single fast `UPDATE shop_books SET book_id = bi.book_id WHERE sb.isbn = bi.isbn AND sb.book_id IS NULL`, in the crawler process (no separate `scrape_runs` row). Links any newly-scraped shop_book to existing canonical books by ISBN within milliseconds.
+2. **Validate as a subprocess** — spawns `bin/validate --shop=<shop>` as a fire-and-forget detached process (`CRAWLER_PHP_BINARY` overrides which PHP it uses; spawn logs go to `SPAWN_LOG_DIR`, default `/var/log/scrapy_runs`). Creates a regular `scrape_runs` row (phase=`validate`). Picks up data-quality changes immediately and auto-resolves stale issues via `resolve_gone_issues`.
 
 Hooks both `scan` and `discover` because shops like pegasas/iBiblioteka yield `ShopBookItem`s in the discover phase (scan is a no-op for them).
 
@@ -177,50 +204,96 @@ ON CONFLICT (shop_id, key) DO UPDATE SET value=EXCLUDED.value, type=EXCLUDED.typ
 
 ### Key Design Decisions
 
-- Generic spiders (`discover`, `scan`) — shop-specific logic lives in `spiders/<shop>/parsers.py`, loaded dynamically via `spiders/registry.py`
+- Generic spiders (`DiscoverSpider`, `ScanSpider`) — shop-specific logic lives in `php/src/<Shop>/Parser.php`, resolved through `ParserRegistry`
 - `discovered_urls` table tracks all found URLs per shop (accumulate-only, never deleted)
 - `scrape_runs` table logs each run's phase/status for crash detection and resume
 - `shop_books` table stores full product metadata (title, author, ISBN, publisher, year, pages, etc.) — one row per book-as-it-appears-in-a-shop
 - `prices` table is append-only (one row per scrape per shop_book)
 - `books` table is for canonical records (shop-independent) — populated by match phase
 - Per-shop settings in `config/shops/<shop>.toml`, loaded at spider init time
+- The React SPA is canonical at `php/dashboard/public/static/hifi`. It was a symlink into the Python tree while both stacks existed, so the differential compared the API alone.
 
 ### Database
 
 - Main DB: `postgresql://postgres:postgres@localhost:5432/book_scraper`
-- Test DB: `postgresql://postgres:postgres@localhost:5433/book_scraper_test`
-- Both run in Docker via `docker-compose.yml`
-- Alembic needs `PYTHONPATH=.` to find models
+- Test DB: `postgresql://postgres:postgres@localhost:5433/book_scraper_php_test`
+- Fixture DB: `…/book_scraper_php_test_fixture` — built from nothing by `make fixture-db`, and what the frozen API shapes are taken over
+- Both clusters run in Docker via `docker-compose.yml`; the test one is behind `--profile test`
+- A fresh test database needs only `php php/bin/migrate apply` — every fixture is planted by the tests themselves
 
 ### Adding a New Shop
 
 1. Create `config/shops/<shop>.toml` with discovery strategies and scraping settings
-2. Create `book_scraper/spiders/<shop>/` directory
-3. Add `parsers.py` exporting `parse_sitemap_urls()`, `parse_category_page()`, `parse_product_page()`. The `parse_category_page` contract returns `{"products": [...], "total": int | None}` — `total` enables upfront pagination on the first page (the spider enqueues all remaining pages from `total`, so `concurrent_requests_per_domain` actually engages instead of chaining one page at a time). Return `total=None` for HTML-scrape shops where the count isn't reliably surfaced; the spider falls back to per-page chained pagination.
-4. Add test fixtures and parser tests
-5. No new spider classes needed — generic spiders load parsers dynamically
+2. Create `php/src/<Shop>/Parser.php`
+3. Expose `parseSitemapUrls()`, `parseCategoryPage()`, `parseProductPage()`, and register it in `ParserRegistry`. `parseCategoryPage` returns `['products' => [...], 'total' => int|null]` — `total` enables upfront pagination on the first page (the spider enqueues all remaining pages from `total`, so `concurrent_requests_per_domain` actually engages instead of chaining one page at a time). Return `total = null` for HTML-scrape shops where the count isn't reliably surfaced; the spider falls back to per-page chained pagination.
+4. Add a fixture under `fixtures/` and a parser test
+5. No new spider classes needed — the generic spiders resolve the parser by shop name
+6. `ParserRegistryTest` asserts the registry and `config/shops/*.toml` list the same shops, so a TOML without a parser fails the suite rather than a crawl
 
 See the `📖 New Bookstore Onboarding Guide` Notion page for a full checklist + the pitfalls section captured during the pegasas onboarding (Magento `category_id` filter is membership-based and leaks across language siblings; EAN ≠ ISBN; e-book detection via category id since Magento has no `is_ebook`; etc.).
 
 ## Testing
 
-Tests are split into `tests/unit/` (fast, no DB) and `tests/integration/` (real PostgreSQL on port 5433).
+Three suites, all against real PostgreSQL on port 5433 — no mocks:
 
-- Unit tests cover parsers, config, items, session, registry, and spiders (using fake Scrapy responses)
-- Integration tests cover DB repo layer and PostgresPipeline end-to-end
-- Scrapy boilerplate (`settings.py`, `middlewares.py`, lifecycle methods) marked `# pragma: no cover`
-- HTML fixtures in `tests/fixtures/` shared by parser and spider tests
+- **`php/`** (library, ~2,110 tests) — parsers, validator, matcher, repositories, run lifecycle. `--exclude-group db` runs the offline half.
+- **`php/crawler/`** (~50) — spider emit rules, scheduling, watchdog, reconciler.
+- **`php/dashboard/`** (7, but 320 assertions) — the two big goldens plus route smoke tests.
+
+`make test` runs all three. Fixtures are planted by the tests and cleaned up
+after: **a tool that leaves its fixtures behind breaks the next one**, which
+happened repeatedly while the goldens were being frozen (13,339 findings left
+in place, a sentinel run with a fixed id that survived reseeds, a re-matched
+catalogue). If a golden moves for no apparent reason, look for litter first.
+
+### The characterisation goldens
+
+These are the port's evidence, frozen while the Python stack still existed to
+disagree with. Each was written by a differential tool that compared both
+implementations and would only freeze once they already agreed — so what these
+replay is Python's behaviour captured, not PHP's output blessed.
+
+| Golden | Replayed by | Covers |
+|---|---|---|
+| `dashboard/tests/golden/api_shapes.json` | `ApiShapeCharacterisationTest` | 79 GET endpoints: status + response type-skeleton |
+| `dashboard/tests/golden/mutation_cases.json` | `MutationCharacterisationTest` | 100 write-route cases, in sequence |
+| `tests/golden/validate_findings.json` | `ValidateServiceCharacterisationTest` | 34 findings across all 20 issue types |
+| `tests/golden/match_linkage.json` | `MatchServiceCharacterisationTest` | ISBN linkage + author backfill |
+| `tests/golden/validator_cases.json` | `ItemValidatorCharacterisationTest` | 46 item-validation cases |
+| `tests/golden/validate_predicates.json` | `ValidateHelpersDifferentialTest` | 1,823 predicate cases |
+| `tests/golden/reaper_*.json` | `ReaperCharacterisationTest` | per-fixture reap verdicts |
+| `tests/golden/canonical_expected.json` | `CanonicalBookCharacterisationTest` | canonical upsert |
+
+**They cannot be regenerated.** The tools that wrote them were Python and are
+gone, so a golden that fails is a regression to explain, not a file to refresh.
+
+Two rules they depend on, both learned the hard way:
+
+- **A golden can only describe data that comes back the same way every time.**
+  The API and write-route goldens are taken over a database built from nothing
+  (`php/schema` + `SyntheticShop`), not over a copy of the live catalogue — a
+  reseed once turned a field from `str` into `null` and failed the test with
+  nothing having regressed.
+- **`SyntheticShop`** (`php/src/Testing/SyntheticShop.php`) is the fixture: 27
+  rows that fire all 20 issue types plus their suppression cases, a matchable
+  book, a canonical that disagrees with its shop_book, run history, a failure
+  streak and a second shop. It refuses to build against anything but the test
+  cluster, and refuses if any of its ISBNs already belongs to a real canonical.
 
 ## Post-Task Checklist
 
 After completing any task that changes code, suggest to the user:
 
-1. **Rebuild + restart containers**:
-   - Dashboard-only changes (routes, templates, queries): `docker compose build dashboard && docker compose up -d dashboard`
-   - **Schema changes (Alembic migration that drops/renames a column or type), model changes, repo/pipeline/spider changes**: rebuild *both* — `docker compose build dashboard scraper && docker compose up -d dashboard scraper`. Skipping the scraper rebuild leaves it running old code that queries dropped columns and every crawl crashes on startup (see commit f740448).
-   - **BuildKit cache gotcha**: on macOS Docker Desktop, the `COPY book_scraper/` layer occasionally hits a stale-cache path even though source files changed — the new image is "Built" but inside the container `/app/book_scraper/...` still has the previous code. If you're verifying a fix and the running container disagrees with your edits, rebuild with `--no-cache`: `docker compose build --no-cache dashboard scraper && docker compose up -d dashboard scraper`. Quick way to confirm: `docker exec book-scraper-<svc>-1 grep <new-symbol> /app/book_scraper/<changed-file>` — if your new symbol isn't there, the cache lied.
-2. `uv run pytest tests/integration/test_dashboard_routes.py -v` — smoke test all routes.
-3. After schema migrations, trigger a short scan (`scrapy crawl scan -a shop=vaga -a urls=<one-url>`) to confirm the scraper container picked up the new models.
+1. `make test` — all three suites. There are no images to rebuild: the crawler
+   and dashboard run from the CLI, so a code change is live immediately.
+2. After a schema change, `make schema-gate` — it builds a scratch database
+   from `php/schema` and diffs it against the live schema. This is the check
+   that catches enums, partial unique indexes, CHECK expressions and FK
+   actions; a missing partial unique index once made a dead validator check
+   look alive for months.
+3. After a schema change, also run a one-URL scan
+   (`php bin/crawl scan --shop=vaga --urls=<one-url>`) to confirm the models
+   still match what the database has.
 4. After deploying single-row restarts (2026-05-09): on shops with large
    stale-failed backlogs (humanitas, patogupirkti), the first scan may
    trigger an end-of-run retry sweep over hundreds–thousands of URLs.
@@ -234,7 +307,7 @@ After completing any task that changes code, suggest to the user:
 ### Observability label cardinality (Loki)
 
 The Loki index can only afford low-cardinality labels. The four allowed labels are:
-- `service` — bounded set (dashboard, scraper, postgres, flaresolverr, loki, promtail, grafana)
+- `service` — bounded set (dashboard, scraper, postgres, flaresolverr, loki, promtail, grafana). `scraper`/`dashboard` were container names; with no application images the crawler's spawn logs reach Loki through the `scraper_logs` volume instead.
 - `level` — INFO / WARNING / ERROR / DEBUG / CRITICAL
 - `role` — operator / stall-resume / cron-chain / reconcile-restart / cron
 - `shop` — vaga / pegasas / humanitas / future shops
@@ -259,24 +332,32 @@ Drift of 1–10 across the fleet: cosmetic, ignore.
 Drift of 50+ on a single run: investigate (process fencing may be needed —
 see spec's Architectural alternatives section).
 
-### Don't `kill -9` scrapy processes inside the container
+### Don't `kill -9` a runaway crawl
 
-If a runaway loop spawned multiple spiders, **don't** mass-`kill -9` them from inside the scraper container. The detached processes (started via `subprocess.Popen(start_new_session=True)` in `reconcile_runs.py` and `extensions.py`) leave open httpx + TCP sockets when SIGKILL'd, and Docker Desktop's macOS networking shim (vpnkit) can wedge — the daemon stops responding for 5–10 minutes. Escalation order instead:
+If a loop spawned several crawls, **don't** mass-`kill -9` them. Detached
+processes killed that way leave open TCP sockets, and on macOS the Docker
+networking shim can wedge for 5–10 minutes when that happens inside a
+container. SIGTERM first: `bin/crawl` installs a termination handler that stops
+the watchdog and lets the run finalise, so `close_reason` is persisted instead
+of the run being left `running` for the reaper to find.
 
-1. `docker compose stop scraper` (SIGTERM, graceful close).
-2. If that hangs, `docker kill scraper` (the daemon handles socket teardown cleanly when killing the container itself).
-3. If `docker` itself hangs, restart Docker Desktop from the macOS menu bar.
+1. `kill <pid>` (SIGTERM) and give it the `stop_grace_period` it needs — the
+   close path finalises the run and aborts in-flight queue items.
+2. `php artisan runs:reap` if a run was still left non-terminal.
+3. Only then SIGKILL.
 
 ## Code Conventions
 
-- Python 3.12+, strict mypy
-- Ruff for linting and formatting (line-length 88)
+- PHP 8.4 (roach-php caps there), `declare(strict_types=1)` in every file
+- `make lint` is `php -l` over every file. Pint is installed but **not** enforced: the codebase has never been pint-formatted, so running it would be a reformatting sweep, not a lint.
 - Commit directly on main (personal project, no branches)
 - Tests use real PostgreSQL (Docker on port 5433), not mocks
-- Scrapy items use `scrapy.Field()`, validated in `ValidationPipeline` with Pydantic-style checks
+- Items are plain arrays, validated by `ItemValidator` (`php/src/Crawler/ItemValidator.php`)
+- Comments of the form "port of `book_scraper/…`" record where a class came from. Those files are gone from the tree but present at the `python-final` tag.
 
 ## Specs and Plans
 
+- **PHP port + Python removal:** `docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md` — the nine defects the differential found, and what phase 6 (freezing the evidence) cost. Read this before touching a golden.
 - Design spec: `docs/superpowers/specs/2026-04-05-book-scraper-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-04-05-book-scraper-plan.md`
 - Fault tolerance spec: `docs/superpowers/specs/2026-04-06-fault-tolerance-design.md`

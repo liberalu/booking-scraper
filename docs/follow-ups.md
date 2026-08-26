@@ -2,6 +2,9 @@
 
 Tasks deferred during the 2026-05-03 / 2026-05-04 sessions. Pick from here, mark done by deleting the section + committing.
 
+> Written while the stack was Python. The commands have been re-pointed at the
+> PHP equivalents; the reasoning and the expected outcomes are unchanged.
+
 ## #2: Daily LupaSearch cron for pegasas
 
 In `/Users/evaldas/Projects/book-scraper`, the pegasas.lt shop now has a `lupasearch` discover strategy that takes ~3 minutes for a full LT-language pass (vs ~30 minutes for the GraphQL strategy with full metadata). It's the right tool for daily price + stock rescans and new-arrivals detection (via `is_new=1`).
@@ -39,7 +42,7 @@ The `retry_count` column was migrated 2026-04-26 with the note "reserved for a f
 Commit `b956c6a` shipped the per-SKU GraphQL pivot for the pegasas scan phase. Unit tests cover the URL rewrite + JSON parsing, but no run has hit the real backend yet. Kick off:
 
 ```bash
-docker exec book-scraper-scraper-1 /app/.venv/bin/scrapy crawl scan -a shop=pegasas -a max_urls=20
+cd php/crawler && php bin/crawl scan --shop=pegasas --max-urls=20
 ```
 
 Expected: ~10s total, all 20 URLs return `is_book_product=true` with ISBN/year/pages populated, no `stall_timeout`, no `pwa_shell_no_data` reasons.

@@ -1,21 +1,17 @@
-# Python
+# PHP
+vendor/
+composer.phar
+.phpunit.result.cache
+.phpunit.cache/
+php/dashboard/storage/*.key
+php/dashboard/bootstrap/cache/*.php
+
+# Python — the stack was removed on 2026-08-26 (tag python-final). These stay
+# because a stale .venv/ and __pycache__/ are still on disk locally, and one
+# stdlib docs script (docs/superpowers/scripts/build-spec-index.py) remains.
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# Virtual environment
 .venv/
-venv/
-env/
-
-# Scrapy
-.scrapy/
-scrapy_errors.log
 
 # IDEs
 .idea/
@@ -30,6 +26,7 @@ scrapy_errors.log
 .mypy_cache/
 htmlcov/
 .coverage
+_preview_*.html
 
 # Claude Code
 .claude/
