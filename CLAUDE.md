@@ -302,6 +302,13 @@ replay is Python's behaviour captured, not PHP's output blessed.
 **They cannot be regenerated.** The tools that wrote them were Python and are
 gone, so a golden that fails is a regression to explain, not a file to refresh.
 
+**Which freezes the fixture too.** `SyntheticShop` is the input the API and
+write-route goldens were recorded over, so changing what it plants invalidates
+them — and nothing can re-verify the new shapes against Python. Add rows for a
+new test's benefit and those two goldens start failing with no honest way to
+update them. If a test needs different data, plant it in the test, inside a
+transaction, the way `ScheduleRunsTest` plants its own running run.
+
 Two rules they depend on, both learned the hard way:
 
 - **A golden can only describe data that comes back the same way every time.**
