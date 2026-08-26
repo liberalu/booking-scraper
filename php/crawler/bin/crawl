@@ -25,6 +25,7 @@ use BookScraper\Crawler\PostPhase;
 use BookScraper\Discovery\GraphQlUrls;
 use BookScraper\Discovery\IbibliotekaApiUrls;
 use BookScraper\Discovery\LupaSearchUrls;
+use BookScraper\Runs\ProgressReporter;
 use BookScraper\Crawler\Persister;
 use BookScraper\Crawler\RoachContainer;
 use BookScraper\Crawler\RunLifecycle;
@@ -359,6 +360,9 @@ if ($command === 'discover') {
         $shop->id,
         $run->id
     );
+    // Same formula as the end-of-run progress() call below, so the counter
+    // converges on the final number instead of jumping when the run closes.
+    ProgressReporter::bind($run->id, static fn (array $t): int => $t['urls']);
     IssueBuffer::reset();
     DiscoverSpider::resetFiltered();
     // Counted before the crawl: a run that finds nothing is only alarming if
@@ -538,6 +542,11 @@ $watchdog = startWatchdog($run->id, $shopName, 'scan', $stallTimeout);
 // its single browser session cannot serve concurrent requests safely.
 if ($config->flaresolverr() !== null) {
     printf("flaresolverr: serial fetch (session cannot be shared concurrently)\n");
+    ProgressReporter::bind(
+        $run->id,
+        static fn (array $t): int => $t['added'] + $t['updated'] + $t['non_product']
+            + ($t['canonical'] ?? 0),
+    );
     IssueBuffer::reset();
     try {
         $tally = (new SerialScanner(
@@ -587,6 +596,10 @@ PersistItemProcessor::bind(
     new Persister(attributeSchema: $config->attributes()),
     $shop->id,
     $run->id
+);
+ProgressReporter::bind(
+    $run->id,
+    static fn (array $t): int => $t['added'] + $t['updated'] + ($t['canonical'] ?? 0),
 );
 IssueBuffer::reset();
 

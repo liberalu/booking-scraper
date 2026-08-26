@@ -7,6 +7,7 @@ namespace BookScraper\Crawler;
 use BookScraper\Config;
 use BookScraper\ParserRegistry;
 use BookScraper\Repository\CanonicalBookRepository;
+use BookScraper\Runs\ProgressReporter;
 use Throwable;
 
 /**
@@ -65,6 +66,15 @@ final class SerialScanner
                 if ($index > 0 && $delayMicroseconds > 0) {
                     usleep($delayMicroseconds);
                 }
+
+                // At the top of the iteration, not the bottom: the body below
+                // `continue`s out of five branches, and a tick after any of
+                // them would be missed. So this reports the tally as of the
+                // previous URL — one behind, which for a progress counter on a
+                // 12,000-URL rescan is not a distinction worth restructuring
+                // the loop for. The authoritative total is written when the
+                // run finishes.
+                ProgressReporter::tick($tally);
 
                 try {
                     $response = $flareSolverr->get($url);

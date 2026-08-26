@@ -6,6 +6,7 @@ namespace BookScraper\Crawler;
 
 use BookScraper\Repository\CanonicalBookRepository;
 use BookScraper\Repository\DiscoveredUrlRepository;
+use BookScraper\Runs\ProgressReporter;
 use RoachPHP\ItemPipeline\ItemInterface;
 use RoachPHP\ItemPipeline\Processors\ItemProcessorInterface;
 use RoachPHP\Support\Configurable;
@@ -88,6 +89,10 @@ final class PersistItemProcessor implements ItemProcessorInterface
             self::$counts['failed']++;
             fwrite(STDERR, sprintf("  persist failed  %s  %s\n", $url, $e->getMessage()));
         }
+
+        // Let the run's counters move while it is still running. Throttled to
+        // every tenth item inside the reporter.
+        ProgressReporter::tick(self::$counts);
 
         return $item;
     }
