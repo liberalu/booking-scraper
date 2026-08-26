@@ -10,10 +10,12 @@ diffing the results. Every item below was measured, not inferred.
 `1f5e364`), and the undeclared schema drift they surfaced is closed (`09bff38`).
 
 **Python is gone** — removed in `c2f1718` on 2026-08-26, 251 files and 55,814
-lines, with the last commit containing it tagged `python-final`. Six of the
-eight removal phases are closed: 1 (`80ae730`), 3 (`01813bb`), 6, 8 (`c2f1718`),
-7 moot, 5 finished. **Phases 2 (packaging) and 4 (observability) are what
-remain**, and both are smaller than written below.
+lines, with the last commit containing it tagged `python-final`. **All eight
+phases are closed**: 1 (`80ae730`), 2 (`e2c4050`), 3 (`01813bb`), 4, 5, 6,
+8 (`c2f1718`), and 7 was moot.
+
+What remains is not in this plan: it is deferred work and judgement calls, kept
+in `docs/follow-ups.md` and reviewed against the running system on 2026-08-26.
 
 **There is no production.** `book-scraper-postgres-1` is a container on this
 machine, every DSN in the repo resolves to `localhost` or the compose service
@@ -96,17 +98,43 @@ Eight phases, each with the check that must pass before the next starts.
    in an equivalent form. The automated gate must normalise that re-render or it
    reports a permanent false positive. This was the estimate I was least sure of,
    and it is the cheapest phase rather than the most expensive.
-2. **Package the PHP stack** — **the main thing left.** Compose targets for
-   crawler and dashboard, PHP 8.4, via the existing Make wrappers.
-   The trap this entry warned about is already handled: the SPA moved out of
-   `book_scraper/dashboard/static` and is canonical at
-   `php/dashboard/public/static` (`9c8913a`), because deleting Python would
-   otherwise have taken it down.
-   What makes this matter now is phase 3: `runs:schedule` and `runs:reap` have
-   to stay running, and right now nothing supervises them, so a reboot silently
-   stops the schedule again. Compose lost both application services with the
-   Dockerfile in `c2f1718` and currently runs infrastructure only.
-   *Gate:* compose serves the dashboard and a scan completes in-container.
+2. **Package the PHP stack** — ✅ **Done** (`e2c4050`). One image at the repo
+   root, three services: `dashboard`, `scheduler`, `reaper`. `make compose-build`
+   wraps the build with the OrbStack proxy-clearing, because a bare
+   `docker compose build` silently produces an image with missing apt packages.
+
+   No crawler service: a crawl is a child process of whoever asked for it, so
+   restarting a container kills the crawls it started — the watchdog fails the
+   run, the reaper cleans up, and the run is resumable. The Python stack avoided
+   that with a dedicated container reached by `docker exec`, which needs the
+   docker socket mounted into the dashboard. Not worth the socket for one
+   machine.
+
+   `pcntl` is installed deliberately: the watchdog forks, and without it a crawl
+   loses its heartbeat behind a `function_exists()` guard.
+
+   Five things had to be fixed to get one page to render, each found by running
+   it rather than reading it: a missing `.dockerignore` (the host's `vendor/`
+   and its dev-built package manifest were being copied in, so
+   `package:discover` failed on a dev-only provider); directory creation ordered
+   before `dump-autoload`; the whole Laravel storage skeleton, not just `views`;
+   `SESSION_DRIVER=file`, because the default wants a `sessions` table a book
+   catalogue has no business growing; and an `APP_KEY` that decoded to 31 bytes
+   instead of 32.
+
+   A sixth surfaced later, in `4af39f5`: all three services had `build:` with no
+   `image:`, so compose built three copies of one context and rebuilding the
+   dashboard left the scheduler on stale code. They share one tag now.
+
+   `make compose-up` deliberately excludes the scheduler and starts nothing
+   crawling; `make compose-up-scheduler` is separate and labelled, because
+   starting it fires every schedule whose window has passed.
+
+   *Gate:* met. The dashboard serves its SPA and live API on 8001 from compose,
+   and a scan completed in-container — run 859, whose post-phase validate became
+   run 860 with 13,381 findings. The reaper service was shown separately to work:
+   three runs orphaned by stopping the scheduler were failed as
+   `heartbeat_timeout`, resumable, within 66 seconds.
 3. **Scheduling and supervision** — ✅ **Done** (`01813bb`). `php artisan
    runs:schedule` replaces `generate_crontab.py`.
 
@@ -179,9 +207,10 @@ Eight phases, each with the check that must pass before the next starts.
    the three log panels and the failed-runs table, the latter showing the three
    runs orphaned while testing phase 2. Verified after a real in-container
    crawl, whose post-phase validate logged to the volume Alloy tails.
-5. **Close the feature gaps** — 2–3 days. `full_crawl` (✅ `1f5e364`); a CLI for
-   the full match phase (steps 2–3 exist and pass `make match-diff`, nothing
-   drives them).
+5. **Close the feature gaps** — ✅ **Done.** `full_crawl` is ported
+   (`1f5e364`), and the full match phase has had a CLI all along:
+   `php/crawler/bin/match` runs steps 1 and 2, with `--synthesis` for step 3.
+   An earlier revision of this entry called that outstanding; it was not.
 
    **`scripts/` decided — all four go, and none needs a port.** Measured
    against the catalogue rather than assumed:
@@ -283,11 +312,17 @@ Eight phases, each with the check that must pass before the next starts.
    854, 855), plus `make schema-gate` PASS against the live catalogue and the
    dashboard serving its SPA with live KPIs.
 
-Total: **~1 week of focused work, no calendar wait** — and most of it is spent.
-Phases 1, 3, 5, 6 and 8 are done; 7 was moot. What is left is phase 2
-(packaging) and phase 4's one log-path fix, which together are the difference
-between a system that works when invoked and one that looks after itself across
-a reboot.
+Total: **~1 week of focused work, no calendar wait**, and it took about that.
+Every phase is closed. The stack it describes now runs itself: the scheduler
+fires the schedule, the reaper cleans up after crawls that die, and both are
+supervised by compose.
+
+Two estimates in the original were wrong in opposite directions, which is worth
+recording. Phase 1 was called the blocker at 3–4 days and took half a day, since
+a schema dump round-trips faithfully. Phases 2–4 were called optional polish on
+the belief that nothing was scheduled — the schedule was in fact still firing,
+and removing the container stopped it, which made phase 3 urgent rather than
+optional.
 
 ## What removal gives up
 
