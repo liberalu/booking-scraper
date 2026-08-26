@@ -322,6 +322,11 @@ final class MutationCharacterisationTest extends TestCase
                 . '([+-]\d{2}:?\d{2}|Z)?$/', $value) === 1) {
                 return '<timestamp>';
             }
+            // Absolute paths are machine-specific: one error message quotes the
+            // config file it could not find, so the golden only replayed in a
+            // checkout at the same path as the machine that froze it. CI and a
+            // fresh clone both failed on it.
+            $value = str_replace(self::repoRoot() . '/', '<repo>/', $value);
 
             return preg_replace('/(run #)\d+/', '$1<id>', $value) ?? $value;
         }
@@ -387,6 +392,12 @@ final class MutationCharacterisationTest extends TestCase
         }
 
         return $grouped;
+    }
+
+    /** The repository root: this file is at php/dashboard/tests/Feature. */
+    private static function repoRoot(): string
+    {
+        return \dirname(__DIR__, 4);
     }
 
     /** @return list<array<string, mixed>> */

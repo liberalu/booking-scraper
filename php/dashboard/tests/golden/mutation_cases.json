@@ -1242,7 +1242,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
+    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
    }
   }
  },
@@ -1278,7 +1278,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
+    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
    }
   }
  },
@@ -1326,7 +1326,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: /Users/evaldas/Projects/book-scraper/config/shops/synthetic.toml"
+    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
    }
   }
  },
