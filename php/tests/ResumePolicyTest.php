@@ -266,6 +266,38 @@ final class ResumePolicyTest extends TestCase
         }
     }
 
+    public function test_the_failsafe_records_a_reason_when_the_run_is_not_resumable(): void
+    {
+        // The case that was broken and unnoticed. PDO binds PHP `false` as an
+        // empty string, Postgres rejects that for a boolean, and finalize()
+        // swallows its own failure — so every caller that left
+        // $resumableAfterFailure at its default silently did nothing. That is
+        // all three crash paths in bin/crawl, which is why a crawl killed by an
+        // exception never recorded the exception: the run stayed `running`
+        // until the reaper relabelled it `heartbeat_timeout`.
+        DB::commit();
+        $runId = $this->makeRun('running');
+
+        try {
+            $written = RunFailsafe::finalize(
+                $runId,
+                'failed',
+                'SQLSTATE[08006] connection refused',
+                false,
+                self::dsn()
+            );
+
+            $row = DB::table('scrape_runs')->where('id', $runId)->first();
+            self::assertTrue($written, 'finalize reported failure');
+            self::assertSame('failed', $row->status);
+            self::assertSame('SQLSTATE[08006] connection refused', $row->close_reason);
+            self::assertFalse((bool) $row->resumable_after_failure);
+            self::assertNotNull($row->finished_at);
+        } finally {
+            $this->cleanUpCommitted($runId);
+        }
+    }
+
     /**
      * Remove what the two failsafe tests had to commit.
      *

@@ -61,7 +61,14 @@ final class RunFailsafe
                         resumable_after_failure = ?
                   where id = ?'
             );
-            $update->execute([$status, $reason, $resumableAfterFailure, $runId]);
+            // (int), not the bool: PDO binds PHP `false` as an empty string and
+            // Postgres rejects that for a boolean, so every call that left
+            // $resumableAfterFailure at its default failed — and the failure is
+            // swallowed by the catch below. The three crash paths in bin/crawl
+            // all take that default, which is why a crawl killed by an
+            // exception never recorded its reason: the run stayed `running`
+            // until the reaper relabelled it `heartbeat_timeout` a minute later.
+            $update->execute([$status, $reason, (int) $resumableAfterFailure, $runId]);
 
             $event = $pdo->prepare(
                 'insert into scrape_run_events (run_id, event_type, created_at, actor, payload)
