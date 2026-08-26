@@ -46,14 +46,102 @@ services:
     ports:
       - "8191:8191"
 
-  # The scraper and dashboard services were Python, built from the Dockerfile
-  # at the repo root, and both went when Python did. The PHP stack currently
-  # runs from the CLI — `php/bin/crawl`, `artisan serve` — so there is no
-  # application service here to replace them yet. That is phase 2 of
-  # docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md.
+  # ---------------------------------------------------------------------------
+  # The PHP stack. One image (Dockerfile at the repo root), three services.
   #
-  # scraper_logs stays: Alloy reads it, and the PHP crawler writes its spawn
-  # logs to the same /var/log/scrapy_runs path (see PostPhase.php).
+  # There is no crawler service. A crawl is a child process of whoever asked
+  # for it: the scheduler spawns the scheduled ones, the dashboard spawns the
+  # ones an operator clicks. So restarting a container kills the crawls it
+  # started — the watchdog fails the run and the reaper cleans up after it, and
+  # `stop_grace_period` gives the close path time to record why.
+  #
+  # The Python stack avoided that by running crawls in a dedicated container
+  # and reaching it by `docker exec`, which needs the docker socket mounted
+  # into the dashboard. Not worth the socket here: a killed crawl is resumable
+  # and this is one machine.
+  #
+  # For a crawl by hand: docker compose exec scheduler php ../crawler/bin/crawl
+  #   scan --shop=vaga --max-urls=20
+  # ---------------------------------------------------------------------------
+
+  dashboard:
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # ponytail: host port 8001 while gpswox-hive-app holds 8000; revert to
+      # "8000:8000" once that project frees the port.
+      - "8001:8000"
+    environment: &php_env
+      APP_ENV: production
+      APP_DEBUG: "false"
+      # Local-only stack, so a default is better than a setup step nobody
+      # remembers. Override it if this ever leaves this machine. It has to
+      # decode to exactly 32 bytes for aes-256-cbc — one byte short and every
+      # request is a 500 with "Unsupported cipher or incorrect key length".
+      APP_KEY: ${APP_KEY:-base64:Ym9vay1zY3JhcGVyLWxvY2FsLWtleS0zMi1ieXRlcyE=}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: book_scraper
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      # The crawler reads DATABASE_URL, not Laravel's DB_* — a crawl spawned in
+      # here would otherwise fall back to config/default.toml, which says
+      # localhost, and localhost inside a container is not the database.
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/book_scraper
+      # file, not Laravel's `database` default: that wants a `sessions` table,
+      # and a book catalogue has no business growing one. Matches .env on a
+      # developer machine, and without it every page is a 500 on
+      # `relation "sessions" does not exist`.
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
+      TZ: UTC
+    # 30s, matching what the Python scraper had: on SIGTERM a crawl's close
+    # path finalises the run and aborts its in-flight queue items, which can
+    # exceed the 10s default with a large queue and a slow database.
+    stop_grace_period: 30s
+    restart: unless-stopped
+    volumes:
+      - scraper_logs:/var/log
+
+  # The thing that makes the schedule in `cron_jobs` actually fire. Without it
+  # the dashboard's Schedules page writes rows nothing reads — which is exactly
+  # what happened between removing Python's crontab and adding this.
+  #
+  # --max-per-tick=1 here rather than the default 2: the backlog after any
+  # downtime is drained one crawl at a time, and a shop's schedules are already
+  # serialised per shop.
+  scheduler:
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["php", "artisan", "runs:schedule", "--watch", "--max-per-tick=1"]
+    environment: *php_env
+    stop_grace_period: 30s
+    restart: unless-stopped
+    volumes:
+      - scraper_logs:/var/log
+
+  # Fails runs whose process died. Not optional: without it a crawl that dies
+  # without unwinding stays `running`, and the shop+phase preflight then
+  # refuses to start a replacement — so one crash stops that shop for good.
+  reaper:
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["php", "artisan", "runs:reap", "--watch"]
+    environment: *php_env
+    restart: unless-stopped
+
 
   loki:
     image: grafana/loki:latest

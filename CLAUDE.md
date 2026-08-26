@@ -48,6 +48,9 @@ php bin/match --shop=vaga --synthesis                          # + step 3
 docker compose up -d flaresolverr                              # required for humanitas
 
 # Tests
+make compose-build                            # build the image (clears the OrbStack proxy vars)
+make compose-up                               # postgres + dashboard + reaper (no crawling)
+make compose-up-scheduler                     # ...and the scheduler (STARTS CRAWLING)
 make test                                     # library + crawler + dashboard
 make test-offline                             # everything that needs no database
 make lint                                     # php -l over every file
@@ -69,11 +72,17 @@ curl -s 'http://localhost:3100/loki/api/v1/labels' | jq             # active Lok
 curl -s 'http://localhost:12345/-/ready'                             # Alloy readiness
 ```
 
-> **There are no application images.** The `scraper` and `dashboard` compose
-> services were Python and went with it; compose now runs infrastructure only
-> (postgres, flaresolverr, loki, alloy, grafana). The crawler and dashboard run
-> from the CLI. Packaging them is phase 2 of
-> `docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md`.
+> **`make compose-up` does not crawl; `make compose-up-scheduler` does.** One
+> image (`Dockerfile`), three services: `dashboard`, `scheduler`, `reaper`.
+> Starting the scheduler fires every schedule whose window has passed, one per
+> tick, against live shops — after downtime that is a backlog. Check with
+> `docker compose run --rm scheduler php artisan runs:schedule --dry-run` first.
+>
+> There is deliberately no crawler service: a crawl is a child process of
+> whoever asked for it, so restarting a container kills the crawls it started —
+> the watchdog fails the run, the reaper cleans up, and the run is resumable.
+> For a crawl by hand:
+> `docker compose exec dashboard php ../crawler/bin/crawl scan --shop=vaga --max-urls=20`.
 
 ## Architecture
 

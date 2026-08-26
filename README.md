@@ -89,7 +89,21 @@ The dashboard:
 cd php/dashboard && php artisan serve --port=8002
 ```
 
-Two commands have to stay running for the system to look after itself:
+Or in compose, which is how it is meant to run:
+
+```bash
+make compose-build          # build the image (clears the OrbStack proxy vars)
+make compose-up             # postgres + dashboard + reaper
+make compose-up-scheduler   # ...and the scheduler. THIS STARTS CRAWLING.
+```
+
+`make compose-up` is safe any time: nothing crawls on its own. Adding the
+scheduler fires every schedule whose window has passed, one per tick, against
+live shops — after downtime that is a backlog. Check it first with
+`docker compose run --rm scheduler php artisan runs:schedule --dry-run`.
+
+Outside compose, the same two commands have to stay running for the system to
+look after itself:
 
 ```bash
 php artisan runs:schedule --watch    # fires the schedules in cron_jobs
