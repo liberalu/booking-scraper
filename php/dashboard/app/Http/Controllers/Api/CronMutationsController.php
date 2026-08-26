@@ -13,9 +13,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Create / edit / delete / toggle scheduled jobs.
  *
- * Pure DB writes. The crontab itself is regenerated from these rows at
- * scraper boot by scripts/generate_crontab.py, so nothing here touches cron
- * directly.
+ * Pure DB writes. `runs:schedule` reads these rows every tick and fires what
+ * is due, so nothing here touches a scheduler directly — and an edit takes
+ * effect within a tick rather than at the next restart, which is what the
+ * crontab this replaced required.
  */
 final class CronMutationsController
 {
@@ -183,8 +184,10 @@ final class CronMutationsController
     /**
      * Strict 5-field cron, mirroring Python's `_validate_cron`.
      *
-     * croniter also accepts 6- and 7-field forms; the field count is checked
-     * separately so the value round-trips through generate_crontab.py.
+     * croniter also accepted 6- and 7-field forms, and so does
+     * dragonmantank/cron-expression; the field count is checked separately so
+     * a stored expression means the same thing to the scheduler as it did to
+     * the crontab it replaced.
      */
     private static function cronError(string $expression): ?string
     {

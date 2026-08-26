@@ -31,6 +31,7 @@ final class CrawlSpawner
         string $mode = 'delta',
         string $urls = '',
         ?int $cronJobId = null,
+        string $role = 'operator',
     ): array {
         $binary = self::phpBinary();
         $script = self::crawlScript();
@@ -56,7 +57,10 @@ final class CrawlSpawner
         }
         $cmd[] = '--database=' . self::databaseUrl();
 
-        $log = self::logPath('operator', $shop);
+        // The role reaches Loki as a label (operator / cron / stall-resume /
+        // …) by way of the filename, so a scheduled crawl is distinguishable
+        // from one someone clicked.
+        $log = self::logPath($role, $shop);
         $pid = self::detach($cmd, $log);
 
         return ['log' => $log, 'pid' => $pid, 'cmd' => $cmd];

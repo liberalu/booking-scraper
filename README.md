@@ -37,6 +37,10 @@ themselves are generic.
 | Validate | `bin/validate --shop=vaga` | 20 data-quality checks over what was scraped |
 | Match | `bin/match --shop=vaga` | Link shop books to canonical books by ISBN, backfill authors |
 
+Schedules live in `cron_jobs` and are fired by `artisan runs:schedule`, which
+replaced the crontab the Python container rendered at boot. Expressions are
+read as UTC, which is what that crontab used.
+
 For the Magento PWA shops the scan phase is a no-op — those product pages are a
 React shell, so discovery yields the full record inline.
 
@@ -84,6 +88,25 @@ The dashboard:
 ```bash
 cd php/dashboard && php artisan serve --port=8002
 ```
+
+Two commands have to stay running for the system to look after itself:
+
+```bash
+php artisan runs:schedule --watch    # fires the schedules in cron_jobs
+php artisan runs:reap --watch        # fails runs whose process died
+```
+
+Without the first, the Schedules page still accepts schedules and nothing ever
+fires them. Without the second, a crawl that dies without unwinding stays
+`running` and blocks its shop. `runs:schedule --dry-run` reports what it would
+fire without spawning anything.
+
+Note the database each side reads: `bin/crawl` takes `DATABASE_URL`, but the
+dashboard — and therefore the scheduler, and the crawls it spawns — takes
+Laravel's `DB_*` / `DB_URL` from `php/dashboard/.env`. `DATABASE_URL` is
+ignored there. The crawls a scheduler starts always go to the database that
+dashboard is reading, which is deliberate: an operator looking at the test
+database cannot start a crawl against the live one.
 
 ## Tests
 

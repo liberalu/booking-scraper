@@ -57,6 +57,8 @@ make schema-gate                              # does php/schema still match the 
 # Dashboard
 cd php/dashboard && php artisan serve --port=8002
 php artisan runs:reap                         # fail runs whose heartbeat stopped
+php artisan runs:schedule --dry-run           # what the schedules would fire now
+php artisan runs:schedule --watch             # fire them (the thing that must stay up)
 
 # Observability
 open http://localhost:3000                                           # Grafana — admin/admin on first use
@@ -135,6 +137,39 @@ Skipped when:
 - Env var `POST_PHASE_AUTO_TRIGGER=0` (legacy alias: `POST_SCAN_AUTO_TRIGGER=0`).
 
 This means **you don't need to schedule `match` or `validate` cron jobs**. Match step 2 (author backfill) and step 3 (synthesis) only run during a full `match` phase — currently optional/manual. Step 3 is disabled by default via `MATCH_SYNTHESIS_ENABLED` (see below).
+
+### Scheduling — `runs:schedule` is the only thing that fires cron_jobs
+
+`cron_jobs` rows are written by the dashboard's Schedules page. Until the
+Python stack was removed, `scripts/generate_crontab.py` rendered them into the
+scraper container's crontab at boot. With no container, **`php artisan
+runs:schedule --watch` is what turns a row into a crawl** — nothing else does,
+and without it the schedule is inert while still looking configured.
+
+Run it and `runs:reap --watch` under a supervisor. Neither is optional:
+without the reaper, a crawl that dies without unwinding stays `running` and
+blocks its shop.
+
+| Decision | Where | Why |
+|---|---|---|
+| Which windows are due | `CronSchedule::due()` | Pure function of jobs + clock + what this process fired, so it is unit-tested without spawning |
+| Expressions are **UTC** | `CronSchedule::previousDue()` | The container's cron was UTC — job 1 is `0 2 * * *` and its runs start at 02:00Z. Reading them locally would shift every schedule in the table. |
+| At most `--max-per-tick` (2) fire per pass | `ScheduleRuns` | Nine windows were due the first time it ran. The rest stay due and drain over later ticks. |
+| One scheduled crawl per **shop**, any phase | `ScheduleRuns::activePhase()` | A backlog would otherwise start patogupirkti's sitemap discover, category discover and scan together — three crawls against one shop, tripling the request rate its delay exists to cap. |
+| `paused` does **not** count as busy | same | The reaper leaves paused runs alone by design, so they sit indefinitely (there is one on patogupirkti from May). Counting it would stop that shop's schedules permanently. |
+| `last_run_at` is not written here | `RunLifecycle` writes it | One writer. Note what the column means: it is stamped for **every** cron job of that shop+phase, so a manual scan suppresses the next scheduled one. |
+| Spawns go to the DASHBOARD's database | `CrawlSpawner::databaseUrl()` | Built from Laravel's config, i.e. `php/dashboard/.env` (`DB_*`/`DB_URL`) — **not** `DATABASE_URL`, which the crawler uses and the dashboard ignores. So a dashboard pointed at the test database can only start test-database crawls. |
+| A failed spawn is not marked fired | `ScheduleRuns::$firedAt` | `last_run_at` is only stamped once the crawl boots, so without an in-process record a job whose spawn dies is re-fired every tick. Demonstrated: the fixture shop has no parser, so its spawn exits and the guard is what stops the loop. |
+
+Chaining needs nothing here: `PostPhase` spawns `chain_to_job_id` when a run
+closes. Chained jobs also keep their own expressions and are fired on them,
+exactly as the crontab did.
+
+`cron_jobs.args` holds Python's `-a key=value` syntax, because it was appended
+raw to a `scrapy crawl` line. Only `rescrape=true` is in use (the twice-monthly
+full scans) and it maps to `--mode=full`. Anything else is **reported and not
+applied** — silently dropping a scheduled job's argument would run a crawl that
+does something other than what the row asks for.
 
 ### Feature flags
 
