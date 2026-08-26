@@ -8,7 +8,7 @@ In `/Users/evaldas/Projects/book-scraper`, the pegasas.lt shop now has a `lupase
 
 **Add a cron job entry** that runs `discover_lupasearch` for pegasas daily — pick a sensible time (e.g. 03:00 UTC). Use the existing cron infrastructure: `book_scraper/db/repo.py` has `mark_cron_job_ran_if_matches`, `cron_jobs` table is the source of truth, and `book_scraper/scripts/generate_crontab.py` (or similar) renders it into actual crontab entries inside the scraper container.
 
-The dashboard's "New schedule" dialog (`HFNewScheduleDialog` in `book_scraper/dashboard/static/hifi/hf-overlays.jsx`) should let you create the entry through the UI now that pegasas appears in the shop dropdown. Either click through the dashboard or `INSERT` directly into `cron_jobs` — whichever is faster and survives container restarts (the on-disk crontab regenerates from the DB on boot).
+The dashboard's "New schedule" dialog (`HFNewScheduleDialog` in `php/dashboard/public/static/hifi/hf-overlays.jsx`) should let you create the entry through the UI now that pegasas appears in the shop dropdown. Either click through the dashboard or `INSERT` directly into `cron_jobs` — whichever is faster and survives container restarts (the on-disk crontab regenerates from the DB on boot).
 
 **Verify after creation:**
 1. `docker exec book-scraper-scraper-1 crontab -l` shows the new entry.

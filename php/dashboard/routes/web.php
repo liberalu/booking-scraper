@@ -26,10 +26,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Response;
 
 /**
- * The React SPA in book_scraper/dashboard/static/hifi is served UNCHANGED
- * (public/static is a symlink into the Python tree). This app only has to
- * reproduce the JSON API it calls, so both dashboards render identically
- * from one frontend source.
+ * The React SPA in public/static/hifi is served as-is; this app only has to
+ * serve the JSON API it calls.
+ *
+ * That tree used to be a symlink into book_scraper/dashboard/static, so both
+ * dashboards rendered from one frontend source and the comparison was of the
+ * API alone. It became canonical here when Python was removed — the symlink
+ * was the one thing that would have taken the SPA down with it.
  */
 
 // define(), not const: Laravel reloads the route file for every application
@@ -37,7 +40,7 @@ use Illuminate\Support\Facades\Response;
 // showed up once a second app-booting test existed.
 defined('SPA_INDEX') || define(
     'SPA_INDEX',
-    __DIR__ . '/../../../book_scraper/dashboard/static/hifi/index.html'
+    __DIR__ . '/../public/static/hifi/index.html'
 );
 
 Route::prefix('api')->group(function (): void {
