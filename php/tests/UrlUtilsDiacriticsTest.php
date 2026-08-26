@@ -51,17 +51,43 @@ final class UrlUtilsDiacriticsTest extends TestCase
         );
     }
 
-    public function test_parse_url_still_corrupts_and_is_why_we_avoid_it(): void
+    /**
+     * Documents the upstream behaviour UrlUtils::split() works around — and
+     * skips where that behaviour is absent, because it is not universal.
+     *
+     * It is not even a matter of version. On PHP 8.4.24 from Homebrew,
+     * parse_url() turns the `ė` in this path (C4 97) into `_` (5F); on PHP
+     * 8.4.24 from shivammathur/setup-php on Ubuntu, the same call returns the
+     * path intact. So the workaround has to stay regardless, and asserting the
+     * corruption unconditionally just turns a healthy environment red — which
+     * is what it did on CI's first run.
+     *
+     * The invariant that actually matters is covered on every environment by
+     * test_preserves_utf8_path_bytes above: normalize() keeps the bytes. This
+     * test only reports on the underlying platform.
+     */
+    public function test_parse_url_corrupts_utf8_paths_where_it_still_does(): void
     {
-        // Documents the upstream behaviour being worked around. If a future
-        // PHP release fixes parse_url(), this fails and UrlUtils::split()
-        // could be simplified.
         $path = parse_url('https://vaga.lt/asmeninis-tobulėjimas', PHP_URL_PATH);
+
+        if ($path === '/asmeninis-tobulėjimas') {
+            self::markTestSkipped(
+                'parse_url() handles UTF-8 paths correctly on this build ('
+                . PHP_VERSION . '), so it is not the reason UrlUtils::split() '
+                . 'exists here. The workaround still has to stay: other builds '
+                . 'of the same version do corrupt them.'
+            );
+        }
 
         self::assertNotSame(
             '/asmeninis-tobulėjimas',
             $path,
-            'parse_url() no longer corrupts UTF-8 paths — UrlUtils::split() can be revisited'
+            'parse_url() corrupted the path in some way other than expected'
+        );
+        self::assertStringContainsString(
+            '_',
+            (string) $path,
+            'expected the documented byte-to-underscore substitution'
         );
     }
 }
