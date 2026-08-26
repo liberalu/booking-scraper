@@ -121,8 +121,29 @@ mtime of a marker file — crude on purpose, because it survives a parent stuck
 inside a blocking syscall, which is the case being detected.
 
 It fires when nothing has touched that marker for `STALL_TIMEOUT` seconds
-(default 180). `HEARTBEAT_INTERVAL_S` (default 5) is how often it ticks. On
-stall:
+(default 180, and never below twice the shop's own request timeout — humanitas
+allows 240s per request, so its stall timeout is 480s).
+`HEARTBEAT_INTERVAL_S` (default 5) is how often it ticks.
+
+**What counts as activity** differs by path, deliberately:
+
+- Roach paths record on `ResponseReceived` and `ItemScraped` — the signals
+  Python's StallDetector watched. A request that fails at transport level
+  records nothing, which is tolerable because concurrent requests cover for
+  each other.
+- The FlareSolverr path (`SerialScanner`) records on **every fetch, including a
+  failed one**. It is concurrency 1 by construction, so there is nothing else
+  to hear: with a 240s request timeout and a 480s stall timeout, two
+  consecutive timeouts were total silence and the watchdog failed a run that
+  was working as designed. The code always claimed this in a comment; a
+  `continue` in the catch branch skipped the call until 2026-08-26.
+
+The consequence to know: if FlareSolverr is *wholly* unreachable, that run no
+longer stalls — it walks its queue recording failures and finishes with a large
+error count. That is a clearer signal than `stall_timeout`, but it is not a
+fast one.
+
+On stall:
 
 1. Run flipped to `failed` with `resumable_after_failure=True` + `close_reason=stall_timeout`.
 2. `RunFailsafe::finalize()` writes that from the child, on its own connection — the parent may be wedged.

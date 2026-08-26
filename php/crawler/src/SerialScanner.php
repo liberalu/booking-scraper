@@ -80,6 +80,17 @@ final class SerialScanner
                     $response = $flareSolverr->get($url);
                 } catch (Throwable $e) {
                     $tally['failed']++;
+                    // Activity, even though the fetch failed. The comment
+                    // below said this already; the `continue` skipped it.
+                    //
+                    // It matters here more than anywhere else in the crawler.
+                    // This loop is concurrency 1 by construction, and
+                    // humanitas allows a 240s request timeout against a
+                    // 480s stall timeout — so two consecutive timeouts were
+                    // 480 seconds of total silence, and the watchdog killed a
+                    // run that was working exactly as designed. Elsewhere
+                    // concurrent requests cover for each other.
+                    $this->watchdog?->recordActivity();
                     fwrite(STDERR, sprintf("  fetch failed  %s  %s\n", $url, $e->getMessage()));
                     continue;
                 }
