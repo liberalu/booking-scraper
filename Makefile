@@ -44,8 +44,10 @@ schema-gate:
 	$(MAKE) -C php schema-gate
 
 ## Build the PHP image. Use this, not bare `docker compose build`.
+## Builds every service that has a build block — they share one tag, so this
+## is one build, and building only one of them leaves the others stale.
 compose-build:
-	$(CLEAR_PROXY) docker compose build dashboard
+	$(CLEAR_PROXY) docker compose build
 
 ## Bring the stack up WITHOUT the scheduler: database, dashboard, reaper.
 ## Safe to run any time — nothing starts crawling on its own.

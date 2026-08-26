@@ -42,6 +42,23 @@ use BookScraper\Vaga\Parser;
 use RoachPHP\Roach;
 use RoachPHP\Spider\Configuration\Overrides;
 
+// A full scan builds its whole work list before fetching anything, and PHP's
+// default 128M does not hold patogupirkti's: 50,536 URLs died in Guzzle's Uri
+// constructor with "Allowed memory size of 134217728 bytes exhausted". The
+// watchdog handled it correctly — stall, fail, mark resumable, restart — and
+// the restart hit the same wall, which is the shape of a limit rather than a
+// crash.
+//
+// Raised here, not in php.ini or the image, so a crawl behaves the same run
+// from a laptop as from a container. Both had 128M, so this was never a
+// packaging difference; it had simply never been given a shop this size.
+//
+// The real fix is to stream the work list instead of materialising it —
+// recorded as a follow-up. Until then this is a ceiling, not a solution:
+// a shop twice patogupirkti's size will need it raised again.
+// ponytail: fixed ceiling, stream the queue if a shop outgrows it.
+ini_set('memory_limit', getenv('CRAWL_MEMORY_LIMIT') ?: '512M');
+
 require __DIR__ . '/../vendor/autoload.php';
 
 /** @return array<string, string> */

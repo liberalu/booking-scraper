@@ -65,6 +65,12 @@ services:
   # ---------------------------------------------------------------------------
 
   dashboard:
+    # All three services share one image and one tag. Without the explicit
+    # `image:`, compose derives a name per service and builds three copies of
+    # the same context — and rebuilding one leaves the others on stale code,
+    # which is exactly how a fix to bin/crawl reached the dashboard and not the
+    # scheduler that runs the crawls.
+    image: book-scraper-php
     build:
       context: .
     depends_on:
@@ -117,6 +123,7 @@ services:
   # downtime is drained one crawl at a time, and a shop's schedules are already
   # serialised per shop.
   scheduler:
+    image: book-scraper-php
     build:
       context: .
     depends_on:
@@ -133,6 +140,7 @@ services:
   # without unwinding stays `running`, and the shop+phase preflight then
   # refuses to start a replacement — so one crash stops that shop for good.
   reaper:
+    image: book-scraper-php
     build:
       context: .
     depends_on:
