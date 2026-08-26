@@ -149,16 +149,36 @@ Eight phases, each with the check that must pass before the next starts.
 
    **Still to do:** nothing runs it. `runs:schedule --watch` and
    `runs:reap --watch` need a supervisor — which is phase 2.
-4. **Observability** — 1–2 days, and mostly already true. The crawler emits the
-   `key=value` lines and the per-response JSONL, and Loki/Alloy/Grafana are
-   upstream images that did not change.
-   One concrete dependency found while running the crawler on the host:
-   `SPAWN_LOG_DIR` defaults to `/var/log/scrapy_runs`, which only existed inside
-   the container. Off-container it is not writable, so `PostPhase` falls back to
-   the system temp dir — which Alloy does not tail. Either phase 2 puts the
-   `scraper_logs` volume back under the crawler, or `SPAWN_LOG_DIR` points
-   somewhere Alloy reads.
-   *Gate:* existing Grafana dashboards populate from a PHP run.
+4. **Observability** — ✅ **Done.** Loki, Alloy and Grafana are upstream images
+   and needed no change; what needed changing was what they were pointed at.
+
+   - The dashboard's **"Scraper logs" panel read `/var/log/scraper.log`**, which
+     the Python crontab wrote and nothing writes now. It queries
+     `{service="scheduler"}` instead — the scheduler's stdout is the equivalent,
+     and better, since it says what it decided each tick. The dead Alloy source
+     for that file is gone.
+   - The **per-spawn panel's role regex** missed `cron` and `post-phase-auto`,
+     which are two of the three roles the PHP stack writes — so every scheduled
+     crawl and every auto-triggered validate was invisible in it.
+   - **Alloy was indexing another compose project.** The Docker socket shows
+     every container on the host, so `app`, `web`, `mysql`, `redis` and
+     `mailpit` from an unrelated project were in the index. Now filtered on
+     `com.docker.compose.project`.
+   - **`service_name` was a fifth label** the cardinality contract does not
+     allow, and Alloy's two `stage.label_drop`s for it cannot work: Loki 3.x
+     derives it on ingestion, downstream of anything Alloy does. Fixed with
+     `limits_config.discover_service_name: []`.
+
+   Two things left as they are, deliberately: `level` is absent on most PHP
+   lines (the crawler writes for humans, and no panel filters on level), and
+   `filename` remains an unbounded label on the spawn-file streams — the regex
+   that extracts `role` and `shop` reads it, and dropping it costs an operator
+   the ability to tell which spawn a line came from.
+
+   *Gate:* met. All four panels return data through Grafana's own query API —
+   the three log panels and the failed-runs table, the latter showing the three
+   runs orphaned while testing phase 2. Verified after a real in-container
+   crawl, whose post-phase validate logged to the volume Alloy tails.
 5. **Close the feature gaps** — 2–3 days. `full_crawl` (✅ `1f5e364`); a CLI for
    the full match phase (steps 2–3 exist and pass `make match-diff`, nothing
    drives them).

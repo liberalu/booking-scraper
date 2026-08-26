@@ -358,12 +358,28 @@ After completing any task that changes code, suggest to the user:
 ### Observability label cardinality (Loki)
 
 The Loki index can only afford low-cardinality labels. The four allowed labels are:
-- `service` — bounded set (dashboard, scraper, postgres, flaresolverr, loki, promtail, grafana). `scraper`/`dashboard` were container names; with no application images the crawler's spawn logs reach Loki through the `scraper_logs` volume instead.
-- `level` — INFO / WARNING / ERROR / DEBUG / CRITICAL
-- `role` — operator / stall-resume / cron-chain / reconcile-restart / cron
-- `shop` — vaga / pegasas / humanitas / future shops
+- `service` — bounded set. Compose service names (dashboard, scheduler, reaper, postgres, flaresolverr, loki, alloy, grafana), plus `scraper` for the per-spawn files. Nothing is *called* scraper any more; the name stays because those are the crawls' own logs whichever container spawned them, and it is what the dashboard panel queries.
+- `level` — INFO / WARNING / ERROR / DEBUG / CRITICAL. **Mostly absent on PHP lines**: the crawler writes for humans ("done — 2 url(s), books added 0"), not with level prefixes. No panel filters on it. Postgres, Loki and Grafana's own logs still carry one.
+- `role` — operator / cron / post-phase-auto / stall-resume / cron-chain / reconcile-restart. The first three are what the PHP stack writes.
+- `shop` — vaga / pegasas / humanitas / patogupirkti / future shops
 
-**Never promote `run_id` to a label.** It's unbounded and would explode the index. Filter via LogQL `|= "run_id=N"` instead. Phase 4 (CODEOBS-02) emits `key=value` log lines so `| logfmt` works.
+**Never promote `run_id` to a label.** It's unbounded and would explode the index. Filter via LogQL `|= "run_id=N"` instead.
+
+Two things learned bringing this up on the PHP stack:
+
+- **`service_name` was a fifth label, and Alloy could not drop it.** Loki 3.x
+  derives one on ingestion from the first of `service_name`, `service`, `app`… it
+  finds — duplicating `service` on every stream, for twice the series. Alloy has
+  a `stage.label_drop` for it in both pipelines and it cannot work, because the
+  label is added downstream. The fix is `limits_config.discover_service_name: []`
+  in `monitoring/loki/loki-config.yml`.
+- **`filename` is still a label on the spawn-file streams, and it is unbounded** —
+  one per crawl, so one new stream per crawl, forever. Not changed, for two
+  reasons: `stage.regex` extracts `role` and `shop` *from* it, so any drop has to
+  come after that, and losing it costs an operator the ability to tell which
+  spawn a line came from. Worth revisiting if the index gets heavy.
+
+Alloy also keeps only this project's containers now (`com.docker.compose.project == book-scraper`). The Docker socket shows every container on the host, so without that filter Loki was indexing an unrelated project's app/web/mysql/redis/mailpit logs.
 
 ### Counter drift probe (single-row restart era)
 

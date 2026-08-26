@@ -7,7 +7,8 @@
 //                        /var/lib/docker/containers host-path mount needed)
 //   2. spawn_files    — /var/log/scrapy_runs/spawn-*.log with role+shop labels
 //                       extracted from the filename
-//   3. scraper_log    — /var/log/scraper.log (cron + reconcile aggregate)
+//   (3)               — was /var/log/scraper.log, written by Python's crontab.
+//                       Gone; the scheduler container's stdout replaces it.
 //
 // LABEL CARDINALITY CONTRACT:
 //   Allowed labels:  service, level, role, shop
@@ -35,6 +36,16 @@ discovery.relabel "containers" {
     regex         = "^$"
     action        = "drop"
   }
+
+  // ...and containers belonging to a DIFFERENT compose project. The Docker
+  // socket shows every container on the host, so without this Loki was
+  // indexing an unrelated project's app/web/mysql/redis/mailpit logs — more
+  // `service` values than this stack has, and none of them ours.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "book-scraper"
+    action        = "keep"
+  }
 }
 
 loki.source.docker "containers" {
@@ -51,10 +62,13 @@ loki.process "containers" {
   stage.label_drop {
     values = ["service_name"]
   }
-  // Parse log level from Python/uvicorn/Scrapy log formats:
+  // Parse log level where the line carries one. Python/uvicorn/Scrapy did:
   //   "INFO  [alembic.runtime.migration] ..."
   //   "2026-05-12 ... [scrapy.core.engine] INFO: Spider closed"
-  //   "ERROR:    Application startup failed"
+  // The PHP stack mostly does not — its lines are written to be read
+  // ("done — 2 url(s), books added 0"), so `level` is simply absent on them.
+  // Left in place because it still matches Postgres, Loki and Grafana's own
+  // output, and because absent is honest: no panel filters on it.
   stage.regex {
     expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
   }
@@ -66,8 +80,13 @@ loki.process "containers" {
 
 // ─── 2. Per-spawn scrapy log files ───────────────────────────────────────────
 // Filenames: spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
-//   <role>: operator | stall-resume | cron-chain | reconcile-restart
-//   <shop>: vaga | pegasas | humanitas | knygos | almalittera | tytoalba | ...
+//   <role>: operator | cron | post-phase-auto | stall-resume | cron-chain
+//           | reconcile-restart
+//   <shop>: vaga | pegasas | humanitas | patogupirkti | almalittera | ...
+//
+// service stays "scraper" even though no container is called that any more:
+// these are the crawls' own logs whichever container spawned them, and the
+// name is what the dashboard panel queries.
 
 local.file_match "spawn_files" {
   path_targets = [{
@@ -83,6 +102,13 @@ loki.source.file "spawn_files" {
 }
 
 loki.process "spawn_labels" {
+  // Same drop as the container pipeline: Alloy injects `service_name` from
+  // OpenTelemetry conventions, it duplicates `service`, and the cardinality
+  // contract in CLAUDE.md allows four labels. It was only dropped on the
+  // container streams, so the spawn-file streams carried it.
+  stage.label_drop {
+    values = ["service_name"]
+  }
   // Extract role+shop from filename:
   //   spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
   //   ↑8 digits  ↑12 digits (HH+MM+SS=6 + microseconds=6)
@@ -105,31 +131,12 @@ loki.process "spawn_labels" {
   forward_to = [loki.write.default.receiver]
 }
 
-// ─── 3. Cron-output aggregate file ───────────────────────────────────────────
-
-local.file_match "scraper_log" {
-  path_targets = [{
-    __path__ = "/var/log/scraper.log",
-    service  = "scraper",
-    role     = "cron",
-    job      = "scraper_log_file",
-  }]
-}
-
-loki.source.file "scraper_log" {
-  targets    = local.file_match.scraper_log.targets
-  forward_to = [loki.process.scraper_log.receiver]
-}
-
-loki.process "scraper_log" {
-  stage.regex {
-    expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
-  }
-  stage.labels {
-    values = { level = "" }
-  }
-  forward_to = [loki.write.default.receiver]
-}
+// ─── 3. (removed) Cron-output aggregate file ─────────────────────────────────
+//
+// /var/log/scraper.log was written by the Python container's crontab, which
+// went with the Python stack. Its replacement is the `scheduler` container's
+// stdout, already collected by source 1 as service="scheduler" — the dashboard
+// panel that read this file now queries that instead.
 
 // ─── Loki output ──────────────────────────────────────────────────────────────
 

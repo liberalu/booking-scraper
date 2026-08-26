@@ -51,6 +51,17 @@ limits_config:
   ingestion_rate_mb: 4
   ingestion_burst_size_mb: 6
   max_entries_limit_per_query: 5000
+  # Stop Loki adding a `service_name` label of its own.
+  #
+  # Loki 3.x derives one on ingestion from the first of `service_name`,
+  # `service`, `app`, … it finds, and here that duplicates `service` on every
+  # stream — twice the series for no information. The cardinality contract in
+  # CLAUDE.md allows four labels; this was a fifth.
+  #
+  # Alloy's config has a `stage.label_drop` for it in both pipelines, which
+  # cannot work: the label is added downstream by Loki, after anything Alloy
+  # does. Those stages are kept for the OTel case but this is the fix.
+  discover_service_name: []
 
 compactor:
   working_directory: /loki/compactor
