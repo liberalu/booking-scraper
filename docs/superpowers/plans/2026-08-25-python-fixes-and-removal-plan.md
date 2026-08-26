@@ -5,24 +5,32 @@ Rendered version (tables, phase gates): https://claude.ai/code/artifact/3d17d76a
 Found by running the PHP port and the Python stack against identical input and
 diffing the results. Every item below was measured, not inferred.
 
-**Part one is done.** All nine defects are fixed in both stacks (commits
+**Both parts are done.** All nine defects are fixed in both stacks (commits
 `4e274bc`, `2c90beb`, `ac2caa9`, `d92e948`, `2340650`, `8b66faf`, `8828651`,
 `1f5e364`), and the undeclared schema drift they surfaced is closed (`09bff38`).
-Phase 1 of part two is landed too (`80ae730`), the test databases are no longer
-shared (`50a6447`), and **phase 6 — freezing the evidence — is done**: every
-comparison now has a golden a Python-free checkout can replay.
+
+**Python is gone** — removed in `c2f1718` on 2026-08-26, 251 files and 55,814
+lines, with the last commit containing it tagged `python-final`. Six of the
+eight removal phases are closed: 1 (`80ae730`), 3 (`01813bb`), 6, 8 (`c2f1718`),
+7 moot, 5 finished. **Phases 2 (packaging) and 4 (observability) are what
+remain**, and both are smaller than written below.
 
 **There is no production.** `book-scraper-postgres-1` is a container on this
 machine, every DSN in the repo resolves to `localhost` or the compose service
-name, and the last scrape ran 31 days ago. Earlier drafts of this plan — and
-the estimates in them — were written as though a live service were at stake. It
-is not. Phase 7 stops being meaningful, phase 8 takes minutes, and phases 2–4
-become optional polish.
+name. Earlier drafts of this plan — and the estimates in them — were written as
+though a live service were at stake. It is not. Phase 7 stops being meaningful
+and phase 8 took minutes.
 
-Phase 6 was the one that genuinely bit, and it is now done — see the phase
-entry below for what it cost and what it could not preserve. The remaining
-argument against removal is unchanged in kind: removal retires the mechanism
-that found all nine defects above.
+One correction to those drafts, though: they said the last scrape ran 31 days
+ago, and phases 2–4 were called optional polish on that basis. The schedule was
+in fact **still firing** — runs 843 to 852 landed between 02:00 and 04:35 on the
+morning of 26 August, after a gap since 25 July. Removing the container stopped
+them, which is why phase 3 turned out not to be optional at all and was done
+immediately after.
+
+Phase 6 was the one that genuinely bit. The remaining argument against removal
+is unchanged in kind: removal retires the mechanism that found all nine defects
+above.
 
 ## Part one — the fix ledger
 
@@ -87,20 +95,69 @@ Eight phases, each with the check that must pass before the next starts.
    in `pg_dump`'s own session tokens plus one CHECK expression Postgres deparses
    in an equivalent form. The automated gate must normalise that re-render or it
    reports a permanent false positive. This was the estimate I was least sure of,
-   and it is the cheapest phase rather than the most expensive — which leaves
-   phase 6 as the only one that genuinely bites.
-2. **Package the PHP stack** — 2 days. Compose targets for crawler and
-   dashboard, PHP 8.4, via the existing Make wrappers.
-   *Trap:* `php/dashboard/public/static` is a symlink into
-   `book_scraper/dashboard/static` (636 KB, 16 JSX files). Deleting Python
-   breaks the SPA; the tree must move into `php/` and become canonical.
+   and it is the cheapest phase rather than the most expensive.
+2. **Package the PHP stack** — **the main thing left.** Compose targets for
+   crawler and dashboard, PHP 8.4, via the existing Make wrappers.
+   The trap this entry warned about is already handled: the SPA moved out of
+   `book_scraper/dashboard/static` and is canonical at
+   `php/dashboard/public/static` (`9c8913a`), because deleting Python would
+   otherwise have taken it down.
+   What makes this matter now is phase 3: `runs:schedule` and `runs:reap` have
+   to stay running, and right now nothing supervises them, so a reboot silently
+   stops the schedule again. Compose lost both application services with the
+   Dockerfile in `c2f1718` and currently runs infrastructure only.
    *Gate:* compose serves the dashboard and a scan completes in-container.
-3. **Scheduling and supervision** — 2 days. Port `generate_crontab.py`;
-   supervise `artisan runs:reap --watch`; port the entrypoints.
-   *Gate:* a cron-fired run lands with the right `cron_job_id`, and a `kill -9`'d
-   crawl is failed within 60s.
-4. **Observability** — 1–2 days. Emit the same `key=value` lines and the JSONL
-   per-response log; Loki/Alloy/Grafana are upstream images and don't change.
+3. **Scheduling and supervision** — ✅ **Done** (`01813bb`). `php artisan
+   runs:schedule` replaces `generate_crontab.py`.
+
+   Not optional after all: removing the container took away the only thing that
+   turned `cron_jobs` rows into crawls, while the dashboard's Schedules page
+   went on writing and validating rows nothing read — 12 enabled jobs, the
+   newest of which had fired that same morning.
+
+   A poll loop rather than a crontab. There is no container to render one into,
+   and the crontab only picked schedules up at boot, so a schedule created in
+   the dashboard did nothing until someone restarted the scraper. Not Laravel's
+   scheduler either: `schedule:run` still needs a system cron entry every
+   minute, the same dependency with more indirection.
+
+   The due-window decision lives in `CronSchedule`, apart from the command, so
+   it is unit-tested without spawning. Five policies came out of running it
+   against the real table rather than from theory:
+
+   - **Expressions are UTC**, because the container's cron was — job 1 is
+     `0 2 * * *` and its runs start at 02:00Z.
+   - **Two fire per tick.** Nine windows were due on the first dry run, going
+     back to 17 August; the rest stay due and drain later.
+   - **One crawl per shop, any phase.** The first dry run wanted to start
+     patogupirkti's sitemap discover, category discover and scan together —
+     three concurrent crawls against one live shop, tripling the request rate
+     its `download_delay` exists to cap. The crontab never did this because its
+     windows were half an hour apart; a catch-up pass has no spacing.
+   - **`paused` does not count as busy.** The per-shop rule immediately blocked
+     patogupirkti on a `match` run paused since 8 May. The reaper leaves paused
+     runs alone by design, so it would have stopped that shop's schedules
+     permanently.
+   - **A failed spawn is not recorded as fired.** `last_run_at` is stamped by
+     RunLifecycle when the crawl boots, so a spawn that dies leaves no trace
+     and would be retried every tick.
+
+   *Gate:* met. The scheduler fired a vaga sitemap discover in the test
+   database; run 552 landed with 21,625 URLs, `last_run_at` was stamped, and
+   PostPhase linked 14,174 books and spawned the validate that became run 553.
+   The `kill -9` half is the reaper's, which was already ported.
+
+   **Still to do:** nothing runs it. `runs:schedule --watch` and
+   `runs:reap --watch` need a supervisor — which is phase 2.
+4. **Observability** — 1–2 days, and mostly already true. The crawler emits the
+   `key=value` lines and the per-response JSONL, and Loki/Alloy/Grafana are
+   upstream images that did not change.
+   One concrete dependency found while running the crawler on the host:
+   `SPAWN_LOG_DIR` defaults to `/var/log/scrapy_runs`, which only existed inside
+   the container. Off-container it is not writable, so `PostPhase` falls back to
+   the system temp dir — which Alloy does not tail. Either phase 2 puts the
+   `scraper_logs` volume back under the crawler, or `SPAWN_LOG_DIR` points
+   somewhere Alloy reads.
    *Gate:* existing Grafana dashboards populate from a PHP run.
 5. **Close the feature gaps** — 2–3 days. `full_crawl` (✅ `1f5e364`); a CLI for
    the full match phase (steps 2–3 exist and pass `make match-diff`, nothing
@@ -165,27 +222,52 @@ Eight phases, each with the check that must pass before the next starts.
    author backfill picked arbitrarily among candidate authors. Both stacks now
    order explicitly.
 
-   *Gate:* met. `crawl_diff` is the one comparison that cannot be frozen — it
-   needs live HTTP — but the layers under it are: the parser differentials, the
-   item validator, `PersisterTest` (fixture → rows) and the discovery goldens.
-   What is lost is "the live site still looks like the fixture", which is
-   monitoring, not a regression test.
+   **The fixture is frozen with them.** `SyntheticShop` is the input the API
+   and write-route goldens were recorded over, so changing what it plants
+   invalidates them and nothing can re-verify the new shapes. Found by wanting
+   a `running` run for a scheduler test: `/api/runs?status=running` is frozen as
+   an empty list, and the fixture can no longer be changed to fill it. A test
+   needing different data plants it itself, in a transaction.
+
+   *Gate:* met, and later met in its strongest form — the whole suite passes
+   from a clean export at an unrelated filesystem path with no `.env`.
+   `crawl_diff` is the one comparison that cannot be frozen (it needs live
+   HTTP), but the layers under it are: the parser differentials, the item
+   validator, `PersisterTest` (fixture → rows) and the discovery goldens. What
+   is lost is "the live site still looks like the fixture", which is monitoring,
+   not a regression test.
 7. **Shadow run** — ~~2 weeks calendar~~ **redundant.** A shadow period exists
    to prove the new stack behaves on live traffic before cutover. There is no
    live service and no traffic. The meaningful version — run both stacks over
    the same shops and diff what they wrote — is what `crawl_diff`,
    `validate_diff` and `match_diff` already do, and they agree.
    *Gate:* the differentials pass on every shop with seeded data.
-8. **Cutover with a way back** — minutes. No scheduled runs to watch, so the
-   week-long observation does not apply either. Tag first, then remove
-   `book_scraper/` (66 files), `tests/` (86), `scripts/` (6), `alembic/` (60,
-   kept in history), the Python packaging and compose services. Rollback is a
-   revert to the tag, cheap because the deletion never touches the database.
-   *Gate:* one full discover + scan + validate cycle on PHP only.
+8. **Cutover with a way back** — ✅ **Done** (`c2f1718`), and it did take
+   minutes. Tagged `python-final`, then removed `book_scraper/`, `tests/`,
+   `scripts/`, `alembic/` (kept in history), the Python packaging, the
+   Dockerfile and the two compose services built from it, and the 15 Python
+   differential tools: 251 files, 55,814 lines. Rollback is a revert to the tag
+   and never touches the database.
 
-Total: **~1 week of focused work, no calendar wait.** Phases 1 (done), 5 and 6
-are the substance. Phases 2, 3 and 4 matter only if you want it running in
-compose on a timer rather than invoked by hand.
+   Four things would have broken and were fixed first, while both stacks were
+   still there to check against: the SPA symlink, two tests that read the
+   Python source (ISSUE_KEYS and the parser modules — both re-pointed at
+   invariants that survive), and `PostPhase` spawning into a container-only log
+   path, which failed silently and cost the first CLI crawl its validate.
+
+   Two more surfaced from exporting the committed tree to a different path: the
+   dashboard suite could not boot without an `APP_KEY`, and one golden had
+   recorded an absolute filesystem path. CI would have hit both.
+
+   *Gate:* met. A full discover → scan → validate cycle on PHP alone (runs 853,
+   854, 855), plus `make schema-gate` PASS against the live catalogue and the
+   dashboard serving its SPA with live KPIs.
+
+Total: **~1 week of focused work, no calendar wait** — and most of it is spent.
+Phases 1, 3, 5, 6 and 8 are done; 7 was moot. What is left is phase 2
+(packaging) and phase 4's one log-path fix, which together are the difference
+between a system that works when invoked and one that looks after itself across
+a reboot.
 
 ## What removal gives up
 
