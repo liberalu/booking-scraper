@@ -7,12 +7,32 @@ Last reviewed 2026-08-26, when the Python stack was removed. Every section below
 was checked against the running system on that date rather than carried over on
 faith: three earlier items turned out to be already done and were deleted.
 
+Six sections were added on 2026-08-27, when the three composer projects became
+one Laravel application at the repository root. They are marked *(2026-08-27)*
+and come from reading the merged tree, not from that sweep.
+
 ---
 
 ## Needs a decision, not a patch
 
-These four are all judgement calls about intended behaviour. Each has a
-one-line fix once the call is made.
+These are judgement calls about intended behaviour. Each has a short fix once
+the call is made.
+
+### Nothing authenticates the dashboard, and `POST /api/runs` starts crawls *(2026-08-27)*
+
+Every route in `routes/api.php` is open: no auth, no throttle, and
+`bootstrap/app.php` exempts the pre-SPA form posts from CSRF.
+`RunSpawnController::store()` ends at `CrawlSpawner::spawn()`, which runs
+`proc_open(['/bin/sh', '-c', …])`. The arguments are `escapeshellarg`-quoted and
+the phase and shop are whitelisted, so it is not injectable — but anyone who can
+reach the port can start a crawl against a live shop, and `docker-compose.yml`
+publishes the dashboard as `"8001:8000"`, which binds every host interface.
+
+The decision is whether that port is ever reachable from outside the machine. If
+it is not, record that here and delete this section. If it is,
+`->middleware('throttle:60,1')` on the group plus a shared-secret check on the
+mutation routes is the fix — neither golden covers request headers, so it can be
+added without touching frozen behaviour.
 
 ### A paused run can be resumed but never stopped
 
@@ -64,11 +84,76 @@ consistent.
 
 ## Work with no open question
 
+### The CLI entry points are scripts, not Artisan commands *(2026-08-27)*
+
+`bin/` holds 1,291 lines of procedural PHP with its own argv parsing —
+`crawl`, `validate`, `match`, `canonical`, `parse`, `migrate`, `fixture-db`,
+`synthesize-validate-cases` — in a project where `runs:reap` and
+`runs:schedule` are already Artisan commands. This is the one part of the
+2026-08-27 layout change that was not done.
+
+It is not only the scripts. `CrawlSpawner::spawn()`, `PostPhase::command()` and
+`Watchdog` all invoke them by absolute path, and the operator instructions in
+`CLAUDE.md` say `docker compose exec dashboard php bin/crawl`. `bin/crawl` is
+652 of those lines and is the most load-bearing path in the system, so convert
+it with the Crawler suite in front of you rather than as a sweep. `bin/migrate`
+is the exception that should probably stay a script: it must run against a
+database Laravel is not configured for, which is the whole point of its
+`--database=DSN`.
+
+### `LegacyFormsController` sits under `Api\` and serves no API *(2026-08-27)*
+
+It answers `/scrape/*` and `/shops/{shop}/rate-settings` with HTML or a 303 —
+the form posts that predate the SPA. When the JSON routes moved to
+`routes/api.php` it correctly stayed behind in `routes/web.php`, but its class
+is still `App\Http\Controllers\Api\LegacyFormsController`.
+
+Move it to `App\Http\Controllers\`. `mutation_cases.json` freezes both routes'
+responses, so re-run the Feature suite rather than assuming a namespace change
+is inert.
+
+### Query parameters are coerced by hand in every controller *(2026-08-27)*
+
+There is no `FormRequest` in the project. Each list endpoint repeats the same
+block: `(string) $request->query(…)`, a whitelist for sortable columns,
+`max(1, min($perPage, 200))`. It is consistent and defensive, which is why it
+has lasted, but it is one block written eleven times.
+
+Related, and with a trap in it: there is no route model binding either. Every
+`{run}` route does its own `ScrapeRun::find($id)` and returns a manual 404 whose
+body is `{"detail": "Run not found"}`. Laravel's implicit binding produces a
+different 404 body, and `mutation_cases.json` freezes that string — so adopting
+binding means a `missing()` handler or an explicit resolver, not just a
+type-hint.
+
+### `IssuesController` and `BooksController` carry their own query layer *(2026-08-27)*
+
+756 and 661 lines. Both build SQL inline, do their own pagination arithmetic,
+and declare severity maps and sortable-column lists as controller constants.
+`IssuesController` also merges two sources — `validation_issues` and
+`scrape_failures` — with a hand-rolled pigeonhole argument about how many rows
+to take from each before slicing.
+
+The Laravel answer is a query object per list endpoint, not more controllers.
+`api_shapes.json` freezes all 79 GET responses, which is what makes this worth
+starting: the extraction is verifiable one endpoint at a time.
+
+### There is no static analysis *(2026-08-27)*
+
+`make lint` is `php -l`, which catches parse errors and nothing else. Items are
+plain arrays, several public methods return `mixed`, and the array shapes that
+flow from the parsers through `ItemValidator` into `Persister` are described in
+docblocks that nothing verifies.
+
+phpstan at level 5, with the Laravel extension, plus a step in `ci.yml`. Expect
+a baseline file on the first run; the value is in what it refuses to let in
+afterwards, not in emptying it.
+
 ### The PHP scan never populates `scrape_url_items.retry_count`
 
 203 rows have `retry_count > 0` and every one was written by a Python run — the
 highest is run 845, and no PHP run has ever written the column. Nothing in
-`php/crawler/src` touches it outside the model and the test fixture.
+`app/Crawler` touches it outside the model and the test fixture.
 
 Forward the retry count from the HTTP layer into `mark_scrape_url_item_response`'s
 PHP equivalent when a request is retried. Worth doing on the discover side too.
@@ -80,7 +165,7 @@ been a single `request_retried` row. Retries happen silently, so transient
 backend pressure being papered over by retries cannot be seen.
 
 Write a `request_retried` event per retry and render it in the SPA's timeline
-(`php/dashboard/public/static/hifi/`) with a distinct icon — `⊟` is already
+(`public/static/hifi/`) with a distinct icon — `⊟` is already
 taken by `subdivided`, so pick another (`↻`).
 
 ### `heartbeat_timeout` should probably not auto-resume
@@ -133,6 +218,11 @@ volume or create the database by hand if a fresh checkout disagrees.
 
 ## Cosmetic
 
+- **`.dockerignore` is load-bearing since 2026-08-27.** The Dockerfile copies
+  the whole repository (`COPY . .`) now that the application *is* the
+  repository; it used to copy `config/` and `php/` only. `docs/`, `monitoring/`,
+  `.planning/`, `.claude/` and `.github/` are excluded there. A new large
+  top-level directory ships into the image unless it is added to that file.
 - **CI pins `actions/checkout@v4`**, which GitHub forces onto Node 24 with a
   deprecation warning on every run. Bump to v5.
 - **Alloy re-reads container log history on restart** and Loki 400s the entries
