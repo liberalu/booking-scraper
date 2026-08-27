@@ -21,6 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'scrape/*',
             'shops/*/rate-settings',
         ]);
+
+        // A ceiling on the API as a whole. The SPA polls /runs/{id}/live while
+        // a run is open, so this has to sit well above a normal open
+        // dashboard; it is here to stop a loop, not to shape traffic. The
+        // routes that actually start a crawl carry the much tighter
+        // `throttle:spawn` instead — see AppServiceProvider.
+        $middleware->api(prepend: 'throttle:300,1');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

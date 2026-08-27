@@ -29,9 +29,13 @@ defined('SPA_INDEX') || define(
 // The pre-SPA form endpoints, outside /api: they answer with HTML or a 303
 // redirect. `rate-settings` is the only UI for the shop_settings override.
 Route::post('/shops/{shop}/rate-settings', [LegacyFormsController::class, 'rateSettings']);
-Route::post('/scrape/filtered', [LegacyFormsController::class, 'scrapeFiltered']);
-Route::post('/scrape/unknown-urls', [LegacyFormsController::class, 'scrapeUnknownUrls']);
-Route::post('/scrape/url/{url}', [LegacyFormsController::class, 'scrapeUrl']);
+// These three reach CrawlSpawner, exactly as POST /api/runs does, and they are
+// CSRF-exempt because the forms that post to them send no token. Same limiter.
+Route::middleware('throttle:spawn')->group(function (): void {
+    Route::post('/scrape/filtered', [LegacyFormsController::class, 'scrapeFiltered']);
+    Route::post('/scrape/unknown-urls', [LegacyFormsController::class, 'scrapeUnknownUrls']);
+    Route::post('/scrape/url/{url}', [LegacyFormsController::class, 'scrapeUrl']);
+});
 
 // Renamed pages, kept as 301s so old bookmarks and links still land. These
 // must precede the SPA catch-all, which would otherwise answer 200 with the

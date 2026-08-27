@@ -77,9 +77,14 @@ services:
       postgres:
         condition: service_healthy
     ports:
+      # Bound to loopback, not 0.0.0.0. Nothing here authenticates: every API
+      # route is open, and POST /api/runs starts a crawl against a live shop.
+      # Publishing it to the network would put that behind no credential at
+      # all. Widen this only together with real auth — see docs/follow-ups.md.
+      #
       # ponytail: host port 8001 while gpswox-hive-app holds 8000; revert to
-      # "8000:8000" once that project frees the port.
-      - "8001:8000"
+      # "127.0.0.1:8000:8000" once that project frees the port.
+      - "127.0.0.1:8001:8000"
     environment: &php_env
       APP_ENV: production
       APP_DEBUG: "false"

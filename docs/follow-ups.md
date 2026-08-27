@@ -18,21 +18,39 @@ and come from reading the merged tree, not from that sweep.
 These are judgement calls about intended behaviour. Each has a short fix once
 the call is made.
 
-### Nothing authenticates the dashboard, and `POST /api/runs` starts crawls *(2026-08-27)*
+### The dashboard is loopback-only because nothing authenticates it *(2026-08-27)*
 
-Every route in `routes/api.php` is open: no auth, no throttle, and
-`bootstrap/app.php` exempts the pre-SPA form posts from CSRF.
-`RunSpawnController::store()` ends at `CrawlSpawner::spawn()`, which runs
-`proc_open(['/bin/sh', '-c', …])`. The arguments are `escapeshellarg`-quoted and
-the phase and shop are whitelisted, so it is not injectable — but anyone who can
-reach the port can start a crawl against a live shop, and `docker-compose.yml`
-publishes the dashboard as `"8001:8000"`, which binds every host interface.
+Partly closed. The port is bound to `127.0.0.1` and the routes that start a
+crawl are rate-limited; there is still no authentication of any kind, so the
+first of those is what is actually holding.
 
-The decision is whether that port is ever reachable from outside the machine. If
-it is not, record that here and delete this section. If it is,
-`->middleware('throttle:60,1')` on the group plus a shared-secret check on the
-mutation routes is the fix — neither golden covers request headers, so it can be
-added without touching frozen behaviour.
+What was found: seven routes reach `CrawlSpawner::spawn()`, which runs
+`proc_open(['/bin/sh', '-c', …])` — the four `RunSpawnController` routes under
+`/api`, and three `/scrape/*` form posts that are web routes and CSRF-exempt.
+None of them is injectable; the arguments are `escapeshellarg`-quoted and the
+phase and shop are whitelisted. The problem was reachability: compose published
+the dashboard as `"8001:8000"`, which binds every host interface, and no route
+in the application asks who is calling.
+
+What was done: the published port is now `"127.0.0.1:8001:8000"`; all seven
+spawn routes share a `throttle:spawn` limiter at 30/minute (defined once in
+`AppServiceProvider`, since they share one consequence); and the API group as a
+whole carries `throttle:300,1`, set well above an open dashboard's polling
+because it is there to stop a loop, not to shape traffic.
+
+**What is left is authentication, and it is gated on the SPA.** The React
+frontend in `public/static/hifi/` is a built bundle that sends no credential on
+any `fetch()`, so a token check on the mutation routes would break the UI until
+the bundle is rebuilt to send one. That is the actual cost of this item —
+adding middleware is the easy half. Until it is done, widening that port past
+loopback puts an unauthenticated crawl trigger on the network.
+
+Worth deciding alongside it: `postgres` is still published as `"5432:5432"` on
+every interface with `postgres`/`postgres`, and so is the test cluster on 5433.
+Binding those to loopback costs nothing — tests and tools connect over
+localhost — and leaving them as they are makes the dashboard's binding
+decorative.
+
 
 ### A paused run can be resumed but never stopped
 

@@ -67,10 +67,15 @@ Route::get('/cron/{job}/detail', [CronController::class, 'show']);
 // Everything here is a pure database write; the ones that spawn a crawl
 // fall through to the catch-all below.
 Route::post('/books', [BooksController::class, 'store']);
-Route::post('/runs', [RunSpawnController::class, 'store']);
-Route::post('/runs/{run}/rerun', [RunSpawnController::class, 'rerun']);
-Route::post('/runs/{run}/continue', [RunSpawnController::class, 'continueRun']);
-Route::post('/runs/{run}/retry', [RunSpawnController::class, 'retry']);
+// The four that reach CrawlSpawner and start a process against a live shop.
+// The limiter is defined once in AppServiceProvider and shared with the
+// /scrape/* form posts in routes/web.php.
+Route::middleware('throttle:spawn')->group(function (): void {
+    Route::post('/runs', [RunSpawnController::class, 'store']);
+    Route::post('/runs/{run}/rerun', [RunSpawnController::class, 'rerun']);
+    Route::post('/runs/{run}/continue', [RunSpawnController::class, 'continueRun']);
+    Route::post('/runs/{run}/retry', [RunSpawnController::class, 'retry']);
+});
 Route::post('/runs/{run}/stop', [RunMutationsController::class, 'stop']);
 Route::post('/runs/{run}/pause', [RunMutationsController::class, 'pause']);
 Route::post('/runs/{run}/resume', [RunMutationsController::class, 'resume']);
