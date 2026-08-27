@@ -13,13 +13,18 @@ data-quality problems it finds in its own output.
 
 ## Architecture
 
-Three composer projects, sharing one library:
+One Laravel application, and it is the repository:
 
-| Project | What it is |
+| Directory | What it is |
 |---|---|
-| `php/` | The library: parsers, repositories, validator, matcher, run lifecycle. Framework-free. |
-| `php/crawler/` | The crawler: roach-php spiders, watchdog, scheduling. |
-| `php/dashboard/` | Laravel serving a JSON API plus the React SPA in `public/static/hifi`. |
+| `app/Parsers/`, `app/Repositories/`, `app/Services/`, `app/Runs/` | The domain: parsers, repositories, validator, matcher, run lifecycle. |
+| `app/Crawler/` | The crawler: roach-php spiders, watchdog, scheduling. |
+| `app/Http/`, `routes/api.php` | The JSON API, plus the React SPA served from `public/static/hifi`. |
+| `bin/` | The CLI entry points: `crawl`, `validate`, `match`, `migrate`. |
+
+These were three composer projects under `php/`, wired together with path
+repositories, until 2026-08-26. `config/` holds both Laravel's `*.php` config
+and the shops' TOML; Laravel only ever loads the former.
 
 Per-shop behaviour is configuration plus one parser class; the spiders
 themselves are generic.
@@ -69,13 +74,12 @@ the Makefile pins `/opt/homebrew/opt/php@8.4/bin/php`), composer, and Docker.
 ```bash
 make install                                        # composer install, all three projects
 docker compose up -d postgres                       # the live database
-php php/bin/migrate apply --database=postgresql://postgres:postgres@localhost:5432/book_scraper
+php bin/migrate apply --database=postgresql://postgres:postgres@localhost:5432/book_scraper
 ```
 
 Then crawl something:
 
 ```bash
-cd php/crawler
 php bin/crawl discover --shop=vaga --strategy=sitemap
 php bin/crawl scan --shop=vaga --max-urls=20         # a small first run
 ```
@@ -86,7 +90,7 @@ offered explicitly and `--dry-run` fetches and parses without persisting.
 The dashboard:
 
 ```bash
-cd php/dashboard && php artisan serve --port=8002
+php artisan serve --port=8002
 ```
 
 Or in compose, which is how it is meant to run:
@@ -117,7 +121,7 @@ fire without spawning anything.
 
 Note the database each side reads: `bin/crawl` takes `DATABASE_URL`, but the
 dashboard — and therefore the scheduler, and the crawls it spawns — takes
-Laravel's `DB_*` / `DB_URL` from `php/dashboard/.env`. `DATABASE_URL` is
+Laravel's `DB_*` / `DB_URL` from `.env`. `DATABASE_URL` is
 ignored there. The crawls a scheduler starts always go to the database that
 dashboard is reading, which is deliberate: an operator looking at the test
 database cannot start a crawl against the live one.
@@ -126,7 +130,7 @@ database cannot start a crawl against the live one.
 
 ```bash
 docker compose --profile test up -d postgres-test
-php php/bin/migrate apply --database=postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
+php bin/migrate apply --database=postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 make test            # library + crawler + dashboard
 make test-offline    # everything that needs no database
 ```
@@ -177,7 +181,9 @@ docs/                         # specs, plans, follow-ups
 - `scrape_runs` + `scrape_url_items` — run bookkeeping, crash detection, resume.
 - `validation_issues` — what the validator found, with a lifecycle.
 
-Schema changes go in `php/schema/` and are applied by `php/bin/migrate`.
+Schema changes go in `database/schema/` and are applied by `bin/migrate`.
+(`database/migrations/` is deliberately empty — `artisan migrate` has none of
+that migrator's guards, and `.env` points at the live catalogue.)
 `make schema-gate` builds a scratch database from the baseline and diffs it
 against the live schema — that is what catches enums, partial unique indexes,
 CHECK expressions and FK actions.

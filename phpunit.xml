@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <!-- The domain library and the roach-php crawler. Separate composer
+             projects until they were folded into this one; kept as their own
+             suites because neither boots Laravel — they talk to Postgres
+             through Database::boot() and TEST_DATABASE_URL. -->
+        <testsuite name="Library">
+            <directory>tests/Library</directory>
+        </testsuite>
+        <testsuite name="Crawler">
+            <directory>tests/Crawler</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <!-- A fixed test key, deliberately committed. Laravel refuses to boot
+             without one, and .env is gitignored — so without this a fresh
+             clone (and CI) fails the whole dashboard suite with "No
+             application encryption key has been specified" before running a
+             single assertion. Testing-only: nothing real is encrypted with
+             it, and `artisan serve` still reads .env. -->
+        <env name="APP_KEY" value="base64:Ym9vay1zY3JhcGVyLXRlc3Qta2V5LTMyLWJ5dGVzISE="/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>

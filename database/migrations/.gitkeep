@@ -1,0 +1,16 @@
+Deliberately empty.
+
+The catalogue's schema is a byte-faithful `pg_dump` of what Alembic's 118
+revisions produced, and it lives in ../schema/0001_baseline.sql — the
+directory Laravel itself dumps a SQL schema into. It is applied by
+`bin/migrate`, which keeps its own ledger (`php_schema_migrations`), refuses a
+database Alembic has stamped unless `--adopt` is passed, and reports a
+migration edited after it was applied. `php artisan migrate` has none of those
+guards, and `.env` points DB_DATABASE at `book_scraper` — so a migration file
+placed here is one `artisan migrate` away from writing to production.
+
+Laravel's own skeleton migrations (users, cache, sessions, jobs) were removed
+for that reason.
+
+If PHP ever needs a table of its own, give it a separate database or schema
+rather than a migration here.

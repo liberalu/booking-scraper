@@ -1,7 +1,0 @@
-/vendor/
-/.phpunit.cache/
-/dashboard/vendor/
-/dashboard/.env
-/crawler/vendor/
-.phpunit.result.cache
-/.canonical-diff/

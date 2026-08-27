@@ -1,0 +1,127 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Apply the PHP schema migrations in `php/schema/`, or report their status.
+ *
+ * Shared by the crawler and the dashboard — deliberately here and not in
+ * `php/dashboard/database/migrations/`, whose `.gitkeep` explains why that
+ * directory must stay empty.
+ *
+ *   bin/migrate status --database=postgresql://…/somedb
+ *   bin/migrate apply  --database=postgresql://…/somedb
+ *
+ * The DSN must be given explicitly, by --database or DATABASE_URL. There is
+ * no fall-through to config/default.toml, which names the production
+ * catalogue: a migrator that picks a target when you forgot to name one
+ * picks production.
+ */
+
+use App\Schema\Migrator;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/** @return array{0: string, 1: array<string, string>} */
+function parseArgv(array $argv): array
+{
+    $command = '';
+    $opts = [];
+    foreach (array_slice($argv, 1) as $arg) {
+        if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $arg, $m) === 1) {
+            $opts[$m[1]] = $m[2] ?? '1';
+        } elseif ($command === '') {
+            $command = $arg;
+        }
+    }
+
+    return [$command, $opts];
+}
+
+function fail(string $message): never
+{
+    fwrite(STDERR, "migrate: {$message}\n");
+    exit(1);
+}
+
+[$command, $opts] = parseArgv($argv);
+
+if ($command === '' || isset($opts['help'])) {
+    fwrite(STDERR, <<<TXT
+    usage: bin/migrate <status|apply> --database=DSN [--dir=PATH] [--adopt]
+
+      status   list every migration and whether it has been applied
+      apply    apply everything pending, one transaction each
+
+      --database=DSN  target database (or DATABASE_URL). Required.
+      --dir=PATH      migrations directory (default: php/schema)
+      --adopt         apply even to a database Alembic has stamped
+
+    TXT);
+    exit($command === '' ? 1 : 0);
+}
+
+$dsn = $opts['database'] ?? getenv('DATABASE_URL') ?: '';
+if ($dsn === '') {
+    fail('no target database: pass --database=DSN or set DATABASE_URL');
+}
+
+$dir = $opts['dir'] ?? getenv('SCHEMA_MIGRATIONS_DIR') ?: Migrator::defaultDir();
+
+try {
+    $migrator = new Migrator(Migrator::connect($dsn), $dir);
+} catch (Throwable $e) {
+    fail($e->getMessage());
+}
+
+$redacted = preg_replace('#://([^:/@]+):[^@]*@#', '://$1:***@', $dsn);
+
+switch ($command) {
+    case 'status':
+        $applied = $migrator->applied();
+        $drift = $migrator->drift();
+        printf("database: %s\n", $redacted);
+        printf(
+            "owner:    %s\n",
+            $migrator->alembicOwned()
+                ? ($migrator->ledgerExists() ? 'alembic_version AND php ledger present' : 'alembic')
+                : ($migrator->ledgerExists() ? 'php' : 'nobody — no schema applied yet')
+        );
+        foreach ($migrator->available() as $version => $path) {
+            $state = 'pending';
+            if (isset($applied[$version])) {
+                $state = in_array($version, $drift, true)
+                    ? 'applied (FILE CHANGED SINCE)'
+                    : 'applied ' . $applied[$version]['applied_at'];
+            }
+            printf("  %-24s %s\n", $version, $state);
+        }
+        if ($drift !== []) {
+            fwrite(STDERR, sprintf(
+                "\nEdited after being applied: %s\nThe ledger no longer describes what this "
+                . "database contains.\n",
+                implode(', ', $drift)
+            ));
+            exit(1);
+        }
+        exit(0);
+
+    case 'apply':
+        try {
+            $done = $migrator->apply(isset($opts['adopt']));
+        } catch (Throwable $e) {
+            fail($e->getMessage());
+        }
+        if ($done === []) {
+            printf("nothing to apply — %s is up to date\n", $redacted);
+        } else {
+            foreach ($done as $version) {
+                printf("applied %s\n", $version);
+            }
+        }
+        exit(0);
+
+    default:
+        fail("unknown command: {$command}");
+}

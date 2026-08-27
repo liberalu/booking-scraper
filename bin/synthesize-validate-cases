@@ -1,0 +1,49 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Build the synthetic shop that fires every validator check.
+ *
+ *   bin/synthesize-validate-cases --database=postgresql://…/book_scraper_php_test
+ *
+ * The DSN must be given explicitly, by --database or DATABASE_URL, and must
+ * name a test database on the test cluster — SyntheticShop refuses anything
+ * else. There is no fall-through to config/default.toml, which names the real
+ * catalogue: a writer that picks a target when you forgot to name one picks
+ * production.
+ */
+
+use App\Support\Database;
+use App\Testing\SyntheticShop;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$dsn = '';
+foreach (array_slice($argv, 1) as $arg) {
+    if (preg_match('/^--database=(.+)$/', $arg, $m) === 1) {
+        $dsn = $m[1];
+    }
+}
+$dsn = $dsn ?: (getenv('DATABASE_URL') ?: '');
+
+if ($dsn === '') {
+    fwrite(STDERR, "synthesize-validate-cases: pass --database=DSN or set DATABASE_URL\n");
+    exit(1);
+}
+
+try {
+    $result = SyntheticShop::build(Database::boot($dsn)->getConnection());
+} catch (Throwable $e) {
+    fwrite(STDERR, 'synthesize-validate-cases: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+
+printf(
+    "synthesised %d rows on shop '%s' (id %d)\n",
+    $result['rows'],
+    SyntheticShop::SHOP,
+    $result['shop_id']
+);
+printf("  targets: all 20 issue types, plus their suppression cases\n");

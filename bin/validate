@@ -1,0 +1,81 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Run the data-quality validator for a shop.
+ *
+ *   bin/validate --shop=vaga
+ *   bin/validate --shop=vaga --run-id=123    # attribute findings to a run
+ *   bin/validate --shop=vaga --match-first   # match step 1, then validate
+ *
+ * Mirrors the Python PostPhaseAutoTrigger, which runs match step 1 inline
+ * and validate as a subprocess after every successful scan or discover.
+ */
+
+use App\Support\Database;
+use App\Models\Shop;
+use App\Services\MatchService;
+use App\Services\ValidateService;
+use App\Crawler\RunLifecycle;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$opts = [];
+foreach (array_slice($argv, 1) as $arg) {
+    if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $arg, $m) === 1) {
+        $opts[$m[1]] = $m[2] ?? '1';
+    }
+}
+
+if (isset($opts['help'])) {
+    fwrite(STDOUT, <<<TXT
+    Usage: bin/validate --shop=vaga [options]
+
+      --run-id=N       attribute findings to an existing run instead of
+                       creating one
+      --match-first    run match step 1 (ISBN linkage) before validating
+      --database=DSN   override DATABASE_URL
+
+    TXT);
+    exit(0);
+}
+
+$shopName = $opts['shop'] ?? 'vaga';
+
+Database::boot($opts['database'] ?? null);
+$shop = Shop::byName($shopName);
+
+if (isset($opts['match-first'])) {
+    $linked = (new MatchService())->isbnMatch($shopName);
+    printf("match step 1: %d shop_book(s) linked by ISBN\n", $linked);
+}
+
+// Findings are keyed to a run; reuse one when the caller supplies it (the
+// comparison tool does, so both stacks write against the same run id).
+$lifecycle = null;
+$runId = isset($opts['run-id']) ? (int) $opts['run-id'] : null;
+if ($runId === null) {
+    $lifecycle = new RunLifecycle($shop->id, 'validate');
+    $runId = $lifecycle->start()->id;
+}
+
+printf("validate %s (run %d)\n", $shopName, $runId);
+
+try {
+    $counters = (new ValidateService())->run($shop->id, $runId);
+} catch (Throwable $e) {
+    $lifecycle?->fail($e);
+    fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+
+$total = array_sum($counters);
+foreach ($counters as $key => $count) {
+    printf("  %-26s %6d\n", $key, $count);
+}
+printf("total %d issue(s)\n", $total);
+
+$lifecycle?->progress(processed: $total, added: 0, updated: 0, errors: 0);
+$lifecycle?->finish('completed');

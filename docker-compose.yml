@@ -16,8 +16,8 @@ services:
       retries: 5
 
   # The PHP suite's database. `POSTGRES_DB` is how it gets created now that
-  # seed_test_db.py is gone; `php/bin/migrate apply` then builds the schema
-  # from php/schema, and the suite plants every fixture it needs itself.
+  # seed_test_db.py is gone; `bin/migrate apply` then builds the schema
+  # from database/schema, and the suite plants every fixture itself.
   # Only applied on first init — an existing volume keeps its old database.
   postgres-test:
     image: postgres:16
@@ -60,7 +60,7 @@ services:
   # into the dashboard. Not worth the socket here: a killed crawl is resumable
   # and this is one machine.
   #
-  # For a crawl by hand: docker compose exec scheduler php ../crawler/bin/crawl
+  # For a crawl by hand: docker compose exec scheduler php bin/crawl
   #   scan --shop=vaga --max-urls=20
   # ---------------------------------------------------------------------------
 

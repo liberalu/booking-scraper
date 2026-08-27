@@ -1,0 +1,76 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Upsert one bibliographic record into the canonical `books` table.
+ *
+ *   bin/canonical --url=https://ibiblioteka.lt/metis-api/…/public/2097094
+ *   bin/canonical --file=record.json --url=<the url it came from>
+ *
+ * The library's scan phase normally does this; this command exists so a
+ * single record can be re-imported without a run, and so the differential
+ * harness can feed both stacks the same bytes.
+ */
+
+use App\Support\Database;
+use App\Parsers\Ibiblioteka\Parser;
+use App\Repositories\CanonicalBookRepository;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$opts = [];
+foreach (array_slice($argv, 1) as $arg) {
+    if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $arg, $m) === 1) {
+        $opts[$m[1]] = $m[2] ?? '1';
+    }
+}
+
+if (isset($opts['help']) || (!isset($opts['url']) && !isset($opts['file']))) {
+    fwrite(STDOUT, <<<TXT
+    Usage: bin/canonical (--url=U | --file=F --url=U) [--database=DSN]
+
+      --url=U        the record URL; also stored as books.source_url
+      --file=F       read the JSON from a file instead of fetching
+      --database=DSN override DATABASE_URL
+
+    TXT);
+    exit(isset($opts['help']) ? 0 : 1);
+}
+
+$url = (string) ($opts['url'] ?? '');
+if ($url === '') {
+    fwrite(STDERR, "error: --url is required (it is stored as source_url)\n");
+    exit(1);
+}
+
+if (isset($opts['file'])) {
+    $body = file_get_contents($opts['file']);
+    if ($body === false) {
+        fwrite(STDERR, "error: cannot read {$opts['file']}\n");
+        exit(1);
+    }
+} else {
+    // Accept matters: with a browser Accept this endpoint serves the SPA
+    // shell instead of the record. See Parser::rewriteScanUrl.
+    $body = file_get_contents($url, false, stream_context_create([
+        'http' => ['header' => "Accept: application/json\r\n", 'timeout' => 30],
+    ]));
+    if ($body === false) {
+        fwrite(STDERR, "error: fetch failed for {$url}\n");
+        exit(1);
+    }
+}
+
+$parsed = Parser::parseProductPage((string) $body);
+if (($parsed['title'] ?? null) === null) {
+    fwrite(STDERR, "error: no title parsed — was the response the SPA shell?\n");
+    exit(1);
+}
+$parsed['source_url'] = $url;
+
+Database::boot($opts['database'] ?? null);
+$bookId = (new CanonicalBookRepository())->upsert($parsed);
+
+printf("books id=%d  %s\n", $bookId, (string) $parsed['title']);

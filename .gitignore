@@ -3,8 +3,8 @@ vendor/
 composer.phar
 .phpunit.result.cache
 .phpunit.cache/
-php/dashboard/storage/*.key
-php/dashboard/bootstrap/cache/*.php
+/storage/*.key
+/bootstrap/cache/*.php
 
 # Python — the stack was removed on 2026-08-26 (tag python-final). These stay
 # because a stale .venv/ and __pycache__/ are still on disk locally, and one
@@ -41,3 +41,27 @@ _prototypes/
 # Env files
 .env
 .worktrees/
+
+# Laravel — merged in when the application moved to the repository root.
+.env.backup
+.env.production
+.phpactor.json
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
