@@ -1,31 +1,9 @@
 #!/usr/bin/env bash
-#
-# The phase-1 gate: does the PHP baseline actually reproduce the schema?
-#
-# Creates a scratch database on the TEST cluster, applies the PHP migrations
-# into it with `bin/migrate`, then dumps both it and the reference schema,
-# normalises the two dumps and diffs them. Exit code is non-zero on any
-# difference, so this works as a gate rather than as a report.
-#
-#   tools/schema_gate.sh
-#   REFERENCE_DATABASE_URL=… SCRATCH_CLUSTER_URL=… tools/schema_gate.sh
-#   SCHEMA_MIGRATIONS_DIR=/tmp/sabotaged tools/schema_gate.sh
-#
-# The reference is only ever read — one `pg_dump --schema-only`. The scratch
-# database is created on, and dropped from, the test cluster, and the gate
-# refuses outright to create one on 5432.
-#
-# What it catches that a Python-model-derived comparison does not: enums,
-# partial unique indexes, CHECK expressions, and FK actions. Fix #7 in
-# docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md is there
-# because a missing partial unique index made a dead validator check look
-# alive for months.
 
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 app_root="$(cd "$here/.." && pwd)"
-# shellcheck source=./pg_client.sh
 . "$here/pg_client.sh"
 
 PHP_BIN="${PHP_BIN:-/opt/homebrew/opt/php@8.4/bin/php}"
@@ -72,10 +50,6 @@ pg_psql "$SCRATCH_CLUSTER_URL" -c "CREATE DATABASE \"$SCRATCH_DB\"" > /dev/null
 "$PHP_BIN" "$app_root/bin/migrate" apply --database="$scratch_url" \
     ${SCHEMA_MIGRATIONS_DIR:+--dir="$SCHEMA_MIGRATIONS_DIR"}
 
-# The migrator's own ledger is the one table PHP owns and Alembic has never
-# heard of, so it is excluded from BOTH sides rather than from the scratch
-# side only — an asymmetric exclusion is how a gate starts comparing two
-# different things.
 dump() {
     pg_dump_schema "$1" --exclude-table=public.php_schema_migrations \
         | "$here/schema_normalize.sh"
@@ -100,6 +74,5 @@ echo "  - reference, + PHP baseline"
 echo
 cat "$work/diff.txt"
 echo
-# Minus the two `---` / `+++` file headers, which are diff's own.
 echo "schema-gate: FAIL ($(( $(grep -c '^[-+]' "$work/diff.txt") - 2 )) differing lines)"
 exit 1

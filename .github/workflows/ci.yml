@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# PHP only. This workflow ran ruff, mypy and pytest until the Python stack was
-# removed; the three composer projects and their goldens are the suite now.
 env:
   PHP_VERSION: "8.4"
 
@@ -15,21 +13,16 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql, dom
           coverage: none
-      # What `make lint` does. Deliberately not `pint --test`: the codebase
-      # has never been pint-formatted (24 files differ on concat spacing,
-      # import order and PHPUnit method casing), so gating on it would mean a
-      # reformatting sweep, not a lint.
-      - name: Syntax-check every file
-        run: |
-          find app bootstrap config database routes tests -name '*.php' -print0 \
-            | xargs -0 -n1 -P4 php -l > /dev/null
-          # The bin scripts are PHP without a .php suffix, so find misses them.
-          for f in bin/*; do php -l "$f" > /dev/null; done
+      - name: Install
+        run: composer install --no-interaction --no-progress
+      - name: Quality gates
+        run: make lint PHP=php COMPOSER=composer
 
   test:
     runs-on: ubuntu-latest
@@ -39,8 +32,6 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          # The suite's default target. Every fixture is planted by the tests
-          # themselves, so an empty database with the schema applied is enough.
           POSTGRES_DB: book_scraper_php_test
         ports:
           - 5433:5432
@@ -50,7 +41,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
@@ -60,18 +51,11 @@ jobs:
       - name: Install
         run: composer install --no-interaction --no-progress
 
-      # The baseline in database/schema is the whole schema, so this builds it
-      # from empty.
-      # Alembic used to own it; the baseline is a dump of what it produced, and
-      # tools/schema_gate.sh is what proves the two still agree.
       - name: Apply the schema
         run: php bin/migrate apply --database=$DATABASE_URL
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 
-      # All four suites — Unit, Feature, Library, Crawler — in one process.
-      # The Feature goldens build their own fixture-only database
-      # (bin/fixture-db), so this needs the cluster, not just this one database.
       - name: Test suite
         run: vendor/bin/phpunit
         env:

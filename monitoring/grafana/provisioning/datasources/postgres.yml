@@ -1,6 +1,3 @@
-# Grafana data source — Postgres (book_scraper DB).
-# Credentials reuse the dev creds from docker-compose.yml. A dedicated
-# read-only role is deferred to a future cleanup.
 apiVersion: 1
 
 deleteDatasources:

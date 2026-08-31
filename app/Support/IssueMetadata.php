@@ -4,16 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-/**
- * Issue severity and human-readable descriptions.
- *
- * GENERATED from book_scraper/dashboard/queries.py by
- * php/tools/dump_issue_metadata.py. Do not edit by hand — a type added on
- * the Python side would otherwise render as an undescribed "warning" here.
- */
 final class IssueMetadata
 {
-    /** @var array<string, string> */
     public const SEVERITY = [
         'active_no_price' => 'critical',
         'attribute_invalid_value' => 'warning',
@@ -56,7 +48,6 @@ final class IssueMetadata
         'zero_price' => 'critical',
     ];
 
-    /** @var array<string, string> */
     public const DESCRIPTIONS = [
         'active_no_price' => 'Book is marked active but has no price on record. The pricing element may have moved or the product was unpublished from the shop.',
         'attribute_invalid_value' => 'A property value doesn\'t match the allowed enum or regex in the shop config.',
@@ -99,7 +90,6 @@ final class IssueMetadata
         'zero_price' => 'Price parsed as 0.00. Parser probably matched an empty or wrong element.',
     ];
 
-    /** Unknown types default to `warning` — the same fallback Python uses. */
     public static function severity(string $issue): string
     {
         return self::SEVERITY[$issue] ?? 'warning';
@@ -110,7 +100,7 @@ final class IssueMetadata
         return self::DESCRIPTIONS[$issue] ?? '';
     }
 
-    /** @return list<string> issue types at the given severity */
+    /** @return list<string> */
     public static function typesWithSeverity(string $severity): array
     {
         return array_keys(array_filter(

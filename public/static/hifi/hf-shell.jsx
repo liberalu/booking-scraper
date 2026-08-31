@@ -1,4 +1,3 @@
-// Hi-fi shell — sidebar + topbar + page head. Light mode.
 
 function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title, subtitle, actions, breadcrumb }) {
   const HF = getHF();
@@ -43,7 +42,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
 
   return (
     <div style={{ display: 'flex', height: '100%', background: 'var(--hf-bg)', color: 'var(--hf-ink)', fontFamily: 'var(--hf-sans)', fontSize: 13, fontFeatureSettings: '"cv11","ss01"' }}>
-      {/* Sidebar */}
+
       <aside style={{
         width: sidebarW, flexShrink: 0,
         background: 'var(--hf-sidebar)',
@@ -51,7 +50,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
         display: 'flex', flexDirection: 'column',
         transition: 'width 160ms ease',
       }}>
-        {/* Brand */}
+
         <div style={{
           height: 56, padding: collapsed ? 0 : '0 14px',
           display: 'flex', alignItems: 'center', gap: 10,
@@ -74,7 +73,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           )}
         </div>
 
-        {/* Search */}
+
         {!collapsed && (
           <div style={{ padding: '12px 10px 6px' }}>
             <button onClick={openCmdK} aria-label="Open command palette" className="hf-btn" style={{
@@ -97,7 +96,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           </div>
         )}
 
-        {/* Nav */}
+
         <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: collapsed ? '8px 4px' : '8px 10px' }}>
           {navGroups.map(g => (
             <div key={g.group} style={{ marginBottom: 14 }}>
@@ -159,7 +158,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           ))}
         </div>
 
-        {/* Footer: status + collapse */}
+
         <div style={{
           borderTop: `1px solid ${'var(--hf-border-faint)'}`,
           padding: collapsed ? '10px 0' : '12px 12px',
@@ -187,9 +186,9 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
         </div>
       </aside>
 
-      {/* Main */}
+
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Topbar */}
+
         <div style={{
           height: 56, flexShrink: 0,
           padding: `0 var(--hf-content-x)`,
@@ -220,7 +219,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           </div>
         </div>
 
-        {/* Page head */}
+
         <div style={{
           padding: `24px var(--hf-content-x) 18px`,
           borderBottom: `1px solid ${'var(--hf-border)'}`,
@@ -234,7 +233,7 @@ function HFShell({ collapsed, setCollapsed, setPage, activePage, children, title
           {actions && <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>{actions}</div>}
         </div>
 
-        {/* Content */}
+
         <div className="hf-scroll" style={{ flex: 1, overflow: 'auto', padding: `20px var(--hf-content-x) 48px`, background: 'var(--hf-bg)' }}>
           <div style={{ minWidth: 1100 }}>
             {children}

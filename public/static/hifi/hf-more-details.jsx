@@ -1,8 +1,5 @@
-// Hi-fi Schedule detail + tab content panels (Runs, Prices)
 
-// ═══════════════════════ Shared tab panels ═══════════════════════
 
-// Runs panel for shop/book — lightweight runs table scoped to entity
 function HFRunsPanel({ goto, scope = 'shop', entity = 'vaga' }) {
   const HF = getHF();
 
@@ -39,7 +36,6 @@ function HFRunsPanel({ goto, scope = 'shop', entity = 'vaga' }) {
   );
 }
 
-// Prices panel — for shop book detail (full price history)
 function HFPricesPanel() {
   const HF = getHF();
 
@@ -91,7 +87,6 @@ function HFPricesPanel() {
   );
 }
 
-// ═══════════════════════ Schedule detail page ═══════════════════════
 
 function HFScheduleDetail({ nav, goto, params }) {
   const HF = getHF();
@@ -188,7 +183,7 @@ function HFScheduleDetail({ nav, goto, params }) {
         { label:'Last run',     value: stats.last_run_ago || '—', delta: <span style={{color: lastStatus==='fail'? 'var(--hf-err-ink)' : 'var(--hf-ok-ink)'}}>{lastStatus === 'fail' ? 'failed' : lastStatus === 'ok' ? 'ok' : '—'}</span>, tone: lastStatus==='fail'? 'err' : lastStatus==='ok'? 'ok' : undefined },
       ]}/>
 
-      {/* Schedule card + upcoming runs */}
+
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Schedule" sub="when this job fires">
           <div style={{padding:'var(--hf-card-p)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
@@ -252,7 +247,7 @@ function HFScheduleDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Tabs: runs / logs */}
+
       <HFCard style={{marginBottom:'var(--hf-gap)'}}>
         <div style={{padding:`0 var(--hf-card-p)`}}>
           <HFTabs active={tab} onChange={setTab} tabs={[

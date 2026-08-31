@@ -4,66 +4,45 @@ declare(strict_types=1);
 
 namespace App\Parsers\Almalittera;
 
+use App\Books\BookClassifier;
+use App\Crawler\CrawlerTypes;
+use App\Parsers\DiscoveryParser;
+use App\Parsers\ProductParser;
 use App\Support\CoverType;
-use App\Parsers\Vaga\Parser as BookClassifier;
 
-/**
- * Port of book_scraper/spiders/almalittera/parsers.py.
- *
- * Shopify store. Discovery reads the public `/products.json` (rich but no
- * ISBN/year/pages); the product page carries those in a JSON-LD block plus
- * an HTML spec table.
- *
- * The book/non-book classifier is shared with vaga — Python imports
- * `classify_book_product` from the vaga module for the same reason.
- */
-final class Parser
+/** @phpstan-import-type ParsedItem from CrawlerTypes */
+final class Parser implements DiscoveryParser, ProductParser
 {
     private const BASE_URL = 'https://almalittera.lt';
 
-    /**
-     * Shopify's vendor value for products with no author — notebooks,
-     * stationery, planners. Treated as absent so the classifier can drop them.
-     */
     private const PLACEHOLDER_VENDORS = ['nėra autoriaus', 'nera autoriaus'];
 
-    /** Shopify product_type / tag values for non-paper editions. */
     private const EBOOK_MARKERS = ['EPUB'];
+
     private const AUDIO_TYPES = ['MP3', 'AUDIOBOOK'];
 
-    // --------------------------------------------------------------- sitemap
-
-    /** Discovery uses products.json, not a sitemap. */
-    public static function parseSitemapUrls(string $xml): array
+    /** @return list<string> */
+    public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
     {
         return [];
     }
 
-    // -------------------------------------------------------- category page
-
-    /**
-     * A Shopify `/products.json` page.
-     *
-     * `total` is null: the endpoint exposes no count, so the spider chains
-     * page by page exactly as it does for vaga's HTML.
-     *
-     * @return array{products: list<array<string, mixed>>, total: null}
-     */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseCategoryPage(string $body): array
     {
         $data = json_decode($body, true);
         $raw = is_array($data) ? ($data['products'] ?? null) : null;
-        if (!is_array($raw)) {
+        if (! is_array($raw)) {
             return ['products' => [], 'total' => null];
         }
 
         $products = [];
         foreach ($raw as $item) {
-            if (!is_array($item)) {
+            if (! is_array($item)) {
                 continue;
             }
             $handle = $item['handle'] ?? null;
-            if (!is_string($handle) || $handle === '') {
+            if (! is_string($handle) || $handle === '') {
                 continue;
             }
 
@@ -74,7 +53,7 @@ final class Parser
             $properties = $tags === [] ? [] : ['shopify_tags' => $tags];
 
             $products[] = [
-                'url' => self::BASE_URL . '/products/' . $handle,
+                'url' => self::BASE_URL.'/products/'.$handle,
                 'title' => self::unescape($item['title'] ?? null),
                 'author' => self::vendorToAuthor($item['vendor'] ?? null),
                 'price' => self::stringOrNull($variant['price'] ?? null),
@@ -91,23 +70,7 @@ final class Parser
         return ['products' => $products, 'total' => null];
     }
 
-    // --------------------------------------------------------- product page
-
-    /**
-     * A product page. Two server-rendered sources:
-     *
-     *  - JSON-LD `Product`: title, description, image, price, availability,
-     *    brand (author), gtin13 (= ISBN-13). `offers` is sometimes a list,
-     *    one entry per variant; the first is used.
-     *  - HTML spec block: ISBN/EAN, SKU, page count, cover type, year,
-     *    translator.
-     *
-     * The page also carries a `BreadcrumbList`, but on this theme it is only
-     * `Home → <product name>` — the leaf is the product itself, so it yields
-     * no real category and is ignored.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return ParsedItem */
     public static function parseProductPage(string $html): array
     {
         $data = [
@@ -133,19 +96,17 @@ final class Parser
         foreach ($blocks[1] as $block) {
             $cleaned = preg_replace('/[\x00-\x1f]+/', ' ', trim($block)) ?? '';
             $ld = json_decode($cleaned, true);
-            if (!is_array($ld) || array_is_list($ld)) {
+            if (! is_array($ld) || array_is_list($ld)) {
                 continue;
             }
 
-            $ldTypes = array_map('strval', (array) ($ld['@type'] ?? []));
+            $ldTypes = self::stringList($ld['@type'] ?? null);
             $schemaTypes = [...$schemaTypes, ...$ldTypes];
 
-            if (!in_array('Product', $ldTypes, true) && !in_array('Book', $ldTypes, true)) {
+            if (! in_array('Product', $ldTypes, true) && ! in_array('Book', $ldTypes, true)) {
                 continue;
             }
 
-            // First value wins throughout: a later block must not overwrite
-            // what the canonical Product block already supplied.
             $data['title'] ??= self::unescape($ld['name'] ?? null);
             $data['description'] ??= self::unescape($ld['description'] ?? null);
 
@@ -181,8 +142,9 @@ final class Parser
             }
 
             if ($data['isbn'] === null) {
-                $gtin = ($ld['gtin13'] ?? null) ?: ($ld['isbn'] ?? null);
-                if (is_string($gtin) && $gtin !== '') {
+                $gtin = self::stringOrNull($ld['gtin13'] ?? null)
+                    ?? self::stringOrNull($ld['isbn'] ?? null);
+                if ($gtin !== null) {
                     $data['isbn'] = $gtin;
                 }
             }
@@ -190,30 +152,28 @@ final class Parser
 
         $specs = self::parseSpecs($html);
 
-        $data['isbn'] ??= ($specs['ISBN kodas'] ?? null) ?: null;
-        $data['isbn'] ??= ($specs['EAN kodas'] ?? null) ?: null;
-        $data['sku'] ??= ($specs['SKU'] ?? null) ?: null;
+        $data['isbn'] ??= self::stringOrNull($specs['ISBN kodas'] ?? null);
+        $data['isbn'] ??= self::stringOrNull($specs['EAN kodas'] ?? null);
+        $data['sku'] ??= self::stringOrNull($specs['SKU'] ?? null);
         if (isset($specs['Puslapių skaičius'])) {
             $data['pages'] = self::intOrNull($specs['Puslapių skaičius']);
         }
         if (isset($specs['Viršelio tipas'])) {
-            $data['cover_type'] = $specs['Viršelio tipas'] ?: null;
+            $data['cover_type'] = self::stringOrNull($specs['Viršelio tipas']);
         }
         if (isset($specs['Vertėjas'])) {
-            $data['translator'] = $specs['Vertėjas'] ?: null;
+            $data['translator'] = self::stringOrNull($specs['Vertėjas']);
         }
         if (isset($specs['Leidimo metai'])) {
             $data['year'] = self::yearFromLabel($specs['Leidimo metai']);
         }
 
-        // The title is the only e-book signal on the product page — Shopify's
-        // product_type is not rendered here.
         $titleLower = is_string($data['title']) ? mb_strtolower($data['title'], 'UTF-8') : '';
         $isEbook = str_contains($titleLower, 'e.knyga') || str_contains($titleLower, 'epub');
 
         if ($isEbook) {
             $data['format'] = 'ebook';
-        } elseif (is_string($data['cover_type']) && $data['cover_type'] !== '') {
+        } elseif (is_string($data['cover_type'])) {
             $data['format'] = CoverType::toFormat($data['cover_type']);
         } elseif ($data['pages'] !== null) {
             $data['format'] = 'book';
@@ -223,9 +183,7 @@ final class Parser
         sort($schemaTypes);
         $data['schema_types'] = $schemaTypes;
 
-        // Shared with vaga on purpose — the Python module imports the same
-        // classifier rather than duplicating the scoring.
-        $classification = BookClassifier::classifyBookProduct($data);
+        $classification = BookClassifier::classify($data);
         $data['is_book_product'] = $classification['is_book_product'];
         $data['book_score'] = $classification['score'];
         $data['book_score_reasons'] = $classification['reasons'];
@@ -241,13 +199,7 @@ final class Parser
         return $data;
     }
 
-    // -------------------------------------------------------------- helpers
-
-    /**
-     * Label => value pairs from the spec table.
-     *
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     private static function parseSpecs(string $html): array
     {
         if (preg_match(
@@ -260,7 +212,7 @@ final class Parser
 
         preg_match_all(
             '/<span class="product-full-width__description-specs-name">\s*'
-            . '([^<]+?)\s*<\/span>\s*([^<]*?)<\/p>/us',
+            .'([^<]+?)\s*<\/span>\s*([^<]*?)<\/p>/us',
             $block[1],
             $pairs,
             PREG_SET_ORDER
@@ -275,16 +227,10 @@ final class Parser
         return $specs;
     }
 
-    /**
-     * Map Shopify product_type + tags to our `type`.
-     *
-     * Everything unrecognised starts as `book`; the scan phase's classifier
-     * downgrades notebooks and stationery to non_book.
-     */
     public static function bookTypeFromShopify(mixed $productType, mixed $tags): string
     {
         $type = is_string($productType) ? strtoupper(trim($productType)) : '';
-        $tagSet = array_map('strtoupper', self::tagList($tags));
+        $tagSet = array_map(static fn (string $tag): string => strtoupper($tag), self::tagList($tags));
 
         if ($type === 'EPUB' || array_intersect(self::EBOOK_MARKERS, $tagSet) !== []) {
             return 'ebook';
@@ -296,12 +242,7 @@ final class Parser
         return 'book';
     }
 
-    /**
-     * Tags arrive as a list from products.json and as a comma-separated
-     * string from the per-product endpoint.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     private static function tagList(mixed $tags): array
     {
         if (is_array($tags)) {
@@ -317,7 +258,7 @@ final class Parser
 
     public static function vendorToAuthor(mixed $vendor): ?string
     {
-        if (!is_string($vendor)) {
+        if (! is_string($vendor)) {
             return null;
         }
         $cleaned = trim($vendor);
@@ -330,7 +271,6 @@ final class Parser
             : $cleaned;
     }
 
-    /** `Leidimo metai` renders as "YYYY MM DD"; only the year is stored. */
     private static function yearFromLabel(string $value): ?int
     {
         return preg_match('/^\s*(\d{4})/', $value, $m) === 1 ? (int) $m[1] : null;
@@ -338,7 +278,7 @@ final class Parser
 
     private static function firstImageSrc(mixed $images): ?string
     {
-        if (!is_array($images) || $images === []) {
+        if (! is_array($images) || $images === []) {
             return null;
         }
         $first = $images[0] ?? null;
@@ -355,16 +295,35 @@ final class Parser
 
     private static function stringOrNull(mixed $value): ?string
     {
-        return ($value === null || $value === '') ? null : (string) $value;
+        if (is_string($value)) {
+            return $value === '' ? null : $value;
+        }
+
+        return is_int($value) || is_float($value) ? (string) $value : null;
     }
 
     private static function trimmedOrNull(mixed $value): ?string
     {
-        return ($value === null || $value === '') ? null : trim((string) $value);
+        $string = self::stringOrNull($value);
+
+        return $string === null ? null : trim($string);
     }
 
     private static function intOrNull(string $value): ?int
     {
         return preg_match('/^-?\d+$/', trim($value)) === 1 ? (int) trim($value) : null;
+    }
+
+    /** @return list<string> */
+    private static function stringList(mixed $value): array
+    {
+        if (is_string($value)) {
+            return [$value];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter($value, is_string(...)));
     }
 }

@@ -6,20 +6,26 @@ namespace App\Crawler;
 
 use App\Crawler\Scheduling\SubSecondClock;
 use App\Crawler\Scheduling\SubSecondRequestScheduler;
+use App\Repositories\CrawlerRetryRepository;
 use GuzzleHttp\Client as GuzzleClient;
-use RoachPHP\Http\Client as RoachClient;
-use RoachPHP\Http\ClientInterface;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use League\Container\Container as LeagueContainer;
 use League\Container\ReflectionContainer;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Monolog\Logger;
 use Psr\Container\ContainerInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use RoachPHP\Core\Engine;
 use RoachPHP\Core\EngineInterface;
 use RoachPHP\Core\Runner;
 use RoachPHP\Core\RunnerInterface;
+use RoachPHP\Http\Client as RoachClient;
+use RoachPHP\Http\ClientInterface;
 use RoachPHP\ItemPipeline\ItemPipeline;
 use RoachPHP\ItemPipeline\ItemPipelineInterface;
 use RoachPHP\Scheduling\RequestSchedulerInterface;
@@ -27,14 +33,6 @@ use RoachPHP\Scheduling\Timing\ClockInterface;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
-/**
- * Roach's own DefaultContainer is `final` and `@internal`, so swapping the
- * scheduler means providing a container rather than extending theirs.
- *
- * The only substantive changes are the scheduler and clock: both defaults
- * truncate the request delay to whole seconds, which five of six shops pace
- * below (see Scheduling\SubSecondRequestScheduler).
- */
 final class RoachContainer implements ContainerInterface
 {
     private readonly LeagueContainer $container;
@@ -46,9 +44,12 @@ final class RoachContainer implements ContainerInterface
         private readonly float $requestTimeout,
         private readonly float $connectTimeout,
         private readonly string $userAgent,
+        private readonly ?int $runId = null,
+        private readonly CrawlerRetryRepository $retries = new CrawlerRetryRepository,
+        private readonly CrawlerContext $crawler = new CrawlerContext,
     ) {
-        $this->container = (new LeagueContainer())->delegate(new ReflectionContainer());
-        $this->scheduler = new SubSecondRequestScheduler(new SubSecondClock());
+        $this->container = (new LeagueContainer)->delegate(new ReflectionContainer);
+        $this->scheduler = new SubSecondRequestScheduler(new SubSecondClock);
         $this->scheduler->setDelaySeconds($this->requestDelaySeconds);
 
         $this->registerBindings();
@@ -72,11 +73,11 @@ final class RoachContainer implements ContainerInterface
     private function registerBindings(): void
     {
         $this->container->addShared(ContainerInterface::class, $this->container);
-        // WARNING, not INFO: roach's LoggerExtension logs each scraped item
-        // in full, and a book's description alone is a screenful. The CLI
-        // prints its own progress summary instead. Raise with
-        // CRAWLER_LOG_LEVEL=info when debugging a run.
-        $level = Level::fromName(getenv('CRAWLER_LOG_LEVEL') ?: 'warning');
+        $this->container->addShared(CrawlerContext::class, $this->crawler);
+        $this->container->addShared(IssueBuffer::class, $this->crawler->issues());
+
+        $configuredLevel = getenv('CRAWLER_LOG_LEVEL');
+        $level = $this->logLevel(is_string($configuredLevel) ? $configuredLevel : 'warning');
         $this->container->addShared(
             LoggerInterface::class,
             static fn (): LoggerInterface => (new Logger('book-scraper'))
@@ -85,38 +86,104 @@ final class RoachContainer implements ContainerInterface
         $this->container->addShared(EventDispatcher::class, EventDispatcher::class);
         $this->container->addShared(EventDispatcherInterface::class, EventDispatcher::class);
 
-        // The two swapped bindings.
-        $this->container->addShared(ClockInterface::class, fn (): ClockInterface => new SubSecondClock());
+        $this->container->addShared(ClockInterface::class, fn (): ClockInterface => new SubSecondClock);
         $this->container->addShared(RequestSchedulerInterface::class, fn (): RequestSchedulerInterface => $this->scheduler);
 
-        // roach's own Http\ClientInterface, wrapping a Guzzle client that
-        // carries the shop's timeouts. The UA matches what the Python
-        // crawler sends — a different UA can get different HTML.
         $this->container->addShared(
             ClientInterface::class,
-            // Wrapped so one unreachable URL is recorded and skipped rather
-            // than aborting the run — see RecordingClient.
-            fn (): ClientInterface => new RecordingClient(new RoachClient(new GuzzleClient([
-                'timeout' => $this->requestTimeout,
-                'connect_timeout' => $this->connectTimeout,
-                'headers' => ['User-Agent' => $this->userAgent],
-            ]))),
+            fn (): ClientInterface => new RecordingClient(
+                new RoachClient($this->httpClient()),
+                $this->crawler->issues(),
+            ),
         );
 
         $this->container->add(
             ItemPipelineInterface::class,
-            fn (): ItemPipelineInterface => $this->container->get(ItemPipeline::class),
+            fn (): ItemPipelineInterface => $this->itemPipeline(),
         );
         $this->container->add(
             EngineInterface::class,
-            fn (): EngineInterface => $this->container->get(Engine::class),
+            fn (): EngineInterface => $this->engine(),
         );
         $this->container->add(
             RunnerInterface::class,
             fn (): RunnerInterface => new Runner(
                 $this->container,
-                $this->container->get(EngineInterface::class),
+                $this->engine(),
             ),
         );
+    }
+
+    private function httpClient(): GuzzleClient
+    {
+        $stack = HandlerStack::create();
+        $stack->push(Middleware::retry(
+            function (
+                int $retries,
+                RequestInterface $request,
+                ?ResponseInterface $response,
+                ?\Throwable $exception,
+            ): bool {
+                $retry = $retries < 2 && (
+                    $exception instanceof ConnectException
+                    || $response?->getStatusCode() === 429
+                    || ($response !== null && $response->getStatusCode() >= 500)
+                );
+                if ($retry && $this->runId !== null) {
+                    $this->retries->record(
+                        $this->runId,
+                        (string) $request->getUri(),
+                        $retries + 1,
+                        $response?->getStatusCode(),
+                        $exception?->getMessage(),
+                    );
+                }
+
+                return $retry;
+            },
+            static fn (int $retries): int => 500 * (2 ** max(0, $retries - 1)),
+        ));
+
+        return new GuzzleClient([
+            'handler' => $stack,
+            'timeout' => $this->requestTimeout,
+            'connect_timeout' => $this->connectTimeout,
+            'headers' => ['User-Agent' => $this->userAgent],
+        ]);
+    }
+
+    private function itemPipeline(): ItemPipelineInterface
+    {
+        $pipeline = $this->container->get(ItemPipeline::class);
+        if (! $pipeline instanceof ItemPipelineInterface) {
+            throw new \RuntimeException('Roach item pipeline binding is invalid.');
+        }
+
+        return $pipeline;
+    }
+
+    private function engine(): EngineInterface
+    {
+        $engine = $this->container->get(Engine::class);
+        if (! $engine instanceof EngineInterface) {
+            throw new \RuntimeException('Roach engine binding is invalid.');
+        }
+
+        return $engine;
+    }
+
+    private function logLevel(string $value): Level
+    {
+        return match (strtolower($value)) {
+            'debug' => Level::Debug,
+            'info' => Level::Info,
+            'notice' => Level::Notice,
+            'warning' => Level::Warning,
+            'error' => Level::Error,
+            'critical' => Level::Critical,
+            'alert' => Level::Alert,
+            'emergency' => Level::Emergency,
+            default => Level::Warning,
+        };
     }
 }

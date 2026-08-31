@@ -4,24 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\DB;
+use App\Repositories\ShopSettingsRepository;
 use Throwable;
 
-/**
- * Operator overrides from the `shop_settings` table.
- *
- * The top tier of the rate-limit precedence chain: a DB row beats the shop's
- * TOML, which beats the built-in fallback. It exists so a shop that starts
- * rate-limiting mid-crawl can be slowed down with one INSERT, without a
- * redeploy — which is the whole point, and why reading only the TOML (as this
- * port did) quietly removed the incident lever.
- *
- * Resolved per key, not per block: a row for `download_delay` does not stop
- * `concurrent_requests_per_domain` falling through to the TOML.
- */
 final class ShopSettings
 {
-    /** Same clamps the Python handler applies, so a bad row cannot stall or flood. */
     private const DELAY_MIN = 0.1;
 
     private const DELAY_MAX = 60.0;
@@ -38,7 +25,6 @@ final class ShopSettings
         self::$cache = [];
     }
 
-    /** The effective delay for a shop, in seconds. */
     public static function downloadDelay(string $shop, float $fromToml): float
     {
         $value = self::float($shop, 'download_delay', $fromToml);
@@ -46,7 +32,6 @@ final class ShopSettings
         return max(self::DELAY_MIN, min(self::DELAY_MAX, $value));
     }
 
-    /** The effective in-flight request cap for a shop. */
     public static function concurrency(string $shop, int $fromToml): int
     {
         $value = (int) self::float($shop, 'concurrent_requests_per_domain', (float) $fromToml);
@@ -60,7 +45,7 @@ final class ShopSettings
         if ($row === null) {
             return $default;
         }
-        if (!is_numeric($row['value'])) {
+        if (! is_numeric($row['value'])) {
             fwrite(STDERR, sprintf(
                 "  shop_settings.%s for %s is not numeric (%s) — using %s\n",
                 $key,
@@ -75,9 +60,7 @@ final class ShopSettings
         return (float) $row['value'];
     }
 
-    /**
-     * @return array<string, array{value: string, type: string}>
-     */
+    /** @return array<string, array{value: string, type: string}> */
     private static function rows(string $shop): array
     {
         if (array_key_exists($shop, self::$cache)) {
@@ -85,20 +68,9 @@ final class ShopSettings
         }
 
         try {
-            $rows = DB::table('shop_settings')
-                ->join('shops', 'shops.id', '=', 'shop_settings.shop_id')
-                ->where('shops.name', $shop)
-                ->get(['shop_settings.key', 'shop_settings.value', 'shop_settings.type']);
-            $resolved = [];
-            foreach ($rows as $row) {
-                $resolved[(string) $row->key] = [
-                    'value' => (string) $row->value,
-                    'type' => (string) $row->type,
-                ];
-            }
+            $resolved = (new ShopSettingsRepository)->forShop($shop);
         } catch (Throwable $e) {
-            // An unreadable override table must not stop a crawl: fall through
-            // to the TOML, which is what the operator had before.
+
             fwrite(STDERR, "  could not read shop_settings: {$e->getMessage()}\n");
             $resolved = [];
         }

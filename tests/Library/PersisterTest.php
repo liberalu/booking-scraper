@@ -6,21 +6,18 @@ namespace Tests\Library;
 
 use App\Crawler\ItemBuilder;
 use App\Crawler\Persister;
-use App\Support\Database;
 use App\Models\DiscoveredUrl;
 use App\Models\Price;
 use App\Models\Shop;
 use App\Models\ShopBookAttribute;
 use App\Parsers\Vaga\Parser;
+use App\Repositories\CrawlerPersistenceRepository;
+use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
-/**
- * Drives the real vaga fixture through the full pipeline and asserts the
- * rows that come out — the end-to-end check that the parser, repository and
- * pipeline agree.
- */
 final class PersisterTest extends TestCase
 {
     private static ?Capsule $capsule = null;
@@ -37,10 +34,8 @@ final class PersisterTest extends TestCase
         );
         DB::beginTransaction();
 
-        $this->persister = new Persister();
-        // A dedicated shop, not the real 'vaga': committed rows from a live
-        // crawl or from tools/crawl_diff.py would otherwise make these
-        // assertions depend on database history.
+        $this->persister = new Persister;
+
         $this->shopId = Shop::firstOrCreate(
             ['name' => 'persister-test'],
             ['base_url' => 'https://persister.test']
@@ -55,7 +50,7 @@ final class PersisterTest extends TestCase
     private function fixture(): array
     {
         return Parser::parseProductPage(
-            (string) file_get_contents(__DIR__ . '/../../fixtures/vaga_product_page.html')
+            (string) file_get_contents(__DIR__.'/../fixtures/vaga_product_page.html')
         );
     }
 
@@ -108,8 +103,6 @@ final class PersisterTest extends TestCase
         $this->persister->persist($this->shopId, $url, $parsed);
         $this->persister->persist($this->shopId, $url, $parsed);
 
-        // Python inserts unconditionally when price is not null — "we looked
-        // and it was unchanged" is itself a data point.
         self::assertSame(
             3,
             Price::where('shop_book_id', $first->shopBook->id)->count()
@@ -141,7 +134,7 @@ final class PersisterTest extends TestCase
             ->firstOrFail();
 
         self::assertSame($result->shopBook->id, $row->shop_book_id);
-        // The fixture has an ISBN, so the row is complete, not partial.
+
         self::assertSame('product', $row->url_type);
     }
 
@@ -180,8 +173,6 @@ final class PersisterTest extends TestCase
         $url = 'https://persister.test/sticky';
         $this->persister->persist($this->shopId, $url, $this->fixture());
 
-        // A later thin scrape with no ISBN must not undo the promotion —
-        // otherwise the delta scan revisits it forever.
         $partial = $this->fixture();
         $partial['isbn'] = null;
         $this->persister->persist($this->shopId, $url, $partial);
@@ -213,8 +204,7 @@ final class PersisterTest extends TestCase
 
     public function test_item_builder_keeps_parser_supplied_properties(): void
     {
-        // Shop-specific extras must survive into attributes, not be dropped
-        // in favour of the five hardcoded keys.
+
         $built = ItemBuilder::fromParsed([
             'title' => 'X',
             'properties' => ['language' => 'lietuvių', 'ean' => '123'],
@@ -225,5 +215,24 @@ final class PersisterTest extends TestCase
             ['language' => 'lietuvių', 'ean' => '123', 'pages' => 100],
             $built['properties']
         );
+    }
+
+    public function test_repository_transaction_rolls_back_every_write_on_failure(): void
+    {
+        $name = 'rollback-'.bin2hex(random_bytes(6));
+        $repository = new CrawlerPersistenceRepository;
+
+        try {
+            $repository->transaction(function () use ($name): array {
+                Shop::create(['name' => $name, 'base_url' => "https://{$name}.test"]);
+
+                throw new RuntimeException('force rollback');
+            });
+            self::fail('transaction failure was swallowed');
+        } catch (RuntimeException $exception) {
+            self::assertSame('force rollback', $exception->getMessage());
+        }
+
+        self::assertFalse(Shop::where('name', $name)->exists());
     }
 }

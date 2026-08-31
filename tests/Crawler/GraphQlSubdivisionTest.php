@@ -5,30 +5,22 @@ declare(strict_types=1);
 namespace Tests\Crawler;
 
 use App\Crawler\DiscoverSpider;
-use App\Support\Database;
 use App\Discovery\GraphQlUrls;
+use App\Support\Database;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use RoachPHP\Http\Request;
 use RoachPHP\Http\Response;
 
-/**
- * Adaptive subdivision: a 5xx on a GraphQL page is refetched as several
- * smaller pages rather than dropped.
- *
- * Magento's full-page cache misses on deep pages return transient 503s at
- * pageSize=50 under concurrency; the same range at pageSize=10 usually
- * succeeds. The arithmetic is the part worth pinning down — a wrong first
- * sub-page silently skips or re-fetches a slice of the catalogue.
- */
 final class GraphQlSubdivisionTest extends TestCase
 {
     private const BASE = 'https://www.pegasas.lt';
 
     private function spider(array $context = []): DiscoverSpider
     {
-        $spider = new DiscoverSpider();
+        $spider = new DiscoverSpider;
         $spider->withContext($context + [
             'shop' => 'pegasas',
             'strategy' => 'graphql',
@@ -42,9 +34,6 @@ final class GraphQlSubdivisionTest extends TestCase
         return $spider;
     }
 
-    /**
-     * @return list<array{page: int, page_size: int, subdivision_depth: int}>
-     */
     private function requestsFor(
         DiscoverSpider $spider,
         int $page,
@@ -71,7 +60,6 @@ final class GraphQlSubdivisionTest extends TestCase
     {
         $requests = $this->requestsFor($this->spider(), page: 3, pageSize: 50, depth: 0);
 
-        // 5 sub-pages at pageSize=10, then the next normal page.
         self::assertCount(6, $requests);
         self::assertSame(
             [11, 12, 13, 14, 15],
@@ -82,16 +70,11 @@ final class GraphQlSubdivisionTest extends TestCase
             self::assertSame(1, $sub['subdivision_depth']);
         }
 
-        // Pagination continues, or one bad page would end the crawl.
         self::assertSame(4, $requests[5]['page']);
         self::assertSame(50, $requests[5]['page_size']);
         self::assertSame(0, $requests[5]['subdivision_depth']);
     }
 
-    /**
-     * Page 3 at size 50 covers items 100..149. The sub-pages must cover
-     * exactly that range: pages 11..15 at size 10 are items 100..149.
-     */
     public function test_the_sub_pages_cover_exactly_the_failed_range(): void
     {
         $requests = $this->requestsFor($this->spider(), page: 3, pageSize: 50, depth: 0);
@@ -105,7 +88,7 @@ final class GraphQlSubdivisionTest extends TestCase
 
     public function test_an_already_subdivided_page_is_not_split_again(): void
     {
-        // Recursing here would multiply requests without bound.
+
         self::assertSame([], $this->requestsFor($this->spider(), page: 12, pageSize: 10, depth: 1));
     }
 
@@ -118,8 +101,6 @@ final class GraphQlSubdivisionTest extends TestCase
             depth: 0,
         );
 
-        // Sub-pages still fire — they cover a range already inside the cap —
-        // but page 4 does not.
         self::assertCount(5, $requests);
     }
 
@@ -132,7 +113,6 @@ final class GraphQlSubdivisionTest extends TestCase
             depth: 0,
         );
 
-        // factor is floored at 2, so 50 becomes 2 × 25.
         self::assertCount(3, $requests);
         self::assertSame(25, $requests[0]['page_size']);
         self::assertSame([3, 4], [$requests[0]['page'], $requests[1]['page']]);
@@ -140,18 +120,13 @@ final class GraphQlSubdivisionTest extends TestCase
 
     public function test_a_2xx_response_is_parsed_rather_than_subdivided(): void
     {
-        // An empty body parses to zero products, which ends the branch — the
-        // point is that no subdivision requests come out of a 200.
+
         self::assertSame(
             [],
             $this->requestsFor($this->spider(), page: 3, pageSize: 50, depth: 0, status: 200)
         );
     }
 
-    /**
-     * The Timeline card renders these events; without the row an operator
-     * sees a quiet run rather than a spider working around a bad backend.
-     */
     #[Group('db')]
     public function test_each_subdivision_is_recorded_on_the_run_timeline(): void
     {
@@ -168,7 +143,7 @@ final class GraphQlSubdivisionTest extends TestCase
                 'shop_id' => $shopId,
                 'phase' => 'discover_graphql',
                 'status' => 'running',
-                'started_at' => \Illuminate\Support\Carbon::now('UTC'),
+                'started_at' => Carbon::now('UTC'),
                 'urls_processed' => 0,
                 'items_added' => 0,
                 'items_updated' => 0,
@@ -190,8 +165,7 @@ final class GraphQlSubdivisionTest extends TestCase
                 ->first();
             self::assertNotNull($event);
             $payload = json_decode((string) $event->payload, true);
-            // assertEquals, not assertSame: the column is jsonb, which
-            // normalises key order on write.
+
             self::assertEquals([
                 'outcome' => 'subdivided',
                 'page' => 3,
@@ -202,7 +176,6 @@ final class GraphQlSubdivisionTest extends TestCase
                 'sub_size' => 10,
             ], $payload);
 
-            // A sub-page that fails again is recorded too, with its own outcome.
             $this->requestsFor(
                 $this->spider(['run_id' => $runId]),
                 page: 12,

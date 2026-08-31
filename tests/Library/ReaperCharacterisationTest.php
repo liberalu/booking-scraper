@@ -4,41 +4,21 @@ declare(strict_types=1);
 
 namespace Tests\Library;
 
-use App\Support\Database;
 use App\Runs\Reaper;
+use App\Support\Database;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * The reaper, pinned to behaviour Python agreed with.
- *
- * `make reaper-diff` plants zombie runs in two database clones, runs each
- * stack's reaper, and diffs six tables — which needs Python. So the outcome per
- * fixture is frozen instead, and `--freeze` only writes once both reapers
- * agreed. What this asserts is Python's behaviour captured.
- *
- * The fixture shapes come from the same JSON the comparison tool plants from.
- * Two copies of them would drift, and a drifted fixture makes the comparison
- * assert nothing — which is the failure this whole phase exists to avoid.
- *
- * Frozen per fixture rather than as whole-table state: table dumps carry row
- * ids and whatever else the database already held, so they would need
- * rewriting on every unrelated change. The verdict per fixture is the part
- * that actually encodes the rules — and each row below is a different rule:
- * a silent run dies, a hung worker on a *live* run is failed without failing
- * the run, an in-flight item is left alone, a pending item is never touched,
- * and a `processing` row that was never legitimately claimed is never reaped
- * however old it is.
- */
 final class ReaperCharacterisationTest extends TestCase
 {
-    private const SPEC = __DIR__ . '/golden/reaper_fixtures.json';
+    private const SPEC = __DIR__.'/../golden/reaper_fixtures.json';
 
-    private const EXPECTED = __DIR__ . '/golden/reaper_expected.json';
+    private const EXPECTED = __DIR__.'/../golden/reaper_expected.json';
 
     #[Group('db')]
-    public function testEachFixtureIsReapedAsPythonReapedIt(): void
+    public function test_each_fixture_is_reaped_as_python_reaped_it(): void
     {
         $spec = self::json(self::SPEC);
         $expected = self::json(self::EXPECTED);
@@ -73,8 +53,7 @@ final class ReaperCharacterisationTest extends TestCase
 
             foreach ($spec['items'] as $index => $item) {
                 $claimed = self::interval($item['claimed']);
-                // The index is in the URL because (run_id, url) is unique and
-                // two fixtures share a run and a status.
+
                 DB::insert(
                     "insert into scrape_url_items (run_id, shop_id, url, url_type,
                          status, created_at, claimed_at, attempts)
@@ -89,11 +68,8 @@ final class ReaperCharacterisationTest extends TestCase
                 );
             }
 
-            Reaper::sweep();
+            (new Reaper)->sweep();
 
-            // Scoped to this test's own shop: reaper_diff plants the same
-            // marker into the base database before cloning, so matching on
-            // the marker alone picks up its leftovers too.
             $actual = self::outcome($marker, $shopId);
             self::assertCount(count($expected), $actual);
             foreach ($expected as $i => $row) {
@@ -108,8 +84,7 @@ final class ReaperCharacterisationTest extends TestCase
         }
     }
 
-    /** Each fixture must still exercise a distinct rule. */
-    public function testTheFixturesStillCoverEveryRule(): void
+    public function test_the_fixtures_still_cover_every_rule(): void
     {
         $expected = self::json(self::EXPECTED);
 
@@ -126,15 +101,48 @@ final class ReaperCharacterisationTest extends TestCase
             self::assertContains($state, $runStates, "no fixture leaves a run {$state}");
         }
 
-        // A `processing` item that survives is the never-claimed rule; a
-        // `pending` one is the never-touch-pending rule.
         $itemStates = array_column($expected, 'item_status');
         self::assertContains('processing', $itemStates);
         self::assertContains('pending', $itemStates);
         self::assertContains('failed', $itemStates);
     }
 
-    /** @return list<array<string, mixed>> */
+    #[Group('db')]
+    public function test_old_failed_runs_stop_looking_actionable(): void
+    {
+        Database::boot(getenv('TEST_DATABASE_URL')
+            ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test');
+        DB::beginTransaction();
+        try {
+            $shopId = DB::table('shops')->insertGetId([
+                'name' => 'resumable-retention-test',
+                'base_url' => 'https://retention.test',
+            ], 'id');
+            $runId = DB::table('scrape_runs')->insertGetId([
+                'shop_id' => $shopId,
+                'phase' => 'scan',
+                'status' => 'failed',
+                'started_at' => Carbon::now('UTC')->subDays(9),
+                'finished_at' => Carbon::now('UTC')->subDays(8),
+                'resumable_after_failure' => true,
+                'urls_processed' => 0,
+                'items_added' => 0,
+                'items_updated' => 0,
+                'errors_4xx' => 0,
+                'errors_5xx' => 0,
+                'error_count' => 0,
+            ], 'id');
+
+            (new Reaper)->sweep();
+
+            self::assertFalse((bool) DB::table('scrape_runs')
+                ->where('id', $runId)
+                ->value('resumable_after_failure'));
+        } finally {
+            DB::rollBack();
+        }
+    }
+
     private static function outcome(string $marker, int $shopId): array
     {
         return array_map(
@@ -174,7 +182,6 @@ final class ReaperCharacterisationTest extends TestCase
         return $age === null ? 'null' : "now() - interval '{$age}'";
     }
 
-    /** @return array<string, mixed> */
     private static function json(string $path): array
     {
         self::assertFileExists($path, 'run `make reaper-diff FREEZE=1` first');

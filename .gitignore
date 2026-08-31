@@ -1,4 +1,3 @@
-# PHP
 vendor/
 composer.phar
 .phpunit.result.cache
@@ -6,43 +5,22 @@ composer.phar
 /storage/*.key
 /bootstrap/cache/*.php
 
-# Python — the stack was removed on 2026-08-26 (tag python-final). These stay
-# because a stale .venv/ and __pycache__/ are still on disk locally, and one
-# stdlib docs script (docs/superpowers/scripts/build-spec-index.py) remains.
-__pycache__/
-*.py[cod]
-.venv/
-
-# IDEs
 .idea/
 .vscode/
 
-# OS
 .DS_Store
 
-# Testing / Linting
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-htmlcov/
-.coverage
 _preview_*.html
 
-# Claude Code
 .claude/
-.superpowers/
 
-# Logs
 *.log
 
-# Prototypes
 _prototypes/
 
-# Env files
 .env
 .worktrees/
 
-# Laravel — merged in when the application moved to the repository root.
 .env.backup
 .env.production
 .phpactor.json

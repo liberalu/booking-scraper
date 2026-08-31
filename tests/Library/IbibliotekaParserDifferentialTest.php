@@ -7,15 +7,11 @@ namespace Tests\Library;
 use App\Parsers\Ibiblioteka\Parser;
 use PHPUnit\Framework\TestCase;
 
-/**
- * ibiblioteka is the national library's LIBIS API, not a shop: it yields
- * CANONICAL bibliographic records (no prices), tagged `_emit_as: "book"` so
- * the scan spider builds a BookItem.
- */
 final class IbibliotekaParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../fixtures/ibiblioteka';
-    private const GOLDEN = __DIR__ . '/golden';
+    private const FIXTURES = __DIR__.'/../fixtures/ibiblioteka';
+
+    private const GOLDEN = __DIR__.'/../golden';
 
     public function test_search_response_matches_python(): void
     {
@@ -44,7 +40,7 @@ final class IbibliotekaParserDifferentialTest extends TestCase
     public function test_scan_url_rewrite_matches_python(): void
     {
         $golden = json_decode(
-            (string) file_get_contents(self::GOLDEN . '/ibiblioteka_rewrite.json'),
+            (string) file_get_contents(self::GOLDEN.'/ibiblioteka_rewrite.json'),
             true,
             flags: JSON_THROW_ON_ERROR
         );
@@ -59,8 +55,7 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     public function test_category_page_is_an_alias_for_the_search_response(): void
     {
-        // The registry calls parse_category_page for every shop; ibiblioteka
-        // routes it to the search endpoint.
+
         self::assertSame(
             Parser::parseSearchResponse(self::fixture('search_response.json')),
             Parser::parseCategoryPage(self::fixture('search_response.json'))
@@ -69,9 +64,7 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     public function test_records_are_tagged_for_the_canonical_branch(): void
     {
-        // The scan spider branches on this sentinel to build a BookItem
-        // rather than a ShopBookItem — without it a library record would be
-        // written as a priceless shop listing.
+
         $result = Parser::parseProductPage(self::fixture('product_detail_translated.json'));
 
         self::assertSame('book', $result['_emit_as']);
@@ -80,12 +73,9 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         self::assertArrayNotHasKey('price', $result);
     }
 
-    // ------------------------------------------------------- type inference
-
     public function test_electronic_with_an_audio_description_is_audio(): void
     {
-        // ELECTRONIC covers both audio and e-books; only the physical
-        // description separates them.
+
         $result = Parser::parseProductPage(json_encode([
             'publicationFormat' => 'ELECTRONIC',
             'allPhysicalAttributes' => '1 mp3 failas (9 val., 25 min.)',
@@ -133,13 +123,9 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         self::assertSame('21 cm', $result['dimensions']);
     }
 
-    // ------------------------------------------------------------ multipart
-
     public function test_multipart_works_expose_their_volume_urls(): void
     {
-        // A multipart record carries only the set-level ISBN; per-volume
-        // ISBNs live on the part records. Without following them a shop
-        // listing for one volume can never match.
+
         $result = Parser::parseProductPage(json_encode([
             'code' => 'C1B0000814700',
             'multipart' => true,
@@ -163,8 +149,6 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         self::assertSame([], $result['_part_urls']);
     }
 
-    // -------------------------------------------------------------- authors
-
     public function test_contributors_get_a_role_and_a_per_role_position(): void
     {
         $result = Parser::parseProductPage(json_encode([
@@ -184,8 +168,7 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     public function test_the_renamed_titlelt_name_field_is_read(): void
     {
-        // Live shape as of record 115594: names arrive in `titleLt`, not in
-        // the `value` / `name` keys the fixtures were captured with.
+
         $result = Parser::parseProductPage(json_encode([
             'authorViews' => [['titleLt' => 'Maceina, Antanas', 'code' => 'A1']],
             'persons' => [
@@ -222,8 +205,6 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         self::assertSame([], $result['authors']);
     }
 
-    // --------------------------------------------------------- publicationView
-
     public function test_publisher_and_year_are_split_out_of_publication_view(): void
     {
         $result = Parser::parseSearchResponse(json_encode([
@@ -253,8 +234,7 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     public function test_records_without_an_id_are_skipped(): void
     {
-        // The detail URL is built from the id; without one there is nothing
-        // to fetch.
+
         $result = Parser::parseSearchResponse(json_encode([
             'results' => ['content' => [
                 ['titleView' => 'No id'],
@@ -275,12 +255,10 @@ final class IbibliotekaParserDifferentialTest extends TestCase
         self::assertNull($empty['title']);
     }
 
-    // -------------------------------------------------------------- helpers
-
     private function assertMatchesGolden(string $name, mixed $actual): void
     {
         $golden = json_decode(
-            (string) file_get_contents(self::GOLDEN . "/{$name}.json"),
+            (string) file_get_contents(self::GOLDEN."/{$name}.json"),
             true,
             flags: JSON_THROW_ON_ERROR
         );
@@ -290,11 +268,11 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     private static function sorted(mixed $value): mixed
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             return $value;
         }
         $value = array_map([self::class, 'sorted'], $value);
-        if (!array_is_list($value)) {
+        if (! array_is_list($value)) {
             ksort($value);
         }
 
@@ -303,6 +281,6 @@ final class IbibliotekaParserDifferentialTest extends TestCase
 
     private static function fixture(string $name): string
     {
-        return (string) file_get_contents(self::FIXTURES . '/' . $name);
+        return (string) file_get_contents(self::FIXTURES.'/'.$name);
     }
 }

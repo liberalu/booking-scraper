@@ -3,17 +3,17 @@
 
 declare(strict_types=1);
 
-/**
- * Parse one page and print the result as JSON.
- *
- * Diagnostic tool, not the crawler — it writes nothing to the database.
- * Useful for "does the parser still handle what the shop is serving?"
- *
- *   bin/parse                                     # bundled fixture, offline
- *   bin/parse --url=https://vaga.lt/some-book     # one live request
- *   bin/parse --file=page.html --kind=category
- *   bin/parse --url=https://vaga.lt/sitemap.xml --kind=sitemap
- */
+
+
+
+
+
+
+
+
+
+
+
 
 use App\Support\Config;
 use App\Parsers\Vaga\Parser;
@@ -22,9 +22,9 @@ use GuzzleHttp\Exception\GuzzleException;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-const FIXTURES = __DIR__ . '/../fixtures';
+const FIXTURES = __DIR__ . '/../tests/fixtures';
 
-/** @return array<string, string> */
+
 function parseArgv(array $argv): array
 {
     $opts = [];
@@ -64,14 +64,14 @@ if ($shop !== 'vaga') {
 }
 $config = Config::forShop($shop);
 
-// ---------------------------------------------------------------- get markup
+
 
 $source = null;
 if (isset($opts['url'])) {
     $url = $opts['url'];
-    // Match what the Python crawler sends: no USER_AGENT is configured, so
-    // Scrapy's default goes out. A different UA can get different HTML,
-    // which would make this tool disagree with production for no reason.
+
+
+
     $client = new Client([
         'timeout' => $config->requestTimeout(),
         'connect_timeout' => $config->connectTimeout(),
@@ -86,8 +86,8 @@ if (isset($opts['url'])) {
         $config->downloadDelay()
     ));
 
-    // One request, but still honour the shop's pacing — this tool should
-    // never be the thing that trips a rate limit.
+
+
     usleep((int) ($config->downloadDelay() * 1_000_000));
 
     try {
@@ -117,7 +117,7 @@ if (isset($opts['url'])) {
     fwrite(STDERR, "no --url/--file given; parsing bundled fixture\n");
 }
 
-// ------------------------------------------------------------------- parse it
+
 
 $result = match ($kind) {
     'product' => Parser::parseProductPage($source),

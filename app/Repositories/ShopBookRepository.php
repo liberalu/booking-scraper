@@ -4,49 +4,51 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
-use App\Models\BookIsbn;
-use App\Models\ShopAuthor;
+use App\Books\BookClassifier;
 use App\Models\ShopBook;
-use App\Models\ShopBookAttribute;
 use App\Support\UrlUtils;
-use App\Parsers\Vaga\Parser;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
- * Port of upsert_shop_book() in book_scraper/db/repo.py.
- *
- * Every branch here exists because of a production incident; none of it is
- * defensive padding. Read the Python before changing any of it.
+ * @phpstan-type NormalizedData array{
+ *     sku?: string|null,
+ *     type?: string|null,
+ *     author?: string|null,
+ *     isbn?: string|null,
+ *     publisher?: string|null,
+ *     year?: int|null,
+ *     format?: string|null,
+ *     description?: string|null,
+ *     image_url?: string|null,
+ *     categories?: list<string>|null,
+ *     price?: numeric-string|null,
+ *     price_original?: numeric-string|null,
+ *     planned_availability_date?: string|null,
+ *     rating?: numeric-string|null,
+ *     review_count?: int|null,
+ *     in_stock?: bool
+ * }
  */
 final class ShopBookRepository
 {
-    /**
-     * Fields always written, with a change row when the value moves.
-     * `url` is here because a SKU match can find a row whose slug has
-     * since been renamed.
-     */
     private const TRACKED_FIELDS = ['url', 'title'];
 
-    /**
-     * Fields written ONLY when the scrape supplied a value. A lightweight
-     * category-page scrape must not clobber metadata captured from the
-     * full product page.
-     */
-    private const CONDITIONAL_FIELDS = [
-        'author', 'sku', 'isbn', 'publisher', 'year', 'format', 'description',
-    ];
+    public function __construct(
+        private readonly LoggerInterface $logger = new NullLogger,
+        private readonly ShopBookRelationsRepository $relations = new ShopBookRelationsRepository,
+    ) {}
 
-    /** Separators seen in shop author strings. `ir` is Lithuanian "and". */
-    private const MULTI_AUTHOR_PATTERN = '/(?:,\s|;|\s&\s|\s\/\s|\s+and\s+|\s+ir\s+)/iu';
-
-    public function __construct(private readonly LoggerInterface $logger = new NullLogger()) {}
+    public function unlinkCanonical(ShopBook $shopBook): void
+    {
+        ShopBook::whereKey($shopBook->getKey())->update(['book_id' => null]);
+    }
 
     /**
-     * @param  array<string, mixed>  $data  Parsed product fields.
-     * @param  array<string, mixed>|null  $properties  Format-specific extras.
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>|null  $properties
      */
     public function upsert(
         int $shopId,
@@ -57,6 +59,7 @@ final class ShopBookRepository
         ?int $runId = null,
     ): UpsertResult {
         $url = UrlUtils::normalize($url);
+        $data = self::normalizeData($data);
         $sku = $data['sku'] ?? null;
 
         $shopBook = $this->locate($shopId, $url, is_string($sku) ? $sku : null);
@@ -67,10 +70,6 @@ final class ShopBookRepository
             : $this->update($shopBook, $url, $title, $data, $properties, $runId, $now);
     }
 
-    /**
-     * SKU first — it is durable across slug changes on shops that expose
-     * one — then URL.
-     */
     private function locate(int $shopId, string $url, ?string $sku): ?ShopBook
     {
         $shopBook = null;
@@ -79,19 +78,13 @@ final class ShopBookRepository
             $shopBook = ShopBook::where('shop_id', $shopId)->where('sku', $sku)->first();
         }
 
-        // Stale-SKU split identity: the SKU matched a row sitting at a
-        // DIFFERENT url, and the incoming url already belongs to another
-        // row. Writing the url onto the SKU-matched row would violate
-        // uq_shop_book_shop_url. Detach the SKU from the stale row and use
-        // the url's owner instead. Seen when a shop fixes a wrong slug and
-        // recycles the old one for a different product.
         if ($shopBook !== null && $shopBook->url !== $url) {
             $urlOwner = ShopBook::where('shop_id', $shopId)->where('url', $url)->first();
             if ($urlOwner !== null && $urlOwner->id !== $shopBook->id) {
                 $this->logger->warning(
                     'upsert_shop_book: stale SKU {sku} detached from shop_book {stale} '
-                    . '(url={staleUrl}) — URL {url} already owned by shop_book {owner}. '
-                    . 'Likely cause: shop reassigned slug after wrong slug was scraped.',
+                    .'(url={staleUrl}) — URL {url} already owned by shop_book {owner}. '
+                    .'Likely cause: shop reassigned slug after wrong slug was scraped.',
                     [
                         'sku' => $sku,
                         'stale' => $shopBook->id,
@@ -110,7 +103,10 @@ final class ShopBookRepository
             ?? ShopBook::where('shop_id', $shopId)->where('url', $url)->first();
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * @param  NormalizedData  $data
+     * @param  array<string, mixed>|null  $properties
+     */
     private function create(
         int $shopId,
         string $url,
@@ -120,18 +116,26 @@ final class ShopBookRepository
         ?int $runId,
         Carbon $now,
     ): UpsertResult {
-        $shopBook = new ShopBook();
+        $shopBook = new ShopBook;
         $shopBook->shop_id = $shopId;
         $shopBook->url = $url;
         $shopBook->title = $title;
         $shopBook->type = $data['type'] ?? self::inferType($title, $data, $properties);
-
-        foreach (['author', 'sku', 'isbn', 'publisher', 'year', 'format', 'description',
-                  'image_url', 'categories', 'price', 'price_original',
-                  'planned_availability_date', 'rating', 'review_count'] as $field) {
-            $shopBook->{$field} = $data[$field] ?? null;
-        }
-        $shopBook->in_stock = (bool) ($data['in_stock'] ?? true);
+        $shopBook->author = $data['author'] ?? null;
+        $shopBook->sku = $data['sku'] ?? null;
+        $shopBook->isbn = $data['isbn'] ?? null;
+        $shopBook->publisher = $data['publisher'] ?? null;
+        $shopBook->year = $data['year'] ?? null;
+        $shopBook->format = $data['format'] ?? null;
+        $shopBook->description = $data['description'] ?? null;
+        $shopBook->image_url = $data['image_url'] ?? null;
+        $shopBook->categories = $data['categories'] ?? null;
+        $shopBook->price = $data['price'] ?? null;
+        $shopBook->price_original = $data['price_original'] ?? null;
+        $shopBook->planned_availability_date = $data['planned_availability_date'] ?? null;
+        $shopBook->rating = $data['rating'] ?? null;
+        $shopBook->review_count = $data['review_count'] ?? null;
+        $shopBook->in_stock = $data['in_stock'] ?? true;
         $shopBook->last_run_id = $runId;
         $shopBook->last_run_action = 'created';
         $shopBook->created_run_id = $runId;
@@ -140,17 +144,20 @@ final class ShopBookRepository
         $shopBook->is_active = true;
         $shopBook->save();
 
-        if ($properties) {
-            $this->syncAttributes($shopBook->id, $properties);
+        if ($properties !== null && $properties !== []) {
+            $this->relations->syncAttributes($shopBook->id, $properties);
         }
         if (($data['author'] ?? null) !== null) {
-            $this->syncAuthors($shopBook->id, (string) $data['author']);
+            $this->relations->syncAuthors($shopBook->id, $data['author']);
         }
 
         return new UpsertResult($shopBook, true, null, []);
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * @param  NormalizedData  $data
+     * @param  array<string, mixed>|null  $properties
+     */
     private function update(
         ShopBook $shopBook,
         string $url,
@@ -160,9 +167,8 @@ final class ShopBookRepository
         ?int $runId,
         Carbon $now,
     ): UpsertResult {
-        $oldPrice = $shopBook->price === null ? null : (string) $shopBook->price;
-        // Captured before the conditional loop overwrites it — the drift
-        // guard below must compare against the pre-scrape value.
+        $oldPrice = $shopBook->price;
+
         $oldIsbn = $shopBook->isbn;
 
         $shopBook->last_run_id = $runId;
@@ -179,15 +185,33 @@ final class ShopBookRepository
             $shopBook->{$field} = $new;
         }
 
-        foreach (self::CONDITIONAL_FIELDS as $field) {
-            $new = $data[$field] ?? null;
-            if ($new === null) {
-                continue;
-            }
-            if ($shopBook->{$field} != $new) {
-                $changes[] = self::change($field, $shopBook->{$field}, $new);
-            }
-            $shopBook->{$field} = $new;
+        if (($data['author'] ?? null) !== null) {
+            $changes = self::track($changes, 'author', $shopBook->author, $data['author']);
+            $shopBook->author = $data['author'];
+        }
+        if (($data['sku'] ?? null) !== null) {
+            $changes = self::track($changes, 'sku', $shopBook->sku, $data['sku']);
+            $shopBook->sku = $data['sku'];
+        }
+        if (($data['isbn'] ?? null) !== null) {
+            $changes = self::track($changes, 'isbn', $shopBook->isbn, $data['isbn']);
+            $shopBook->isbn = $data['isbn'];
+        }
+        if (($data['publisher'] ?? null) !== null) {
+            $changes = self::track($changes, 'publisher', $shopBook->publisher, $data['publisher']);
+            $shopBook->publisher = $data['publisher'];
+        }
+        if (($data['year'] ?? null) !== null) {
+            $changes = self::track($changes, 'year', $shopBook->year, $data['year']);
+            $shopBook->year = $data['year'];
+        }
+        if (($data['format'] ?? null) !== null) {
+            $changes = self::track($changes, 'format', $shopBook->format, $data['format']);
+            $shopBook->format = $data['format'];
+        }
+        if (($data['description'] ?? null) !== null) {
+            $changes = self::track($changes, 'description', $shopBook->description, $data['description']);
+            $shopBook->description = $data['description'];
         }
 
         if (($data['image_url'] ?? null) !== null) {
@@ -216,45 +240,46 @@ final class ShopBookRepository
         if (($data['categories'] ?? null) !== null) {
             $shopBook->categories = $data['categories'];
         }
-        foreach (['price', 'price_original', 'planned_availability_date', 'rating', 'review_count'] as $field) {
-            if (($data[$field] ?? null) !== null) {
-                $shopBook->{$field} = $data[$field];
-            }
+        if (($data['price'] ?? null) !== null) {
+            $shopBook->price = $data['price'];
         }
-        $shopBook->in_stock = (bool) ($data['in_stock'] ?? true);
+        if (($data['price_original'] ?? null) !== null) {
+            $shopBook->price_original = $data['price_original'];
+        }
+        if (($data['planned_availability_date'] ?? null) !== null) {
+            $shopBook->planned_availability_date = $data['planned_availability_date'];
+        }
+        if (($data['rating'] ?? null) !== null) {
+            $shopBook->rating = $data['rating'];
+        }
+        if (($data['review_count'] ?? null) !== null) {
+            $shopBook->review_count = $data['review_count'];
+        }
+        $shopBook->in_stock = $data['in_stock'] ?? true;
         $shopBook->last_seen_at = $now;
         $shopBook->is_active = true;
-        // A returning shop_book clears its vanish stamp, so "inactive since"
-        // keeps meaning the last transition rather than the first ever.
+
         $shopBook->inactive_since = null;
         $shopBook->save();
 
         if ($properties !== null) {
-            $this->syncAttributes($shopBook->id, $properties);
+            $this->relations->syncAttributes($shopBook->id, $properties);
         }
         if (($data['author'] ?? null) !== null) {
-            $this->syncAuthors($shopBook->id, (string) $data['author']);
+            $this->relations->syncAuthors($shopBook->id, $data['author']);
         }
 
         return new UpsertResult($shopBook, false, $oldPrice, $changes);
     }
 
-    /**
-     * When a linked shop_book's ISBN changes to one the canonical book
-     * doesn't own, the link is stale. Null book_id and reset match_status
-     * so match step 1 can re-link by the corrected ISBN — its
-     * `WHERE book_id IS NULL` guard means an existing link is never
-     * re-evaluated, which is how match_isbn_drift accumulates.
-     *
-     * @return list<array{field: string, old: string|null, new: string|null}>
-     */
-    private function guardIsbnDrift(ShopBook $shopBook, mixed $isbn, ?string $oldIsbn): array
+    /** @return list<array{field: string, old: string|null, new: string|null}> */
+    private function guardIsbnDrift(ShopBook $shopBook, ?string $isbn, ?string $oldIsbn): array
     {
         if ($isbn === null || $shopBook->book_id === null || $isbn === $oldIsbn) {
             return [];
         }
 
-        $stillValid = BookIsbn::where('book_id', $shopBook->book_id)
+        $stillValid = DB::table('book_isbns')->where('book_id', $shopBook->book_id)
             ->where('isbn', $isbn)
             ->exists();
         if ($stillValid) {
@@ -271,167 +296,26 @@ final class ShopBookRepository
         return $changes;
     }
 
-    /**
-     * Only the supplied keys are touched: a partial scrape must not drop
-     * attributes an earlier full scrape captured.
-     *
-     * @param array<string, mixed> $properties
-     */
-    private function syncAttributes(int $shopBookId, array $properties): void
-    {
-        if ($properties === []) {
-            return;
-        }
-
-        $existing = ShopBookAttribute::where('shop_book_id', $shopBookId)
-            ->get()
-            ->keyBy('key');
-
-        foreach ($properties as $key => $value) {
-            $stringValue = self::pythonStr($value);
-            $row = $existing->get($key);
-            if ($row === null) {
-                ShopBookAttribute::create([
-                    'shop_book_id' => $shopBookId,
-                    'key' => $key,
-                    'value' => $stringValue,
-                ]);
-            } elseif ($row->value !== $stringValue) {
-                $row->value = $stringValue;
-                $row->save();
-            }
-        }
-    }
-
-    /**
-     * The string Python's `str()` would produce for an attribute value.
-     *
-     * The column is text, and the Python writer stores `str(value)` — so a
-     * boolean lands as 'True'/'False', not PHP's '1'/''. Getting this wrong
-     * is invisible until something reads the value back: `is_new` would read
-     * as absent for every new book pegasas reports.
-     */
-    private static function pythonStr(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        if (is_bool($value)) {
-            return $value ? 'True' : 'False';
-        }
-        if (is_float($value)) {
-            if (is_nan($value)) {
-                return 'nan';
-            }
-            if (is_infinite($value)) {
-                return $value > 0 ? 'inf' : '-inf';
-            }
-            // json_encode gives the shortest round-tripping form, which is
-            // what repr() gives — but drops the '.0' on whole numbers.
-            $text = (string) json_encode($value);
-
-            return preg_match('/[.eE]/', $text) === 1 ? $text : $text . '.0';
-        }
-        if (is_array($value)) {
-            // Python renders a list as "['a', 'b']". Attributes are scalars in
-            // practice; encode rather than silently writing "Array".
-            return (string) json_encode($value);
-        }
-
-        return (string) $value;
-    }
-
-    /**
-     * Reconcile shop_authors + shop_book_authors so the book points at the
-     * right authors in the right order. Called only when the scrape
-     * actually supplied an author string.
-     */
-    private function syncAuthors(int $shopBookId, ?string $authorRaw): void
-    {
-        $desired = [];
-        $seen = [];
-        $position = 0;
-
-        foreach (self::splitAuthors($authorRaw) as $name) {
-            $normalized = self::normalizeAuthor($name);
-            if ($normalized === '') {
-                continue;
-            }
-
-            $author = ShopAuthor::where('normalized_name', $normalized)->first();
-            if ($author === null) {
-                $author = ShopAuthor::create([
-                    'name' => $name,
-                    'normalized_name' => $normalized,
-                    'created_at' => Carbon::now('UTC'),
-                ]);
-            }
-            // Keep only the first occurrence so (shop_book_id, author_id)
-            // stays unique when a shop repeats a name.
-            if (isset($seen[$author->id])) {
-                continue;
-            }
-            $seen[$author->id] = true;
-            $desired[$author->id] = $position++;
-        }
-
-        $existing = DB::table('shop_book_authors')
-            ->where('shop_book_id', $shopBookId)
-            ->pluck('position', 'author_id')
-            ->all();
-
-        foreach ($existing as $authorId => $currentPosition) {
-            if (!array_key_exists($authorId, $desired)) {
-                DB::table('shop_book_authors')
-                    ->where('shop_book_id', $shopBookId)
-                    ->where('author_id', $authorId)
-                    ->delete();
-            }
-        }
-        foreach ($desired as $authorId => $wanted) {
-            if (!array_key_exists($authorId, $existing)) {
-                DB::table('shop_book_authors')->insert([
-                    'shop_book_id' => $shopBookId,
-                    'author_id' => $authorId,
-                    'position' => $wanted,
-                ]);
-            } elseif ((int) $existing[$authorId] !== $wanted) {
-                DB::table('shop_book_authors')
-                    ->where('shop_book_id', $shopBookId)
-                    ->where('author_id', $authorId)
-                    ->update(['position' => $wanted]);
-            }
-        }
-    }
-
     /** @return list<string> */
     public static function splitAuthors(?string $raw): array
     {
-        if ($raw === null || trim($raw) === '') {
-            return [];
-        }
-
-        $parts = array_values(array_filter(
-            array_map('trim', preg_split(self::MULTI_AUTHOR_PATTERN, $raw) ?: []),
-            static fn (string $p): bool => $p !== ''
-        ));
-
-        // A single-author string still yields one item so callers can
-        // always iterate.
-        return $parts !== [] ? $parts : [trim($raw)];
+        return ShopBookRelationsRepository::splitAuthors($raw);
     }
 
     public static function normalizeAuthor(string $name): string
     {
-        return trim(preg_replace('/\s+/u', ' ', mb_strtolower(trim($name), 'UTF-8')) ?? '');
+        return ShopBookRelationsRepository::normalizeAuthor($name);
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * @param  NormalizedData  $data
+     * @param  array<string, mixed>|null  $properties
+     */
     private static function inferType(string $title, array $data, ?array $properties): string
     {
         $properties ??= [];
 
-        return Parser::inferShopBookType([
+        return BookClassifier::inferType([
             'title' => $title,
             'author' => $data['author'] ?? null,
             'isbn' => $data['isbn'] ?? null,
@@ -452,8 +336,101 @@ final class ShopBookRepository
     {
         return [
             'field' => $field,
-            'old' => $old === null ? null : (string) $old,
-            'new' => $new === null ? null : (string) $new,
+            'old' => self::changeValue($old),
+            'new' => self::changeValue($new),
         ];
+    }
+
+    /**
+     * @param  list<array{field: string, old: string|null, new: string|null}>  $changes
+     * @return list<array{field: string, old: string|null, new: string|null}>
+     */
+    private static function track(array $changes, string $field, mixed $old, mixed $new): array
+    {
+        if ($old !== $new) {
+            $changes[] = self::change($field, $old, $new);
+        }
+
+        return $changes;
+    }
+
+    private static function changeValue(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value) || is_bool($value)) {
+            return json_encode($value, JSON_THROW_ON_ERROR);
+        }
+
+        return json_encode($value, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return NormalizedData
+     */
+    private static function normalizeData(array $data): array
+    {
+        $row = DatabaseRow::from($data);
+        $normalized = [];
+        foreach (['sku', 'type', 'author', 'isbn', 'publisher', 'format', 'description',
+            'image_url', 'planned_availability_date'] as $field) {
+            if ($row->has($field)) {
+                $normalized[$field] = $row->nullableString($field);
+            }
+        }
+        foreach (['year', 'review_count'] as $field) {
+            if ($row->has($field)) {
+                $normalized[$field] = $row->nullableInt($field);
+            }
+        }
+        foreach (['price', 'price_original', 'rating'] as $field) {
+            if ($row->has($field)) {
+                $normalized[$field] = self::numericString($row->value($field));
+            }
+        }
+        if ($row->has('in_stock')) {
+            $normalized['in_stock'] = $row->nullableBool('in_stock') ?? true;
+        }
+        if ($row->has('categories')) {
+            $normalized['categories'] = self::stringList($row->value('categories'));
+        }
+
+        return $normalized;
+    }
+
+    /** @return numeric-string|null */
+    private static function numericString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_string($value) && is_numeric($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            $string = (string) $value;
+
+            return $string;
+        }
+
+        return null;
+    }
+
+    /** @return list<string>|null */
+    private static function stringList(mixed $value): ?array
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter($value, is_string(...)));
     }
 }

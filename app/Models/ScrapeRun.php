@@ -4,20 +4,30 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasSqlAlchemyDefaults;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * One row per phase run. `last_heartbeat` is what the reaper watches, so
- * a long-running phase must keep touching it or it gets reaped as stalled.
- *
  * @property int $id
  * @property int $shop_id
  * @property string $phase
  * @property string $status
+ * @property Carbon|null $started_at
+ * @property Carbon|null $finished_at
+ * @property Carbon|null $last_heartbeat
+ * @property int|null $urls_total
  * @property int $urls_processed
+ * @property int $items_added
+ * @property int $items_updated
+ * @property int $errors_4xx
+ * @property int $errors_5xx
+ * @property int $error_count
+ * @property string|null $close_reason
+ * @property bool $resumable_after_failure
+ * @property int|null $pid
+ * @property Shop $shop
  */
 final class ScrapeRun extends Model
 {
@@ -61,36 +71,9 @@ final class ScrapeRun extends Model
         'last_heartbeat' => 'datetime',
     ];
 
+    /** @return BelongsTo<Shop, $this> */
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class, 'shop_id');
-    }
-
-    public static function start(int $shopId, string $phase): self
-    {
-        return self::create([
-            'shop_id' => $shopId,
-            'phase' => $phase,
-            'status' => 'running',
-            'started_at' => Carbon::now('UTC'),
-            'last_heartbeat' => Carbon::now('UTC'),
-            'pid' => getmypid() ?: null,
-        ]);
-    }
-
-    public function heartbeat(): void
-    {
-        // Bypass the model so a heartbeat never flushes half-built state.
-        static::withoutEvents(fn () => self::whereKey($this->id)
-            ->update(['last_heartbeat' => Carbon::now('UTC')]));
-    }
-
-    public function finish(string $status, ?string $closeReason = null): void
-    {
-        $this->update([
-            'status' => $status,
-            'finished_at' => Carbon::now('UTC'),
-            'close_reason' => $closeReason,
-        ]);
     }
 }

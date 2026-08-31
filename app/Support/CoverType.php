@@ -6,20 +6,12 @@ namespace App\Support;
 
 use Normalizer;
 
-/**
- * Port of book_scraper/spiders/cover_type.py.
- *
- * Maps Lithuanian cover-type labels to canonical `shop_books.format`
- * tokens. Dimension-only input returns null on purpose: leaking "15x22"
- * as a format is what drove the `format_is_dimensions` validator issue.
- */
 final class CoverType
 {
     private const CANONICAL = [
         'hardcover', 'paperback', 'ebook', 'audiobook', 'cd', 'dvd', 'book',
     ];
 
-    /** "15x22", "17 x 24", "170 x 205 mm", "21X30 cm" — reject outright. */
     private const DIMENSION = '/^\s*\d+\s*[xX×]\s*\d+(\s*(mm|cm))?\s*$/iu';
 
     public static function toFormat(?string $coverType): ?string
@@ -50,8 +42,7 @@ final class CoverType
         }
 
         $stripped = self::stripDiacritics($lower);
-        // "puskie…" → semi-hard, "kiet…"/"keti" → hard (handles the typo),
-        // "minkst…" → paperback.
+
         if (str_contains($stripped, 'puskiet') || str_contains($stripped, 'puskie')) {
             return 'hardcover';
         }
@@ -65,7 +56,6 @@ final class CoverType
         return null;
     }
 
-    /** NFD then drop combining marks: ė → e, š → s. */
     public static function stripDiacritics(string $s): string
     {
         $nfd = Normalizer::normalize($s, Normalizer::FORM_D);

@@ -6,26 +6,15 @@ namespace Tests\Library;
 
 use PHPUnit\Framework\TestCase;
 
-/**
- * The schema gate's honesty rests entirely on `tools/schema_normalize.sh`.
- *
- * It has to fold together the one CHECK expression Postgres deparses two
- * equivalent ways — otherwise the gate reports a permanent false positive and
- * gets ignored — while still failing on a difference that matters. A blanket
- * "strip anything cast-shaped" would do the first and not the second, so both
- * directions are pinned here.
- */
 final class SchemaNormalizeTest extends TestCase
 {
-    /** As SQLAlchemy emits it: the array cast outside the constructor. */
     private const AS_EMITTED =
-        "    CONSTRAINT ck_scrape_run_events_event_type CHECK (((event_type)::text = ANY "
-        . "((ARRAY['started'::character varying, 'failed'::character varying])::text[])))";
+        '    CONSTRAINT ck_scrape_run_events_event_type CHECK (((event_type)::text = ANY '
+        ."((ARRAY['started'::character varying, 'failed'::character varying])::text[])))";
 
-    /** As Postgres re-renders it once the constraint has survived a restore. */
     private const AS_REDEPARSED =
-        "    CONSTRAINT ck_scrape_run_events_event_type CHECK (((event_type)::text = ANY "
-        . "(ARRAY[('started'::character varying)::text, ('failed'::character varying)::text])))";
+        '    CONSTRAINT ck_scrape_run_events_event_type CHECK (((event_type)::text = ANY '
+        ."(ARRAY[('started'::character varying)::text, ('failed'::character varying)::text])))";
 
     public function test_the_two_deparsings_of_one_check_converge(): void
     {
@@ -61,7 +50,6 @@ final class SchemaNormalizeTest extends TestCase
         self::assertNotSame(self::normalize(self::AS_EMITTED), self::normalize($retyped));
     }
 
-    /** An unrelated cast is not a normalisation target. */
     public function test_an_unrelated_column_cast_is_left_alone(): void
     {
         $line = "CONSTRAINT ck_x CHECK (((a)::text <> ''::text))";
@@ -73,19 +61,19 @@ final class SchemaNormalizeTest extends TestCase
     {
         $dump = "\\restrict abc123\nCREATE TABLE public.t (id integer);\n\\unrestrict abc123\n";
 
-        self::assertSame("CREATE TABLE public.t (id integer);", self::normalize($dump));
+        self::assertSame('CREATE TABLE public.t (id integer);', self::normalize($dump));
     }
 
     public function test_the_pg_dump_version_header_is_dropped(): void
     {
         $dump = "-- Dumped by pg_dump version 16.13 (Debian)\nCREATE TABLE public.t (id integer);";
 
-        self::assertSame("CREATE TABLE public.t (id integer);", self::normalize($dump));
+        self::assertSame('CREATE TABLE public.t (id integer);', self::normalize($dump));
     }
 
     private static function normalize(string $input): string
     {
-        $script = dirname(__DIR__, 2) . '/tools/schema_normalize.sh';
+        $script = dirname(__DIR__, 2).'/tools/schema_normalize.sh';
         $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $process = proc_open(['/bin/bash', $script], $descriptors, $pipes);
         self::assertIsResource($process);

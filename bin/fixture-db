@@ -3,16 +3,16 @@
 
 declare(strict_types=1);
 
-/**
- * Build the fixture-only database the frozen API shapes are taken over.
- *
- *   bin/fixture-db [--recreate] --database=postgresql://…/book_scraper_php_test
- *
- * The DSN names any database on the TEST cluster; the fixture database is a
- * sibling of it. Prints the fixture DSN on success.
- */
 
-use App\Testing\FixtureDatabase;
+
+
+
+
+
+
+
+
+use Tests\Support\FixtureDatabase;
 
 require __DIR__ . '/../vendor/autoload.php';
 

@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: book_scraper
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,10 +15,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # The PHP suite's database. `POSTGRES_DB` is how it gets created now that
-  # seed_test_db.py is gone; `bin/migrate apply` then builds the schema
-  # from database/schema, and the suite plants every fixture itself.
-  # Only applied on first init — an existing volume keeps its old database.
   postgres-test:
     image: postgres:16
     profiles: ["test"]
@@ -27,49 +23,21 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: book_scraper_php_test
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata_test:/var/lib/postgresql/data
 
   flaresolverr:
-    # Cloudflare Managed Challenge bypass. Only humanitas.lt routes
-    # through it (controlled per-shop via the [flaresolverr] block in
-    # the shop TOML); other shops continue to use httpx directly.
-    # Solves take 5–10 s and the browser session keeps the
-    # cf_clearance cookie warm across requests — see
-    # book_scraper/flaresolverr_middleware.py.
     image: ghcr.io/flaresolverr/flaresolverr:latest
     restart: unless-stopped
     environment:
       LOG_LEVEL: info
       TZ: Europe/Vilnius
     ports:
-      - "8191:8191"
+      - "127.0.0.1:8191:8191"
 
-  # ---------------------------------------------------------------------------
-  # The PHP stack. One image (Dockerfile at the repo root), three services.
-  #
-  # There is no crawler service. A crawl is a child process of whoever asked
-  # for it: the scheduler spawns the scheduled ones, the dashboard spawns the
-  # ones an operator clicks. So restarting a container kills the crawls it
-  # started — the watchdog fails the run and the reaper cleans up after it, and
-  # `stop_grace_period` gives the close path time to record why.
-  #
-  # The Python stack avoided that by running crawls in a dedicated container
-  # and reaching it by `docker exec`, which needs the docker socket mounted
-  # into the dashboard. Not worth the socket here: a killed crawl is resumable
-  # and this is one machine.
-  #
-  # For a crawl by hand: docker compose exec scheduler php bin/crawl
-  #   scan --shop=vaga --max-urls=20
-  # ---------------------------------------------------------------------------
 
   dashboard:
-    # All three services share one image and one tag. Without the explicit
-    # `image:`, compose derives a name per service and builds three copies of
-    # the same context — and rebuilding one leaves the others on stale code,
-    # which is exactly how a fix to bin/crawl reached the dashboard and not the
-    # scheduler that runs the crawls.
     image: book-scraper-php
     build:
       context: .
@@ -77,56 +45,30 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      # Bound to loopback, not 0.0.0.0. Nothing here authenticates: every API
-      # route is open, and POST /api/runs starts a crawl against a live shop.
-      # Publishing it to the network would put that behind no credential at
-      # all. Widen this only together with real auth — see docs/follow-ups.md.
-      #
-      # ponytail: host port 8001 while gpswox-hive-app holds 8000; revert to
-      # "127.0.0.1:8000:8000" once that project frees the port.
       - "127.0.0.1:8001:8000"
     environment: &php_env
       APP_ENV: production
       APP_DEBUG: "false"
-      # Local-only stack, so a default is better than a setup step nobody
-      # remembers. Override it if this ever leaves this machine. It has to
-      # decode to exactly 32 bytes for aes-256-cbc — one byte short and every
-      # request is a 500 with "Unsupported cipher or incorrect key length".
       APP_KEY: ${APP_KEY:-base64:Ym9vay1zY3JhcGVyLWxvY2FsLWtleS0zMi1ieXRlcyE=}
+      DASHBOARD_AUTH_USERNAME: ${DASHBOARD_AUTH_USERNAME:-admin}
+      DASHBOARD_AUTH_PASSWORD: ${DASHBOARD_AUTH_PASSWORD:-admin}
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_DATABASE: book_scraper
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      # The crawler reads DATABASE_URL, not Laravel's DB_* — a crawl spawned in
-      # here would otherwise fall back to config/default.toml, which says
-      # localhost, and localhost inside a container is not the database.
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/book_scraper
-      # file, not Laravel's `database` default: that wants a `sessions` table,
-      # and a book catalogue has no business growing one. Matches .env on a
-      # developer machine, and without it every page is a 500 on
-      # `relation "sessions" does not exist`.
       SESSION_DRIVER: file
       CACHE_STORE: file
       QUEUE_CONNECTION: sync
       LOG_CHANNEL: stderr
       TZ: UTC
-    # 30s, matching what the Python scraper had: on SIGTERM a crawl's close
-    # path finalises the run and aborts its in-flight queue items, which can
-    # exceed the 10s default with a large queue and a slow database.
     stop_grace_period: 30s
     restart: unless-stopped
     volumes:
       - scraper_logs:/var/log
 
-  # The thing that makes the schedule in `cron_jobs` actually fire. Without it
-  # the dashboard's Schedules page writes rows nothing reads — which is exactly
-  # what happened between removing Python's crontab and adding this.
-  #
-  # --max-per-tick=1 here rather than the default 2: the backlog after any
-  # downtime is drained one crawl at a time, and a shop's schedules are already
-  # serialised per shop.
   scheduler:
     image: book-scraper-php
     build:
@@ -141,9 +83,6 @@ services:
     volumes:
       - scraper_logs:/var/log
 
-  # Fails runs whose process died. Not optional: without it a crawl that dies
-  # without unwinding stays `running`, and the shop+phase preflight then
-  # refuses to start a replacement — so one crash stops that shop for good.
   reaper:
     image: book-scraper-php
     build:
@@ -161,21 +100,12 @@ services:
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
       - ./monitoring/loki:/etc/loki:ro
       - loki_data:/loki
-    # No healthcheck declared — Loki's official image is Distroless (no shell,
-    # no wget) so the standard `CMD-SHELL wget /ready` pattern doesn't work.
-    # Plan smoke test (Task 8) verifies Loki's `/ready` endpoint directly via
-    # curl from the host. Other services use `depends_on: service_started`
-    # to wait for the container to start (not health).
 
   alloy:
-    # Grafana Alloy — replaces Promtail (EOL March 2026).
-    # Ships container stdout + /var/log/scraper.log + spawn files to Loki.
-    # Uses loki.source.docker (reads from Docker daemon directly) so the
-    # /var/lib/docker/containers host-path bind-mount Promtail needed is gone.
     image: grafana/alloy:latest
     restart: unless-stopped
     command:
@@ -191,8 +121,6 @@ services:
       - scraper_logs:/var/log:ro
       - ./monitoring/alloy:/etc/alloy:ro
     healthcheck:
-      # Alloy's image has bash but not wget/curl. Use bash's built-in TCP
-      # pseudo-device to probe whether the HTTP server is listening.
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/12345"]
       interval: 10s
       timeout: 5s
@@ -208,10 +136,10 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: ""
@@ -220,9 +148,6 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     healthcheck:
-      # Grafana's official image is Alpine-based and has wget. Probe the
-      # internal /api/health endpoint — it returns {"database":"ok",...}
-      # once the DB connection is established.
       test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health | grep -q '\"database\": \"ok\"'"]
       interval: 10s
       timeout: 5s

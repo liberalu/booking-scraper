@@ -8,20 +8,6 @@ use RoachPHP\Http\Request;
 use RoachPHP\Scheduling\RequestSchedulerInterface;
 use RoachPHP\Scheduling\Timing\ClockInterface;
 
-/**
- * Drop-in replacement for roach's ArrayRequestScheduler that paces in
- * fractional seconds.
- *
- * RequestSchedulerInterface::setDelay() is typed `int`, so the float
- * delay arrives through setDelaySeconds() instead — Config::downloadDelay()
- * is the source. setDelay() is still honoured (roach's Engine calls it
- * with the spider's int) but only when no float has been set, so the
- * interface stays satisfied without letting an int silently overwrite the
- * real per-shop value.
- *
- * ponytail: mirrors ArrayRequestScheduler rather than subclassing it —
- * that class is final. Re-check on roach upgrades.
- */
 final class SubSecondRequestScheduler implements RequestSchedulerInterface
 {
     private float $delay = 0.0;
@@ -38,7 +24,6 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
         $this->nextBatchReadyAt = $this->clock->now();
     }
 
-    /** The per-shop `download_delay`, in fractional seconds. */
     public function setDelaySeconds(float $seconds): self
     {
         $this->delay = max(0.0, $seconds);
@@ -57,7 +42,6 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
         return $this->requests === [];
     }
 
-    /** @return array<array-key, Request> */
     public function nextRequests(int $batchSize): array
     {
         $this->clock->sleepUntil($this->nextBatchReadyAt);
@@ -66,7 +50,6 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
         return $this->take($batchSize);
     }
 
-    /** @return array<array-key, Request> */
     public function forceNextRequests(int $batchSize): array
     {
         return $this->take($batchSize);
@@ -74,10 +57,8 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
 
     public function setDelay(int $delay): RequestSchedulerInterface
     {
-        // Don't let the spider's int clobber a float already set from the
-        // shop config — that is exactly the truncation this class exists
-        // to avoid.
-        if (!$this->delayExplicitlySet) {
+
+        if (! $this->delayExplicitlySet) {
             $this->delay = (float) $delay;
         }
 
@@ -100,11 +81,13 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
             return $from;
         }
 
-        return $from->modify(sprintf('+%d microseconds', (int) round($this->delay * 1_000_000)))
-            ?: $from;
+        return $from->modify(sprintf(
+            '+%d microseconds',
+            (int) round($this->delay * 1_000_000),
+        ));
     }
 
-    /** @return array<array-key, Request> */
+    /** @return list<Request> */
     private function take(int $batchSize): array
     {
         return \array_splice($this->requests, 0, $batchSize);

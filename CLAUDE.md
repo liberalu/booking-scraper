@@ -31,16 +31,16 @@ php bin/migrate apply  --database=$DATABASE_URL  # apply database/schema
 
 # Crawling. Writes to DATABASE_URL; pass --database to be explicit, and
 # --dry-run to fetch and parse without persisting.
-php bin/crawl discover --shop=vaga --strategy=sitemap
-php bin/crawl discover --shop=vaga --strategy=categories       # + prices
-php bin/crawl discover --shop=vaga --strategy=full_crawl       # follow internal links
-php bin/crawl discover --shop=vaga --strategy=categories --max-pages=3
-php bin/crawl scan --shop=vaga                                 # resumable
-php bin/crawl scan --shop=vaga --max-urls=20                   # dev / smoke
-php bin/crawl scan --shop=vaga --urls=https://vaga.lt/some-book
-php bin/crawl discover --shop=pegasas --strategy=graphql       # full LT metadata, slow
-php bin/crawl discover --shop=pegasas --strategy=lupasearch    # fast price/stock rescan
-php bin/crawl discover --shop=humanitas --strategy=categories  # via FlareSolverr (~10 min)
+php artisan crawler:run discover --shop=vaga --strategy=sitemap
+php artisan crawler:run discover --shop=vaga --strategy=categories       # + prices
+php artisan crawler:run discover --shop=vaga --strategy=full_crawl       # follow internal links
+php artisan crawler:run discover --shop=vaga --strategy=categories --max-pages=3
+php artisan crawler:run scan --shop=vaga                                 # resumable
+php artisan crawler:run scan --shop=vaga --max-urls=20                   # dev / smoke
+php artisan crawler:run scan --shop=vaga --urls=https://vaga.lt/some-book
+php artisan crawler:run discover --shop=pegasas --strategy=graphql       # full LT metadata, slow
+php artisan crawler:run discover --shop=pegasas --strategy=lupasearch    # fast price/stock rescan
+php artisan crawler:run discover --shop=humanitas --strategy=categories  # via FlareSolverr (~10 min)
 php bin/validate --shop=vaga                                   # data-quality validator
 php bin/match --shop=vaga                                      # steps 1 + 2
 php bin/match --shop=vaga --synthesis                          # + step 3
@@ -52,7 +52,7 @@ make compose-up                               # postgres + dashboard + reaper (n
 make compose-up-scheduler                     # ...and the scheduler (STARTS CRAWLING)
 make test                                     # library + crawler + dashboard
 make test-offline                             # everything that needs no database
-make lint                                     # php -l over every file
+make lint                                     # syntax, Pint, ECS, PHPStan/Larastan, Rector
 make fixture-db                               # rebuild the fixture-only database
 make schema-gate                              # does database/schema still match the live schema?
 
@@ -81,23 +81,23 @@ curl -s 'http://localhost:12345/-/ready'                             # Alloy rea
 > whoever asked for it, so restarting a container kills the crawls it started —
 > the watchdog fails the run, the reaper cleans up, and the run is resumable.
 > For a crawl by hand:
-> `docker compose exec dashboard php bin/crawl scan --shop=vaga --max-urls=20`.
+> `docker compose exec dashboard php artisan crawler:run scan --shop=vaga --max-urls=20`.
 
 ## Architecture
 
-- **One Laravel application, rooted at `php/`.** The crawler, the domain
+- **One Laravel application, rooted at the repository.** The crawler, the domain
   library and the dashboard were three composer projects wired together with
   path repositories until 2026-08-26; they are now `app/Crawler/`,
-  `app/{Models,Services,Repositories,Runs,Discovery,Parsers,Support}/` and
-  `app/Http/` in one project.
+  `app/{Models,DTO,Queries,Services,Repositories,Runs,Discovery,Parsers,Support}/`
+  and `app/Http/` in one project.
 - **Crawler:** roach-php, synchronous (no event loop) — `app/Crawler/`
 - **DB:** PostgreSQL via Eloquent; the schema baseline is
-  `database/schema/`, applied by `bin/migrate`. `database/migrations/`
-  is deliberately empty — see the note in it.
-- **Dashboard:** Laravel serving a JSON API (`routes/api.php`) plus the React SPA in `public/static/hifi`
+  `database/schema/`, applied by `bin/migrate`. Do not use `artisan migrate`.
+- **Dashboard:** Laravel serving a JSON API through Form Requests, DTOs, thin controllers, query objects, and domain services, plus the React SPA in `public/static/hifi`
+- **Persistence boundary:** application code reaches PostgreSQL through repositories; services and controllers do not build queries. Large read models are split by list/detail or source concern.
 - **Config:** TOML files in `config/` (global defaults + per-shop overrides)
-- **Package manager:** composer, one project — `php/`
-- **Deployment:** CLI. Compose runs infrastructure only; there are no application images.
+- **Package manager:** composer, one project
+- **Deployment:** one Compose application image used by the dashboard, scheduler, and reaper
 
 **Schema ownership.** Alembic owned the schema until the Python stack was
 removed; `database/schema/0001_baseline.sql` is a dump of what it produced, and
@@ -110,9 +110,9 @@ FK actions included. `bin/migrate` refuses a database that has an
 
 1. **Discover** (`discover` spider) — find URLs. Strategies: `sitemap`, `categories`, `full_crawl`, `graphql` (Magento), `lupasearch` (third-party search index, POST endpoint). GraphQL + LupaSearch can also yield full `ShopBookItem` data inline, so for Magento PWA shops the scan phase becomes a no-op.
 2. **Scan** (`scan` spider) — scrape full product pages for discovered URLs. Resumable after crashes.
-3. **Match** — not yet implemented (link shop_books to canonical books)
+3. **Match** — link shop books to canonical books by ISBN and backfill normalized authors.
 
-Spiders are generic — the shop is an argument: `php bin/crawl discover --shop=vaga --strategy=sitemap`.
+Spiders are generic — the shop is an argument: `php artisan crawler:run discover --shop=vaga --strategy=sitemap`.
 Shop-specific parsing lives in `app/Parsers/<Shop>/Parser.php`, resolved through
 `ParserRegistry`.
 
@@ -211,7 +211,7 @@ does something other than what the row asks for.
 | Env var | Default | Effect |
 |---|---|---|
 | `POST_PHASE_AUTO_TRIGGER` | `1` | Auto-runs match step 1 + validate after every scan/discover. Set `0` to disable. |
-| `MATCH_SYNTHESIS_ENABLED` | `0` | When the full `match` phase runs, step 3 (canonical synthesis from shop data) is skipped. Set `1` to re-enable. Disabled because the per-row synthesis loop on shops with ~2.5k unmatched books blocks the reactor past the 60s heartbeat reaper, killing steps 1 + 2 mid-transaction. When Rule 1 (multi-shop consensus synthesis, see `docs/superpowers/specs/2026-05-18-data-quality-rules-design.md`) lands with batched commits, remove this flag. |
+| `MATCH_SYNTHESIS_ENABLED` | `0` | When the full `match` phase runs, step 3 (canonical synthesis from shop data) is skipped. Set `1` to re-enable. Disabled because the per-row synthesis loop on shops with ~2.5k unmatched books blocks the reactor past the 60s heartbeat reaper, killing steps 1 + 2 mid-transaction. Re-enable it after synthesis uses batched commits. |
 
 ### Validator issue types (recent additions)
 
@@ -296,7 +296,7 @@ ON CONFLICT (shop_id, key) DO UPDATE SET value=EXCLUDED.value, type=EXCLUDED.typ
 1. Create `config/shops/<shop>.toml` with discovery strategies and scraping settings
 2. Create `app/Parsers/<Shop>/Parser.php`
 3. Expose `parseSitemapUrls()`, `parseCategoryPage()`, `parseProductPage()`, and register it in `ParserRegistry`. `parseCategoryPage` returns `['products' => [...], 'total' => int|null]` — `total` enables upfront pagination on the first page (the spider enqueues all remaining pages from `total`, so `concurrent_requests_per_domain` actually engages instead of chaining one page at a time). Return `total = null` for HTML-scrape shops where the count isn't reliably surfaced; the spider falls back to per-page chained pagination.
-4. Add a fixture under `fixtures/` and a parser test
+4. Add a fixture under `tests/fixtures/` and a parser test
 5. No new spider classes needed — the generic spiders resolve the parser by shop name
 6. `ParserRegistryTest` asserts the registry and `config/shops/*.toml` list the same shops, so a TOML without a parser fails the suite rather than a crawl
 
@@ -330,8 +330,8 @@ replay is Python's behaviour captured, not PHP's output blessed.
 
 | Golden | Replayed by | Covers |
 |---|---|---|
-| `dashboard/tests/golden/api_shapes.json` | `ApiShapeCharacterisationTest` | 79 GET endpoints: status + response type-skeleton |
-| `dashboard/tests/golden/mutation_cases.json` | `MutationCharacterisationTest` | 100 write-route cases, in sequence |
+| `tests/golden/api_shapes.json` | `ApiShapeCharacterisationTest` | 79 GET endpoints: status + response type-skeleton |
+| `tests/golden/mutation_cases.json` | `MutationCharacterisationTest` | 100 write-route cases, in sequence |
 | `tests/golden/validate_findings.json` | `ValidateServiceCharacterisationTest` | 34 findings across all 20 issue types |
 | `tests/golden/match_linkage.json` | `MatchServiceCharacterisationTest` | ISBN linkage + author backfill |
 | `tests/golden/validator_cases.json` | `ItemValidatorCharacterisationTest` | 46 item-validation cases |
@@ -356,7 +356,7 @@ Two rules they depend on, both learned the hard way:
   (`database/schema` + `SyntheticShop`), not over a copy of the live catalogue — a
   reseed once turned a field from `str` into `null` and failed the test with
   nothing having regressed.
-- **`SyntheticShop`** (`app/Testing/SyntheticShop.php`) is the fixture: 27
+- **`SyntheticShop`** (`tests/Support/SyntheticShop.php`) is the fixture: 27
   rows that fire all 20 issue types plus their suppression cases, a matchable
   book, a canonical that disagrees with its shop_book, run history, a failure
   streak and a second shop. It refuses to build against anything but the test
@@ -374,7 +374,7 @@ After completing any task that changes code, suggest to the user:
    actions; a missing partial unique index once made a dead validator check
    look alive for months.
 3. After a schema change, also run a one-URL scan
-   (`php bin/crawl scan --shop=vaga --urls=<one-url>`) to confirm the models
+   (`php artisan crawler:run scan --shop=vaga --urls=<one-url>`) to confirm the models
    still match what the database has.
 4. After deploying single-row restarts (2026-05-09): on shops with large
    stale-failed backlogs (humanitas, patogupirkti), the first scan may
@@ -447,21 +447,12 @@ of the run being left `running` for the reaper to find.
 ## Code Conventions
 
 - PHP 8.4 (roach-php caps there), `declare(strict_types=1)` in every file
-- `make lint` is `php -l` over every file. Pint is installed but **not** enforced: the codebase has never been pint-formatted, so running it would be a reformatting sweep, not a lint.
+- `make lint` runs syntax checks, Pint, ECS, PHPStan/Larastan at max with strict rules, and Rector dry-run.
+- PHPStan runs at max with strict, deprecation, and disallowed-call rules. There is no baseline or ignored migration debt.
 - Commit directly on main (personal project, no branches)
 - Tests use real PostgreSQL (Docker on port 5433), not mocks
 - Items are plain arrays, validated by `ItemValidator` (`app/Crawler/ItemValidator.php`)
-- Comments of the form "port of `book_scraper/…`" record where a class came from. Those files are gone from the tree but present at the `python-final` tag.
 
-## Specs and Plans
-
-- **PHP port + Python removal:** `docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md` — the nine defects the differential found, and what phase 6 (freezing the evidence) cost. Read this before touching a golden.
-- Design spec: `docs/superpowers/specs/2026-04-05-book-scraper-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-04-05-book-scraper-plan.md`
-- Fault tolerance spec: `docs/superpowers/specs/2026-04-06-fault-tolerance-design.md`
-- Fault tolerance plan: `docs/superpowers/plans/2026-04-06-fault-tolerance-plan.md`
-- Dashboard redesign spec: `docs/superpowers/specs/2026-04-14-dashboard-redesign-design.md`
-- Dashboard redesign plan: `docs/superpowers/plans/2026-04-14-dashboard-redesign-plan.md`
 - vaga.lt strategy: Notion page "vaga.lt scraping strategy"
 - pegasas.lt strategy: Notion page "pegasas.lt scraping strategy"
 - Architecture: Notion page "Scraping Strategy & Architecture"

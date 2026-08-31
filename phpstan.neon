@@ -1,0 +1,29 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/spaze/phpstan-disallowed-calls/extension.neon
+
+parameters:
+    level: max
+    phpVersion: 80400
+    paths:
+        - app
+        - bootstrap
+        - config
+        - routes
+    excludePaths:
+        - bootstrap/cache
+        - storage
+        - vendor
+    universalObjectCratesClasses:
+        - Illuminate\Database\Eloquent\Model
+    disallowedFunctionCalls:
+        -
+            function: dump
+            message: use a logger instead
+        -
+            function: dd
+            message: use a logger instead
+    strictRules:
+        allRules: true

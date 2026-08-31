@@ -4,18 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasSqlAlchemyDefaults;
+use Illuminate\Database\Eloquent\Model;
 
-/**
- * Author as a shop spells it. `normalized_name` is the dedupe key and is
- * shared across shops, so two shops writing "J. R. R. Tolkien" and
- * "j.r.r. tolkien" converge on one row.
- *
- * @property int $id
- * @property string $name
- * @property string $normalized_name
- */
 final class ShopAuthor extends Model
 {
     protected $table = 'shop_authors';

@@ -1,16 +1,7 @@
-// Hi-fi Issue detail — rebuilt to match prod /issues/:id + scale features.
-// Loaded after hf-details.jsx; overrides the legacy HFIssueDetail.
-//
-// Adds versus the prod screenshot:
-//   • Wave context callout — "this is 1 of 36,242 issues from run #407"
-//   • "Fix this" action panel — type-specific buttons (Open parser / Re-scrape / Bulk ack)
-//   • Raw extraction snippet — show what the parser saw so you can diagnose without leaving
 
 function HFIssueDetail({ nav, goto, params }) {
   const HF = getHF();
 
-  // Fetch from API when params.id is a numeric issue ID; fall back to mock
-  // params for hifi-preview mode (where params carry display fields directly).
   const issueId = params?.id && /^\d+$/.test(String(params.id)) ? params.id : null;
   const [apiData, setApiData] = React.useState(null);
   const [apiLoading, setApiLoading] = React.useState(!!issueId);
@@ -18,9 +9,6 @@ function HFIssueDetail({ nav, goto, params }) {
   const [waveTotal, setWaveTotal] = React.useState(1);
   const [otherIssues, setOtherIssues] = React.useState([]);
 
-  // Fetch real wave total from /api/issues/groups whenever the issue's type changes.
-  // Depends on `apiData?.issue || params?.type` directly so the hook stays above
-  // the early-return guards (Rules of Hooks).
   React.useEffect(() => {
     const t = apiData?.issue || params?.type;
     if (!t) return;
@@ -71,7 +59,6 @@ function HFIssueDetail({ nav, goto, params }) {
   if (apiLoading) return <div style={{padding:40, color: getHF().ink3, fontFamily: getHF().sans}}>Loading…</div>;
   if (apiNotFound) return <div style={{padding:40, color: getHF().errInk, fontFamily: getHF().sans}}>Issue not found.</div>;
 
-  // Resolve display fields: prefer live API data, fall back to params (hifi preview).
   const id        = apiData ? `ISS-${apiData.id}` : (params?.id        || 'ISS-266206');
   const type      = apiData?.issue             || params?.type      || 'missing_price';
   const sev       = apiData?.severity          || params?.sev       || 'critical';
@@ -104,7 +91,6 @@ function HFIssueDetail({ nav, goto, params }) {
     scrape_run_failed:     'A scrape run ended with status=failed before completing its phase.',
     product_url_non_book:  'A URL classified as a product page resolved to something that is not a book (DVD, stationery, gift card, etc.).',
   };
-  // (waveTotal fetched above, before the early-return guards)
 
   const bulkAckWave = async () => {
     if (!window.confirm(`Acknowledge all ${waveTotal.toLocaleString()} "${type}" issues${shop ? ' in ' + shop : ''}?`)) return;
@@ -122,7 +108,6 @@ function HFIssueDetail({ nav, goto, params }) {
     }
   };
 
-  // Type-specific actions for the Fix-this panel.
   const fixActions = (() => {
     const open = (page, p) => () => goto(page, p);
     const rescrape = async () => {
@@ -264,7 +249,7 @@ function HFIssueDetail({ nav, goto, params }) {
         <HFButton variant="primary" onClick={() => goto('issues')}>Back to issues</HFButton>
       </>}
     >
-      {/* 4-tile KPI strip: SEVERITY / LIFECYCLE / DETECTED / FIELD */}
+
       <div style={{
         display:'grid', gridTemplateColumns:'repeat(4, 1fr)',
         border:`1px solid ${HF.border}`, borderRadius: HF.r3,
@@ -295,7 +280,7 @@ function HFIssueDetail({ nav, goto, params }) {
         ))}
       </div>
 
-      {/* Wave context callout — only show when wave is meaningful (> 1 issue) */}
+
       {waveTotal > 1 && (
         <div style={{
           marginBottom: HF.gap, padding: '12px 14px',
@@ -321,7 +306,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </div>
       )}
 
-      {/* What this means + Failure details */}
+
       <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:HF.gap, marginBottom:HF.gap, alignItems:'start'}}>
         <HFCard
           title="What this means"
@@ -426,7 +411,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Fix this — type-specific action panel */}
+
       <HFCard
         title="Fix this"
         sub="Type-aware actions for this issue. Bulk actions apply to the entire wave."
@@ -448,7 +433,7 @@ function HFIssueDetail({ nav, goto, params }) {
         ))}
       </HFCard>
 
-      {/* Affected book */}
+
       {(book || url) && (
         <HFCard
           title="Affected book"
@@ -482,7 +467,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </HFCard>
       )}
 
-      {/* Other issues of same type in same shop */}
+
       <HFCard
         title={`Other ${type} issues${shop ? ' in ' + shop : ''}`}
         sub={`${otherIssues.length} of ${(waveTotal - 1).toLocaleString()} other issues in this wave`}

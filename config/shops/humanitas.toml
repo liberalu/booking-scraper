@@ -3,89 +3,30 @@ name = "humanitas"
 base_url = "https://www.humanitas.lt"
 
 [scraping]
-# FlareSolverr is the bottleneck (~1–3 s per request, can spike to 10 s
-# while the browser warms up). MUST stay at 1: the FS middleware reuses
-# a single browser session across all requests, and two concurrent
-# `request.get` calls on the same session race for the same browser
-# instance — the second response silently returns the first request's
-# body. This produced the 2026-05-22 humanitas regression where the
-# `m575a2filt_leidimo_kalba=Lithuanian` seed (5,000 books, 18.9 MB)
-# returned the bilingual seed's 596 KB / 110-book body and ~5,000
-# books went un-discovered. Verified via concurrent threading test.
-# Only raise after the FS middleware grows a per-slot session pool.
 download_delay = 0.5
 concurrent_requests_per_domain = 1
 batch_size = 50
 batch_pause = 5
 max_retries = 2
-# FS waits up to 90–120 s for the browser to settle on a cold-start
-# challenge solve. Keep client-side timeouts well above that so we
-# don't kill the FS POST mid-render.
 connect_timeout = 15
 read_timeout = 180
 hard_timeout = 240
 batch_timeout = 600
 
 [flaresolverr]
-# Compose service name; override locally with FLARESOLVERR_ENDPOINT or
-# by editing this file. session_ttl_minutes < the cf_clearance ~30 min
-# wall so the cookie always rotates before it expires.
 endpoint = "http://flaresolverr:8191/v1"
 max_timeout_ms = 120000
 session_ttl_minutes = 25
 
 [discover]
-# Match the LT permalink namespace. EN mirror (/product/) and the
-# /produktas/visos-knygos/ paths from the broken sitemap (which leaks
-# the dev hostname humanitas.lt.kikilis.serveriai.lt) are excluded.
 url_include_pattern = "^https://www\\.humanitas\\.lt/produktas/"
 
 [discover.categories]
-# The published sitemap.xml is unusable on production (it leaks the
-# dev hostname `humanitas.lt.kikilis.serveriai.lt` and uses the wrong
-# category slug `/produktas/visos-knygos/...`). Instead we paginate
-# the "all categories" catalogue page with the CMSMS Products module's
-# server-side language filter applied.
-#
-# Why the LT-language filter is load-bearing:
-#   - Without it the unfiltered catalogue is ~81 k books, mostly
-#     imported German/English academic titles. The LT subset is
-#     ~5 k books — 16× smaller.
-#   - With `m575a2filt_leidimo_kalba=Lithuanian`, page 1 at
-#     `m575a2product_limit=5000` returns ~5 000 LT books in a single
-#     FlareSolverr round trip (~17 s). Page 2 picks up the ~20
-#     stragglers; page 3 is empty. Verified 2026-05-07.
-#   - Pagination at limit=5000 with the filter is somewhat unreliable
-#     (pages 1+2 overlap ~99 % — CMSMS quirk). The spider's stop-on-
-#     empty behaviour + max_pages=3 safety cap handles it cleanly.
-#   - Each `<a class="book-item">` card on the listing already
-#     carries title + author + final price + original price + image,
-#     so discover persists Price rows for the whole LT catalogue in
-#     ~35 s. The scan phase becomes a delta (only first-sight metadata
-#     enrichment for ISBN/year/pages/format) instead of a weekly grind.
-#
-# Module instance id `m575a2` is stable per deploy; if humanitas
-# redeploys with a fresh module id, this URL needs updating —
-# `parse_category_page` would still work (it keys on
-# `class="book-item"`, not the URL shape).
-# Two seed URLs to capture both pure-LT books and Lithuanian-English
-# bilingual titles (`Leidinio kalba: Lietuvių-anglų`). The strict
-# `Lithuanian` filter alone misses ~112 bilingual books (M. K. Čiurlionio
-# kūryba, ADHD ir autizmas, etc.) — small but real false-negative class
-# verified 2026-05-07. Each filter walks its own page sequence; pages
-# across filters are deduplicated downstream by the `discovered_urls`
-# unique constraint.
 url = [
   "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian",
   "https://www.humanitas.lt/produktai/visos-kategorijos/?cntnt01page={page}&m575a2product_limit=5000&m575a2filt_leidimo_kalba=Lithuanian-English",
 ]
 max_age_hours = 24
-# Safety cap (per seed URL, not total). With the LT filter, page 1
-# returns ~5 000 books and page 2 returns ~20 stragglers — we need
-# exactly 2 productive pages per seed in the steady state. 3 leaves
-# room for one transient empty page without giving up a runaway
-# pagination guard. Two seed URLs × max_pages=3 = up to 6 pages
-# total per discover run.
 max_pages = 3
 
 [scan]

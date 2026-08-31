@@ -1,11 +1,6 @@
-// Hi-fi global overlays — command palette, avatar menu, settings, add/new dialogs.
-// Registers window.HF_APP with openers. Any page can call them.
 
-// Module-level scroll-lock counter so stacked modals don't unlock the body
-// before the topmost one closes.
 let _hfOpenModalCount = 0;
 
-// Focusable selector — used by the focus trap and the initial focus pass.
 const _HF_FOCUSABLE_SEL = [
   'a[href]',
   'button:not([disabled])',
@@ -17,10 +12,6 @@ const _HF_FOCUSABLE_SEL = [
 
 const _hfModalCtx = React.createContext(null);
 
-// ══════════════════════════════ Discover strategy catalog ══════════════════════════════
-// Single source of truth for strategy button labels + hint copy. The backend
-// (/api/shops) tells us which keys are configured for each shop; we filter
-// this catalog by that list when rendering the segmented picker.
 const HF_DISCOVER_STRATEGIES = {
   sitemap:         { label: 'Sitemap',         hint: 'Read /sitemap.xml — fastest, only URL discovery' },
   categories:      { label: 'Categories',      hint: 'Walk category listing pages — also extracts prices' },
@@ -30,7 +21,6 @@ const HF_DISCOVER_STRATEGIES = {
   full_crawl:      { label: 'Full crawl',      hint: 'Follow every internal link — slowest, most thorough' },
 };
 
-// Build segmented options from the strategy keys a shop has configured.
 function _hfStrategyOptions(keys) {
   const list = Array.isArray(keys) && keys.length ? keys : Object.keys(HF_DISCOVER_STRATEGIES);
   return list
@@ -41,18 +31,12 @@ function _hfStrategyHint(key) {
   return HF_DISCOVER_STRATEGIES[key]?.hint || '';
 }
 
-// ══════════════════════════════ Base Modal ══════════════════════════════
 function HFModal({ open, onClose, width = 560, children, align = 'center', label }) {
   const HF = getHF();
   const panelRef = React.useRef(null);
   const lastFocusedRef = React.useRef(null);
   const titleId = React.useId();
 
-  // Save trigger focus on open; restore it on close so keyboard users return
-  // to the button that launched the dialog instead of falling back to <body>.
-  // Initial-focus pass moves focus to the first interactive element inside
-  // the panel (or the panel itself if none), so the dialog is announced
-  // and immediately operable by keyboard.
   React.useEffect(() => {
     if (!open) return;
     lastFocusedRef.current = document.activeElement;
@@ -67,12 +51,11 @@ function HFModal({ open, onClose, width = 560, children, align = 'center', label
       cancelAnimationFrame(id);
       const el = lastFocusedRef.current;
       if (el && typeof el.focus === 'function') {
-        try { el.focus({ preventScroll: true }); } catch (_) { /* node detached */ }
+        try { el.focus({ preventScroll: true }); } catch (_)
       }
     };
   }, [open]);
 
-  // Body scroll lock. Counter pattern handles nested modals correctly.
   React.useEffect(() => {
     if (!open) return;
     _hfOpenModalCount += 1;
@@ -87,7 +70,6 @@ function HFModal({ open, onClose, width = 560, children, align = 'center', label
     };
   }, [open]);
 
-  // Escape closes; Tab/Shift+Tab cycles inside the panel (focus trap).
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -155,7 +137,6 @@ function HFModal({ open, onClose, width = 560, children, align = 'center', label
   );
 }
 
-// Modal header/footer/body primitives
 function HFModalHead({ title, sub, onClose, icon }) {
   const HF = getHF();
   const ctx = React.useContext(_hfModalCtx);
@@ -202,7 +183,6 @@ function HFModalFoot({ children }) {
   );
 }
 
-// Field — labeled input group
 function HFField({ label, hint, children, required }) {
   const HF = getHF();
   return (
@@ -288,7 +268,6 @@ function HFSegmented({ value, onChange, options }) {
   );
 }
 
-// ══════════════════════════════ Command palette (⌘K) ══════════════════════════════
 function HFCommandK({ open, onClose, goto }) {
   const HF = getHF();
   const [q, setQ] = React.useState('');
@@ -352,7 +331,6 @@ function HFCommandK({ open, onClose, goto }) {
     { label: 'Jump to',  items: filtered.filter(x => x.k === 'jump') },
   ];
 
-  // global index for highlight
   let running = 0;
 
   return (
@@ -442,7 +420,6 @@ function HFCommandK({ open, onClose, goto }) {
   );
 }
 
-// ══════════════════════════════ New Run dialog ══════════════════════════════
 function HFNewRunDialog({ open, onClose, goto }) {
   const HF = getHF();
   const [shop, setShop] = React.useState('');
@@ -470,9 +447,6 @@ function HFNewRunDialog({ open, onClose, goto }) {
   const urlCount = selShop ? (selShop.discovered_urls || 0) : 0;
   const shopStrategies = selShop?.discover_strategies || [];
 
-  // Snap strategy to the first one the selected shop actually exposes
-  // whenever the shop or phase changes — otherwise switching from vaga
-  // to pegasas leaves "sitemap" selected (which pegasas doesn't have).
   React.useEffect(() => {
     if (phase !== 'discover' || !shopStrategies.length) return;
     if (!shopStrategies.includes(strategy)) setStrategy(shopStrategies[0]);
@@ -571,7 +545,6 @@ function HFNewRunDialog({ open, onClose, goto }) {
   );
 }
 
-// ══════════════════════════════ New Schedule dialog ══════════════════════════════
 const CRON_PRESETS = [
   { v:'15m',   lbl:'Every 15 min', cron:'*/15 * * * *' },
   { v:'1h',    lbl:'Hourly',       cron:'0 * * * *' },
@@ -866,7 +839,6 @@ function HFEditScheduleDialog({ open, job, onClose }) {
   );
 }
 
-// ══════════════════════════════ Add URL dialog ══════════════════════════════
 function HFAddURLDialog({ open, onClose }) {
   const HF = getHF();
   const [url, setUrl] = React.useState('');
@@ -930,7 +902,6 @@ function HFAddURLDialog({ open, onClose }) {
   );
 }
 
-// ══════════════════════════════ Add Shop dialog ══════════════════════════════
 function HFAddShopDialog({ open, onClose, goto }) {
   const HF = getHF();
   const [name, setName] = React.useState('');
@@ -977,7 +948,6 @@ function HFAddShopDialog({ open, onClose, goto }) {
   );
 }
 
-// ══════════════════════════════ Add Book dialog ══════════════════════════════
 function HFAddBookDialog({ open, onClose }) {
   const HF = getHF();
   const [isbn, setIsbn]           = React.useState('');
@@ -1103,7 +1073,6 @@ function HFAddBookDialog({ open, onClose }) {
   );
 }
 
-// ══════════════════════════════ Shop picker (for cmd+K "Open shop…") ═══════
 function HFParserPicker({ open, onClose, goto }) {
   const HF = getHF();
   const [shops, setShops] = React.useState([]);
@@ -1143,7 +1112,6 @@ function HFParserPicker({ open, onClose, goto }) {
   );
 }
 
-// ══════════════════════════════ Settings modal ══════════════════════════════
 function HFSettings({ open, onClose, accent, setAccent, density, setDensity, persist }) {
   const HF = getHF();
   const [tab, setTab] = React.useState('appearance');
@@ -1271,7 +1239,6 @@ function HFSettings({ open, onClose, accent, setAccent, density, setDensity, per
   );
 }
 
-// ══════════════════════════════ Avatar menu (popover) ══════════════════════════════
 function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
   const HF = getHF();
   const lastFocusedRef = React.useRef(null);
@@ -1288,7 +1255,7 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
       cancelAnimationFrame(id);
       const el = lastFocusedRef.current;
       if (el && typeof el.focus === 'function') {
-        try { el.focus({ preventScroll: true }); } catch (_) { /* node detached */ }
+        try { el.focus({ preventScroll: true }); } catch (_)
       }
     };
   }, [open]);
@@ -1370,7 +1337,6 @@ function HFAvatarMenu({ open, anchorRect, onClose, goto }) {
   );
 }
 
-// ══════════════════════════════ Rate Settings dialog ══════════════════════════════
 function HFRateSettingsDialog({ open, onClose, shopName }) {
   const HF = getHF();
   const [delay, setDelay] = React.useState('');
@@ -1380,7 +1346,6 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
-  // Fetch current settings from DB each time the modal opens.
   React.useEffect(() => {
     if (!open || !shopName) return;
     setLoadingSettings(true);
@@ -1462,10 +1427,6 @@ function HFRateSettingsDialog({ open, onClose, shopName }) {
   );
 }
 
-// ══════════════════════════════ Confirm dialog ══════════════════════════════
-// Drop-in replacement for window.confirm(): renders a styled modal so action
-// flows match the rest of the dashboard. `danger` swaps the primary button to
-// the danger variant for destructive actions (Stop run, Re-run, etc.).
 function HFConfirmDialog({ open, title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger, busy, onConfirm, onCancel }) {
   const HF = getHF();
   return (
@@ -1484,10 +1445,6 @@ function HFConfirmDialog({ open, title, body, confirmLabel = 'Confirm', cancelLa
   );
 }
 
-// ══════════════════════════════ Acknowledge failure-group dialog ══════════════════════════════
-// Replaces a multi-line window.prompt() — operators come back to acked buckets
-// months later, so a labelled textarea with a real placeholder is much better
-// UX than the OS prompt with `\n`-padded body text.
 function HFAckGroupDialog({ open, group, runId, busy, onConfirm, onCancel }) {
   const HF = getHF();
   const [note, setNote] = React.useState('');
@@ -1528,14 +1485,10 @@ function HFAckGroupDialog({ open, group, runId, busy, onConfirm, onCancel }) {
   );
 }
 
-// ══════════════════════════════ Toasts ══════════════════════════════
-// Pub/sub bus + global push/dismiss. HFToastHost subscribes once and renders
-// the stack at bottom-right. Any code can call window.HF_APP.toast({...}).
 const _hfToastListeners = new Set();
 let _hfToastSeq = 0;
 function _hfPushToast(t) {
   const id = ++_hfToastSeq;
-  // Tone-based default TTL: errors stay longer so operators can read them.
   const ttlByTone = { ok: 3500, accent: 3500, warn: 5500, err: 7000, neutral: 4000 };
   const toast = {
     id,
@@ -1637,7 +1590,6 @@ function HFToastHost() {
   );
 }
 
-// ══════════════════════════════ Exports ══════════════════════════════
 Object.assign(window, {
   HFModal, HFModalHead, HFModalBody, HFModalFoot,
   HFField, HFInput, HFSelect, HFSegmented,

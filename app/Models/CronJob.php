@@ -7,26 +7,24 @@ namespace App\Models;
 use App\Models\Concerns\HasSqlAlchemyDefaults;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
- * A scheduled phase run. `phase` + `strategy` are stored separately here,
- * while scrape_runs stores the combined value ('discover_sitemap') — see
- * runPhase() for the mapping, which is load-bearing: 'scan' takes no
- * strategy suffix regardless of strategy, because 'scan_delta' is not a
- * valid scrape_phase enum value.
- *
  * @property int $id
  * @property int $shop_id
+ * @property int|null $chain_to_job_id
  * @property string $phase
  * @property string|null $strategy
- * @property string $cron_expression
  * @property bool $enabled
+ * @property string $cron_expression
+ * @property Carbon|null $last_run_at
+ * @property string|null $args
+ * @property Shop $shop
  */
 final class CronJob extends Model
 {
     use HasSqlAlchemyDefaults;
 
-    /** `created_at` is a Python-side SQLAlchemy default, not a server one. */
     public const TIMESTAMP_DEFAULTS = ['created_at'];
 
     protected $table = 'cron_jobs';
@@ -39,23 +37,24 @@ final class CronJob extends Model
         'created_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Shop, $this> */
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class, 'shop_id');
     }
 
+    /** @return BelongsTo<CronJob, $this> */
     public function chainTo(): BelongsTo
     {
         return $this->belongsTo(self::class, 'chain_to_job_id');
     }
 
-    /** The scrape_runs.phase value this job produces. */
     public function runPhase(): string
     {
         if ($this->phase === 'scan') {
             return 'scan';
         }
-        if ($this->phase === 'discover' && $this->strategy) {
+        if ($this->phase === 'discover' && $this->strategy !== null && $this->strategy !== '') {
             return "discover_{$this->strategy}";
         }
 

@@ -8,17 +8,9 @@ use App\Models\ScrapeRun;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
-/**
- * Port of the run-shaping helpers in book_scraper/dashboard/routes/api.py
- * (_run_dict, _rel, _elapsed, _progress, _parse_phase).
- *
- * The React SPA is served unchanged and reads these keys directly, so the
- * output shape — including the em-dash placeholders and the constant
- * "type"/"by" fields — is a contract, not a style choice.
- */
 final class RunPresenter
 {
-    /** @return array<string, mixed> */
+    /** @return array<string, bool|float|int|string|null> */
     public static function toArray(
         ScrapeRun $run,
         ?int $terminalCount = null,
@@ -37,7 +29,7 @@ final class RunPresenter
 
         $startedH = 0.0;
         if ($run->started_at !== null) {
-            $startedH = Carbon::now('UTC')->diffInRealSeconds($run->started_at, true) / 3600;
+            $startedH = Carbon::now('UTC')->diffInSeconds($run->started_at, true) / 3600;
         }
 
         return [
@@ -69,7 +61,7 @@ final class RunPresenter
         ];
     }
 
-    /** 'discover_sitemap' → ['discover','sitemap']; 'scan' → ['scan','delta']. */
+    /** @return array{string, string} */
     public static function parsePhase(string $phase): array
     {
         if (str_starts_with($phase, 'discover_')) {
@@ -82,12 +74,6 @@ final class RunPresenter
         return ['scan', 'delta'];
     }
 
-    /**
-     * `terminalCount` is done+failed scrape_url_items for the run: it counts
-     * non-product fetches and 4xx/5xx as progress, because the work for
-     * that URL is finished. List endpoints skip it and fall back to
-     * urls_processed.
-     */
     public static function progress(ScrapeRun $run, ?int $terminalCount = null): int
     {
         if ($run->status === 'completed') {
@@ -109,7 +95,7 @@ final class RunPresenter
         }
         $end = $run->finished_at ?? Carbon::now('UTC');
 
-        $secs = max(0, (int) $start->diffInRealSeconds($end, true));
+        $secs = max(0, (int) $start->diffInSeconds($end, true));
         $s = $secs % 60;
         $m = intdiv($secs, 60) % 60;
         $h = intdiv($secs, 3600);
@@ -124,14 +110,13 @@ final class RunPresenter
         return "{$s}s";
     }
 
-    /** Coarse "4w ago" bucketing — matches Python's _rel exactly. */
     public static function relative(?CarbonInterface $dt): string
     {
         if ($dt === null) {
             return '—';
         }
 
-        $s = max(0, (int) Carbon::now('UTC')->diffInRealSeconds($dt, true));
+        $s = max(0, (int) Carbon::now('UTC')->diffInSeconds($dt, true));
         if ($s < 60) {
             return 'just now';
         }
@@ -156,15 +141,9 @@ final class RunPresenter
             return "{$mo}mo ago";
         }
 
-        return intdiv($d, 365) . 'y ago';
+        return intdiv($d, 365).'y ago';
     }
 
-    /**
-     * Python's datetime.isoformat(), which OMITS the microsecond component
-     * when it is exactly zero ('...T02:00:00+00:00', not
-     * '...T02:00:00.000000+00:00'). Cron-derived timestamps land on whole
-     * seconds, so this branch fires in practice.
-     */
     public static function iso(?CarbonInterface $dt): ?string
     {
         if ($dt === null) {

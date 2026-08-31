@@ -9,14 +9,8 @@ use App\Support\Database;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Round-trips through a real Postgres text[] rather than asserting against
- * hand-written literals: the point of the cast is to agree with what the
- * server actually emits, including its quoting and escaping rules.
- */
 final class PostgresTextArrayTest extends TestCase
 {
-    /** @return list<array{0: list<string>}> */
     public static function arrays(): array
     {
         return [
@@ -32,14 +26,11 @@ final class PostgresTextArrayTest extends TestCase
         ];
     }
 
-    /** @param list<string> $items */
     #[DataProvider('arrays')]
     public function test_round_trips_through_postgres(array $items): void
     {
         $connection = Database::boot(self::dsn())->getConnection();
 
-        // Send our encoding to the server, read back the server's own
-        // literal, and parse that. Agreement in both directions or bust.
         $literal = $connection->selectOne(
             'select (?::text[])::text as arr',
             [PostgresTextArray::encode($items)]

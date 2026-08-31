@@ -8,12 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Book/non-book verdict for a discovered URL, written by the discover
- * phase's classifier.
- *
- * @property int $discovered_url_id
- * @property int|null $book_score
- * @property bool|null $is_book_product
+ * @property int $book_score
+ * @property bool $is_book_product
+ * @property list<array<string, mixed>> $reasons
  */
 final class UrlClassification extends Model
 {
@@ -24,8 +21,10 @@ final class UrlClassification extends Model
     protected $casts = [
         'book_score' => 'integer',
         'is_book_product' => 'boolean',
+        'reasons' => 'array',
     ];
 
+    /** @return BelongsTo<DiscoveredUrl, $this> */
     public function discoveredUrl(): BelongsTo
     {
         return $this->belongsTo(DiscoveredUrl::class, 'discovered_url_id');

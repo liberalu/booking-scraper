@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-#
-# Prove the schema gate can fail.
-#
-# A gate that cannot fail proves nothing, and this repo has been caught by
-# exactly that twice — a test asserting `"price" in row` passed while every
-# price was None, and `sku_duplicate` looked covered because the test schema
-# was missing the partial unique index production has. So: copy the baseline,
-# delete one unique index from the copy, run the gate against the copy, and
-# require it to fail AND to name the index it lost.
-#
-# The index removed is `uq_shop_books_shop_sku` on purpose — that is the one
-# whose absence from the model made a dead validator check look alive.
-#
-# Nothing is written to the checked-in baseline: the copy lives in a temp
-# directory that goes away with the script.
 
 set -euo pipefail
 

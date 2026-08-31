@@ -9,22 +9,37 @@ use App\Models\Concerns\HasSqlAlchemyDefaults;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
- * One row per book-as-it-appears-in-a-shop. Unique on (shop_id, url).
- *
- * `book_id` is written only by the match phase and is deliberately not
- * fillable here: match linkage is strictly ISBN-exact, and a scraper
- * writing it would reintroduce the `match_isbn_drift` class of bug.
- *
  * @property int $id
  * @property int $shop_id
  * @property string $url
  * @property string $title
+ * @property string|null $author
  * @property string|null $isbn
- * @property list<string> $categories
+ * @property string|null $sku
+ * @property string|null $publisher
+ * @property int|null $year
+ * @property string|null $format
+ * @property string $type
+ * @property string|null $description
+ * @property string|null $image_url
+ * @property list<string>|null $categories
+ * @property numeric-string|null $price
+ * @property numeric-string|null $price_original
  * @property bool $in_stock
  * @property bool $is_active
+ * @property Carbon|null $planned_availability_date
+ * @property-write Carbon|string|null $planned_availability_date
+ * @property numeric-string|null $rating
+ * @property int|null $review_count
+ * @property int|null $book_id
+ * @property int|null $last_run_id
+ * @property Carbon $first_seen_at
+ * @property Carbon $last_seen_at
+ * @property Carbon|null $inactive_since
+ * @property Shop $shop
  */
 final class ShopBook extends Model
 {
@@ -34,7 +49,6 @@ final class ShopBook extends Model
 
     use HasSqlAlchemyDefaults;
 
-    /** Columns Postgres has no default for; see the trait. */
     public const TIMESTAMP_DEFAULTS = ['first_seen_at', 'last_seen_at'];
 
     protected $attributes = [
@@ -65,11 +79,13 @@ final class ShopBook extends Model
         'inactive_since' => 'datetime',
     ];
 
+    /** @return BelongsTo<Shop, $this> */
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class, 'shop_id');
     }
 
+    /** @return HasMany<Price, $this> */
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class, 'shop_book_id');

@@ -7,16 +7,11 @@ namespace Tests\Library;
 use App\Parsers\Patogupirkti\Parser;
 use PHPUnit\Framework\TestCase;
 
-/**
- * patogupirkti is Magento 1: category cards carry an inline
- * `product_tracking_data` blob, product pages use schema.org microdata plus
- * a spec table. Two product templates exist — the legacy one leans on the
- * spec table where the newer carries microdata — so both are compared.
- */
 final class PatogupirktiParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__ . '/../../fixtures/patogupirkti';
-    private const GOLDEN = __DIR__ . '/golden';
+    private const FIXTURES = __DIR__.'/../fixtures/patogupirkti';
+
+    private const GOLDEN = __DIR__.'/../golden';
 
     public function test_category_page_matches_python(): void
     {
@@ -50,12 +45,9 @@ final class PatogupirktiParserDifferentialTest extends TestCase
         );
     }
 
-    // ---------------------------------------------------------- sitemap index
-
     public function test_a_sitemap_index_recurses_only_into_product_children(): void
     {
-        // The index also lists category/page/author/serial/manufacturer
-        // children; following those would flood discovery with non-products.
+
         $fetched = [];
         $urls = Parser::parseSitemapUrls(
             self::fixture('sitemap_index.xml'),
@@ -75,7 +67,7 @@ final class PatogupirktiParserDifferentialTest extends TestCase
 
     public function test_a_sitemap_index_without_a_fetcher_yields_nothing(): void
     {
-        // The caller owns the HTTP; without a fetcher there is nothing to read.
+
         self::assertSame([], Parser::parseSitemapUrls(self::fixture('sitemap_index.xml')));
     }
 
@@ -84,8 +76,6 @@ final class PatogupirktiParserDifferentialTest extends TestCase
         self::assertSame([], Parser::parseSitemapUrls('<not-xml'));
         self::assertSame([], Parser::parseSitemapUrls(''));
     }
-
-    // ----------------------------------------------------------- card details
 
     public function test_discounted_cards_carry_both_prices(): void
     {
@@ -98,8 +88,7 @@ final class PatogupirktiParserDifferentialTest extends TestCase
         self::assertNotEmpty($discounted, 'fixture should contain a discounted card');
 
         foreach ($discounted as $product) {
-            // The displayed price must be the lower of the two, or the
-            // discount labelling is inverted.
+
             self::assertLessThan(
                 (float) $product['price_original'],
                 (float) $product['price'],
@@ -110,8 +99,7 @@ final class PatogupirktiParserDifferentialTest extends TestCase
 
     public function test_every_card_keeps_its_magento_id(): void
     {
-        // The id is the join key back to the tracking blob, and the only
-        // stable identifier a card exposes.
+
         foreach (Parser::parseCategoryPage(self::fixture('category_page.html'))['products'] as $product) {
             self::assertArrayHasKey('magento_id', $product['properties']);
             self::assertMatchesRegularExpression('/^\d+$/', $product['properties']['magento_id']);
@@ -125,9 +113,7 @@ final class PatogupirktiParserDifferentialTest extends TestCase
 
     public function test_the_breadcrumb_root_and_product_leaf_are_dropped(): void
     {
-        // "Pirmas" appears on every product and the last crumb is the product
-        // itself; keeping either would pollute the classifier's category
-        // signal.
+
         $categories = Parser::parseProductPage(self::fixture('product_page.html'))['categories'];
 
         foreach ($categories as $category) {
@@ -144,12 +130,10 @@ final class PatogupirktiParserDifferentialTest extends TestCase
         self::assertSame($result['isbn'], $result['sku']);
     }
 
-    // -------------------------------------------------------------- helpers
-
     private function assertMatchesGolden(string $name, mixed $actual): void
     {
         $golden = json_decode(
-            (string) file_get_contents(self::GOLDEN . "/{$name}.json"),
+            (string) file_get_contents(self::GOLDEN."/{$name}.json"),
             true,
             flags: JSON_THROW_ON_ERROR
         );
@@ -159,11 +143,11 @@ final class PatogupirktiParserDifferentialTest extends TestCase
 
     private static function sorted(mixed $value): mixed
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             return $value;
         }
         $value = array_map([self::class, 'sorted'], $value);
-        if (!array_is_list($value)) {
+        if (! array_is_list($value)) {
             ksort($value);
         }
 
@@ -172,6 +156,6 @@ final class PatogupirktiParserDifferentialTest extends TestCase
 
     private static function fixture(string $name): string
     {
-        return (string) file_get_contents(self::FIXTURES . '/' . $name);
+        return (string) file_get_contents(self::FIXTURES.'/'.$name);
     }
 }

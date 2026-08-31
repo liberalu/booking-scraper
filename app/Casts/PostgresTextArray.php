@@ -6,18 +6,9 @@ namespace App\Casts;
 
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 
-/**
- * Cast for a Postgres `text[]` / `varchar[]` column (shop_books.categories).
- *
- * Eloquent has no native PG array support and would hand back the raw
- * literal `{"Grožinė literatūra","Romanai"}`. Quoting is parsed properly
- * rather than split on commas: category names can legitimately contain a
- * comma, and a naive split would silently shard one category into two —
- * which then feeds the book/non-book classifier.
- *
- * @implements CastsAttributes<list<string>, list<string>>
- */
+/** @implements CastsAttributes<list<string>, list<string>|string> */
 final class PostgresTextArray implements CastsAttributes
 {
     /** @return list<string> */
@@ -27,10 +18,14 @@ final class PostgresTextArray implements CastsAttributes
             return [];
         }
         if (is_array($value)) {
-            return array_values($value);
+            return self::stringList($value);
         }
 
-        return self::parse((string) $value);
+        if (! is_string($value)) {
+            throw new InvalidArgumentException("{$key} must be a PostgreSQL array literal or string list.");
+        }
+
+        return self::parse($value);
     }
 
     public function set(Model $model, string $key, mixed $value, array $attributes): ?string
@@ -38,9 +33,9 @@ final class PostgresTextArray implements CastsAttributes
         if ($value === null) {
             return null;
         }
-        $items = is_array($value) ? $value : [$value];
+        $items = is_array($value) ? self::stringList($value) : [$value];
 
-        return self::encode(array_map('strval', array_values($items)));
+        return self::encode($items);
     }
 
     /** @return list<string> */
@@ -50,7 +45,7 @@ final class PostgresTextArray implements CastsAttributes
         if ($literal === '{}' || $literal === '') {
             return [];
         }
-        // Drop the enclosing braces before scanning elements.
+
         if (str_starts_with($literal, '{') && str_ends_with($literal, '}')) {
             $literal = substr($literal, 1, -1);
         }
@@ -68,24 +63,26 @@ final class PostgresTextArray implements CastsAttributes
             if ($escaped) {
                 $current .= $char;
                 $escaped = false;
+
                 continue;
             }
             if ($char === '\\') {
                 $escaped = true;
+
                 continue;
             }
             if ($char === '"') {
-                $inQuotes = !$inQuotes;
-                // Remember the element was quoted: that is the only thing
-                // separating the string 'NULL' from a real SQL null, and
-                // the only thing that makes a quoted empty string real.
+                $inQuotes = ! $inQuotes;
+
                 $wasQuoted = true;
+
                 continue;
             }
-            if ($char === ',' && !$inQuotes) {
+            if ($char === ',' && ! $inQuotes) {
                 $items[] = [$current, $wasQuoted];
                 $current = '';
                 $wasQuoted = false;
+
                 continue;
             }
             $current .= $char;
@@ -96,9 +93,10 @@ final class PostgresTextArray implements CastsAttributes
         foreach ($items as [$value, $quoted]) {
             if ($quoted) {
                 $out[] = $value;
+
                 continue;
             }
-            // Unquoted: NULL is the null marker and whitespace is padding.
+
             $trimmed = trim($value);
             if ($trimmed !== '' && $trimmed !== 'NULL') {
                 $out[] = $trimmed;
@@ -115,10 +113,27 @@ final class PostgresTextArray implements CastsAttributes
             return '{}';
         }
         $quoted = array_map(
-            static fn (string $item): string => '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $item) . '"',
+            static fn (string $item): string => '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $item).'"',
             $items
         );
 
-        return '{' . implode(',', $quoted) . '}';
+        return '{'.implode(',', $quoted).'}';
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $items
+     * @return list<string>
+     */
+    private static function stringList(array $items): array
+    {
+        $strings = [];
+        foreach ($items as $item) {
+            if (! is_string($item)) {
+                throw new InvalidArgumentException('PostgreSQL text arrays may contain only strings.');
+            }
+            $strings[] = $item;
+        }
+
+        return $strings;
     }
 }

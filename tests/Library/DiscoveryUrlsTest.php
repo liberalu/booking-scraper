@@ -9,25 +9,17 @@ use App\Discovery\IbibliotekaApiUrls;
 use App\Discovery\LupaSearchUrls;
 use PHPUnit\Framework\TestCase;
 
-/**
- * The three JSON-API discovery strategies encode every request input into a
- * synthetic URL, so they are exactly comparable: the golden file holds what
- * Python produces for a set of inputs, and anything else here is a defect.
- *
- * Regenerate with `make discovery-golden`.
- */
 final class DiscoveryUrlsTest extends TestCase
 {
-    /** @return array<string, mixed> */
     private static function golden(): array
     {
-        $path = __DIR__ . '/golden/discovery_urls.json';
+        $path = __DIR__.'/../golden/discovery_urls.json';
         self::assertFileExists($path, 'run `make discovery-golden` first');
 
         return json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     }
 
-    public function testGraphQlUrlsMatchPython(): void
+    public function test_graph_ql_urls_match_python(): void
     {
         foreach (self::golden()['graphql'] as $case) {
             $url = GraphQlUrls::buildPageUrl(
@@ -46,8 +38,7 @@ final class DiscoveryUrlsTest extends TestCase
         }
     }
 
-    /** A subdivided URL must not read back as depth 0, or it would re-split. */
-    public function testSubdivisionDepthSurvivesTheRoundTrip(): void
+    public function test_subdivision_depth_survives_the_round_trip(): void
     {
         $url = GraphQlUrls::buildPageUrl('https://x.lt', ['1', '2'], 10, 4, 1);
         self::assertSame(1, GraphQlUrls::parsePageUrl($url)['subdivision_depth']);
@@ -59,7 +50,7 @@ final class DiscoveryUrlsTest extends TestCase
         );
     }
 
-    public function testLupaSearchUrlsMatchPython(): void
+    public function test_lupa_search_urls_match_python(): void
     {
         foreach (self::golden()['lupasearch'] as $case) {
             $seed = LupaSearchUrls::buildSeedUrl(
@@ -95,12 +86,7 @@ final class DiscoveryUrlsTest extends TestCase
         }
     }
 
-    /**
-     * A filter key containing a dot is the case PHP gets wrong by default:
-     * `parse_str` renames `f.publisher` to `f_publisher` and the filter
-     * vanishes from the body.
-     */
-    public function testDottedFilterKeysSurviveParsing(): void
+    public function test_dotted_filter_keys_survive_parsing(): void
     {
         $seed = LupaSearchUrls::buildSeedUrl(
             'https://api.lupasearch.com/v1/query/x',
@@ -112,7 +98,7 @@ final class DiscoveryUrlsTest extends TestCase
         self::assertSame(['Alma littera'], $body['filters']['publisher']);
     }
 
-    public function testIbibliotekaUrlsMatchPython(): void
+    public function test_ibiblioteka_urls_match_python(): void
     {
         foreach (self::golden()['ibiblioteka_api'] as $case) {
             $seeds = IbibliotekaApiUrls::buildSeedUrls(
@@ -139,7 +125,6 @@ final class DiscoveryUrlsTest extends TestCase
                 "ibib body: {$case['label']}"
             );
 
-            // Annual URLs queued before the switch to monthly bands.
             self::assertSame(
                 $case['legacy_params'],
                 IbibliotekaApiUrls::parseParams($case['legacy_url']),
@@ -158,8 +143,7 @@ final class DiscoveryUrlsTest extends TestCase
         }
     }
 
-    /** 12 months per year, and December rolls into the next January. */
-    public function testMonthlyBandsCoverEveryMonth(): void
+    public function test_monthly_bands_cover_every_month(): void
     {
         $seeds = IbibliotekaApiUrls::buildSeedUrls(2023, 2025, 100);
         self::assertCount(24, $seeds);

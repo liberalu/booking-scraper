@@ -4,23 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Library;
 
-use App\Support\Database;
 use App\Models\BookIsbn;
 use App\Models\Shop;
 use App\Models\ShopBook;
 use App\Models\ShopBookAttribute;
 use App\Repositories\ShopBookRepository;
+use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Covers the branches of upsert_shop_book that exist because of production
- * incidents. Runs against the real test database (port 5433) inside a
- * transaction that is rolled back per test.
- */
 final class ShopBookRepositoryTest extends TestCase
 {
     private static ?Capsule $capsule = null;
@@ -38,7 +33,7 @@ final class ShopBookRepositoryTest extends TestCase
 
         DB::beginTransaction();
 
-        $this->repo = new ShopBookRepository();
+        $this->repo = new ShopBookRepository;
         $this->shopId = Shop::firstOrCreate(
             ['name' => 'testshop'],
             ['base_url' => 'https://testshop.test']
@@ -49,8 +44,6 @@ final class ShopBookRepositoryTest extends TestCase
     {
         DB::rollBack();
     }
-
-    // ------------------------------------------------------------- create
 
     public function test_creates_a_new_row(): void
     {
@@ -71,7 +64,7 @@ final class ShopBookRepositoryTest extends TestCase
 
     public function test_normalizes_the_url_before_writing(): void
     {
-        // Trailing slash + tracking param must not create a second row.
+
         $first = $this->repo->upsert($this->shopId, 'https://testshop.test/b/', 'B');
         $second = $this->repo->upsert(
             $this->shopId,
@@ -83,8 +76,6 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertFalse($second->created);
         self::assertSame($first->shopBook->id, $second->shopBook->id);
     }
-
-    // ------------------------------------------------------------- update
 
     public function test_tracks_changed_fields_and_returns_old_price(): void
     {
@@ -112,8 +103,7 @@ final class ShopBookRepositoryTest extends TestCase
     #[DataProvider('conditionalFields')]
     public function test_null_does_not_clobber_an_existing_value(string $field, mixed $value): void
     {
-        // A category-page scrape supplies no author/isbn/etc. It must not
-        // erase what a full product-page scrape captured.
+
         $this->repo->upsert($this->shopId, 'https://testshop.test/d', 'D', [$field => $value]);
         $result = $this->repo->upsert($this->shopId, 'https://testshop.test/d', 'D', []);
 
@@ -121,7 +111,6 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertSame([], $result->changes);
     }
 
-    /** @return list<array{0: string, 1: mixed}> */
     public static function conditionalFields(): array
     {
         return [
@@ -146,8 +135,6 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertNull($result->shopBook->inactive_since);
     }
 
-    // ---------------------------------------------------------- SKU logic
-
     public function test_sku_match_wins_over_url_so_a_slug_rename_updates_in_place(): void
     {
         $created = $this->repo->upsert($this->shopId, 'https://testshop.test/old-slug', 'F', [
@@ -168,9 +155,7 @@ final class ShopBookRepositoryTest extends TestCase
 
     public function test_stale_sku_split_identity_detaches_rather_than_violating_the_url_constraint(): void
     {
-        // The shop scraped product X under the wrong slug, then fixed it and
-        // recycled the old slug for product Y. The SKU now points at a row
-        // whose URL another row already owns.
+
         $stale = $this->repo->upsert($this->shopId, 'https://testshop.test/wrong', 'X', [
             'sku' => 'SKU-2',
         ])->shopBook;
@@ -180,13 +165,10 @@ final class ShopBookRepositoryTest extends TestCase
             'sku' => 'SKU-2',
         ]);
 
-        // The URL's owner is updated; the stale row loses the SKU.
         self::assertSame($owner->id, $result->shopBook->id);
         self::assertSame('SKU-2', $result->shopBook->sku);
         self::assertNull(ShopBook::findOrFail($stale->id)->sku);
     }
-
-    // --------------------------------------------------- ISBN drift guard
 
     public function test_isbn_drift_unlinks_a_stale_canonical_match(): void
     {
@@ -202,7 +184,6 @@ final class ShopBookRepositoryTest extends TestCase
         ])->shopBook;
         ShopBook::whereKey($created->id)->update(['book_id' => $bookId, 'match_status' => 'matched']);
 
-        // The shop now reports a DIFFERENT ISBN for this URL.
         $result = $this->repo->upsert($this->shopId, 'https://testshop.test/g', 'G', [
             'isbn' => $otherIsbn,
         ]);
@@ -237,8 +218,6 @@ final class ShopBookRepositoryTest extends TestCase
 
         self::assertSame($bookId, $result->shopBook->book_id);
     }
-
-    // ------------------------------------------------------------ authors
 
     public function test_multi_author_string_becomes_ordered_rows(): void
     {
@@ -290,7 +269,6 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertSame($expected, ShopBookRepository::splitAuthors($raw));
     }
 
-    /** @return list<array{0: string, 1: list<string>}> */
     public static function authorStrings(): array
     {
         return [
@@ -300,14 +278,12 @@ final class ShopBookRepositoryTest extends TestCase
             ['A & B', ['A', 'B']],
             ['A / B', ['A', 'B']],
             ['A and B', ['A', 'B']],
-            // Lithuanian "and".
+
             ['A ir B', ['A', 'B']],
-            // A comma with no following space is part of the name, not a split.
+
             ['Tolkien,J.R.R.', ['Tolkien,J.R.R.']],
         ];
     }
-
-    // --------------------------------------------------------- attributes
 
     public function test_partial_properties_do_not_drop_earlier_attributes(): void
     {
@@ -317,7 +293,6 @@ final class ShopBookRepositoryTest extends TestCase
             'cover_type' => 'Minkštas',
         ])->shopBook;
 
-        // A later, thinner scrape supplies only one key.
         $this->repo->upsert($this->shopId, $url, 'L', [], ['pages' => 340]);
 
         $attrs = ShopBookAttribute::where('shop_book_id', $book->id)
@@ -346,24 +321,16 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertSame('non_book', $result->shopBook->type);
     }
 
-    /**
-     * A checksum-valid ISBN-13 unique to this call.
-     *
-     * `book_isbns.isbn` is globally unique, so a hardcoded real ISBN clashes
-     * as soon as the test database holds a copy of production (see
-     * tools/seed_test_db.py). Deriving from a per-process counter keeps the
-     * value valid — the classifier checks the checksum — without colliding.
-     */
     private static function uniqueIsbn(): string
     {
         static $counter = 0;
-        // 978 + 9 digits seeded from pid so parallel runs don't collide.
-        $body = '978' . substr(str_pad((string) (getmypid() * 1000 + $counter++), 9, '0', STR_PAD_LEFT), -9);
+
+        $body = '978'.substr(str_pad((string) (getmypid() * 1000 + $counter++), 9, '0', STR_PAD_LEFT), -9);
         $total = 0;
         foreach (str_split($body) as $i => $digit) {
             $total += (int) $digit * ($i % 2 === 0 ? 1 : 3);
         }
 
-        return $body . (string) ((10 - $total % 10) % 10);
+        return $body.(string) ((10 - $total % 10) % 10);
     }
 }

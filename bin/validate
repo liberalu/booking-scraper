@@ -3,24 +3,14 @@
 
 declare(strict_types=1);
 
-/**
- * Run the data-quality validator for a shop.
- *
- *   bin/validate --shop=vaga
- *   bin/validate --shop=vaga --run-id=123    # attribute findings to a run
- *   bin/validate --shop=vaga --match-first   # match step 1, then validate
- *
- * Mirrors the Python PostPhaseAutoTrigger, which runs match step 1 inline
- * and validate as a subprocess after every successful scan or discover.
- */
-
-use App\Support\Database;
-use App\Models\Shop;
+use App\Crawler\RunLifecycle;
+use App\Repositories\DatabaseRepositoryFactory;
+use App\Repositories\ShopRepository;
 use App\Services\MatchService;
 use App\Services\ValidateService;
-use App\Crawler\RunLifecycle;
+use App\Support\Database;
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
 $opts = [];
 foreach (array_slice($argv, 1) as $arg) {
@@ -30,7 +20,7 @@ foreach (array_slice($argv, 1) as $arg) {
 }
 
 if (isset($opts['help'])) {
-    fwrite(STDOUT, <<<TXT
+    fwrite(STDOUT, <<<'TXT'
     Usage: bin/validate --shop=vaga [options]
 
       --run-id=N       attribute findings to an existing run instead of
@@ -45,15 +35,14 @@ if (isset($opts['help'])) {
 $shopName = $opts['shop'] ?? 'vaga';
 
 Database::boot($opts['database'] ?? null);
-$shop = Shop::byName($shopName);
+$repositoryFactory = new DatabaseRepositoryFactory;
+$shop = (new ShopRepository)->byName($shopName);
 
 if (isset($opts['match-first'])) {
-    $linked = (new MatchService())->isbnMatch($shopName);
+    $linked = (new MatchService($repositoryFactory->matching()))->isbnMatch($shopName);
     printf("match step 1: %d shop_book(s) linked by ISBN\n", $linked);
 }
 
-// Findings are keyed to a run; reuse one when the caller supplies it (the
-// comparison tool does, so both stacks write against the same run id).
 $lifecycle = null;
 $runId = isset($opts['run-id']) ? (int) $opts['run-id'] : null;
 if ($runId === null) {
@@ -64,10 +53,11 @@ if ($runId === null) {
 printf("validate %s (run %d)\n", $shopName, $runId);
 
 try {
-    $counters = (new ValidateService())->run($shop->id, $runId);
+    $counters = (new ValidateService($repositoryFactory->validation()))
+        ->run($shop->id, $runId);
 } catch (Throwable $e) {
     $lifecycle?->fail($e);
-    fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
+    fwrite(STDERR, 'error: '.$e->getMessage()."\n");
     exit(1);
 }
 

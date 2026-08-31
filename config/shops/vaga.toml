@@ -9,17 +9,11 @@ batch_size = 100
 batch_pause = 15
 max_retries = 2
 
-# Timeouts (seconds)
 connect_timeout = 5       # TCP connection establishment
 read_timeout = 10         # time between received bytes
 hard_timeout = 30         # absolute max per request (asyncio)
 batch_timeout = 300       # max time for entire batch
 
-# httpx client rotation — vaga.lt silently stops responding after
-# ~100 requests on the same client (TIME_WAIT pile-up + server-side
-# cumulative tracking). Recreate the AsyncClient every N requests,
-# well below the wall. See follow-up #10 in the live observability
-# spec for the diagnosis.
 httpx_client_reset_after_requests = 80
 
 [discover]
@@ -36,7 +30,6 @@ max_age_hours = 672
 start_url = "https://vaga.lt"
 
 [scan]
-# Reads from discovered_urls table, no URL needed
 
 [match]
 trust = 100

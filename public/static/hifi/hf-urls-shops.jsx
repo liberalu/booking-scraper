@@ -1,10 +1,8 @@
-// Hi-fi URLs list + Shops list + Shop detail
 
 function HFUrls({ nav, goto, params: initParams }) {
   const HF = getHF();
   const sTone = { ok:'ok', warn:'warn', error:'err' };
 
-  // Filter state — backend handles filtering & pagination.
   const shopNames = useShopNames();
   const [q, setQ]               = React.useState(initParams?.q || '');
   const [shop, setShop]         = React.useState(initParams?.shop || 'all');
@@ -104,7 +102,7 @@ function HFUrls({ nav, goto, params: initParams }) {
             }},
             { key:'book_title', label:'Book', w:'1.2fr',
               sortable:true,
-              sortVal: null,  // disable client sort — server handles it
+              sortVal: null,
               onHeaderClick: () => {
                 if (sortBy === 'book') setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
                 else { setSortBy('book'); setSortOrder('asc'); setHasBook(true); }
@@ -179,7 +177,6 @@ function HFUrls({ nav, goto, params: initParams }) {
   );
 }
 
-// ─────────────────────────────── Shops list ───────────────────────────────
 
 function HFShops({ nav, goto }) {
   const HF = getHF();
@@ -235,7 +232,6 @@ function HFShops({ nav, goto }) {
   );
 }
 
-// ─────────────────────────────── Shop detail ───────────────────────────────
 
 function HFShopDetail({ nav, goto, params }) {
   const HF = getHF();

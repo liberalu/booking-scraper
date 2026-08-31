@@ -3,24 +3,21 @@
 
 declare(strict_types=1);
 
-/**
- * Crawl a shop into the database.
- *
- *   bin/crawl discover --shop=vaga --strategy=sitemap
- *   bin/crawl discover --shop=vaga --strategy=categories --max-pages=3
- *   bin/crawl scan --shop=vaga --max-urls=20
- *   bin/crawl scan --shop=vaga --urls=https://vaga.lt/some-book
- *
- * Writes to whatever DATABASE_URL points at. Default is the LIVE database,
- * so --database is offered explicitly and --dry-run fetches and parses
- * without persisting anything.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 
 use App\Support\Config;
-use Illuminate\Support\Carbon;
-use App\Crawler\ActivityExtension;
-use App\Crawler\IssueBuffer;
-use App\Crawler\PersistItemProcessor;
+use App\Crawler\CrawlerContext;
 use App\Crawler\PostPhase;
 use App\Discovery\GraphQlUrls;
 use App\Discovery\IbibliotekaApiUrls;
@@ -32,37 +29,43 @@ use App\Crawler\RunLifecycle;
 use App\Crawler\DiscoverSpider;
 use App\Crawler\ScanSpider;
 use App\Crawler\SerialScanner;
+use App\Crawler\SerialCategoryDiscoverer;
 use App\Crawler\Watchdog;
 use App\Runs\ResumePolicy;
 use App\Runs\RunReconciler;
 use App\Runs\RunFailsafe;
+use App\Repositories\CrawlerQueueRepository;
+use App\Repositories\DatabaseRepositoryFactory;
+use App\Repositories\PostPhaseRepository;
+use App\Repositories\ShopRepository;
+use App\Services\MatchService;
 use App\Support\Database;
-use App\Models\DiscoveredUrl;
-use App\Models\Shop;
 use App\Parsers\Vaga\Parser;
 use RoachPHP\Roach;
 use RoachPHP\Spider\Configuration\Overrides;
 
-// A full scan builds its whole work list before fetching anything, and PHP's
-// default 128M does not hold patogupirkti's: 50,536 URLs died in Guzzle's Uri
-// constructor with "Allowed memory size of 134217728 bytes exhausted". The
-// watchdog handled it correctly — stall, fail, mark resumable, restart — and
-// the restart hit the same wall, which is the shape of a limit rather than a
-// crash.
-//
-// Raised here, not in php.ini or the image, so a crawl behaves the same run
-// from a laptop as from a container. Both had 128M, so this was never a
-// packaging difference; it had simply never been given a shop this size.
-//
-// The real fix is to stream the work list instead of materialising it —
-// recorded as a follow-up. Until then this is a ceiling, not a solution:
-// a shop twice patogupirkti's size will need it raised again.
-// ponytail: fixed ceiling, stream the queue if a shop outgrows it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ini_set('memory_limit', getenv('CRAWL_MEMORY_LIMIT') ?: '512M');
 
 require __DIR__ . '/../vendor/autoload.php';
 
-/** @return array<string, string> */
+$crawler = new CrawlerContext;
+
+
 function options(array $argv): array
 {
     $opts = [];
@@ -81,31 +84,40 @@ function fail(string $message): never
     exit(1);
 }
 
-// A leading flag means no command was given (`bin/crawl --help`).
-/**
- * Fork the heartbeat/stall watchdog for a run.
- *
- * Without it a long crawl gets reaped: the dashboard reaper fails any run
- * whose last_heartbeat goes stale, and nothing in a synchronous PHP crawl
- * refreshes it.
- */
-/**
- * Stop cleanly when the watchdog (or an operator) asks.
- *
- * The watchdog sends SIGTERM rather than SIGKILL so the current database
- * write can finish; a half-written item looks like a data-quality problem
- * later. The run is finalised here because the watchdog only marks stalls —
- * an operator-requested stop has a different close reason.
- */
-function installTerminationHandler(int $runId, callable $onStop): void
+function flattenBatches(iterable $batches): Generator
+{
+    foreach ($batches as $batch) {
+        foreach ($batch as $url) {
+            yield $url;
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function installTerminationHandler(int $runId, callable $onStop, RunFailsafe $failsafe): void
 {
     if (!function_exists('pcntl_signal')) {
         return;
     }
-    $handler = static function () use ($runId, $onStop): void {
+    $handler = static function () use ($runId, $onStop, $failsafe): void {
         fwrite(STDERR, "\n  received stop signal — finalising run {$runId}\n");
         $onStop();
-        RunFailsafe::finalize($runId, 'failed', 'stopped', true);
+        $failsafe->finalize($runId, 'failed', 'stopped', true);
         exit(1);
     };
     pcntl_signal(SIGTERM, $handler);
@@ -113,25 +125,26 @@ function installTerminationHandler(int $runId, callable $onStop): void
     pcntl_async_signals(true);
 }
 
-/**
- * The two issues a discovery run can only know at the end.
- *
- * `url_pattern_filtered` is a tally, not a per-URL complaint: a shop listing
- * thousands of non-product pages is normal, and one row per run keeps the
- * inbox usable. `discover_zero_yield` is the one that matters — a run that
- * finds nothing on a shop that previously had URLs means the markup moved or
- * the shop started blocking, and it otherwise reports success.
- */
+
+
+
+
+
+
+
+
+
 function recordDiscoverCloseIssues(
+    CrawlerContext $crawler,
     string $shopName,
     string $baseUrl,
     string $strategy,
     int $urlsYielded,
     int $urlsBefore,
 ): void {
-    $filtered = DiscoverSpider::filteredCount();
+    $filtered = $crawler->filteredCount();
     if ($filtered > 0) {
-        IssueBuffer::add(
+        $crawler->issues()->add(
             'url_pattern_filtered',
             'url',
             '',
@@ -139,7 +152,7 @@ function recordDiscoverCloseIssues(
         );
     }
     if ($urlsYielded === 0 && $urlsBefore > 0) {
-        IssueBuffer::add(
+        $crawler->issues()->add(
             'discover_zero_yield',
             'run',
             $baseUrl,
@@ -148,7 +161,14 @@ function recordDiscoverCloseIssues(
     }
 }
 
-function startWatchdog(int $runId, string $shop, string $phase, float $stallTimeout): Watchdog
+function startWatchdog(
+    CrawlerContext $crawler,
+    int $runId,
+    string $shop,
+    string $phase,
+    float $stallTimeout,
+    RunFailsafe $failsafe,
+): Watchdog
 {
     $watchdog = new Watchdog(
         runId: $runId,
@@ -158,9 +178,10 @@ function startWatchdog(int $runId, string $shop, string $phase, float $stallTime
         heartbeatInterval: (float) (getenv('HEARTBEAT_INTERVAL_S') ?: 5),
         maxResumeAttempts: (int) (getenv('STALL_AUTO_RESUME_MAX') ?: 10),
         dsn: App\Support\Database::bootedDsn(),
+        failsafe: $failsafe,
     );
-    ActivityExtension::bind($watchdog);
-    installTerminationHandler($runId, static fn () => $watchdog->stop());
+    $crawler->bindWatchdog($watchdog);
+    installTerminationHandler($runId, static fn () => $watchdog->stop(), $failsafe);
     if ($watchdog->start()) {
         printf("watchdog: heartbeat %.0fs, stall timeout %.0fs\n",
             (float) (getenv('HEARTBEAT_INTERVAL_S') ?: 5), $stallTimeout);
@@ -195,6 +216,8 @@ if ($command === '' || isset($opts['help'])) {
         --resumed-attempt=N
                          internal: adopt a resumable run's queue. Set by the
                          watchdog when it restarts a stalled crawl.
+        --adopt-run-id=N internal: adopt this exact run's pending queue. Set
+                         by the dashboard Continue/Retry actions.
 
       reconcile
         fail every run still marked `running` (call on boot — such a row
@@ -205,15 +228,15 @@ if ($command === '' || isset($opts['help'])) {
     Shops: vaga, pegasas, patogupirkti, humanitas, almalittera, ibiblioteka.
 
     TXT);
-    // Explicit --help succeeds; a missing command is a usage error.
+
     exit(isset($opts['help']) ? 0 : 1);
 }
 
 if ($command === 'reconcile') {
-    // Boot reconciliation: any row still `running` belongs to a process the
-    // restart killed. Flag them resumable so the queued work survives.
+
+
     Database::boot($opts['database'] ?? null);
-    $orphans = RunReconciler::markOrphansFailed();
+    $orphans = (new RunReconciler)->markOrphansFailed();
     if ($orphans === []) {
         fwrite(STDOUT, "no orphaned runs\n");
         exit(0);
@@ -244,34 +267,44 @@ if (!App\Support\ParserRegistry::has($shopName)) {
 }
 
 $dryRun = isset($opts['dry-run']);
-// 0 means uncapped — what the dashboard passes for a real scan. The CLI
-// default stays small so an interactive `make crawl` cannot start a 30k-URL
-// crawl by accident.
+
+
+
 $maxUrls = (int) ($opts['max-urls'] ?? 20);
 $maxUrls = $maxUrls <= 0 ? PHP_INT_MAX : $maxUrls;
 $scanMode = $opts['mode'] ?? 'delta';
-// Set when a cron job (or a cron chain) fired this run: it decides which
-// follow-up runs once this one closes.
+
+
 $cronJobId = isset($opts['cron-job-id']) ? (int) $opts['cron-job-id'] : null;
 if (!in_array($scanMode, ['delta', 'full'], true)) {
     fail("mode '{$scanMode}' is not valid (delta|full)");
 }
 
 Database::boot($opts['database'] ?? null);
+$repositoryFactory = new DatabaseRepositoryFactory;
+$shops = new ShopRepository;
+$queue = new CrawlerQueueRepository;
+$failsafe = new RunFailsafe;
+$progress = new ProgressReporter;
+$postPhase = new PostPhase(
+    new PostPhaseRepository,
+    new MatchService($repositoryFactory->matching()),
+    $failsafe,
+);
 $config = Config::forShop($shopName);
-// Operator overrides beat the TOML, and this is the only place that can read
-// them — the database is up by now.
-$config->applyShopSettings($shopName);
-$shop = Shop::byName($shopName);
 
-// Default 180s, matching STALL_TIMEOUT on the Python side. Never below the
-// shop's own hard timeout, or a single slow-but-legitimate request trips it.
+
+$config->applyShopSettings($shopName);
+$shop = $shops->byName($shopName);
+
+
+
 $stallTimeout = max(
     (float) (getenv('STALL_TIMEOUT') ?: 180),
     $config->requestTimeout() * 2
 );
 
-// ------------------------------------------------------------------- discover
+
 
 if ($command === 'discover') {
     $strategy = $opts['strategy'] ?? 'sitemap';
@@ -284,10 +317,10 @@ if ($command === 'discover') {
     }
 
     $strategyConf = $config->strategy($strategy);
-    $maxPages = (int) ($opts['max-pages'] ?? 0);
+    $maxPages = (int) ($opts['max-pages'] ?? $strategyConf['max_pages'] ?? 0);
 
-    // The JSON APIs synthesise their own seeds from the config; the HTML
-    // strategies read a URL template out of it.
+
+
     $seedUrls = [];
     $template = '';
     $startUrl = '';
@@ -315,11 +348,11 @@ if ($command === 'discover') {
             (int) ($strategyConf['year_to'] ?? 2027),
             max(10, (int) ($strategyConf['page_size'] ?? 100)),
         );
-        // One seed per calendar month, so a 1990-2027 window is 444 of
-        // them. --max-pages caps pagination WITHIN a band (as it does in
-        // Python); --max-bands caps how many bands open at all, which is
-        // what makes a dev run finish. No default cap: the production run
-        // must cover every month.
+
+
+
+
+
         $maxBands = (int) ($opts['max-bands'] ?? 0);
         if ($maxBands > 0) {
             $seedUrls = array_slice($seedUrls, 0, $maxBands);
@@ -334,12 +367,16 @@ if ($command === 'discover') {
                 . " whole site; pass --max-pages=N to cap it\n");
         }
     } else {
-        $template = (string) ($strategyConf['url'] ?? '');
-        if ($template === '') {
-            fail("[discover.{$strategy}] has no url");
+        $templates = $config->strategyUrls($strategy);
+        if (count($templates) === 1) {
+            $template = $templates[0];
+            $startUrl = str_replace('{page}', '1', $template);
+        } else {
+            $seedUrls = array_map(
+                static fn (string $url): string => str_replace('{page}', '1', $url),
+                $templates,
+            );
         }
-        // page 1 of the template; {page} is absent on sitemap URLs.
-        $startUrl = str_replace('{page}', '1', $template);
     }
 
     printf(
@@ -355,66 +392,76 @@ if ($command === 'discover') {
     $run = $lifecycle->start();
     printf("scrape_runs id=%d\n", $run->id);
 
-    PersistItemProcessor::bind(
-        new Persister(attributeSchema: $config->attributes()),
+    $crawler->bind(
+        new Persister(
+            attributeSchema: $config->attributes(),
+            issues: $crawler->issues(),
+        ),
         $shop->id,
-        $run->id
+        $run->id,
+        progress: $progress,
     );
-    // Same formula as the end-of-run progress() call below, so the counter
-    // converges on the final number instead of jumping when the run closes.
-    ProgressReporter::bind($run->id, static fn (array $t): int => $t['urls']);
-    IssueBuffer::reset();
-    DiscoverSpider::resetFiltered();
-    // Counted before the crawl: a run that finds nothing is only alarming if
-    // the shop had URLs to begin with.
-    $urlsBefore = DiscoveredUrl::where('shop_id', $shop->id)->count();
 
-    // full_crawl only: URLs already classified and checked recently are
-    // followed for their outgoing links but not re-emitted as rows.
+
+    $progress->bind($run->id, static fn (array $t): int => $t['urls']);
+    $urlsBefore = $queue->discoveredUrlCount($shop->id);
+
+
+
     $stableUrls = [];
     if ($strategy === 'full_crawl') {
         $stableUrls = array_fill_keys(
-            DiscoveredUrl::where('shop_id', $shop->id)
-                ->whereIn('url_type', ['product', 'non_product', 'unreachable'])
-                ->where('last_checked_at', '>=', Carbon::now('UTC')->subDays(7))
-                ->pluck('normalized_url')
-                ->all(),
+            $queue->stableUrls($shop->id),
             true
         );
         printf("full_crawl: %d URL(s) already classified recently\n", count($stableUrls));
     }
-    $watchdog = startWatchdog($run->id, $shopName, 'discover', $stallTimeout);
+    $watchdog = startWatchdog(
+        $crawler,
+        $run->id,
+        $shopName,
+        'discover',
+        $stallTimeout,
+        $failsafe,
+    );
 
     Roach::useContainer(new RoachContainer(
         requestDelaySeconds: $config->downloadDelay(),
         requestTimeout: $config->requestTimeout(),
         connectTimeout: $config->connectTimeout(),
         userAgent: 'Scrapy',
+        runId: $run->id,
+        crawler: $crawler,
     ));
 
     try {
-        Roach::startSpider(
-            DiscoverSpider::class,
-            new Overrides(concurrency: $config->concurrency()),
-            [
-                'shop' => $shopName,
-                'strategy' => $strategy,
-                'run_id' => $run->id,
-                'start_url' => $startUrl,
-                'seed_urls' => $seedUrls,
-                'url_template' => $template,
-                'base_url' => $config->baseUrl(),
-                'page_size' => (int) ($strategyConf['page_size'] ?? 100),
-                'max_pages' => $maxPages,
-                'url_include_pattern' => $config->urlIncludePattern(),
-                'stable_urls' => $stableUrls,
-                'category_ids' => array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
-                'subdivide_factor' => (int) ($strategyConf['subdivide_factor'] ?? 5),
-                'subdivide_min_page_size' => (int) ($strategyConf['subdivide_min_page_size'] ?? 1),
-            ],
-        );
-
-        $tally = PersistItemProcessor::tally();
+        if ($strategy === 'categories' && $config->flaresolverr() !== null) {
+            printf("flaresolverr: serial category discovery\n");
+            $tally = (new SerialCategoryDiscoverer($shopName, $config, $crawler))
+                ->run($config->strategyUrls($strategy), $maxPages);
+        } else {
+            Roach::startSpider(
+                DiscoverSpider::class,
+                new Overrides(concurrency: $config->concurrency()),
+                [
+                    'shop' => $shopName,
+                    'strategy' => $strategy,
+                    'run_id' => $run->id,
+                    'start_url' => $startUrl,
+                    'seed_urls' => $seedUrls,
+                    'url_template' => $template,
+                    'base_url' => $config->baseUrl(),
+                    'page_size' => (int) ($strategyConf['page_size'] ?? 100),
+                    'max_pages' => $maxPages,
+                    'url_include_pattern' => $config->urlIncludePattern(),
+                    'stable_urls' => $stableUrls,
+                    'category_ids' => array_map('strval', (array) ($strategyConf['category_ids'] ?? [])),
+                    'subdivide_factor' => (int) ($strategyConf['subdivide_factor'] ?? 5),
+                    'subdivide_min_page_size' => (int) ($strategyConf['subdivide_min_page_size'] ?? 1),
+                ],
+            );
+            $tally = $crawler->tally();
+        }
         $lifecycle->progress(
             processed: $tally['urls'],
             added: $tally['added'],
@@ -431,73 +478,99 @@ if ($command === 'discover') {
             $tally['updated'],
             $tally['failed'],
         );
-        recordDiscoverCloseIssues($shopName, $config->baseUrl(), $strategy, $tally['urls'], $urlsBefore);
-        $written = IssueBuffer::flush($shop->id, $run->id);
+        recordDiscoverCloseIssues(
+            $crawler,
+            $shopName,
+            $config->baseUrl(),
+            $strategy,
+            $tally['urls'],
+            $urlsBefore,
+        );
+        $written = $crawler->issues()->flush($shop->id, $run->id);
         if ($written > 0) {
             printf("validation: %d issue(s) recorded\n", $written);
         }
-        PostPhase::after('discover', $shopName, $run->id, $cronJobId);
+        $postPhase->after('discover', $shopName, $run->id, $cronJobId);
         exit(0);
     } catch (Throwable $e) {
         $watchdog->stop();
-        // Failsafe as well as the lifecycle write: the lifecycle path shares
-        // a connection that may be unusable after a query failure.
+
+
         $lifecycle->fail($e);
-        RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
-        IssueBuffer::flush($shop->id, $run->id);
-        PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+        $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+        $crawler->issues()->flush($shop->id, $run->id);
+        $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
         fail('run failed: ' . $e->getMessage());
     }
 }
 
-// ------------------------------------------------------------------ work list
 
-if (isset($opts['urls'])) {
-    $urls = array_values(array_filter(array_map('trim', explode(',', $opts['urls']))));
-} else {
-    // Mirrors get_pending_scan_urls(): everything not written off as a
-    // non-product, and either still under the failure cap or stale enough
-    // that another attempt is due.
-    $query = DiscoveredUrl::where('shop_id', $shop->id)
-        ->where('url_type', '!=', 'non_product')
-        ->where(static function ($q): void {
-            $q->where('fail_count', '<', 3)
-                ->orWhere('last_checked_at', '<', Carbon::now('UTC')->subDays(7))
-                ->orWhereNull('last_checked_at');
-        });
-    if ($scanMode === 'delta') {
-        // Delta skips URLs already confirmed as products — those have a
-        // shop_book already. `full` re-scrapes them.
-        $query->where('url_type', '!=', 'product');
-    }
-    $urls = $query
-        // Python leaves this unordered; least-recently-checked first makes a
-        // capped run deterministic and costs nothing when uncapped.
-        ->orderByRaw('last_checked_at asc nulls first')
-        ->limit($maxUrls)
-        ->pluck('url')
-        ->all();
+
+$resumedAttempt = isset($opts['resumed-attempt']) ? (int) $opts['resumed-attempt'] : 0;
+$adoptRunId = isset($opts['adopt-run-id']) ? (int) $opts['adopt-run-id'] : null;
+if ($dryRun && ($resumedAttempt > 0 || $adoptRunId !== null)) {
+    fail('a resumed run cannot be combined with --dry-run');
 }
 
-if ($urls === []) {
+$resumable = null;
+$resumePolicy = new ResumePolicy(0);
+if ($adoptRunId !== null) {
+    $resumable = $resumePolicy->findResumableById($adoptRunId, $shop->id, 'scan');
+    if ($resumable === null) {
+        fail("run {$adoptRunId} is not an adoptable scan for shop '{$shopName}'");
+    }
+} elseif ($resumedAttempt > 0) {
+    $resumable = $resumePolicy->findResumable($shop->id, 'scan');
+    if ($resumable === null) {
+        fail("no resumable scan queue exists for shop '{$shopName}'");
+    }
+}
+
+$lifecycle = null;
+$run = null;
+if ($resumable !== null) {
+    $lifecycle = RunLifecycle::adopt((int) $resumable->id);
+    $run = $lifecycle->run()
+        ?? throw new RuntimeException('adopted lifecycle has no run');
+    $urlCount = $queue->pendingRunUrlCount($run->id, $maxUrls);
+    $urlBatches = $queue->pendingRunUrlBatches($run->id, $maxUrls);
+    printf(
+        "resuming scrape_runs id=%d%s\n",
+        $run->id,
+        $resumedAttempt > 0 ? " (attempt {$resumedAttempt})" : ''
+    );
+} elseif (isset($opts['urls'])) {
+    $urls = array_slice(
+        array_values(array_filter(array_map('trim', explode(',', $opts['urls'])))),
+        0,
+        $maxUrls,
+    );
+    $urlCount = count($urls);
+    $urlBatches = [$urls];
+} else {
+    $urlCount = $queue->scanUrlCount($shop->id, $scanMode, $maxUrls);
+    $urlBatches = $queue->scanUrlBatches($shop->id, $scanMode, $maxUrls);
+}
+
+if ($urlCount === 0) {
+    $lifecycle?->finish('completed', 'queue_empty');
     fwrite(STDOUT, "nothing to scan\n");
     exit(0);
 }
-$urls = array_slice($urls, 0, $maxUrls);
 
 printf(
     "scan %s — %d url(s), concurrency %d, delay %.2fs%s\n",
     $shopName,
-    count($urls),
+    $urlCount,
     $config->concurrency(),
     $config->downloadDelay(),
     $dryRun ? ' [DRY RUN — nothing will be written]' : ''
 );
 
-// ------------------------------------------------------------------- dry run
+
 
 if ($dryRun) {
-    foreach ($urls as $url) {
+    foreach (flattenBatches($urlBatches) as $url) {
         $body = @file_get_contents($url, false, stream_context_create([
             'http' => ['header' => "User-Agent: Scrapy\r\n", 'timeout' => $config->requestTimeout()],
         ]));
@@ -518,45 +591,49 @@ if ($dryRun) {
     exit(0);
 }
 
-// ---------------------------------------------------------------------- run
 
-// A restart adopts the previous run's row and its pending queue rather than
-// opening a new one — that is what keeps the chain a single logical run and
-// lets the depth cap and zero-progress breaker see the whole history.
-$resumedAttempt = isset($opts['resumed-attempt']) ? (int) $opts['resumed-attempt'] : 0;
-$resumable = $resumedAttempt > 0 ? ResumePolicy::findResumable($shop->id, 'scan') : null;
 
-if ($resumable !== null) {
-    $lifecycle = RunLifecycle::adopt((int) $resumable->id);
-    $run = $lifecycle->run();
-    printf("resuming scrape_runs id=%d (attempt %d)\n", $run->id, $resumedAttempt);
-} else {
+
+
+
+if ($lifecycle === null) {
     $lifecycle = new RunLifecycle($shop->id, 'scan');
-    $run = $lifecycle->start(count($urls));
+    $run = $lifecycle->start($urlCount);
     printf("scrape_runs id=%d\n", $run->id);
 }
 
-$watchdog = startWatchdog($run->id, $shopName, 'scan', $stallTimeout);
+$watchdog = startWatchdog(
+    $crawler,
+    $run->id,
+    $shopName,
+    'scan',
+    $stallTimeout,
+    $failsafe,
+);
 
-// Shops behind a Cloudflare challenge take the serial FlareSolverr path:
-// its single browser session cannot serve concurrent requests safely.
+
+
 if ($config->flaresolverr() !== null) {
     printf("flaresolverr: serial fetch (session cannot be shared concurrently)\n");
-    ProgressReporter::bind(
+    $progress->bind(
         $run->id,
         static fn (array $t): int => $t['added'] + $t['updated'] + $t['non_product']
             + ($t['canonical'] ?? 0),
     );
-    IssueBuffer::reset();
+    $crawler->issues()->reset();
     try {
         $tally = (new SerialScanner(
             $shopName,
             $config,
-            new Persister(attributeSchema: $config->attributes()),
+            new Persister(
+                attributeSchema: $config->attributes(),
+                issues: $crawler->issues(),
+            ),
             $shop->id,
             $run->id,
             $watchdog,
-        ))->run($urls);
+            progress: $progress,
+        ))->run(flattenBatches($urlBatches));
 
         $lifecycle->progress(
             processed: $tally['added'] + $tally['updated'] + $tally['non_product']
@@ -576,50 +653,56 @@ if ($config->flaresolverr() !== null) {
             $tally['non_product'],
             $tally['failed']
         );
-        $written = IssueBuffer::flush($shop->id, $run->id);
+        $written = $crawler->issues()->flush($shop->id, $run->id);
         if ($written > 0) {
             printf("validation: %d issue(s) recorded\n", $written);
         }
-        PostPhase::after('scan', $shopName, $run->id, $cronJobId);
+        $postPhase->after('scan', $shopName, $run->id, $cronJobId);
         exit(0);
     } catch (Throwable $e) {
         $watchdog->stop();
         $lifecycle->fail($e);
-        RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
-        IssueBuffer::flush($shop->id, $run->id);
-        PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+        $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+        $crawler->issues()->flush($shop->id, $run->id);
+        $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
         fail('run failed: ' . $e->getMessage());
     }
 }
 
-PersistItemProcessor::bind(
-    new Persister(attributeSchema: $config->attributes()),
+$crawler->bind(
+    new Persister(
+        attributeSchema: $config->attributes(),
+        issues: $crawler->issues(),
+    ),
     $shop->id,
-    $run->id
+    $run->id,
+    progress: $progress,
 );
-ProgressReporter::bind(
+$progress->bind(
     $run->id,
     static fn (array $t): int => $t['added'] + $t['updated'] + ($t['canonical'] ?? 0),
 );
-IssueBuffer::reset();
-
 Roach::useContainer(new RoachContainer(
     requestDelaySeconds: $config->downloadDelay(),
     requestTimeout: $config->requestTimeout(),
     connectTimeout: $config->connectTimeout(),
-    // Matches what the Python crawler sends: no USER_AGENT is configured,
-    // so Scrapy's default goes out. A different UA can yield different HTML.
+
+
     userAgent: 'Scrapy',
+    runId: $run->id,
+    crawler: $crawler,
 ));
 
 try {
-    Roach::startSpider(
-        ScanSpider::class,
-        new Overrides(concurrency: $config->concurrency()),
-        ['shop' => $shopName, 'urls' => $urls],
-    );
+    foreach ($urlBatches as $urlBatch) {
+        Roach::startSpider(
+            ScanSpider::class,
+            new Overrides(concurrency: $config->concurrency()),
+            ['shop' => $shopName, 'urls' => $urlBatch],
+        );
+    }
 
-    $tally = PersistItemProcessor::tally();
+    $tally = $crawler->tally();
     $lifecycle->progress(
         processed: $tally['added'] + $tally['updated'] + ($tally['canonical'] ?? 0),
         added: $tally['added'],
@@ -637,16 +720,16 @@ try {
         $tally['non_product'],
         $tally['failed']
     );
-    $written = IssueBuffer::flush($shop->id, $run->id);
+    $written = $crawler->issues()->flush($shop->id, $run->id);
     if ($written > 0) {
         printf("validation: %d issue(s) recorded\n", $written);
     }
-    PostPhase::after('scan', $shopName, $run->id, $cronJobId);
+    $postPhase->after('scan', $shopName, $run->id, $cronJobId);
 } catch (Throwable $e) {
     $watchdog->stop();
     $lifecycle->fail($e);
-    RunFailsafe::finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
-    IssueBuffer::flush($shop->id, $run->id);
-    PostPhase::chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
+    $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
+    $crawler->issues()->flush($shop->id, $run->id);
+    $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
     fail('run failed: ' . $e->getMessage());
 }

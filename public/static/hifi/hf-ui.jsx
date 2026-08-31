@@ -1,6 +1,4 @@
-// Hi-fi UI primitives — light-mode, density-aware.
 
-// Shared shops cache — fetched once per page load, shared across all filter dropdowns.
 const _shopsCache = { names: null, promise: null };
 function useShopNames() {
   const [names, setNames] = React.useState(_shopsCache.names);
@@ -16,9 +14,6 @@ function useShopNames() {
   return names ? ['all', ...names] : ['all'];
 }
 
-// Generic filter hook. Pass rows + filter spec; returns {filtered, filterBar state, clearAll, activeCount, empty}.
-// Each filter: { id, label, options (array), match: (row, value) => bool }
-// `search` spec: { placeholder, width, fields: (row) => string to match against }
 function useHFFilters(rows, spec) {
   const initial = {};
   spec.filters.forEach(f => { initial[f.id] = f.default || 'all'; });
@@ -53,10 +48,6 @@ function useHFFilters(rows, spec) {
   return { q, setQ, vals, setVal, filtered, activeCount, clearAll };
 }
 
-// Skeleton — animated placeholder block. Use w/h to size; defaults to a
-// 12px-tall pill that mimics a line of body text. Set `circle` for round
-// avatars/dots. The `hfShimmer` keyframe is defined globally and respects
-// prefers-reduced-motion via the global media-query guard.
 function HFSkeleton({ w = '100%', h = 12, br = 4, circle, style, inline }) {
   const HF = getHF();
   return (
@@ -73,8 +64,6 @@ function HFSkeleton({ w = '100%', h = 12, br = 4, circle, style, inline }) {
   );
 }
 
-// Repeating skeleton table rows that match HFTable's column rhythm.
-// Pass the same `columns` you'd pass to HFTable + how many rows to render.
 function HFTableSkeleton({ columns, rows = 6, density }) {
   const HF = getHF();
   const gridCols = columns.map(c => c.w || '1fr').join(' ');
@@ -103,8 +92,6 @@ function HFTableSkeleton({ columns, rows = 6, density }) {
   );
 }
 
-// KPI strip skeleton — same chrome as HFKpiStrip, with shimmer placeholders
-// in each tile. `count` defaults to 5 (matching the typical strip width).
 function HFKpiStripSkeleton({ count = 5 }) {
   const HF = getHF();
   return (
@@ -128,7 +115,6 @@ function HFKpiStripSkeleton({ count = 5 }) {
   );
 }
 
-// Standard empty-state card body (wrap in HFCard)
 function HFEmptyState({ title, sub, onClear, actionLabel = 'Clear filters' }) {
   const HF = getHF();
   return (
@@ -316,7 +302,6 @@ function HFSearch({ placeholder = 'Search…', width = 260, value, onChange }) {
   );
 }
 
-// Card — elevated white surface with optional header
 function HFCard({ title, sub, action, children, style, padding, flush }) {
   const HF = getHF();
   return (
@@ -344,15 +329,10 @@ function HFCard({ title, sub, action, children, style, padding, flush }) {
   );
 }
 
-// Table — density aware, hover rows, optional striping, sortable headers
-// Columns can declare `sortable: true` and the table displays an arrow affordance.
-// Pass `sortBy` + `sortDir` ('asc'|'desc') + `onSort(key)` to make it controlled,
-// or leave uncontrolled and it self-manages sort state (client-side sort).
 function HFTable({ columns, rows, stripe = false, onRowClick, sortBy: extSortBy, sortDir: extSortDir, onSort }) {
   const HF = getHF();
   const gridCols = columns.map(c => c.w || '1fr').join(' ');
 
-  // uncontrolled sort state
   const [uSortBy, setUSortBy] = React.useState(null);
   const [uSortDir, setUSortDir] = React.useState('asc');
   const sortBy  = extSortBy  !== undefined ? extSortBy  : uSortBy;
@@ -493,8 +473,6 @@ function HFTabs({ tabs, active, onChange }) {
   );
 }
 
-// Build a short aria-summary for a numeric series. `label` is the data subject
-// ("Scrape activity per day"); defaults to a generic noun.
 function hfChartSummary(data, label = 'Series') {
   if (!data || data.length === 0) return `${label}: no data`;
   const peak = Math.max(...data);
@@ -503,7 +481,6 @@ function hfChartSummary(data, label = 'Series') {
   return `${label}, ${data.length} points. Peak ${fmt(peak)}. Latest ${fmt(latest)}.`;
 }
 
-// Sparkline / area chart
 function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8, label = 'Trend' }) {
   const HF = getHF();
   if (!data || data.length === 0) {
@@ -520,7 +497,6 @@ function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8, label = 'Trend' })
   const path = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const areaPath = `${path} L${w},${h} L0,${h} Z`;
   const gid = 'hfA_' + Math.random().toString(36).slice(2, 8);
-  // gridlines
   const lines = [0.25, 0.5, 0.75].map(p => h * p);
   const summary = hfChartSummary(data, label);
   return (
@@ -646,10 +622,6 @@ const hfLink = (HF) => ({
   display: 'inline-flex', alignItems: 'center', gap: 4,
 });
 
-// SPA-friendly breadcrumb anchor. Renders a real <a href> from
-// window.HF_BUILD_PATH so middle-click and cmd/ctrl-click open in a new tab,
-// while normal clicks intercept and call goto(). Drop-in for the
-// `<a href="#" onClick={e => { e.preventDefault(); goto(page); }}>` pattern.
 function HFBreadcrumbLink({ page, params, goto, children, style }) {
   const HF = getHF();
   const href = (window.HF_BUILD_PATH && window.HF_BUILD_PATH(page, params)) || '#';
@@ -665,8 +637,6 @@ function HFBreadcrumbLink({ page, params, goto, children, style }) {
   );
 }
 
-// "Open in new tab" icon link — pairs with mono URL text inside table cells.
-// Stops row-click propagation so clicking the icon doesn't also open the row.
 function HFExtLink({ href, title = 'Open in new tab', size = 12 }) {
   const HF = getHF();
   const [hover, setHover] = React.useState(false);

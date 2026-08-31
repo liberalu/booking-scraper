@@ -5,22 +5,15 @@ declare(strict_types=1);
 namespace Tests\Crawler;
 
 use App\Crawler\RunLifecycle;
-use App\Support\Database;
 use App\Runs\ResumePolicy;
 use App\Runs\RunEvent;
 use App\Runs\RunFailsafe;
 use App\Runs\RunReconciler;
+use App\Support\Database;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
-/**
- * A restart must continue the SAME logical run.
- *
- * If each attempt opened a fresh row, the depth cap and the zero-progress
- * breaker would both count zero events every time and never fire — the
- * runaway loop they exist to stop would be invisible to them.
- */
 final class RunAdoptionTest extends TestCase
 {
     private static bool $booted = false;
@@ -29,7 +22,7 @@ final class RunAdoptionTest extends TestCase
 
     protected function setUp(): void
     {
-        if (!self::$booted) {
+        if (! self::$booted) {
             Database::boot(self::dsn());
             self::$booted = true;
         }
@@ -53,7 +46,6 @@ final class RunAdoptionTest extends TestCase
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
     }
 
-    /** A stalled run: failed, resumable, with work still queued. */
     private function stalledRun(int $processed = 5): int
     {
         $runId = DB::table('scrape_runs')->insertGetId([
@@ -102,8 +94,7 @@ final class RunAdoptionTest extends TestCase
 
     public function test_adopting_clears_the_resumable_flag(): void
     {
-        // The adopting process owns the queue now; leaving the flag set would
-        // let a third process adopt the same work concurrently.
+
         $runId = $this->stalledRun();
 
         RunLifecycle::adopt($runId);
@@ -134,17 +125,15 @@ final class RunAdoptionTest extends TestCase
     {
         $runId = $this->stalledRun();
 
-        // Three attempts on the same row.
         foreach ([5, 12, 30] as $snapshot) {
-            RunFailsafe::recordEvent($runId, RunEvent::RESTARTED, [
+            (new RunFailsafe)->recordEvent($runId, RunEvent::RESTARTED, [
                 'reason' => 'stall_timeout',
                 'urls_processed_snapshot' => $snapshot,
             ]);
             RunLifecycle::adopt($runId);
         }
 
-        // Visible to the cap precisely because they share a row.
-        self::assertSame(3, ResumePolicy::chainDepth($runId));
+        self::assertSame(3, (new ResumePolicy(0))->chainDepth($runId));
         self::assertFalse((new ResumePolicy(3))->evaluate($runId)['allowed']);
     }
 
@@ -152,29 +141,40 @@ final class RunAdoptionTest extends TestCase
     {
         $runId = $this->stalledRun();
 
-        self::assertSame($runId, ResumePolicy::findResumable($this->shopId, 'scan')?->id);
+        self::assertSame($runId, (new ResumePolicy(0))->findResumable($this->shopId, 'scan')?->id);
+    }
+
+    public function test_an_operator_can_resolve_the_exact_run_selected(): void
+    {
+        $older = $this->stalledRun();
+        $newer = $this->stalledRun();
+
+        self::assertSame(
+            $older,
+            (new ResumePolicy(0))->findResumableById($older, $this->shopId, 'scan')?->id,
+        );
+        self::assertSame(
+            $newer,
+            (new ResumePolicy(0))->findResumableById($newer, $this->shopId, 'scan')?->id,
+        );
+        self::assertNull((new ResumePolicy(0))->findResumableById($older, $this->shopId, 'validate'));
     }
 
     public function test_an_adopted_run_is_no_longer_offered_for_adoption(): void
     {
-        // 'running' still counts as resumable (a crash leaves the queue
-        // owned by that row), so the same run is returned — but the flag is
-        // gone, which is what distinguishes crash recovery from a live owner.
+
         $runId = $this->stalledRun();
         RunLifecycle::adopt($runId);
 
-        $found = ResumePolicy::findResumable($this->shopId, 'scan');
+        $found = (new ResumePolicy(0))->findResumable($this->shopId, 'scan');
         self::assertSame($runId, $found?->id);
         self::assertSame('running', $found?->status);
-        self::assertFalse((bool) $found?->resumable_after_failure);
+        self::assertFalse((bool) $found?->resumableAfterFailure);
     }
-
-    // ------------------------------------------------- queue inheritance
 
     public function test_adoption_releases_items_stuck_in_processing(): void
     {
-        // The dead process left these claimed; nothing owns them now, so they
-        // must go back to pending or the work is silently lost.
+
         $runId = $this->stalledRun();
         DB::table('scrape_url_items')->insert([
             'run_id' => $runId,
@@ -225,8 +225,7 @@ final class RunAdoptionTest extends TestCase
 
     public function test_a_failure_at_the_retry_cap_stays_failed(): void
     {
-        // The ceiling that stops a persistently-5xxing URL from being reset
-        // on every stall and re-stalling forever.
+
         $runId = $this->stalledRun();
         $itemId = $this->failedItem($runId, 'run_aborted', attempts: RunReconciler::RETRY_CAP);
 

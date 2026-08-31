@@ -1,6 +1,3 @@
-// Hi-fi tokens — light mode, Retool/Metabase-adjacent.
-// Accent is swappable at runtime via window.HF_ACCENT ('teal'|'violet'|'amber'|'slate').
-// Density via window.HF_DENSITY ('comfortable'|'compact'|'ultra').
 
 const HF_ACCENTS = {
   teal:   { 50:'#ecfeff', 100:'#cffafe', 200:'#a5f3fc', 400:'#22d3ee', 500:'#0ea5a4', 600:'#0891b2', 700:'#0e7490' },
@@ -18,15 +15,9 @@ const HF_DENSITIES = {
   ultra:       { rowH: 28, cellY: 6,  cardP: 12, cardHeadY: 10, kpiP: 12, gap: 12, fsBody: 12, fsSmall: 11, fsKpi: 22, fsMono: 12 },
 };
 
-// Publish the full token set as CSS custom properties on :root. Called from
-// getHF() so values always track the current accent/density. Components can
-// reference tokens via `var(--hf-...)` in inline styles or class-based CSS
-// — accent/density swap then propagates through the cascade with no React
-// re-render required.
 function _hfPublish(a, d) {
   if (typeof document === 'undefined' || !document.documentElement) return;
   const r = document.documentElement.style;
-  // Surfaces
   r.setProperty('--hf-bg',           '#f7f8fa');
   r.setProperty('--hf-surface',      '#ffffff');
   r.setProperty('--hf-sidebar',      '#fbfcfd');
@@ -34,24 +25,20 @@ function _hfPublish(a, d) {
   r.setProperty('--hf-subtle',       '#f3f4f7');
   r.setProperty('--hf-hover',        '#f5f6f9');
   r.setProperty('--hf-input',        '#ffffff');
-  // Borders
   r.setProperty('--hf-border',         '#e5e7ec');
   r.setProperty('--hf-border-strong',  '#d4d7de');
   r.setProperty('--hf-border-faint',   '#eef0f4');
-  // Ink ramp
   r.setProperty('--hf-ink',  '#111827');
   r.setProperty('--hf-ink2', '#374151');
   r.setProperty('--hf-ink3', '#6b7280');
   r.setProperty('--hf-ink4', '#9ca3af');
   r.setProperty('--hf-ink5', '#c7cbd3');
-  // Accent (drives focus rings + interactive surfaces)
   r.setProperty('--hf-accent',        a[500]);
   r.setProperty('--hf-accent-hover',  a[600]);
   r.setProperty('--hf-accent-soft',   a[50]);
   r.setProperty('--hf-accent-soft2',  a[100]);
   r.setProperty('--hf-accent-border', a[200]);
   r.setProperty('--hf-accent-ink',    a[700]);
-  // Semantic
   r.setProperty('--hf-ok',         '#16a34a');
   r.setProperty('--hf-ok-soft',    '#f0fdf4');
   r.setProperty('--hf-ok-border',  '#bbf7d0');
@@ -64,12 +51,10 @@ function _hfPublish(a, d) {
   r.setProperty('--hf-err-soft',   '#fef2f2');
   r.setProperty('--hf-err-border', '#fecaca');
   r.setProperty('--hf-err-ink',    '#b91c1c');
-  // Elevation
   r.setProperty('--hf-shadow-sm', '0 1px 2px rgba(16,24,40,.08)');
   r.setProperty('--hf-shadow',    '0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06)');
   r.setProperty('--hf-shadow-md', '0 4px 8px -2px rgba(16,24,40,.06), 0 2px 4px -2px rgba(16,24,40,.04)');
   r.setProperty('--hf-shadow-lg', '0 8px 24px rgba(16,24,40,.12)');
-  // Density-derived
   r.setProperty('--hf-row-h',      `${d.rowH}px`);
   r.setProperty('--hf-cell-y',     `${d.cellY}px`);
   r.setProperty('--hf-card-p',     `${d.cardP}px`);
@@ -80,18 +65,14 @@ function _hfPublish(a, d) {
   r.setProperty('--hf-fs-small',   `${d.fsSmall}px`);
   r.setProperty('--hf-fs-kpi',     `${d.fsKpi}px`);
   r.setProperty('--hf-fs-mono',    `${d.fsMono}px`);
-  // Layout
   r.setProperty('--hf-content-x',  '28px');
-  // Chart palette (accent-derived)
   r.setProperty('--hf-chart-primary',   a[500]);
   r.setProperty('--hf-chart-fill-from', a[200]);
   r.setProperty('--hf-chart-fill-to',   a[50]);
   r.setProperty('--hf-chart-grid',      '#eef0f4');
   r.setProperty('--hf-chart-axis',      '#9ca3af');
-  // Fonts
   r.setProperty('--hf-sans', '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
   r.setProperty('--hf-mono', '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace');
-  // Radii
   r.setProperty('--hf-r1', '4px');
   r.setProperty('--hf-r2', '6px');
   r.setProperty('--hf-r3', '8px');
@@ -108,28 +89,24 @@ function getHF() {
   _hfPublish(a, d);
 
   return {
-    // surfaces
-    bg:       '#f7f8fa',        // app background (content area)
-    surface:  '#ffffff',        // cards, topbar
-    sidebar:  '#fbfcfd',        // left nav
+    bg:       '#f7f8fa',
+    surface:  '#ffffff',
+    sidebar:  '#fbfcfd',
     raised:   '#ffffff',
-    subtle:   '#f3f4f7',        // striped rows, kpi tile hover
-    hover:    '#f5f6f9',        // row hover
+    subtle:   '#f3f4f7',
+    hover:    '#f5f6f9',
     input:    '#ffffff',
 
-    // borders
-    border:   '#e5e7ec',        // hairline card / divider
+    border:   '#e5e7ec',
     borderStrong: '#d4d7de',
     borderFaint:  '#eef0f4',
 
-    // ink ramp
-    ink:      '#111827',        // primary text
-    ink2:     '#374151',        // secondary
-    ink3:     '#6b7280',        // muted
-    ink4:     '#9ca3af',        // faint
-    ink5:     '#c7cbd3',        // disabled / placeholder
+    ink:      '#111827',
+    ink2:     '#374151',
+    ink3:     '#6b7280',
+    ink4:     '#9ca3af',
+    ink5:     '#c7cbd3',
 
-    // accent (data color)
     accent:   a[500],
     accentHover: a[600],
     accentSoft:  a[50],
@@ -137,7 +114,6 @@ function getHF() {
     accentBorder: a[200],
     accentInk:   a[700],
 
-    // semantic (tuned for light bg, calmer than saturated reds/greens)
     ok:       '#16a34a',
     okSoft:   '#f0fdf4',
     okBorder: '#bbf7d0',
@@ -153,30 +129,24 @@ function getHF() {
     info:     a[500],
     infoSoft: a[50],
 
-    // chart
     chartPrimary:   a[500],
     chartFillFrom:  a[200],
     chartFillTo:    a[50],
     chartGrid:      '#eef0f4',
     chartAxis:      '#9ca3af',
 
-    // elevation
-    shadowSm: '0 1px 2px rgba(16,24,40,.08)',           // inputs, small chips, avatars
+    shadowSm: '0 1px 2px rgba(16,24,40,.08)',
     shadow:   '0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06)',
     shadowMd: '0 4px 8px -2px rgba(16,24,40,.06), 0 2px 4px -2px rgba(16,24,40,.04)',
-    shadowLg: '0 8px 24px rgba(16,24,40,.12)',          // floating menus, dropdowns, popovers
+    shadowLg: '0 8px 24px rgba(16,24,40,.12)',
 
-    // radius
     r1: 4, r2: 6, r3: 8, r4: 10, r5: 12,
 
-    // layout — use everywhere instead of magic numbers in inline styles
     contentX: 28,
 
-    // fonts
     sans: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     mono: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
 
-    // density-derived
     rowH: d.rowH,
     cellY: d.cellY,
     cardP: d.cardP,
@@ -192,7 +162,6 @@ function getHF() {
   };
 }
 
-// Global keyframes + base resets for hi-fi
 (function(){
   if (document.getElementById('hf-base')) return;
   const s = document.createElement('style');

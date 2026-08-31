@@ -3,16 +3,16 @@
 
 declare(strict_types=1);
 
-/**
- * Upsert one bibliographic record into the canonical `books` table.
- *
- *   bin/canonical --url=https://ibiblioteka.lt/metis-api/…/public/2097094
- *   bin/canonical --file=record.json --url=<the url it came from>
- *
- * The library's scan phase normally does this; this command exists so a
- * single record can be re-imported without a run, and so the differential
- * harness can feed both stacks the same bytes.
- */
+
+
+
+
+
+
+
+
+
+
 
 use App\Support\Database;
 use App\Parsers\Ibiblioteka\Parser;
@@ -52,8 +52,8 @@ if (isset($opts['file'])) {
         exit(1);
     }
 } else {
-    // Accept matters: with a browser Accept this endpoint serves the SPA
-    // shell instead of the record. See Parser::rewriteScanUrl.
+
+
     $body = file_get_contents($url, false, stream_context_create([
         'http' => ['header' => "Accept: application/json\r\n", 'timeout' => 30],
     ]));

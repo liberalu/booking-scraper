@@ -4,60 +4,44 @@ declare(strict_types=1);
 
 namespace App\Parsers\Patogupirkti;
 
+use App\Books\BookClassifier;
+use App\Crawler\CrawlerTypes;
+use App\Parsers\DiscoveryParser;
+use App\Parsers\ProductParser;
 use App\Support\CoverType;
 use App\Support\Isbn;
-use App\Parsers\Vaga\Parser as BookClassifier;
 
-/**
- * Port of book_scraper/spiders/patogupirkti/parsers.py.
- *
- * Magento 1. Category cards carry an inline `product_tracking_data` JS
- * object with structured fields; product pages use schema.org microdata
- * plus a spec table. Book/non-book scoring is shared with vaga, as in the
- * Python module.
- */
-final class Parser
+/** @phpstan-import-type ParsedItem from CrawlerTypes */
+final class Parser implements DiscoveryParser, ProductParser
 {
-    private const BASE_URL = 'https://www.patogupirkti.lt';
     private const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
 
-    /** Card boundary. Splitting on the opening tag keeps fields from bleeding. */
     private const CARD_OPEN = '/<div\s+class="product">/i';
 
     private const CARD_LINK = '/href="(https?:\/\/www\.patogupirkti\.lt\/knyga\/[^"]+\.html)"/i';
 
-    /** `var product_tracking_data_62181 = {...};` */
     private const TRACKING_DATA = '/var\s+product_tracking_data_(\d+)\s*=\s*(\{.*?\})\s*;/s';
 
     private const PRICE_VALUE = '/([\d ]+[.,]\d+)\s*(?:<[^>]+>)?\s*€/u';
+
     private const NEW_PRICE = '/<div\s+class="new-price"[^>]*>(.*?)<\/div>/si';
+
     private const OLD_PRICE = '/<strong[^>]*\bclass="[^"]*\bold-price\b[^"]*"[^>]*>(.*?)<\/strong>/si';
 
     private const STOCK = '/<div\s+class="(instock|outstock)\s+stock-status/i';
 
-    /** "Šiuo metu neparduodama" — discontinued, no availability microdata. */
     private const NOT_FOR_SALE = '/neparduodama/i';
 
     private const SPEC_ROW = '/<td\s+class="title"[^>]*>\s*([^<]+?)\s*:?\s*<\/td>\s*'
-        . '<td\s+class="value"[^>]*>(.*?)<\/td>/si';
+        .'<td\s+class="value"[^>]*>(.*?)<\/td>/si';
 
     private const BREADCRUMB = '/itemprop=["\']itemListElement["\'][^>]*>.*?'
-        . 'itemprop=["\']name["\'][^>]*>\s*([^<]+?)\s*</si';
+        .'itemprop=["\']name["\'][^>]*>\s*([^<]+?)\s*</si';
 
-    /** Breadcrumb root present on every product; carries no signal. */
     private const BREADCRUMB_ROOT = 'pirmas';
 
-    // --------------------------------------------------------------- sitemap
-
     /**
-     * Product URLs from a `<urlset>` or `<sitemapindex>`.
-     *
-     * An index recurses only into children whose loc contains
-     * `sitemap_product`, skipping the category/page/author/serial/
-     * manufacturer sub-sitemaps. `$fetchChild` is injectable so callers (and
-     * tests) control the HTTP.
-     *
-     * @param  callable(string): string|null  $fetchChild
+     * @param  (callable(string): string)|null  $fetchChild
      * @return list<string>
      */
     public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
@@ -67,13 +51,23 @@ final class Parser
             return [];
         }
 
-        if (str_ends_with($doc->documentElement->tagName, 'sitemapindex')) {
+        $root = $doc->documentElement;
+        if ($root === null) {
+            return [];
+        }
+
+        if (str_ends_with($root->tagName, 'sitemapindex')) {
             $urls = [];
             $xpath = new \DOMXPath($doc);
             $xpath->registerNamespace('s', self::SITEMAP_NS);
-            foreach ($xpath->query('//s:sitemap/s:loc') ?: [] as $node) {
-                $loc = $node->textContent;
-                if ($loc === '' || !str_contains($loc, 'sitemap_product')) {
+            $nodes = $xpath->query('//s:sitemap/s:loc');
+            if ($nodes === false) {
+                return [];
+            }
+
+            foreach ($nodes as $node) {
+                $loc = trim($node->nodeValue ?? '');
+                if ($loc === '' || ! str_contains($loc, 'sitemap_product')) {
                     continue;
                 }
                 if ($fetchChild === null) {
@@ -99,25 +93,22 @@ final class Parser
         $xpath->registerNamespace('s', self::SITEMAP_NS);
 
         $urls = [];
-        foreach ($xpath->query('//s:loc') ?: [] as $node) {
-            if ($node->textContent !== '') {
-                $urls[] = $node->textContent;
+        $nodes = $xpath->query('//s:loc');
+        if ($nodes === false) {
+            return [];
+        }
+
+        foreach ($nodes as $node) {
+            $url = trim($node->nodeValue ?? '');
+            if ($url !== '') {
+                $urls[] = $url;
             }
         }
 
         return $urls;
     }
 
-    // -------------------------------------------------------- category page
-
-    /**
-     * Products from a category listing.
-     *
-     * `total` is null: patogupirkti surfaces no reliable count, so the spider
-     * walks `?p=N` until a page comes back empty.
-     *
-     * @return array{products: list<array<string, mixed>>, total: null}
-     */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseCategoryPage(string $html): array
     {
         $products = [];
@@ -125,11 +116,11 @@ final class Parser
 
         foreach (self::splitCards($html) as $card) {
             if (preg_match(self::TRACKING_DATA, $card, $tracking) !== 1) {
-                // No tracking blob means template scaffolding (promo tiles).
+
                 continue;
             }
             $data = json_decode($tracking[2], true);
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 continue;
             }
 
@@ -142,18 +133,13 @@ final class Parser
             }
             $seen[$url] = true;
 
-            $title = self::unescape((string) ($data['name'] ?? ''));
+            $title = self::unescape(self::scalarString($data['name'] ?? null));
             if ($title === null) {
                 continue;
             }
 
-            $priceOriginal = isset($data['price']) && $data['price'] !== ''
-                ? self::normalizePrice((string) $data['price'])
-                : null;
+            $priceOriginal = self::normalizePrice(self::scalarString($data['price'] ?? null));
 
-            // The rendered card carries the displayed price: `.new-price` is
-            // final, the `.old-price` strong is pre-discount. Full-priced
-            // items have neither, so fall back to the tracking price.
             $price = preg_match(self::NEW_PRICE, $card, $new) === 1
                 ? self::normalizePrice($new[1])
                 : null;
@@ -165,7 +151,7 @@ final class Parser
             }
             if ($price === null) {
                 $price = $priceOriginal;
-                // No discount, so an "original" would just duplicate it.
+
                 $priceOriginal = null;
             }
 
@@ -177,10 +163,6 @@ final class Parser
                 $inStock = true;
             }
 
-            // `variant` joins publisher/year/format/pages ("Jotema, 2026,
-            // 15x22, minkšti viršeliai, 352"). Splitting it is fragile —
-            // publishers contain commas — so it is kept raw and the scan
-            // phase fills clean fields from the product page.
             $properties = ['magento_id' => $tracking[1]];
             if (is_string($data['variant'] ?? null) && trim($data['variant']) !== '') {
                 $properties['variant_raw'] = trim($data['variant']);
@@ -194,7 +176,7 @@ final class Parser
             $products[] = [
                 'url' => $url,
                 'title' => $title,
-                'author' => self::unescape((string) ($data['brand'] ?? '')),
+                'author' => self::unescape(self::scalarString($data['brand'] ?? null)),
                 'price' => $price,
                 'price_original' => $priceOriginal,
                 'in_stock' => $inStock,
@@ -206,9 +188,7 @@ final class Parser
         return ['products' => $products, 'total' => null];
     }
 
-    // --------------------------------------------------------- product page
-
-    /** @return array<string, mixed> */
+    /** @return ParsedItem */
     public static function parseProductPage(string $html): array
     {
         $data = [
@@ -224,8 +204,6 @@ final class Parser
             'review_count' => null,
         ];
 
-        // h1 is clean; og:title carries a " - <author> | Patogupirkti.lt"
-        // suffix that has to come off.
         if (preg_match('/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i', $html, $h1) === 1) {
             $data['title'] = self::unescape($h1[1]);
         } else {
@@ -237,7 +215,6 @@ final class Parser
             $data['title'] = $ogTitle;
         }
 
-        // Microdata.
         $author = self::itempropText($html, 'author');
         if ($author !== null) {
             $data['author'] = $author;
@@ -254,7 +231,7 @@ final class Parser
         if ($isbnRaw !== null) {
             $normalized = Isbn::normalize($isbnRaw);
             if (Isbn::isValid($normalized)) {
-                // patogupirkti uses the ISBN as its SKU.
+
                 $data['isbn'] = $normalized;
                 $data['sku'] = $normalized;
             }
@@ -262,9 +239,12 @@ final class Parser
 
         $priceRaw = self::itempropText($html, 'price');
         if ($priceRaw !== null) {
-            // Already a clean decimal in practice; normalised in case the
-            // template changes.
-            $data['price'] = self::normalizePrice($priceRaw . ' €') ?: (trim($priceRaw) ?: null);
+
+            $data['price'] = self::normalizePrice($priceRaw.' €');
+            if ($data['price'] === null) {
+                $trimmedPrice = trim($priceRaw);
+                $data['price'] = $trimmedPrice === '' ? null : $trimmedPrice;
+            }
         }
 
         $availability = self::itempropText($html, 'availability')
@@ -272,8 +252,7 @@ final class Parser
         if ($availability !== null) {
             $data['in_stock'] = strtolower(trim($availability)) === 'instock';
         } elseif (preg_match(self::NOT_FOR_SALE, $html) === 1) {
-            // Discontinued items emit no availability microdata. Marking them
-            // out of stock keeps them out of the missing-price checks.
+
             $data['in_stock'] = false;
         }
 
@@ -282,14 +261,15 @@ final class Parser
             $data['image_url'] = $image;
         }
 
-        // Spec table: publisher, cover type, translator, and a fallback for
-        // fields the microdata misses on legacy pages.
         $spec = self::extractSpecTable($html);
 
         if ($data['author'] === null && ($spec['Autorius'] ?? '') !== '') {
             $data['author'] = $spec['Autorius'];
         }
-        $publisher = ($spec['Leidėjas'] ?? '') ?: ($spec['Leidykla'] ?? '');
+        $publisher = $spec['Leidėjas'] ?? '';
+        if ($publisher === '') {
+            $publisher = $spec['Leidykla'] ?? '';
+        }
         if ($publisher !== '') {
             $data['publisher'] = $publisher;
         }
@@ -311,7 +291,6 @@ final class Parser
             $data['translator'] = $spec['Vertėjas'];
         }
 
-        // Spec extras worth keeping but without first-class columns.
         $properties = [];
         if (isset($spec['Pavadinimas originalo kalba'])) {
             $properties['original_title'] = $spec['Pavadinimas originalo kalba'];
@@ -323,39 +302,33 @@ final class Parser
             $data['properties'] = $properties;
         }
 
-        // Genre joins the breadcrumb chain so the classifier can read it as a
-        // book signal.
         $categories = self::extractCategories($html);
         $genre = $spec['Žanras'] ?? null;
-        if ($genre !== null && !in_array($genre, $categories, true)) {
+        if ($genre !== null && ! in_array($genre, $categories, true)) {
             $categories[] = $genre;
         }
         $data['categories'] = $categories;
 
-        $classification = BookClassifier::classifyBookProduct($data);
+        $classification = BookClassifier::classify($data);
         $data['is_book_product'] = $classification['is_book_product'];
         $data['book_score'] = $classification['score'];
         $data['book_score_reasons'] = $classification['reasons'];
-        $data['type'] = BookClassifier::inferShopBookType($data);
+        $data['type'] = BookClassifier::inferType($data);
 
         return $data;
     }
 
-    // -------------------------------------------------------------- helpers
-
-    /** @return list<string> per-card HTML slices */
+    /** @return list<string> */
     private static function splitCards(string $html): array
     {
-        $parts = preg_split(self::CARD_OPEN, $html) ?: [];
+        $parts = preg_split(self::CARD_OPEN, $html);
+        if ($parts === false) {
+            return [];
+        }
 
-        // The first slice is everything before the first card.
         return count($parts) > 1 ? array_slice($parts, 1) : [];
     }
 
-    /**
-     * itemprop text. The attribute may hold several space-separated tokens
-     * (`itemprop="isbn sku"`), so the token is matched on word boundaries.
-     */
     private static function itempropText(string $html, string $prop): ?string
     {
         $pattern = sprintf(
@@ -366,7 +339,6 @@ final class Parser
         return preg_match($pattern, $html, $m) === 1 ? self::unescape($m[1]) : null;
     }
 
-    /** Same, but from a content="" / href="" attribute. */
     private static function itempropAttribute(string $html, string $prop): ?string
     {
         $pattern = sprintf(
@@ -408,7 +380,6 @@ final class Parser
             }
         }
 
-        // The last crumb is the product title itself.
         if (count($names) > 1) {
             array_pop($names);
         }
@@ -442,7 +413,6 @@ final class Parser
         return $value === '' ? null : $value;
     }
 
-    /** Collapses whitespace and decodes entities; empty becomes null. */
     private static function unescape(?string $value): ?string
     {
         if ($value === null) {
@@ -464,15 +434,23 @@ final class Parser
         return preg_match('/^-?\d+$/', $trimmed) === 1 ? (int) $trimmed : null;
     }
 
+    private static function scalarString(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        return is_int($value) || is_float($value) ? (string) $value : null;
+    }
+
     private static function loadXml(string $xml): ?\DOMDocument
     {
-        // loadXML() raises ValueError on an empty string instead of
-        // returning false, so this guard has to come first.
+
         if (trim($xml) === '') {
             return null;
         }
 
-        $doc = new \DOMDocument();
+        $doc = new \DOMDocument;
         $previous = libxml_use_internal_errors(true);
         $ok = $doc->loadXML($xml);
         libxml_use_internal_errors($previous);

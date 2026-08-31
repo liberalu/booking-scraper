@@ -1,17 +1,3 @@
-# Grafana provisioned alert — catches silent upstream breakage in the discover
-# phase (e.g. the 2026-06 ibiblioteka incident: the search endpoint moved to
-# /detailed-search/page, every POST 405'd, and discovery quietly processed 0
-# URLs for ~3 weeks before anyone noticed).
-#
-# Signal: a discover run that reached a terminal state (completed/failed) in the
-# last 24h having processed 0 URLs. A healthy discover always processes >0, so a
-# terminal-with-zero run means the strategy fetched nothing — a strong proxy for
-# an endpoint/auth/schema change upstream.
-#
-# Reload after editing:  docker compose restart grafana
-# Notifications: this rule uses Grafana's default notification policy/contact
-# point. To actually receive alerts, configure a contact point (email/Slack/
-# webhook) in Grafana → Alerting → Contact points, or provision one alongside.
 apiVersion: 1
 
 groups:

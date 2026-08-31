@@ -1,4 +1,3 @@
-// Hi-fi icons — same set as mid-fi but designed for light bg, slightly thicker stroke.
 
 function HFIcon({ d, size = 16, sw = 1.75 }) {
   return (

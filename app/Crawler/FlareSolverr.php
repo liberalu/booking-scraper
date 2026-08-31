@@ -8,31 +8,9 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use RuntimeException;
 
-/**
- * Fetches pages through a FlareSolverr sidecar, ported from
- * book_scraper/flaresolverr_middleware.py.
- *
- * humanitas puts a Cloudflare Managed Challenge on every URL, so plain
- * requests are useless there. FlareSolverr drives a real Chromium, solves
- * the challenge and returns the rendered HTML.
- *
- * Sessions are reused so the `cf_clearance` cookie sticks — FlareSolverr
- * keeps the cookie jar attached to the session. Cloudflare's wall is ~30
- * minutes, so the session is rotated before that (`session_ttl_minutes`).
- *
- * CONCURRENCY MUST BE 1. The middleware reuses a single browser session
- * across requests, and two concurrent `request.get` calls on one session
- * race for the same browser instance — the second response silently returns
- * the FIRST request's body. That produced the 2026-05-22 humanitas
- * regression where one product's metadata was written to another's row.
- */
+/** @phpstan-import-type FlareResponse from CrawlerTypes */
 final class FlareSolverr
 {
-    /**
-     * Mint the replacement session this many seconds before the current one
-     * expires. Creating one costs a challenge solve (~10–15s), so it needs
-     * to be ready before the old session stops being trusted.
-     */
     private const PRE_ROTATION_BUFFER_S = 90.0;
 
     private ?string $sessionId = null;
@@ -50,31 +28,26 @@ final class FlareSolverr
         ?Client $client = null,
     ) {
         $this->sessionTtlSeconds = $sessionTtlMinutes * 60;
-        // The HTTP timeout must exceed FlareSolverr's own, or a challenge
-        // solve that is merely slow looks like a transport failure.
+
         $this->client = $client ?? new Client([
             'timeout' => ($maxTimeoutMs / 1000) + 30,
             'connect_timeout' => 10,
         ]);
     }
 
-    /**
-     * Fetch a URL through FlareSolverr.
-     *
-     * @return array{status: int, body: string, url: string, headers: array<string, string>}
-     */
+    /** @return FlareResponse */
     public function get(string $url): array
     {
         return $this->request('request.get', $url);
     }
 
-    /** @return array{status: int, body: string, url: string, headers: array<string, string>} */
+    /** @return FlareResponse */
     public function post(string $url, string $postData): array
     {
         return $this->request('request.post', $url, $postData);
     }
 
-    /** @return array{status: int, body: string, url: string, headers: array<string, string>} */
+    /** @return FlareResponse */
     private function request(string $cmd, string $url, ?string $postData = null): array
     {
         $body = [
@@ -90,10 +63,9 @@ final class FlareSolverr
         $data = $this->call($body);
 
         if (($data['status'] ?? null) !== 'ok') {
-            // FlareSolverr itself failed — unsolvable challenge, browser
-            // crash. Surfaced as a 502 so the retry path handles it rather
-            // than the caller treating an error page as content.
-            $message = (string) ($data['message'] ?? 'FlareSolverr error');
+
+            $rawMessage = $data['message'] ?? null;
+            $message = is_string($rawMessage) ? $rawMessage : 'FlareSolverr error';
 
             return [
                 'status' => 502,
@@ -103,25 +75,17 @@ final class FlareSolverr
             ];
         }
 
-        $solution = $data['solution'] ?? [];
+        $rawSolution = $data['solution'] ?? null;
+        $solution = is_array($rawSolution) ? $rawSolution : [];
 
         return [
-            'status' => (int) ($solution['status'] ?? 200),
-            'body' => (string) ($solution['response'] ?? ''),
-            'url' => (string) ($solution['url'] ?? $url),
+            'status' => self::integer($solution['status'] ?? null, 200),
+            'body' => self::string($solution['response'] ?? null, ''),
+            'url' => self::string($solution['url'] ?? null, $url),
             'headers' => self::normaliseHeaders($solution['headers'] ?? null),
         ];
     }
 
-    /**
-     * A usable session id, rotated ahead of TTL.
-     *
-     * Three paths: healthy (well inside TTL), pre-rotation (inside the
-     * buffer — mint a replacement but keep serving the old id until the new
-     * one is ready, so only the triggering request pays the cost), and hard
-     * expiry (past TTL, destroy before creating because the old session
-     * can no longer be trusted).
-     */
     public function ensureSession(): string
     {
         $now = microtime(true);
@@ -142,14 +106,12 @@ final class FlareSolverr
 
                     return $old;
                 }
-                // Destroyed only after the swap, so a request still in flight
-                // on the old session can finish.
+
                 $this->destroySession($old);
 
                 return $new;
             }
 
-            // Past TTL: destroy first, the cookie is no longer trusted.
             $this->destroySession($this->sessionId);
         }
 
@@ -160,7 +122,7 @@ final class FlareSolverr
     {
         $data = $this->call(['cmd' => 'sessions.create']);
         $session = $data['session'] ?? null;
-        if (!is_string($session) || $session === '') {
+        if (! is_string($session) || $session === '') {
             throw new RuntimeException('FlareSolverr sessions.create returned no session id');
         }
 
@@ -171,7 +133,6 @@ final class FlareSolverr
         return $session;
     }
 
-    /** Best-effort: a failed teardown must not block the caller. */
     private function destroySession(string $session): void
     {
         try {
@@ -199,46 +160,63 @@ final class FlareSolverr
             $response = $this->client->post($this->endpoint, ['json' => $body]);
         } catch (GuzzleException $e) {
             throw new RuntimeException(
-                'FlareSolverr request failed: ' . $e->getMessage(),
+                'FlareSolverr request failed: '.$e->getMessage(),
                 previous: $e
             );
         }
 
         $decoded = json_decode((string) $response->getBody(), true);
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             throw new RuntimeException('FlareSolverr returned a non-JSON body');
         }
 
-        return $decoded;
+        $object = [];
+        foreach ($decoded as $key => $value) {
+            if (is_string($key)) {
+                $object[$key] = $value;
+            }
+        }
+
+        return $object;
     }
 
-    /**
-     * Headers arrive as a list of {name, value}.
-     *
-     * Content-Encoding is dropped: FlareSolverr already returns decoded
-     * HTML, and leaving the header on makes a downstream client try to
-     * decompress plain text.
-     *
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     private static function normaliseHeaders(mixed $raw): array
     {
-        if (!is_array($raw)) {
+        if (! is_array($raw)) {
             return [];
         }
 
         $headers = [];
         foreach ($raw as $header) {
-            if (!is_array($header)) {
+            if (! is_array($header)) {
                 continue;
             }
-            $name = trim((string) ($header['name'] ?? ''));
+            $name = self::string($header['name'] ?? null, '');
+            $name = trim($name);
             if ($name === '' || strtolower($name) === 'content-encoding') {
                 continue;
             }
-            $headers[$name] = (string) ($header['value'] ?? '');
+            $headers[$name] = self::string($header['value'] ?? null, '');
         }
 
         return $headers;
+    }
+
+    private static function string(mixed $value, string $default): string
+    {
+        return is_string($value) ? $value : $default;
+    }
+
+    private static function integer(mixed $value, int $default): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+        if (is_string($value) && ctype_digit($value)) {
+            return (int) $value;
+        }
+
+        return $default;
     }
 }

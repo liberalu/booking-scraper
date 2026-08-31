@@ -1,20 +1,4 @@
-// Grafana Alloy config — log shipping to Loki.
-// Replaces monitoring/promtail/promtail-config.yml (Promtail EOL March 2026).
-//
-// Three log sources:
-//   1. containers     — Docker container stdout via loki.source.docker
-//                       (reads from the Docker daemon socket directly; no
-//                        /var/lib/docker/containers host-path mount needed)
-//   2. spawn_files    — /var/log/scrapy_runs/spawn-*.log with role+shop labels
-//                       extracted from the filename
-//   (3)               — was /var/log/scraper.log, written by Python's crontab.
-//                       Gone; the scheduler container's stdout replaces it.
-//
-// LABEL CARDINALITY CONTRACT:
-//   Allowed labels:  service, level, role, shop
-//   Forbidden:       run_id (unbounded — filter via |= "run_id=N" in LogQL)
 
-// ─── 1. Container stdout ─────────────────────────────────────────────────────
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -24,23 +8,17 @@ discovery.docker "containers" {
 discovery.relabel "containers" {
   targets = discovery.docker.containers.targets
 
-  // Promote the compose service name to a `service` label.
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
   }
 
-  // Drop containers not managed by compose (no service label).
   rule {
     source_labels = ["service"]
     regex         = "^$"
     action        = "drop"
   }
 
-  // ...and containers belonging to a DIFFERENT compose project. The Docker
-  // socket shows every container on the host, so without this Loki was
-  // indexing an unrelated project's app/web/mysql/redis/mailpit logs — more
-  // `service` values than this stack has, and none of them ours.
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
     regex         = "book-scraper"
@@ -56,19 +34,9 @@ loki.source.docker "containers" {
 }
 
 loki.process "containers" {
-  // Drop the `service_name` label that Alloy auto-injects from OpenTelemetry
-  // conventions — it duplicates `service` and violates the label-cardinality
-  // contract (only service/level/role/shop are allowed per CLAUDE.md).
   stage.label_drop {
     values = ["service_name"]
   }
-  // Parse log level where the line carries one. Python/uvicorn/Scrapy did:
-  //   "INFO  [alembic.runtime.migration] ..."
-  //   "2026-05-12 ... [scrapy.core.engine] INFO: Spider closed"
-  // The PHP stack mostly does not — its lines are written to be read
-  // ("done — 2 url(s), books added 0"), so `level` is simply absent on them.
-  // Left in place because it still matches Postgres, Loki and Grafana's own
-  // output, and because absent is honest: no panel filters on it.
   stage.regex {
     expression = "(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|FATAL)\\b"
   }
@@ -78,15 +46,6 @@ loki.process "containers" {
   forward_to = [loki.write.default.receiver]
 }
 
-// ─── 2. Per-spawn scrapy log files ───────────────────────────────────────────
-// Filenames: spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
-//   <role>: operator | cron | post-phase-auto | stall-resume | cron-chain
-//           | reconcile-restart
-//   <shop>: vaga | pegasas | humanitas | patogupirkti | almalittera | ...
-//
-// service stays "scraper" even though no container is called that any more:
-// these are the crawls' own logs whichever container spawned them, and the
-// name is what the dashboard panel queries.
 
 local.file_match "spawn_files" {
   path_targets = [{
@@ -102,19 +61,9 @@ loki.source.file "spawn_files" {
 }
 
 loki.process "spawn_labels" {
-  // Same drop as the container pipeline: Alloy injects `service_name` from
-  // OpenTelemetry conventions, it duplicates `service`, and the cardinality
-  // contract in CLAUDE.md allows four labels. It was only dropped on the
-  // container streams, so the spawn-file streams carried it.
   stage.label_drop {
     values = ["service_name"]
   }
-  // Extract role+shop from filename:
-  //   spawn-YYYYMMDD-HHMMSSffffff-<role>-<shop>.log
-  //   ↑8 digits  ↑12 digits (HH+MM+SS=6 + microseconds=6)
-  // role is greedy (may contain hyphens, e.g. stall-resume).
-  // shop excludes hyphens — every current/backlog shop name is hyphen-free,
-  // so the greedy role captures up to the LAST hyphen correctly.
   stage.regex {
     source     = "filename"
     expression = "/spawn-\\d{8}-\\d{12}-(?P<role>[a-z0-9_-]+)-(?P<shop>[a-z0-9_]+)\\.log$"
@@ -131,14 +80,7 @@ loki.process "spawn_labels" {
   forward_to = [loki.write.default.receiver]
 }
 
-// ─── 3. (removed) Cron-output aggregate file ─────────────────────────────────
-//
-// /var/log/scraper.log was written by the Python container's crontab, which
-// went with the Python stack. Its replacement is the `scheduler` container's
-// stdout, already collected by source 1 as service="scheduler" — the dashboard
-// panel that read this file now queries that instead.
 
-// ─── Loki output ──────────────────────────────────────────────────────────────
 
 loki.write "default" {
   endpoint {

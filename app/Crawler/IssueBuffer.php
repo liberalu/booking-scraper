@@ -4,38 +4,28 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
-use App\Services\ValidationIssueWriter;
+use App\Repositories\ValidationIssueRepository;
+use App\Support\Database;
 use Throwable;
 
-/**
- * Data-quality issues noticed while crawling, held until the run closes.
- *
- * The validator phase finds problems by querying stored rows; these are the
- * ones only the crawl can see — a page that came back empty, a redirect to the
- * homepage, an ISBN that failed its checksum before being discarded. Upstream
- * buffers them on the pipeline and flushes once at spider close, so a run
- * writes issues in one batch rather than a row at a time.
- *
- * Static because roach builds processors through its container: the CLI has no
- * seam to inject into.
- */
+/** @phpstan-import-type BufferedIssue from CrawlerTypes */
 final class IssueBuffer
 {
-    /** @var list<array{url: string, field: string, issue: string, raw_value: string|null}> */
-    private static array $issues = [];
+    /** @var list<BufferedIssue> */
+    private array $issues = [];
 
-    public static function reset(): void
+    public function reset(): void
     {
-        self::$issues = [];
+        $this->issues = [];
     }
 
-    public static function add(
+    public function add(
         string $issue,
         string $field,
         string $url,
         string $rawValue = '',
     ): void {
-        self::$issues[] = [
+        $this->issues[] = [
             'url' => $url,
             'field' => $field,
             'issue' => $issue,
@@ -50,35 +40,28 @@ final class IssueBuffer
         ));
     }
 
-    /** @return list<array{url: string, field: string, issue: string, raw_value: string|null}> */
-    public static function drain(): array
+    /** @return list<BufferedIssue> */
+    public function drain(): array
     {
-        $issues = self::$issues;
-        self::$issues = [];
+        $issues = $this->issues;
+        $this->issues = [];
 
         return $issues;
     }
 
-    public static function count(): int
+    public function count(): int
     {
-        return count(self::$issues);
+        return count($this->issues);
     }
 
-    /**
-     * Write what the crawl noticed.
-     *
-     * Swallows failures on purpose: a crawl that fetched and stored everything
-     * correctly must not be reported as failed because its issue batch could
-     * not be written.
-     */
-    public static function flush(int $shopId, int $runId): int
+    public function flush(int $shopId, int $runId): int
     {
-        $issues = self::drain();
+        $issues = $this->drain();
         if ($issues === []) {
             return 0;
         }
         try {
-            (new ValidationIssueWriter())->upsert($issues, $shopId, $runId);
+            (new ValidationIssueRepository(Database::manager()))->upsert($issues, $shopId, $runId);
 
             return count($issues);
         } catch (Throwable $e) {

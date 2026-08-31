@@ -1,7 +1,3 @@
-// Hi-fi Book page — logical book aggregating ShopBook entries across multiple shops.
-// "Book" is the canonical entity (identified by ISBN); each shop has its own ShopBook
-// row pointing at it. This page shows: which shop listings are matched, when they
-// were matched, how they were matched, and prices side-by-side.
 
 function HFBook({ nav, goto, params }) {
   const HF = getHF();
@@ -68,15 +64,12 @@ function HFBook({ nav, goto, params }) {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
-  // Build a lookup of {shop -> price ~30 days ago} from real history.
-  // The Δ 30d column subtracts current price from this baseline.
   const historyByShop = {};
   (history || []).forEach(h => { historyByShop[h.shop] = h.series || []; });
   function prevPriceFor(shopName) {
     const series = historyByShop[shopName];
     if (!series || series.length === 0) return null;
     const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
-    // Pick the point closest to 30 days ago (or the oldest available point)
     let best = null;
     for (const p of series) {
       const t = new Date(p.date).getTime();
@@ -88,9 +81,6 @@ function HFBook({ nav, goto, params }) {
     return isNaN(v) ? null : v;
   }
 
-  // One row per shop that lists this book. Field names mirror what
-  // `book_detail` returns: shop, shop_book_id, url, price, in_stock,
-  // last_seen_at, title, author, year, isbn, publisher, format, match_method.
   const shops = (data.shops || []).map(s => ({
     shop: s.shop,
     shopBookId: s.shop_book_id,
@@ -109,7 +99,6 @@ function HFBook({ nav, goto, params }) {
     method: s.match_method || '—',
     confidence: null,
     by: 'auto',
-    // Per-shop metadata fields (for Metadata matrix + Contributors)
     shopAuthor: s.author,
     shopTitle: s.title,
     shopIsbn: s.isbn,
@@ -233,9 +222,6 @@ function HFBook({ nav, goto, params }) {
   );
 }
 
-// ─────────────────────── Listings tab (single, unified) ───────────────────────
-// One row per shop — combines price, stock, match method, confidence,
-// matched-at, matched-by, last scrape, and per-row actions in one place.
 
 function HFBookListings({ HF, shops, goto, methodTone, sbTone, lowest }) {
   return (
@@ -296,15 +282,12 @@ function HFBookListings({ HF, shops, goto, methodTone, sbTone, lowest }) {
   );
 }
 
-// ─────────────────────── Prices tab ───────────────────────
 
 function HFBookPrices({ HF, shops, lowest, history }) {
   if (shops.length === 0 || shops.every(s => s.price == null)) {
     return <HFCard><div style={{padding:40, textAlign:'center', color:HF.ink4}}>No price data available.</div></HFCard>;
   }
 
-  // Build per-shop series from real history when present; fall back to a flat
-  // single-point line at the current price when the shop has no recorded history.
   const historyByShop = {};
   (history || []).forEach(h => { historyByShop[h.shop] = h.series || []; });
 
@@ -316,14 +299,12 @@ function HFBookPrices({ HF, shops, lowest, history }) {
     return { shop: s.shop, data, current: s.price, history: hist };
   });
 
-  // All-time low across all shops' real history
   const allHistoryPrices = (history || []).flatMap(h => (h.series || []).map(p => ({ shop: h.shop, price: parseFloat(p.price), date: p.date })))
     .filter(p => !isNaN(p.price));
   const allTimeLow = allHistoryPrices.length > 0
     ? allHistoryPrices.reduce((min, p) => p.price < min.price ? p : min, allHistoryPrices[0])
     : null;
 
-  // Average price across all current shop prices
   const currentPrices = shops.map(s => s.price).filter(p => p != null);
   const avgPrice = currentPrices.length > 0
     ? currentPrices.reduce((a, b) => a + b, 0) / currentPrices.length
@@ -381,7 +362,6 @@ function HFBookPrices({ HF, shops, lowest, history }) {
   );
 }
 
-// ─────────────────────── Metadata tab ───────────────────────
 
 function HFBookMetadata({ HF, book, shops }) {
   const order = shops.map(s => s.shop);
@@ -394,7 +374,6 @@ function HFBookMetadata({ HF, book, shops }) {
   );
 }
 
-// Shared grid renderer used by both Identifiers and Contributors cards.
 function HFFieldGrid({ HF, rows, order, shops, labelHeader }) {
   if (!rows.length) return null;
   return (
@@ -485,11 +464,6 @@ function HFContributorsCard({ HF, book, shops, order }) {
 }
 
 function HFMetadataMatrix({ HF, book, shops, order }) {
-  // Per-field per-shop matrix derived from real API data.
-  // Each cell is:
-  //   { v: '<value>' }              → shop reported this value (matches canonical → green check)
-  //   { v: '<value>', conflict:true } → shop reported a different value (warning)
-  //   { missing:true }              → shop did not provide this field
   const fields = [
     { field:'ISBN',       canonical: book.isbn,      perShop: s => s.shopIsbn,
       match: v => book.isbns.length > 0 ? book.isbns.some(i => i.isbn === v) : v === book.isbn },
@@ -536,7 +510,6 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
     };
   });
 
-  // Conflicts list — every shop × field where the shop value disagrees with canonical.
 
   return (
     <>
@@ -545,7 +518,7 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
               style={{marginBottom:HF.gap}} flush>
         <div style={{overflowX:'auto'}} className="hf-scroll">
           <div style={{minWidth: 200 + order.length*140}}>
-            {/* Header row */}
+
             <div style={{
               display:'grid',
               gridTemplateColumns:`140px 200px repeat(${order.length}, 1fr)`,
@@ -562,7 +535,7 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
                 </span>
               ))}
             </div>
-            {/* Rows */}
+
             {matrix.map((row, i) => (
               <div key={row.field} style={{
                 display:'grid',
@@ -646,7 +619,6 @@ function HFMetadataMatrix({ HF, book, shops, order }) {
   );
 }
 
-// ─────────────────────── Helper components ───────────────────────
 
 const SHOP_COLORS = ['accent','#0e7490','#b45309','#7c3aed','#16a34a','#6b7280'];
 function shopColor(i, HF) {

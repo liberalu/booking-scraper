@@ -4,22 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Testing\FixtureDatabase;
-use App\Testing\SyntheticShop;
+use App\Repositories\SchedulerRepository;
 use Illuminate\Support\Facades\DB;
+use PDO;
 use PHPUnit\Framework\Attributes\Group;
+use Tests\Support\FixtureDatabase;
+use Tests\Support\SyntheticShop;
 use Tests\TestCase;
 use Tests\UsesTestDatabase;
 
-/**
- * The scheduler's plumbing and its concurrency policy.
- *
- * CronScheduleTest covers which windows are due; this covers the part that
- * needs a database — whether an in-flight run for the shop holds a job back —
- * and the fact that the command loads and reports at all.
- *
- * Every case runs `--dry-run`, so nothing is ever spawned.
- */
 final class ScheduleRunsTest extends TestCase
 {
     use UsesTestDatabase;
@@ -34,13 +27,6 @@ final class ScheduleRunsTest extends TestCase
         ));
     }
 
-    /**
-     * A job due every minute, so due-ness is never the variable under test.
-     *
-     * Clears the table first: the fixture plants a cron job of its own, and it
-     * competes for the max-per-tick budget and for the shop's idle slot. Every
-     * caller is inside a transaction that rolls back.
-     */
     private function plantJob(string $shopName): int
     {
         DB::table('cron_jobs')->delete();
@@ -60,7 +46,7 @@ final class ScheduleRunsTest extends TestCase
     {
         DB::beginTransaction();
         try {
-            // synthetic-two has no runs at all.
+
             $id = $this->plantJob(SyntheticShop::SHOP_TWO);
 
             $this->artisan('runs:schedule --dry-run')
@@ -76,11 +62,7 @@ final class ScheduleRunsTest extends TestCase
     {
         DB::beginTransaction();
         try {
-            // Planted here rather than taken from the fixture: the fixture has
-            // no `running` run (its frozen /api/runs?status=running shape is an
-            // empty list), and it cannot gain one — the goldens were frozen
-            // against it while Python still existed, and nothing can re-freeze
-            // them now.
+
             $id = $this->plantJob(SyntheticShop::SHOP_TWO);
             DB::insert(
                 "insert into scrape_runs (shop_id, phase, status, started_at, last_heartbeat,
@@ -102,10 +84,7 @@ final class ScheduleRunsTest extends TestCase
     #[Group('db')]
     public function test_a_paused_run_does_not_hold_a_shop_back(): void
     {
-        // Deliberate, and the opposite of the crawler's own preflight. A paused
-        // run is parked by an operator and the reaper leaves it alone by design,
-        // so it can sit for months — there is one on patogupirkti from May.
-        // Counting it as busy would stop that shop's schedules permanently.
+
         DB::beginTransaction();
         try {
             $shopId = (int) DB::table('shops')->where('name', SyntheticShop::SHOP_TWO)->value('id');
@@ -147,7 +126,7 @@ final class ScheduleRunsTest extends TestCase
         DB::beginTransaction();
         try {
             $first = $this->plantJob(SyntheticShop::SHOP_TWO);
-            // Not plantJob() again — that clears the table.
+
             $second = (int) DB::selectOne(
                 "insert into cron_jobs (shop_id, phase, strategy, args, cron_expression,
                      enabled, created_at)
@@ -156,9 +135,6 @@ final class ScheduleRunsTest extends TestCase
                 [$first]
             )->id;
 
-            // Both are due; one fires, and the other says so rather than
-            // vanishing — twelve crawls starting at once is the thing being
-            // avoided, and silence would hide it.
             $this->artisan('runs:schedule --dry-run --max-per-tick=1')
                 ->expectsOutputToContain("cron job #{$first} due")
                 ->expectsOutputToContain("deferring cron job #{$second}")
@@ -166,5 +142,47 @@ final class ScheduleRunsTest extends TestCase
         } finally {
             DB::rollBack();
         }
+    }
+
+    #[Group('db')]
+    public function test_a_second_scheduler_cannot_claim_the_same_shop(): void
+    {
+        DB::beginTransaction();
+        $connection = null;
+        try {
+            $id = $this->plantJob(SyntheticShop::SHOP_TWO);
+            $shopId = (int) DB::table('cron_jobs')->where('id', $id)->value('shop_id');
+            $connection = $this->separateConnection();
+            $statement = $connection->prepare(
+                'select pg_advisory_lock(7351, cast(? as integer))',
+            );
+            $statement->execute([$shopId]);
+
+            self::assertFalse((new SchedulerRepository)->tryAcquireShop($shopId));
+        } finally {
+            if ($connection instanceof PDO) {
+                $connection->exec('select pg_advisory_unlock_all()');
+            }
+            DB::rollBack();
+        }
+    }
+
+    private function separateConnection(): PDO
+    {
+        $dsn = sprintf(
+            'pgsql:host=%s;port=%d;dbname=%s',
+            config('database.connections.pgsql.host'),
+            config('database.connections.pgsql.port'),
+            config('database.connections.pgsql.database'),
+        );
+
+        return new PDO(
+            $dsn,
+            config('database.connections.pgsql.username'),
+            config('database.connections.pgsql.password'),
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ],
+        );
     }
 }

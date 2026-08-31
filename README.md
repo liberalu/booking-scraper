@@ -7,9 +7,8 @@ data-quality problems it finds in its own output.
 > This was a Scrapy project until 2026-08-26. It was ported to PHP, verified
 > against the original by differential testing — identical input through both
 > implementations, outputs compared — and the original was then removed. The
-> last commit containing it is tagged `python-final`. See
-> [the removal plan](docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md)
-> for the nine defects the comparison found and how the evidence was preserved.
+> last commit containing it is tagged `python-final`; the frozen fixtures and
+> goldens preserve the comparison evidence.
 
 ## Architecture
 
@@ -17,9 +16,11 @@ One Laravel application, and it is the repository:
 
 | Directory | What it is |
 |---|---|
-| `app/Parsers/`, `app/Repositories/`, `app/Services/`, `app/Runs/` | The domain: parsers, repositories, validator, matcher, run lifecycle. |
+| `app/Parsers/`, `app/Repositories/`, `app/Services/`, `app/Runs/` | Domain parsing, persistence, use cases, and run lifecycle. |
 | `app/Crawler/` | The crawler: roach-php spiders, watchdog, scheduling. |
-| `app/Http/`, `routes/api.php` | The JSON API, plus the React SPA served from `public/static/hifi`. |
+| `app/Http/Requests/`, `app/DTO/` | Validated HTTP input and framework-neutral request/response values. |
+| `app/Queries/`, `app/Services/` | Read models and business operations used by thin controllers. |
+| `app/Http/Controllers/`, `routes/` | HTTP adapters for the JSON API and React SPA. |
 | `bin/` | The CLI entry points: `crawl`, `validate`, `match`, `migrate`. |
 
 These were three composer projects under `php/`, wired together with path
@@ -33,12 +34,12 @@ themselves are generic.
 
 | Phase | Command | What it does |
 |---|---|---|
-| Discover | `bin/crawl discover --shop=vaga --strategy=sitemap` | Find product URLs |
-| Discover | `bin/crawl discover --shop=vaga --strategy=categories` | Find URLs and extract current prices |
-| Discover | `bin/crawl discover --shop=vaga --strategy=full_crawl` | Follow every internal link from one seed |
-| Discover | `bin/crawl discover --shop=pegasas --strategy=graphql` | Magento GraphQL: full metadata, slow |
-| Discover | `bin/crawl discover --shop=pegasas --strategy=lupasearch` | Third-party search index: fast price/stock rescan |
-| Scan | `bin/crawl scan --shop=vaga` | Scrape full product pages, resumable after a crash |
+| Discover | `php artisan crawler:run discover --shop=vaga --strategy=sitemap` | Find product URLs |
+| Discover | `php artisan crawler:run discover --shop=vaga --strategy=categories` | Find URLs and extract current prices |
+| Discover | `php artisan crawler:run discover --shop=vaga --strategy=full_crawl` | Follow every internal link from one seed |
+| Discover | `php artisan crawler:run discover --shop=pegasas --strategy=graphql` | Magento GraphQL: full metadata, slow |
+| Discover | `php artisan crawler:run discover --shop=pegasas --strategy=lupasearch` | Third-party search index: fast price/stock rescan |
+| Scan | `php artisan crawler:run scan --shop=vaga` | Scrape full product pages, resumable after a crash |
 | Validate | `bin/validate --shop=vaga` | 20 data-quality checks over what was scraped |
 | Match | `bin/match --shop=vaga` | Link shop books to canonical books by ISBN, backfill authors |
 
@@ -72,7 +73,7 @@ Requires PHP 8.4 (roach-php caps there — Homebrew's default `php` is 8.5, so
 the Makefile pins `/opt/homebrew/opt/php@8.4/bin/php`), composer, and Docker.
 
 ```bash
-make install                                        # composer install, all three projects
+make install                                        # install PHP dependencies
 docker compose up -d postgres                       # the live database
 php bin/migrate apply --database=postgresql://postgres:postgres@localhost:5432/book_scraper
 ```
@@ -80,11 +81,11 @@ php bin/migrate apply --database=postgresql://postgres:postgres@localhost:5432/b
 Then crawl something:
 
 ```bash
-php bin/crawl discover --shop=vaga --strategy=sitemap
-php bin/crawl scan --shop=vaga --max-urls=20         # a small first run
+php artisan crawler:run discover --shop=vaga --strategy=sitemap
+php artisan crawler:run scan --shop=vaga --max-urls=20         # a small first run
 ```
 
-`bin/crawl` writes to whatever `DATABASE_URL` points at, so `--database` is
+`crawler:run` writes to whatever `DATABASE_URL` points at, so `--database` is
 offered explicitly and `--dry-run` fetches and parses without persisting.
 
 The dashboard:
@@ -119,7 +120,7 @@ fires them. Without the second, a crawl that dies without unwinding stays
 `running` and blocks its shop. `runs:schedule --dry-run` reports what it would
 fire without spawning anything.
 
-Note the database each side reads: `bin/crawl` takes `DATABASE_URL`, but the
+Note the database each side reads: `crawler:run` takes `DATABASE_URL`, but the
 dashboard — and therefore the scheduler, and the crawls it spawns — takes
 Laravel's `DB_*` / `DB_URL` from `.env`. `DATABASE_URL` is
 ignored there. The crawls a scheduler starts always go to the database that
@@ -152,22 +153,22 @@ config/
     default.toml              # global settings (delays, DB URL)
     shops/<shop>.toml         # per-shop URLs, strategies, concurrency
 
-php/
-    src/                      # the library
-        <Shop>/Parser.php     # per-shop parsing, testable without a spider
-        Services/             # ValidateService, MatchService
-        Repository/           # shop books, canonical books
-        Runs/                 # reaper, failsafe, resume policy, scan lock
-        Testing/              # SyntheticShop, FixtureDatabase — fixtures as code
-    crawler/                  # roach-php spiders, watchdog, scheduling
-    dashboard/                # Laravel API + the React SPA under public/static
-    schema/0001_baseline.sql  # the whole schema; applied by bin/migrate
-    tools/schema_gate.sh      # does the baseline still match the live schema?
-    tests/golden/             # characterisation goldens
-
-fixtures/                     # saved HTML/JSON for parser tests
+app/
+    Books/                    # shop-neutral classification rules
+    Parsers/<Shop>/           # per-shop parsing, testable without a spider
+    Repositories/             # all PostgreSQL reads/writes, split by concern
+    Services/                 # domain and API application services
+    Runs/                     # lifecycle, failsafe, resume policy, scan lock
+    Crawler/                  # roach-php spiders, watchdog, scheduling
+    Http/Controllers/Api/     # thin Laravel request adapters
+bin/                          # crawl, validate, match and schema entry points
+database/schema/              # schema applied by bin/migrate
+tests/Support/                # synthetic database fixtures and helpers
+tests/golden/                 # immutable characterisation goldens
+tests/fixtures/               # saved HTML/JSON parser inputs
+public/static/hifi/           # built React dashboard
 monitoring/                   # Loki, Alloy, Grafana provisioning
-docs/                         # specs, plans, follow-ups
+docs/                         # port history and current follow-ups
 ```
 
 ## Database
@@ -182,8 +183,8 @@ docs/                         # specs, plans, follow-ups
 - `validation_issues` — what the validator found, with a lifecycle.
 
 Schema changes go in `database/schema/` and are applied by `bin/migrate`.
-(`database/migrations/` is deliberately empty — `artisan migrate` has none of
-that migrator's guards, and `.env` points at the live catalogue.)
+There are no Laravel migrations because `artisan migrate` lacks that
+migrator's production guards.
 `make schema-gate` builds a scratch database from the baseline and diffs it
 against the live schema — that is what catches enums, partial unique indexes,
 CHECK expressions and FK actions.
@@ -197,6 +198,8 @@ then the global default.
 
 ## Deployment
 
-Compose runs infrastructure only — postgres, flaresolverr, loki, alloy,
-grafana. The crawler and dashboard run from the CLI; there are no application
-images yet. Packaging them is phase 2 of the removal plan.
+Compose builds one application image and runs it as the dashboard, scheduler,
+and reaper services, alongside PostgreSQL, FlareSolverr, Loki, Alloy, and
+Grafana. Published service ports are loopback-only by default; the dashboard
+has no authentication, so do not widen its bind address without adding an
+authenticated reverse proxy.

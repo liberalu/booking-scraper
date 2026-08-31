@@ -3,18 +3,6 @@ name = "patogupirkti"
 base_url = "https://www.patogupirkti.lt"
 
 [scraping]
-# Cloudflare on patogupirkti is the passive tier — plain GETs with a
-# desktop UA don't trigger the Managed Challenge (verified 2026-05-07,
-# 5/5 sequential curl OK in ~1 s each). No FlareSolverr needed.
-#
-# Pacing tuned empirically on 60 099-URL scans (2026-05-08):
-#   * concurrency=4: avg server latency 3.3 s, throughput 0.90 URL/s
-#   * concurrency=3: avg server latency 2.4 s, throughput ~0.85 URL/s
-# Same effective throughput at conc=3 (server scales sub-linearly so
-# lower concurrency gives faster individual responses), ~30% lighter
-# on the Magento backend, smaller blast radius if Cloudflare ever
-# shifts to active challenge. Override via shop_settings DB row to
-# experiment without redeploying.
 download_delay = 0.5
 concurrent_requests_per_domain = 3
 batch_size = 100
@@ -26,51 +14,22 @@ hard_timeout = 30
 batch_timeout = 300
 
 [discover]
-# Product permalinks: `/knyga/<slug>.html`. Excludes category roots,
-# author landing pages (`/<author-slug>-knygos`), and series pages.
 url_include_pattern = "^https://www\\.patogupirkti\\.lt/knyga/[^/]+\\.html$"
 
 [discover.sitemap]
-# Sitemap-of-sitemaps: the index points at sitemap_product.xml
-# (49 999 URLs) and sitemap_product-1.xml (10 100 URLs). The parser
-# detects the `<sitemapindex>` root and fetches both child sitemaps
-# synchronously via stdlib urllib (~2–3 s extra at run start).
 url = "https://www.patogupirkti.lt/sitemap/sitemap.xml"
 max_age_hours = 168
 
 [discover.categories]
-# Optional fast-rescan path for prices/stock — mirrors pegasas's
-# lupasearch role. Each `<div class="product">` card on a category
-# listing carries an inline `product_tracking_data_<id>` JS object
-# (id, name, regular price, brand=author, variant=publisher/year/format)
-# plus the rendered discounted price + in-stock flag. Walking these
-# pages is much faster than per-product GETs because each request
-# returns ~150 cards.
-#
-# Seed roots cover the bulk of the LT book catalogue: fiction, non-
-# fiction, kids/YA. Author landing pages and individual genre leafs
-# aren't seeded here — they'd duplicate items already covered by the
-# parent root. Pagination via `?p=N` chains until a page returns 0
-# cards (the spider's stop-on-empty terminator). cd-dvd is excluded
-# because that root uses a different card template (verified
-# 2026-05-07 — `<div class="product">` doesn't match) and the items
-# aren't books anyway.
 url = [
   "https://www.patogupirkti.lt/grozine-literatura?p={page}",
   "https://www.patogupirkti.lt/dalykine-literatura?p={page}",
   "https://www.patogupirkti.lt/knygos-vaikams?p={page}",
 ]
 max_age_hours = 24
-# Safety cap per seed URL. ~150 cards/page × 400 pages = 60 000 cards
-# upper bound for the largest root; in practice each root is much
-# smaller. 500 leaves headroom for catalogue growth without enabling
-# a runaway pagination loop if the empty-page terminator misfires.
 max_pages = 500
 
 [scan]
-# Reads from discovered_urls table; no URL needed. parsers.parse_product_page
-# pulls itemprop microdata + spec table → ~99% ISBN/year/pages/format
-# coverage on calibration samples.
 
 [match]
 trust = 50

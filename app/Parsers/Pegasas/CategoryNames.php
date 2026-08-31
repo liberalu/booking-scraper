@@ -4,19 +4,8 @@ declare(strict_types=1);
 
 namespace App\Parsers\Pegasas;
 
-/**
- * Magento category id -> name.
- *
- * GENERATED from book_scraper/spiders/pegasas/category_names.py by
- * php/tools/dump_pegasas_categories.py. Do not edit by hand.
- *
- * LupaSearch returns only numeric category ids, but the validator's
- * non-book keyword checks work on names — without this map, every
- * LupaSearch-discovered row would look category-less to them.
- */
 final class CategoryNames
 {
-    /** @var array<int, string> */
     public const MAP = [
         5050 => 'Pegasas',
         5051 => 'Knygos',
@@ -1192,8 +1181,7 @@ final class CategoryNames
 
     public static function name(int $id): string
     {
-        // Falls back to the id so a category added upstream degrades to a
-        // harmless label rather than vanishing. Regenerate to fix.
+
         return self::MAP[$id] ?? (string) $id;
     }
 }

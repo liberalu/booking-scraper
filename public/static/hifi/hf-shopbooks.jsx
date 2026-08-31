@@ -1,4 +1,3 @@
-// Hi-fi Shop Books list + detail
 
 function HFChangesPanel({ changes, fmtDate }) {
   const TRUNC = 120;
@@ -59,7 +58,6 @@ function HFChangesPanel({ changes, fmtDate }) {
   );
 }
 
-// Lightweight markdown → HTML converter (no deps, covers common shop description patterns)
 function mdToHtml(text) {
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const inline = s => esc(s)
@@ -81,9 +79,8 @@ function mdToHtml(text) {
   }).join('');
 }
 
-// Price chart with hover tooltip showing exact date + price
 function HFPriceChart({ priceHistory, h = 160 }) {
-  const [tooltip, setTooltip] = React.useState(null); // { x, y, label }
+  const [tooltip, setTooltip] = React.useState(null);
   const prices = priceHistory.map(p => p.price || 0).filter(v => v > 0);
   if (prices.length === 0) {
     return <div style={{height:h, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--hf-ink4)', fontSize:13}}>No price history yet</div>;
@@ -133,7 +130,6 @@ function HFShopBooks({ nav, goto }) {
   const HF = getHF();
   const statusTone = { active:'ok', out:'warn', delisted:'neutral' };
 
-  // Filter state — backend handles filtering and pagination.
   const shopNames = useShopNames();
   const _sp = new URLSearchParams(window.location.search);
   const [q, setQ]                 = React.useState(_sp.get('q') || '');
@@ -148,7 +144,6 @@ function HFShopBooks({ nav, goto }) {
   const [page, setPage]           = React.useState(Math.max(1, parseInt(_sp.get('page') || '1', 10) || 1));
   const PER_PAGE = 30;
 
-  // Mirror filter state into URL bar
   React.useEffect(() => {
     const sp = new URLSearchParams();
     if (q.trim()) sp.set('q', q.trim());
@@ -329,7 +324,6 @@ function HFShopBooks({ nav, goto }) {
   );
 }
 
-// ───────────────────────────── Detail ─────────────────────────────
 
 function HFShopBookDetail({ nav, goto, params }) {
   const HF = getHF();
@@ -474,7 +468,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         </div>
       </HFCard>
 
-      {/* ── Overview ── */}
+
       {tab === 'overview' && <>
       <div style={{display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         {(() => {
@@ -540,7 +534,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Categories + URL row */}
+
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFCard title="Categories" sub={`${(data.categories||[]).filter(c=>c.trim()).length} assigned`}>
           {(data.categories||[]).filter(c => c.trim()).length === 0 ? (
@@ -563,7 +557,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Description */}
+
       {data.description && (
         <HFCard title="Description" sub="from shop listing">
           <div
@@ -574,7 +568,7 @@ function HFShopBookDetail({ nav, goto, params }) {
       )}
       </>}
 
-      {/* ── Prices ── */}
+
       {tab === 'prices' && (<>
         <HFKpiStrip items={[
           { label:'Current',       value: data.price || '—' },
@@ -627,10 +621,10 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       </>)}
 
-      {/* ── Changes ── */}
+
       {tab === 'changes' && <HFChangesPanel changes={changes} fmtDate={fmtDate}/>}
 
-      {/* ── Issues ── */}
+
       {tab === 'issues' && (() => {
         const active   = issuesList.filter(i => i.lifecycle_state !== 'resolved');
         const resolved = issuesList.filter(i => i.lifecycle_state === 'resolved');
@@ -669,7 +663,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         );
       })()}
 
-      {/* ── URLs ── */}
+
       {tab === 'urls' && (
         <HFCard title="Source URLs" sub="discovered URLs linked to this book">
           {data.url ? (
@@ -689,7 +683,7 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       )}
 
-      {/* ── Runs ── */}
+
       {tab === 'runs' && (
         <HFCard title="Recent runs" sub="runs where this book was scraped">
           {runs.length === 0
@@ -716,8 +710,8 @@ function HFShopBookDetail({ nav, goto, params }) {
         </HFCard>
       )}
 
-      {/* ── Raw ── */}
-      {/* ── Classification ── */}
+
+
       {tab === 'classification' && (() => {
         const cls = data.classification;
         const SIGNAL_META = {
@@ -732,7 +726,7 @@ function HFShopBookDetail({ nav, goto, params }) {
           no_title:                  { label:'No title',                  dir:-1, max:0, desc:'Title field missing or empty — cannot classify.' },
           book_schema:               { label:'Structured book schema',    dir:1,  max:2, desc:'Schema.org Book type detected in page markup.' },
         };
-        const MAX_POSITIVE = 10;  // 3+3+2+2
+        const MAX_POSITIVE = 10;
         const THRESHOLD = 3;
 
         if (!cls) return (
@@ -746,19 +740,17 @@ function HFShopBookDetail({ nav, goto, params }) {
         const reasons = cls.reasons || [];
         const storedType = data.type;
 
-        // Separate positive and negative signals
         const posPoints = reasons.reduce((s, r) => r.points > 0 ? s + r.points : s, 0);
         const negPoints = reasons.reduce((s, r) => r.points < 0 ? s + r.points : s, 0);
 
-        // Score bar: 0–10 range, threshold at 3
         const barPct = Math.min(100, Math.max(0, (posPoints / MAX_POSITIVE) * 100));
         const threshPct = (THRESHOLD / MAX_POSITIVE) * 100;
 
         return (<>
-          {/* Verdict card */}
+
           <HFCard style={{marginBottom:'var(--hf-gap)'}}>
             <div style={{padding:`18px var(--hf-card-p)`, display:'flex', alignItems:'center', gap:20}}>
-              {/* Big verdict icon */}
+
               <div style={{
                 width:52, height:52, borderRadius:14, flexShrink:0,
                 background: isBook ? 'var(--hf-ok)' : 'var(--hf-err)',
@@ -792,7 +784,7 @@ function HFShopBookDetail({ nav, goto, params }) {
               </div>
             </div>
 
-            {/* Score bar */}
+
             <div style={{padding:`0 var(--hf-card-p) 16px`}}>
               <div style={{fontSize:11, color:'var(--hf-ink4)', marginBottom:6, display:'flex', justifyContent:'space-between'}}>
                 <span>Score contribution (positive signals only)</span>
@@ -805,7 +797,7 @@ function HFShopBookDetail({ nav, goto, params }) {
                   background: posPoints >= THRESHOLD ? 'var(--hf-ok)' : 'var(--hf-warn)',
                   transition:'width 0.3s ease',
                 }}/>
-                {/* Threshold marker */}
+
                 <div style={{
                   position:'absolute', top:-4, left:`${threshPct}%`,
                   height:16, width:2, background:'var(--hf-accent)',
@@ -820,7 +812,7 @@ function HFShopBookDetail({ nav, goto, params }) {
             </div>
           </HFCard>
 
-          {/* Signal breakdown */}
+
           <HFCard title="Signal breakdown" sub={`${reasons.length} signals evaluated`}>
             <div style={{padding:`4px 0`}}>
               {reasons.map((r, i) => {
@@ -837,7 +829,7 @@ function HFShopBookDetail({ nav, goto, params }) {
                     gap:12, alignItems:'center',
                     opacity: fired ? 1 : 0.65,
                   }}>
-                    {/* Status dot */}
+
                     <div style={{display:'flex', justifyContent:'center'}}>
                       {isPositive ? (
                         <span style={{color:'var(--hf-ok)', display:'flex'}}>{HF_ICONS.check}</span>
@@ -849,14 +841,14 @@ function HFShopBookDetail({ nav, goto, params }) {
                         <div style={{width:8, height:8, borderRadius:'50%', background:'var(--hf-border-strong)', marginLeft:2}}/>
                       )}
                     </div>
-                    {/* Label + description */}
+
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:13, fontWeight: fired ? 600 : 400, color: isPositive ? 'var(--hf-ok-ink)' : isNegative ? 'var(--hf-err-ink)' : 'var(--hf-ink)'}}>
                         {meta.label}
                       </div>
                       {meta.desc && <div style={{fontSize:12, color:'var(--hf-ink4)', marginTop:1}}>{meta.desc}</div>}
                     </div>
-                    {/* Points badge */}
+
                     <div style={{
                       fontFamily:'var(--hf-mono)', fontSize:13, fontWeight:700,
                       color: isPositive ? 'var(--hf-ok-ink)' : isNegative ? 'var(--hf-err-ink)' : 'var(--hf-ink4)',
@@ -876,7 +868,7 @@ function HFShopBookDetail({ nav, goto, params }) {
             )}
           </HFCard>
 
-          {/* Rule explanation */}
+
           <HFCard title="How classification works" sub="decision logic" style={{marginTop:'var(--hf-gap)'}}>
             <div style={{padding:`12px var(--hf-card-p)`, display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
               {[

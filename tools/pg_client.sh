@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-# Shared `psql` / `pg_dump` runner for the schema tooling. Sourced, not run.
-#
-# Neither binary is on this machine's PATH — both Postgres clusters are
-# containers (postgres:16) and no libpq was ever installed on the host. So
-# rather than making the schema gate depend on a client nobody has, this
-# resolves one of three runners, in order:
-#
-#   1. `pg_dump` on PATH, if a future machine has one.
-#   2. `docker exec` into a running postgres container (default: the test
-#      cluster's own container, which is where the scratch database lives).
-#   3. `docker run --rm postgres:16`, so the gate still works with the
-#      compose stack down.
-#
-# Cases 2 and 3 talk to the host's published ports, so `localhost` in a DSN
-# is rewritten to `host.docker.internal` before it crosses into a container.
-# Deliberately NOT the compose service names: the DSNs in this repo are
-# host-side (5432 / 5433), and translating ports to service names would
-# guess which cluster is meant.
 
 set -euo pipefail
 
@@ -54,11 +36,6 @@ pg_client_describe() {
     esac
 }
 
-# ---------------------------------------------------------------------------
-# DSN parsing. Accepts libpq URLs and the SQLAlchemy-style driver suffix
-# (`postgresql+psycopg2://`) so the same value works for both stacks.
-# Sets PGD_HOST PGD_PORT PGD_USER PGD_PASS PGD_NAME.
-# ---------------------------------------------------------------------------
 pg_parse_dsn() {
     local dsn="$1"
     local rest
@@ -100,7 +77,6 @@ pg_parse_dsn() {
     fi
 }
 
-# The host as seen from wherever the client actually runs.
 _pg_reachable_host() {
     local host="$1"
     if [ "$(pg_client_runner)" = "host" ]; then
@@ -113,11 +89,6 @@ _pg_reachable_host() {
     esac
 }
 
-# pg_run <dsn> <binary> [args...]  — stdin is forwarded.
-#
-# NOTICE is suppressed (WARNING and above still print): `DROP DATABASE IF
-# EXISTS` on a database that isn't there is normal operation for the gate, and
-# a line of noise per run trains people to skim past this output.
 PG_OPTS='-c client_min_messages=warning'
 
 pg_run() {
@@ -148,8 +119,6 @@ pg_run() {
 
 pg_psql() { local dsn="$1"; shift; pg_run "$dsn" psql -v ON_ERROR_STOP=1 -q "$@"; }
 
-# Schema-only dump, with the flags that make it restorable into a database
-# owned by somebody else. No --no-comments: a column comment is schema.
 pg_dump_schema() {
     local dsn="$1"
     shift

@@ -4,22 +4,28 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasSqlAlchemyDefaults;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 /**
- * Accumulate-only URL ledger, unique on (shop_id, normalized_url).
- * Rows are never deleted — `url_type` and `fail_count` carry the state.
- *
  * @property int $id
  * @property int $shop_id
  * @property string $url
  * @property string $normalized_url
- * @property string $source
  * @property string $url_type
+ * @property string|null $source
  * @property int $fail_count
+ * @property int|null $last_http_status
+ * @property Carbon|null $last_checked_at
+ * @property Carbon $first_seen_at
+ * @property Carbon $last_seen_at
+ * @property int|null $shop_book_id
+ * @property-read Shop $shop
+ * @property-read ShopBook|null $shopBook
+ * @property-read UrlClassification|null $classification
  */
 final class DiscoveredUrl extends Model
 {
@@ -50,16 +56,19 @@ final class DiscoveredUrl extends Model
         'last_seen_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Shop, $this> */
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class, 'shop_id');
     }
 
+    /** @return BelongsTo<ShopBook, $this> */
     public function shopBook(): BelongsTo
     {
         return $this->belongsTo(ShopBook::class, 'shop_book_id');
     }
 
+    /** @return HasOne<UrlClassification, $this> */
     public function classification(): HasOne
     {
         return $this->hasOne(UrlClassification::class, 'discovered_url_id');

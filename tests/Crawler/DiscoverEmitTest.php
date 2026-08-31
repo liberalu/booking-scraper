@@ -11,18 +11,12 @@ use ReflectionClass;
 use RoachPHP\Http\Request;
 use RoachPHP\Http\Response;
 use RoachPHP\ItemPipeline\ItemInterface;
-use RoachPHP\Spider\ParseResult;
 
-/**
- * The emit rules decide what discovery writes, and each gate exists for a
- * reason recorded in the Python spider. Exercised offline against the
- * shared fixture — no network.
- */
 final class DiscoverEmitTest extends TestCase
 {
     private function spider(array $context = []): DiscoverSpider
     {
-        $spider = new DiscoverSpider();
+        $spider = new DiscoverSpider;
         $spider->withContext($context + [
             'shop' => 'vaga',
             'strategy' => 'categories',
@@ -34,15 +28,12 @@ final class DiscoverEmitTest extends TestCase
         return $spider;
     }
 
-    /** @return list<array<string, mixed>> emitted items, in order */
     private function emit(DiscoverSpider $spider, array $products): array
     {
         $method = (new ReflectionClass($spider))->getMethod('emitProducts');
-        $method->setAccessible(true);
-
         $out = [];
         foreach ($method->invoke($spider, $products) as $result) {
-            /** @var ParseResult $result */
+
             $value = $result->value();
             if ($value instanceof ItemInterface) {
                 $out[] = $value->all();
@@ -83,16 +74,13 @@ final class DiscoverEmitTest extends TestCase
     #[DataProvider('incompleteListings')]
     public function test_incomplete_rows_still_record_the_url_but_no_book(array $product): void
     {
-        // The URL must always be tracked: the scan spider fetches the full
-        // page and sets url_type authoritatively. Only the book row is held
-        // back, so a stub never lands in shop_books.
+
         $items = $this->emit($this->spider(), [$product]);
 
         self::assertCount(1, $items);
         self::assertSame('url', $items[0]['kind']);
     }
 
-    /** @return array<string, array{0: array<string, mixed>}> */
     public static function incompleteListings(): array
     {
         return [
@@ -104,9 +92,7 @@ final class DiscoverEmitTest extends TestCase
 
     public function test_known_non_book_records_the_url_but_never_a_book_row(): void
     {
-        // Writing a non_book row during discover produces url_type='product'
-        // / type='non_book' mismatches (product_url_non_book) that persist
-        // until the next scan corrects them.
+
         $items = $this->emit($this->spider(), [[
             'url' => 'https://vaga.lt/board-game',
             'title' => 'Stalo žaidimas',
@@ -135,12 +121,9 @@ final class DiscoverEmitTest extends TestCase
         self::assertTrue($items[1]['parsed']['in_stock']);
     }
 
-    // --------------------------------------------------------- pagination
-
     public function test_page_one_enqueues_every_remaining_page_upfront(): void
     {
-        // Chaining page+1 serialises discovery no matter the concurrency;
-        // upfront enqueueing is what lets concurrency engage.
+
         $pages = $this->enqueuedPages(total: 350, maxPages: 0);
 
         self::assertSame([2, 3, 4], $pages, 'ceil(350/100) = 4 pages');
@@ -156,16 +139,13 @@ final class DiscoverEmitTest extends TestCase
         self::assertSame([], $this->enqueuedPages(total: 40, maxPages: 0));
     }
 
-    /** @return list<int> page numbers of the follow-up requests */
     private function enqueuedPages(int $total, int $maxPages): array
     {
         $spider = $this->spider(['max_pages' => $maxPages]);
         $method = (new ReflectionClass($spider))->getMethod('enqueueRemainingPages');
-        $method->setAccessible(true);
-
         $pages = [];
         foreach ($method->invoke($spider, $total) as $result) {
-            /** @var ParseResult $result */
+
             $value = $result->value();
             if ($value instanceof Request) {
                 parse_str((string) parse_url($value->getUri(), PHP_URL_QUERY), $query);
@@ -176,35 +156,21 @@ final class DiscoverEmitTest extends TestCase
         return $pages;
     }
 
-    // ------------------------------------------------------------- sitemap
-
-    /**
-     * A padded href and its clean twin are ONE link.
-     *
-     * vaga's homepage carries 65 hrefs like `href="/atmosfera "`. Untrimmed,
-     * 62 of them are distinct URLs from their clean twins, so each of those
-     * products is fetched twice and can get a duplicate discovered_urls row —
-     * which is what the Python spider did until it was fixed to trim too.
-     * Nothing in the crawler calls trim() explicitly; DomCrawler's link
-     * resolution does it, so this pins behaviour that a change of HTML library
-     * could silently take away.
-     */
     public function test_a_padded_href_is_the_same_link_as_its_clean_twin(): void
     {
         $html = '<html><body>'
-            . '<a href="/atmosfera ">padded</a>'
-            . '<a href="/atmosfera">clean</a>'
-            . '<a href=" /kitas">leading</a>'
-            . '<a href="https://elsewhere.test/x">external</a>'
-            . '<a href="/atmosfera#reviews">fragment</a>'
-            . '</body></html>';
+            .'<a href="/atmosfera ">padded</a>'
+            .'<a href="/atmosfera">clean</a>'
+            .'<a href=" /kitas">leading</a>'
+            .'<a href="https://elsewhere.test/x">external</a>'
+            .'<a href="/atmosfera#reviews">fragment</a>'
+            .'</body></html>';
 
         $spider = $this->spider(['strategy' => 'full_crawl']);
         $request = new Request('GET', 'https://vaga.lt/', [$spider, 'parse']);
         $response = new Response(new \Nyholm\Psr7\Response(200, [], $html), $request);
 
         $method = (new ReflectionClass($spider))->getMethod('internalLinks');
-        $method->setAccessible(true);
         $links = $method->invoke($spider, $response, 'https://vaga.lt');
 
         self::assertSame([
@@ -215,7 +181,7 @@ final class DiscoverEmitTest extends TestCase
 
     public function test_sitemap_emits_each_unique_url_once(): void
     {
-        $xml = (string) file_get_contents(__DIR__ . '/../../fixtures/vaga_sitemap.xml');
+        $xml = (string) file_get_contents(__DIR__.'/../fixtures/vaga_sitemap.xml');
         $spider = $this->spider(['strategy' => 'sitemap']);
 
         $request = new Request('GET', 'https://vaga.lt/sitemap.xml', [$spider, 'parse']);

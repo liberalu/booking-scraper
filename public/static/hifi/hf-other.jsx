@@ -1,4 +1,3 @@
-// Hi-fi Cron (schedules), Issues, Prices pages
 
 function HFCron({ nav, goto }) {
   const HF = getHF();
@@ -213,7 +212,6 @@ function HFCron({ nav, goto }) {
   );
 }
 
-// ─────────────────────────────── Issues ───────────────────────────────
 
 const SNOOZE_ICON = (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -227,7 +225,6 @@ function HFIssues({ nav, goto }) {
   const HF = getHF();
   const PER_PAGE = 30;
 
-  // Read all filter/page state from URL on mount so bookmarks and reloads restore view.
   const _sp = () => new URLSearchParams(window.location.search);
   const [tab,           setTab]           = React.useState(() => { const t = _sp().get('tab'); return ['new','acknowledged','snoozed','resolved','all'].includes(t) ? t : 'new'; });
   const [page,          setPage]          = React.useState(() => Math.max(parseInt(_sp().get('page') || '1', 10) || 1, 1));
@@ -241,7 +238,6 @@ function HFIssues({ nav, goto }) {
   });
   const [loading, setLoading] = React.useState(true);
 
-  // Remaining server-side filters
   const [runIdInput,    setRunIdInput]    = React.useState(() => _sp().get('run_id')    || '');
   const [urlTypeFilter, setUrlTypeFilter] = React.useState(() => _sp().get('url_type')  || 'all');
   const [bookTypeFilter,setBookTypeFilter]= React.useState(() => _sp().get('book_type') || 'all');
@@ -250,7 +246,7 @@ function HFIssues({ nav, goto }) {
   const [showHelp, setShowHelp] = React.useState(false);
   const [snoozeOpenFor, setSnoozeOpenFor] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [undoToast, setUndoToast] = React.useState(null); // {issue_type, shop, count, timerId}
+  const [undoToast, setUndoToast] = React.useState(null);
 
   const [shopsList, setShopsList] = React.useState([]);
   React.useEffect(() => {
@@ -279,19 +275,16 @@ function HFIssues({ nav, goto }) {
   }, [viewMode, shopFilter, tab]);
 
   const ISSUE_REFERENCE = [
-    // critical
     { key:'isbn_duplicate',      sev:'critical', desc:'Same ISBN, two rows in same shop' },
     { key:'in_stock_no_price',   sev:'critical', desc:'In-stock book has no price' },
     { key:'non_product_active',  sev:'critical', desc:'URL marked non-product but shop_book is active' },
     { key:'unreachable_active',  sev:'critical', desc:'URL is unreachable but shop_book still active' },
-    // warning
     { key:'slug_title_mismatch', sev:'warning',  desc:'URL slug shares zero tokens with book title' },
     { key:'active_no_price',     sev:'warning',  desc:'Active book has no price at all' },
     { key:'stale_active',        sev:'warning',  desc:'Active but not seen in last 28 days' },
     { key:'non_book_has_isbn',   sev:'warning',  desc:'Type=non_book but has a valid ISBN' },
     { key:'unmatched_has_isbn',  sev:'warning',  desc:'Has ISBN but not matched to canonical book' },
     { key:'match_isbn_drift',    sev:'warning',  desc:'Matched book\'s ISBN differs from shop_book ISBN' },
-    // info
     { key:'book_no_metadata',       sev:'info', desc:'type=book but no ISBN, author, or year' },
     { key:'no_price_history',       sev:'info', desc:'Active but zero rows in prices table' },
     { key:'year_out_of_range',      sev:'info', desc:'Year < 1800 or > current year + 2' },
@@ -305,10 +298,8 @@ function HFIssues({ nav, goto }) {
   ];
   const SEV_TONE = { critical:'err', warning:'warn', info:'neutral' };
 
-  // Reset to page 1 when any filter or tab changes (but not on page changes themselves).
   React.useEffect(() => { setPage(1); }, [tab, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter]);
 
-  // Fetch from server whenever any server-side param changes.
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -328,7 +319,6 @@ function HFIssues({ nav, goto }) {
     return () => { cancelled = true; };
   }, [tab, page, runId, severity, issueType, shopFilter, q, urlTypeFilter, bookTypeFilter, reloadKey]);
 
-  // Mirror all filter state into the URL bar (replaceState — no history entries).
   React.useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     tab           !== 'new'  ? sp.set('tab',       tab)            : sp.delete('tab');
@@ -360,7 +350,6 @@ function HFIssues({ nav, goto }) {
     known: i.lifecycle_state === 'acknowledged',
   }));
 
-  // Persist known state + selection in component state (prototype — resets on reload).
   const [knownMap, setKnownMap] = React.useState({});
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -371,7 +360,7 @@ function HFIssues({ nav, goto }) {
 
   const sevTone = { high:'err', medium:'warn', low:'neutral' };
 
-  const tabSource = allIssues;  // API already filtered by tab
+  const tabSource = allIssues;
 
   const counts = data.counts || { new: 0, acknowledged: 0, snoozed: 0, resolved: 0, total: 0 };
   const byTab = {
@@ -382,10 +371,8 @@ function HFIssues({ nav, goto }) {
     all:          counts.total || data.total || 0,
   };
 
-  // When tab changes, clear selection (selection is only meaningful within a tab).
   React.useEffect(() => { setSelected(new Set()); }, [tab]);
 
-  // All filters are server-side — allIssues is already the filtered page.
   const filters = { filtered: allIssues, activeCount: 0 };
   const typeOptions = ['all', ...ISSUE_REFERENCE.map(r => r.key)];
 
@@ -421,9 +408,8 @@ function HFIssues({ nav, goto }) {
   const someVisibleSelected = allIssues.some(r => selected.has(r.id));
 
   const selectedCount = selected.size;
-  const selectedAreKnown = tab === 'acknowledged';   // if we're in Acknowledged tab, bulk action is "Mark open"
+  const selectedAreKnown = tab === 'acknowledged';
 
-  // Checkbox cell component (prevents row click, controls selection)
   const CheckCell = ({ id, checked }) => (
     <span
       onClick={(e) => { e.stopPropagation(); toggleOne(id); }}
@@ -445,7 +431,6 @@ function HFIssues({ nav, goto }) {
     </span>
   );
 
-  // Header checkbox (select-all-visible, indeterminate state)
   const HeaderCheck = () => {
     const state = allVisibleSelected ? 'all' : someVisibleSelected ? 'some' : 'none';
     return (
@@ -473,7 +458,6 @@ function HFIssues({ nav, goto }) {
     );
   };
 
-  // Dim the contents of known rows inline
   const dimIfKnown = (row, node) => row.known
     ? <span style={{ opacity: 0.48 }}>{node}</span>
     : node;
@@ -518,7 +502,7 @@ function HFIssues({ nav, goto }) {
         </div>
       </HFCard>
 
-      {/* Issue type reference modal */}
+
       <HFModal open={showHelp} onClose={() => setShowHelp(false)} width={560}>
         <HFModalHead title="Issue type reference" sub="21 check types across 5 groups" onClose={() => setShowHelp(false)}/>
         <HFModalBody>
@@ -541,7 +525,7 @@ function HFIssues({ nav, goto }) {
         </HFModalFoot>
       </HFModal>
 
-      {/* Bulk action bar — replaces filter bar when ≥1 selected */}
+
       {selectedCount > 0 ? (
         <HFCard style={{marginBottom:'var(--hf-gap)', background:'var(--hf-accent-soft)', border:`1px solid ${'var(--hf-accent-border)'}`}} padding={12}>
           <div style={{display:'flex', alignItems:'center', gap:12, padding:'2px 4px'}}>
@@ -872,7 +856,6 @@ function HFIssues({ nav, goto }) {
   );
 }
 
-// ─────────────────────────────── Prices ───────────────────────────────
 
 function HFPrices({ nav, goto }) {
   const HF = getHF();
@@ -923,7 +906,6 @@ function HFPrices({ nav, goto }) {
   const biggestDrop = allRows.reduce((best, r) => r.pct < (best?.pct ?? 0) ? r : best, null);
   const biggestRise = allRows.reduce((best, r) => r.pct > (best?.pct ?? 0) ? r : best, null);
 
-  // sparkline: % changes as bar heights
   const pctVals = allRows.map(r => r.pct).filter(v => v !== 0);
 
   return (

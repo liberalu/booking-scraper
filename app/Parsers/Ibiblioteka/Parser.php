@@ -4,23 +4,19 @@ declare(strict_types=1);
 
 namespace App\Parsers\Ibiblioteka;
 
-/**
- * Port of book_scraper/spiders/ibiblioteka/parsers.py.
- *
- * The Lithuanian National Library (LIBIS) JSON API. Unlike every other
- * source here this is not a shop: it emits CANONICAL bibliographic records,
- * tagged `_emit_as: "book"` so the scan spider builds a BookItem instead of
- * a ShopBookItem. There are no prices.
- *
- * Person roles use UNIMARC relator codes.
- */
-final class Parser
+use App\Crawler\CrawlerTypes;
+use App\Parsers\DiscoveryParser;
+use App\Parsers\IbibliotekaSearchParser;
+use App\Parsers\ProductParser;
+use App\Parsers\ScanUrlRewriter;
+
+/** @phpstan-import-type ParsedItem from CrawlerTypes */
+final class Parser implements DiscoveryParser, IbibliotekaSearchParser, ProductParser, ScanUrlRewriter
 {
     private const COVER_BASE = 'https://ibiblioteka.lt';
 
     private const DETAIL_PATH = '/metis-api/bibliographic-records/public/';
 
-    /** UNIMARC relator code => our role name. */
     private const ROLE_CODES = [
         '070' => 'author',
         '080' => 'author',
@@ -31,50 +27,31 @@ final class Parser
         '220' => 'compiler',
     ];
 
-    /** Page count in the physical description: "312 p." / "312 psl." */
     private const PAGES = '/(\d+)\s*(?:p\b|psl\.)/u';
 
-    /** Audiobook duration: "9 val., 25 min., 1 sek." */
     private const DURATION = '/\d+\s*(?:val|min|sek)\.?(?:[^)]*)/u';
 
     private const YEAR = '/\b(1[89]\d{2}|20\d{2})\b/';
 
     private const DIMENSIONS = '/(\d+)\s*cm/u';
 
-    /** Physical-description keywords that mean an audio file, not an e-book. */
     private const AUDIO_KEYWORDS = ['mp3', 'audio', 'val.,', 'min.,'];
 
-    // --------------------------------------------------------------- search
-
-    /**
-     * A POST /detailed-search response.
-     *
-     * Carries everything extractable from the listing — title, year,
-     * publisher (parsed out of publicationView), format, LIBIS code as SKU —
-     * so records appear without waiting for the scan phase, which later adds
-     * authors, ISBNs and covers from the detail endpoint.
-     *
-     * @return array{products: list<array<string, mixed>>, total: null}
-     */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseSearchResponse(string $json): array
     {
         $data = json_decode($json, true);
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return ['products' => [], 'total' => null];
         }
 
-        $items = $data['results']['content'] ?? [];
-        if (!is_array($items)) {
-            return ['products' => [], 'total' => null];
-        }
+        $results = self::map($data['results'] ?? null);
+        $items = self::listOfMaps($results['content'] ?? null);
 
         $products = [];
         foreach ($items as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-            $id = $item['id'] ?? null;
-            if ($id === null || $id === '' || $id === 0) {
+            $id = self::scalarString($item['id'] ?? null);
+            if ($id === null || $id === '' || $id === '0') {
                 continue;
             }
 
@@ -82,14 +59,15 @@ final class Parser
             [$bookType, $bookFormat] = self::inferTypeAndFormat($item['publicationFormat'] ?? null, '');
 
             $products[] = [
-                'url' => self::COVER_BASE . self::DETAIL_PATH . $id,
-                'title' => ($item['titleView'] ?? null) ?: (($item['titleFull'] ?? null) ?: null),
-                'sku' => ($item['code'] ?? null) ?: null,
+                'url' => self::COVER_BASE.self::DETAIL_PATH.$id,
+                'title' => self::nonEmptyString($item['titleView'] ?? null)
+                    ?? self::nonEmptyString($item['titleFull'] ?? null),
+                'sku' => self::nonEmptyString($item['code'] ?? null),
                 'year' => $year,
                 'publisher' => $publisher,
                 'type' => $bookType,
                 'format' => $bookFormat,
-                // The national library is authoritative — no scoring needed.
+
                 'is_book_product' => true,
                 'book_score' => 5,
             ];
@@ -98,58 +76,35 @@ final class Parser
         return ['products' => $products, 'total' => null];
     }
 
-    /** Alias matching the shop-parser contract used by the registry. */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseCategoryPage(string $json): array
     {
         return self::parseSearchResponse($json);
     }
 
-    /** LIBIS has no sitemap; discovery goes through the search API. */
-    public static function parseSitemapUrls(string $xml): array
+    /** @return list<string> */
+    public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
     {
         return [];
     }
 
-    // --------------------------------------------------------------- detail
-
-    /**
-     * Ask for JSON explicitly.
-     *
-     * The endpoint content-negotiates: with a browser `Accept` it serves the
-     * SPA shell (30,995 bytes of xhtml), and with `application/json` the
-     * record (19,593 bytes). Measured on record 2097094, 2026-08-25.
-     *
-     * Python shipped without this hook, so its download handler's
-     * HTML-preferring `Accept` stood and every scan fetch returned 200 with a
-     * shell the parser found no title in — a run that reported `completed`
-     * having scraped nothing, and the reason ibiblioteka has no production
-     * rows. Python now carries the same hook; the two agree.
-     *
-     * The URL is returned unchanged — only the header matters here.
-     *
-     * @return array{url: string, headers: array<string, string>}
-     */
+    /** @return array{url: string, headers: array<string, string>} */
     public static function rewriteScanUrl(string $url): array
     {
         return ['url' => $url, 'headers' => ['Accept' => 'application/json']];
     }
 
-    /**
-     * A GET /bibliographic-records/public/{id} response.
-     *
-     * Returns a BookItem-shaped array tagged `_emit_as: "book"`.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return ParsedItem */
     public static function parseProductPage(string $json): array
     {
         $raw = json_decode($json, true);
-        if (!is_array($raw)) {
+        if (! is_array($raw)) {
             return self::emptyResult();
         }
 
-        $physical = (string) ($raw['allPhysicalAttributes'] ?? '');
-        $pubFormat = $raw['publicationFormat'] ?? null;
+        $raw = self::map($raw);
+        $physical = self::scalarString($raw['allPhysicalAttributes'] ?? null) ?? '';
+        $pubFormat = self::nonEmptyString($raw['publicationFormat'] ?? null);
         [$bookType] = self::inferTypeAndFormat($pubFormat, $physical);
 
         $pages = null;
@@ -164,9 +119,9 @@ final class Parser
             }
         }
 
-        $cover = $raw['coverUrl'] ?? null;
-        if (is_string($cover) && str_starts_with($cover, '/')) {
-            $cover = self::COVER_BASE . $cover;
+        $cover = self::nonEmptyString($raw['coverUrl'] ?? null);
+        if ($cover !== null && str_starts_with($cover, '/')) {
+            $cover = self::COVER_BASE.$cover;
         }
 
         $year = null;
@@ -177,7 +132,7 @@ final class Parser
 
         $isbns = [];
         foreach (is_array($raw['isbn'] ?? null) ? $raw['isbn'] : [] as $rawIsbn) {
-            if (!is_string($rawIsbn) || $rawIsbn === '') {
+            if (! is_string($rawIsbn) || $rawIsbn === '') {
                 continue;
             }
             $cleaned = str_replace(['-', ' '], '', $rawIsbn);
@@ -193,23 +148,28 @@ final class Parser
 
         $languages = is_array($raw['languages'] ?? null) ? $raw['languages'] : [];
         $language = isset($languages[0]) && is_array($languages[0])
-            ? ($languages[0]['code'] ?? null)
+            ? self::nonEmptyString($languages[0]['code'] ?? null)
             : null;
 
         $translatedFrom = [];
         foreach (is_array($raw['translatedFromLanguages'] ?? null) ? $raw['translatedFromLanguages'] : [] as $lang) {
-            if (is_array($lang) && ($lang['code'] ?? null) !== null) {
-                $translatedFrom[] = $lang['code'];
+            if (is_array($lang)) {
+                $code = self::nonEmptyString($lang['code'] ?? null);
+                if ($code !== null) {
+                    $translatedFrom[] = $code;
+                }
             }
         }
 
         $audienceRaw = is_array($raw['audience'] ?? null) ? $raw['audience'] : [];
         $audience = isset($audienceRaw[0]) && is_array($audienceRaw[0])
-            ? ($audienceRaw[0]['nameLt'] ?? null)
+            ? self::nonEmptyString($audienceRaw[0]['nameLt'] ?? null)
             : null;
 
-        $rateAverage = $raw['rateAverage'] ?? null;
-        $rateNumber = $raw['rateNumber'] ?? null;
+        $rateAverage = self::number($raw['rateAverage'] ?? null);
+        $rateNumber = self::integer($raw['rateNumber'] ?? null);
+        $rateAverage = $rateAverage === 0.0 ? null : $rateAverage;
+        $rateNumber = $rateNumber === 0 ? null : $rateNumber;
 
         return [
             '_emit_as' => 'book',
@@ -218,13 +178,13 @@ final class Parser
             'book_score' => 5,
             'book_score_reasons' => [['reason' => 'ibiblioteka_national_library']],
             'data_source' => 'ibiblioteka',
-            'libis_code' => $raw['code'] ?? null,
-            'title' => ($raw['title'] ?? null) ?: null,
-            'title_full' => ($raw['titleFull'] ?? null) ?: null,
+            'libis_code' => self::nonEmptyString($raw['code'] ?? null),
+            'title' => self::nonEmptyString($raw['title'] ?? null),
+            'title_full' => self::nonEmptyString($raw['titleFull'] ?? null),
             'year' => $year,
-            'publisher' => ($raw['publisher'] ?? null) ?: null,
-            'series' => ($raw['seriesView'] ?? null) ?: null,
-            'release_place' => ($raw['releasePlace'] ?? null) ?: null,
+            'publisher' => self::nonEmptyString($raw['publisher'] ?? null),
+            'series' => self::nonEmptyString($raw['seriesView'] ?? null),
+            'release_place' => self::nonEmptyString($raw['releasePlace'] ?? null),
             'type' => $bookType,
             'format' => $pubFormat,
             'pages' => $pages,
@@ -232,43 +192,35 @@ final class Parser
             'dimensions' => self::parseDimensions($physical),
             'language' => $language,
             'translated_from' => $translatedFrom === [] ? null : $translatedFrom,
-            'description' => ($raw['summary'] ?? null) ?: null,
+            'description' => self::nonEmptyString($raw['summary'] ?? null),
             'cover_url' => $cover,
-            'upcoming_release' => (bool) ($raw['upcomingRelease'] ?? false),
-            'udc_codes' => ($raw['udcSubjectsCodes'] ?? null) ?: null,
-            'subjects' => ($raw['rubricSubjectView'] ?? null) ?: null,
+            'upcoming_release' => self::boolean($raw['upcomingRelease'] ?? null),
+            'udc_codes' => self::nonEmptyValue($raw['udcSubjectsCodes'] ?? null),
+            'subjects' => self::nonEmptyValue($raw['rubricSubjectView'] ?? null),
             'audience' => $audience,
-            'libis_rating' => $rateAverage ? (float) $rateAverage : null,
-            'libis_review_count' => $rateNumber ? (int) $rateNumber : null,
+            'libis_rating' => $rateAverage,
+            'libis_review_count' => $rateNumber,
             'isbns' => $isbns,
             'authors' => self::extractAuthors($raw),
         ];
     }
 
     /**
-     * Detail URLs for each volume of a multipart work.
-     *
-     * A multipart record ("Ana Karenina T.1 + T.2") carries only the set-level
-     * ISBN; per-volume ISBNs appear solely on the part records. Without
-     * following them the canonical table has no volume-level ISBN, so a shop
-     * listing for a single volume can never match. The scan spider queues
-     * these as separate items.
-     *
      * @param  array<string, mixed>  $raw
      * @return list<string>
      */
     private static function partUrls(array $raw): array
     {
         $parts = is_array($raw['parts'] ?? null) ? $raw['parts'] : [];
-        if (!($raw['multipart'] ?? false) || $parts === []) {
+        if (! self::boolean($raw['multipart'] ?? null) || $parts === []) {
             return [];
         }
 
         $urls = [];
         foreach ($parts as $part) {
-            $code = is_array($part) ? ($part['code'] ?? null) : null;
+            $code = is_array($part) ? self::scalarString($part['code'] ?? null) : null;
             if ($code !== null && $code !== '') {
-                $urls[] = self::COVER_BASE . self::DETAIL_PATH . $code;
+                $urls[] = self::COVER_BASE.self::DETAIL_PATH.$code;
             }
         }
 
@@ -276,14 +228,8 @@ final class Parser
     }
 
     /**
-     * Contributors with role and per-role position.
-     *
-     * Two sources: `authorViews` (primary authors) and `persons[]`, which
-     * carries multi-role contributors via UNIMARC type codes. Deduped on
-     * (role, code) so a person listed in both appears once per role.
-     *
      * @param  array<string, mixed>  $raw
-     * @return list<array<string, mixed>>
+     * @return list<array{name: string, libis_code: string|null, role: string, position: int}>
      */
     private static function extractAuthors(array $raw): array
     {
@@ -292,17 +238,17 @@ final class Parser
         $rolePosition = [];
 
         foreach (is_array($raw['authorViews'] ?? null) ? $raw['authorViews'] : [] as $view) {
-            if (!is_array($view)) {
+            if (! is_array($view)) {
                 continue;
             }
-            // LIBIS renamed the name field to `titleLt`; `value`/`name` are kept
-            // as fallbacks because the fixtures predate that rename.
-            $name = ($view['titleLt'] ?? null) ?: ($view['value'] ?? null);
-            if ($name === null || $name === '') {
+
+            $name = self::nonEmptyString($view['titleLt'] ?? null)
+                ?? self::nonEmptyString($view['value'] ?? null);
+            if ($name === null) {
                 continue;
             }
-            $code = $view['code'] ?? null;
-            $key = 'author|' . ($code ?: $name);
+            $code = self::nonEmptyString($view['code'] ?? null);
+            $key = 'author|'.($code ?? $name);
             if (isset($seen[$key])) {
                 continue;
             }
@@ -313,21 +259,23 @@ final class Parser
         }
 
         foreach (is_array($raw['persons'] ?? null) ? $raw['persons'] : [] as $person) {
-            if (!is_array($person)) {
+            if (! is_array($person)) {
                 continue;
             }
-            $name = ($person['titleLt'] ?? null) ?: ($person['name'] ?? null);
-            if ($name === null || $name === '') {
+            $name = self::nonEmptyString($person['titleLt'] ?? null)
+                ?? self::nonEmptyString($person['name'] ?? null);
+            if ($name === null) {
                 continue;
             }
-            $code = $person['code'] ?? null;
+            $code = self::nonEmptyString($person['code'] ?? null);
 
             foreach (is_array($person['types'] ?? null) ? $person['types'] : [] as $type) {
-                $role = self::ROLE_CODES[is_array($type) ? ($type['code'] ?? '') : ''] ?? null;
+                $roleCode = is_array($type) ? self::nonEmptyString($type['code'] ?? null) : null;
+                $role = $roleCode === null ? null : (self::ROLE_CODES[$roleCode] ?? null);
                 if ($role === null) {
                     continue;
                 }
-                $key = $role . '|' . ($code ?: $name);
+                $key = $role.'|'.($code ?? $name);
                 if (isset($seen[$key])) {
                     continue;
                 }
@@ -341,16 +289,10 @@ final class Parser
         return $out;
     }
 
-    // -------------------------------------------------------------- helpers
-
-    /**
-     * "Place : Publisher, Year" -> (year, publisher).
-     *
-     * @return array{0: int|null, 1: string|null}
-     */
+    /** @return array{int|null, string|null} */
     private static function parsePublicationView(mixed $view): array
     {
-        if (!is_string($view) || $view === '') {
+        if (! is_string($view) || $view === '') {
             return [null, null];
         }
 
@@ -359,22 +301,18 @@ final class Parser
         $publisher = null;
         if (str_contains($view, ':')) {
             $afterColon = trim(explode(':', $view, 2)[1]);
-            // Drop the year, then the punctuation it left behind.
-            $clean = rtrim(preg_replace(self::YEAR, '', $afterColon) ?? $afterColon, " ,.()");
-            $publisher = trim($clean) ?: null;
+
+            $clean = rtrim(preg_replace(self::YEAR, '', $afterColon) ?? $afterColon, ' ,.()');
+            $publisher = trim($clean);
+            if ($publisher === '') {
+                $publisher = null;
+            }
         }
 
         return [$year, $publisher];
     }
 
-    /**
-     * LIBIS publicationFormat + physical description -> (type, format).
-     *
-     * ELECTRONIC covers both audio and e-books, distinguished only by the
-     * physical description mentioning an audio file or a duration.
-     *
-     * @return array{0: string, 1: string|null}
-     */
+    /** @return array{string, string|null} */
     private static function inferTypeAndFormat(mixed $pubFormat, string $physical): array
     {
         $lower = mb_strtolower($physical, 'UTF-8');
@@ -389,8 +327,6 @@ final class Parser
             return ['ebook', 'ebook'];
         }
 
-        // PRINTED, or anything unrecognised: read the binding out of the
-        // physical description when it says so.
         if (str_contains($lower, 'kietais viršeliais') || str_contains($lower, 'kieti viršeliai')) {
             return ['book', 'Kieti viršeliai'];
         }
@@ -410,7 +346,7 @@ final class Parser
         return preg_match(self::DIMENSIONS, $physical, $m) === 1 ? "{$m[1]} cm" : null;
     }
 
-    /** @return array<string, mixed> */
+    /** @return ParsedItem */
     private static function emptyResult(): array
     {
         return [
@@ -425,5 +361,89 @@ final class Parser
             'planned_availability_date' => null, 'rating' => null,
             'review_count' => null,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function map(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($value as $key => $item) {
+            if (is_string($key)) {
+                $map[$key] = $item;
+            }
+        }
+
+        return $map;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function listOfMaps(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $maps = [];
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                $maps[] = self::map($item);
+            }
+        }
+
+        return $maps;
+    }
+
+    private static function scalarString(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        return is_int($value) || is_float($value) ? (string) $value : null;
+    }
+
+    private static function nonEmptyString(mixed $value): ?string
+    {
+        $string = self::scalarString($value);
+
+        return $string === null || $string === '' ? null : $string;
+    }
+
+    private static function integer(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+        if (is_string($value) && preg_match('/^-?\d+$/', $value) === 1) {
+            return (int) $value;
+        }
+
+        return null;
+    }
+
+    private static function number(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+        if (is_string($value) && is_numeric($value)) {
+            return (float) $value;
+        }
+
+        return null;
+    }
+
+    private static function boolean(mixed $value): bool
+    {
+        return $value === true || $value === 1 || $value === '1';
+    }
+
+    private static function nonEmptyValue(mixed $value): mixed
+    {
+        return $value === null || $value === '' || $value === [] ? null : $value;
     }
 }

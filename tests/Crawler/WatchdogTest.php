@@ -10,13 +10,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Exercises the watchdog by actually forking it — a mocked timer would
- * prove nothing about the part that matters, which is that a SEPARATE
- * process keeps the heartbeat alive while the parent is blocked.
- *
- * Intervals are compressed to keep the suite quick; the logic is unchanged.
- */
 final class WatchdogTest extends TestCase
 {
     private static bool $booted = false;
@@ -25,16 +18,14 @@ final class WatchdogTest extends TestCase
 
     protected function setUp(): void
     {
-        if (!function_exists('pcntl_fork')) {
+        if (! function_exists('pcntl_fork')) {
             self::markTestSkipped('pcntl unavailable');
         }
-        if (!self::$booted) {
+        if (! self::$booted) {
             Database::boot(self::dsn());
             self::$booted = true;
         }
 
-        // No wrapping transaction here: the watchdog runs in another process
-        // with its own connection and could not see uncommitted rows.
         $this->shopId = (int) (DB::table('shops')->where('name', 'watchdog-test')->value('id')
             ?? DB::table('shops')->insertGetId(
                 ['name' => 'watchdog-test', 'base_url' => 'https://watchdog.test'],
@@ -62,7 +53,7 @@ final class WatchdogTest extends TestCase
             'phase' => 'scan',
             'status' => $status,
             'started_at' => Carbon::now('UTC'),
-            // Deliberately stale so a tick is observable as a change.
+
             'last_heartbeat' => Carbon::now('UTC')->subHour(),
             'urls_processed' => 0,
             'items_added' => 0,
@@ -87,14 +78,11 @@ final class WatchdogTest extends TestCase
             runId: $runId,
             shop: 'watchdog-test',
             phase: 'scan',
-            stallTimeout: 3600,       // no stall during this test
+            stallTimeout: 3600,
             heartbeatInterval: 0.5,
         );
         self::assertTrue($watchdog->start());
 
-        // Block the parent exactly as a long synchronous fetch would. The
-        // in-process Python design needed a worker thread to survive this;
-        // a forked child is unaffected.
         usleep(1_500_000);
 
         $watchdog->stop();
@@ -106,9 +94,6 @@ final class WatchdogTest extends TestCase
     {
         $runId = $this->makeRun();
 
-        // The watchdog SIGTERMs its parent to stop a wedged crawl — here the
-        // parent is PHPUnit, so install a handler and observe the signal
-        // instead of being killed by it. This asserts the real behaviour.
         $signalled = false;
         pcntl_signal(SIGTERM, static function () use (&$signalled): void {
             $signalled = true;
@@ -118,13 +103,12 @@ final class WatchdogTest extends TestCase
             runId: $runId,
             shop: 'watchdog-test',
             phase: 'scan',
-            stallTimeout: 1,          // no activity for 1s counts as stalled
+            stallTimeout: 1,
             heartbeatInterval: 0.4,
-            maxResumeAttempts: 0,     // don't spawn a replacement in a test
+            maxResumeAttempts: 0,
         );
         self::assertTrue($watchdog->start());
 
-        // Never call recordActivity(), so the marker goes stale.
         for ($i = 0; $i < 25; $i++) {
             usleep(100_000);
             pcntl_signal_dispatch();
@@ -157,7 +141,6 @@ final class WatchdogTest extends TestCase
         );
         self::assertTrue($watchdog->start());
 
-        // A crawl that is slow but progressing must not be killed.
         for ($i = 0; $i < 8; $i++) {
             $watchdog->recordActivity();
             usleep(300_000);
@@ -173,8 +156,7 @@ final class WatchdogTest extends TestCase
 
     public function test_the_watchdog_stops_ticking_once_the_run_is_terminal(): void
     {
-        // A tick landing after the reaper finalised the row would make a dead
-        // run look alive on the next reaper pass.
+
         $runId = $this->makeRun('failed');
 
         $watchdog = new Watchdog(

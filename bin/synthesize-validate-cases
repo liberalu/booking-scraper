@@ -3,20 +3,20 @@
 
 declare(strict_types=1);
 
-/**
- * Build the synthetic shop that fires every validator check.
- *
- *   bin/synthesize-validate-cases --database=postgresql://…/book_scraper_php_test
- *
- * The DSN must be given explicitly, by --database or DATABASE_URL, and must
- * name a test database on the test cluster — SyntheticShop refuses anything
- * else. There is no fall-through to config/default.toml, which names the real
- * catalogue: a writer that picks a target when you forgot to name one picks
- * production.
- */
+
+
+
+
+
+
+
+
+
+
+
 
 use App\Support\Database;
-use App\Testing\SyntheticShop;
+use Tests\Support\SyntheticShop;
 
 require __DIR__ . '/../vendor/autoload.php';
 

@@ -9,13 +9,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
-/**
- * Every configured shop must resolve to a parser, or the generic spiders
- * silently cannot crawl it.
- */
 final class ParserRegistryTest extends TestCase
 {
-    /** @return list<array{0: string}> */
     public static function shops(): array
     {
         return array_map(
@@ -34,7 +29,7 @@ final class ParserRegistryTest extends TestCase
     #[DataProvider('shops')]
     public function test_every_parser_exposes_the_core_contract(string $shop): void
     {
-        // The generic spiders call these three by name on every shop.
+
         foreach (['parseSitemapUrls', 'parseCategoryPage', 'parseProductPage'] as $method) {
             self::assertTrue(
                 ParserRegistry::supports($shop, $method),
@@ -45,14 +40,10 @@ final class ParserRegistryTest extends TestCase
 
     public function test_the_registry_matches_the_configured_shops(): void
     {
-        // Drift either way is a runtime failure: a TOML with no parser cannot
-        // be crawled, and a parser with no TOML has no URLs, delay or
-        // strategies to work from. This compared the registry against
-        // book_scraper/spiders/*/parsers.py until Python was removed;
-        // config/shops/ is the list that decides what exists now.
+
         $configured = array_map(
             static fn (string $path): string => basename($path, '.toml'),
-            glob(__DIR__ . '/../../config/shops/*.toml') ?: []
+            glob(__DIR__.'/../../config/shops/*.toml') ?: []
         );
         sort($configured);
 
@@ -72,8 +63,7 @@ final class ParserRegistryTest extends TestCase
 
     public function test_pegasas_exposes_its_scan_url_rewrite(): void
     {
-        // Only pegasas needs it: its product pages are a React shell, so the
-        // scan URL is swapped for a single-SKU GraphQL query.
+
         self::assertTrue(ParserRegistry::supports('pegasas', 'rewriteScanUrl'));
         self::assertFalse(ParserRegistry::supports('vaga', 'rewriteScanUrl'));
     }

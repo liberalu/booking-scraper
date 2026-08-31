@@ -1,7 +1,3 @@
-# Grafana dashboard provider — points at the bind-mounted dashboards directory.
-# Drop a *.json file under monitoring/grafana/dashboards/ and it appears in
-# Grafana on next reload (or immediately when allowUiUpdates=false +
-# updateIntervalSeconds=10).
 apiVersion: 1
 
 providers:

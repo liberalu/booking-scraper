@@ -1,4 +1,3 @@
-// Hi-fi URL detail + Issue detail pages
 
 function HFUrlDetail({ nav, goto, params }) {
   const HF = getHF();
@@ -80,7 +79,7 @@ function HFUrlDetail({ nav, goto, params }) {
       ]}/>
 
       <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
-        {/* Response code history heatmap */}
+
         <HFCard title="Response code history" sub={`last ${checkHistory.length} checks`}>
           <div style={{padding:'var(--hf-card-p)'}}>
             {checkHistory.length === 0 ? (
@@ -146,7 +145,7 @@ function HFUrlDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Check history table */}
+
       <HFCard title="Check history" sub={`${checkHistory.length} most recent checks`}>
         {checkHistory.length === 0
           ? <HFEmptyState title="No check history" sub="This URL has not been scraped yet." onClear={null}/>
@@ -172,9 +171,7 @@ function HFUrlDetail({ nav, goto, params }) {
   );
 }
 
-// ─────────────────────────────── Issue detail ───────────────────────────────
 
-// Human-readable labels for issue type keys
 const ISSUE_TITLES = {
   missing_price:             'Missing price',
   zero_price:                'Zero price',
@@ -204,7 +201,6 @@ function HFIssueRelated({ issue, shop, currentId, goto }) {
     fetch(`/api/issues?${params}`)
       .then(r => r.json())
       .then(d => {
-        // Exclude the current issue from the list
         const others = (d.issues || []).filter(i => i.id !== currentId);
         setRelated(others.slice(0, 5));
       })
@@ -340,7 +336,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </HFButton>
       </>}
     >
-      {/* KPI strip */}
+
       <HFKpiStrip items={[
         { label:'Severity',  value: data.severity,  tone: sevTone },
         { label:'Lifecycle', value: lcLabel[data.lifecycle_state] || data.lifecycle_state, tone: lcTone[data.lifecycle_state] || 'neutral' },
@@ -348,10 +344,10 @@ function HFIssueDetail({ nav, goto, params }) {
         { label:'Field',     value: data.field, delta: <span style={{color:'var(--hf-ink3)'}}>affected</span> },
       ]}/>
 
-      {/* Main 2-col: description left, failure details right */}
+
       <div style={{display:'grid', gridTemplateColumns:'3fr 2fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
 
-        {/* What this means */}
+
         <HFCard title="What this means" sub={`issue type: ${data.issue}`}>
           <div style={{padding:`var(--hf-card-p)`}}>
             {data.description ? (
@@ -381,7 +377,7 @@ function HFIssueDetail({ nav, goto, params }) {
           </div>
         </HFCard>
 
-        {/* Failure details */}
+
         <HFCard title="Failure details">
           <div style={{padding:`4px 0`}}>
             {[
@@ -431,7 +427,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </HFCard>
       </div>
 
-      {/* Affected book */}
+
       {data.shop_book_id && (
         <HFCard title="Affected book" sub="book where this issue was detected">
           <div style={{
@@ -451,7 +447,6 @@ function HFIssueDetail({ nav, goto, params }) {
                 {data.shop_book_title || `Shop book #${data.shop_book_id}`}
               </div>
               <div style={{fontSize:12, color:'var(--hf-ink4)', fontFamily:'var(--hf-mono)', marginTop:3}}>
-                #{data.shop_book_id}{data.shop_name ? ` · ${data.shop_name}` : ''}
               </div>
             </div>
             <HFButton onClick={() => goto('shop-book-detail', { id: data.shop_book_id })}>
@@ -461,7 +456,7 @@ function HFIssueDetail({ nav, goto, params }) {
         </HFCard>
       )}
 
-      {/* Related issues — same type in same shop */}
+
       {data.issue && data.shop_name && <HFIssueRelated issue={data.issue} shop={data.shop_name} currentId={data.id} goto={goto} />}
     </HFShell>
   );

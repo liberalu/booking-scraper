@@ -27,7 +27,7 @@ stack against the same Postgres; now the only implementation.
 > **Layout note (2026-08-26).** The library, the crawler and the dashboard were
 > three composer projects (`php/`, `php/crawler/`, `php/dashboard/`) wired
 > together with path repositories. They are now one Laravel application rooted
-> at `php/`: the domain lives under `app/`, the CLI entry points under `bin/`,
+> at the repository: the domain lives under `app/`, the CLI entry points under `bin/`,
 > the API in `routes/api.php`, and the schema baseline in `database/schema/`.
 > Paths written below in the old shape refer to the same code in its new home.
 
@@ -42,8 +42,8 @@ Three composer projects, not one — see the Guzzle note below for why:
 Status: **complete and verified against Python** — all six shop parsers, all
 four phases, the validator, the matcher, the fault-tolerance layer, and every
 dashboard endpoint including the 23 write routes. The differential found nine
-defects in the process, all fixed in both stacks; see
-`docs/superpowers/plans/2026-08-25-python-fixes-and-removal-plan.md`.
+defects in the process, all fixed in both stacks; the `python-final` tag and
+frozen goldens preserve that evidence.
 
 ## Ground rules
 
@@ -70,7 +70,7 @@ outputs compared.
 
 | Unit | Check | Scale |
 |---|---|---|
-| `Vaga\Parser` | Output vs golden JSON dumped from the Python parser over the shared `tests/fixtures/` | 3 fixtures, full dict compared field by field |
+| `Vaga\Parser` | Output vs golden JSON dumped from the Python parser over `tests/fixtures/` | 3 fixtures, full dict compared field by field |
 | `UrlUtils` | Output vs Python `normalize_url` | 62-case corpus in CI; **809,757 production URLs** compared offline, 0 differences |
 | `Casts\PostgresTextArray` | Round-trip through a real Postgres `text[]`, both directions | 9 shapes incl. embedded commas, quotes, backslashes |
 | `Isbn`, `CoverType` | Behaviour parity on the signatures Python encodes | checksum + corruption fingerprints, LT cover labels |
@@ -203,9 +203,8 @@ order, each in one transaction, each recorded in `public.php_schema_migrations`
 *both* sides of the diff, because an asymmetric exclusion is how a gate starts
 comparing two different things.
 
-Migrations live here, in `php/`, shared by crawler and dashboard — never in
-`dashboard/database/migrations/`, whose `.gitkeep` explains why that directory
-must stay empty.
+Schema changes live in `database/schema/`, shared by crawler and dashboard.
+Laravel migrations are not used.
 
 ### What stops it reaching production
 
@@ -309,13 +308,6 @@ typed `int`, and `SystemClock::sleepUntil()` truncates to whole seconds via
 choice between hammering the shop at 0s and running ~5× slower at 1s.
 `Scheduling\SubSecondRequestScheduler` + `SubSecondClock` keep the
 microseconds and are bound over roach's defaults in the DI container.
-
-**roach-php and Laravel cannot share a composer project.** roach-php 3.x
-pins Guzzle `^7.8`; Laravel 13 ships Guzzle 8. Since only the crawler needs
-roach — the dashboard consumes this package for models, config and URL
-helpers — `roach-php/core` sits in `require-dev` and PSR-4 keeps
-`Scheduling\*` from ever loading in the dashboard. Installing roach in a
-Laravel app means downgrading Laravel or splitting the package.
 
 **`parse_url()` corrupts UTF-8 paths.** It substitutes `_` for some
 non-ASCII bytes: `/asmeninis-tobulėjimas` → `/asmeninis-tobul\xc4_jimas`.

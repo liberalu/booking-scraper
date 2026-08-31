@@ -4,21 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasSqlAlchemyDefaults;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * Persistent work queue for the scan phase — this is what makes a run
- * resumable. Rows left in `processing` by a dead process are reset to
- * `pending` on the next start.
- *
- * @property int $id
- * @property int $run_id
- * @property string $url
- * @property string $status
- * @property int $attempts
- */
 final class ScrapeUrlItem extends Model
 {
     protected $table = 'scrape_url_items';
@@ -47,11 +36,13 @@ final class ScrapeUrlItem extends Model
         'done_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<ScrapeRun, $this> */
     public function run(): BelongsTo
     {
         return $this->belongsTo(ScrapeRun::class, 'run_id');
     }
 
+    /** @return BelongsTo<DiscoveredUrl, $this> */
     public function discoveredUrl(): BelongsTo
     {
         return $this->belongsTo(DiscoveredUrl::class, 'discovered_url_id');

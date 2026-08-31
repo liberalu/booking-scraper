@@ -1,11 +1,7 @@
-// Hi-fi Books list — canonical catalog (one row per ISBN, aggregated from
-// shop-books + ISBN DB enrichment). Distinct from Shop Books (raw per-shop rows).
 
 function HFBooks({ nav, goto }) {
   const HF = getHF();
 
-  // Filter+pagination state is mirrored to the URL as ?page=&q=&enriched=…
-  // so the view is reloadable and shareable.
   const _initialParams = React.useMemo(() => {
     const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     return {
@@ -19,7 +15,6 @@ function HFBooks({ nav, goto }) {
     };
   }, []);
 
-  // Remote data state
   const [data, setData] = React.useState({ books: [], total: 0, pages: 1 });
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(_initialParams.page);
@@ -32,7 +27,6 @@ function HFBooks({ nav, goto }) {
       .catch(() => {});
   }, []);
 
-  // Filter state (server-side filters)
   const [q, setQ] = React.useState(_initialParams.q);
   const [enrichedFilter, setEnrichedFilter] = React.useState(_initialParams.enriched);
   const [conflictsFilter, setConflictsFilter] = React.useState(_initialParams.conflicts);
@@ -48,7 +42,6 @@ function HFBooks({ nav, goto }) {
       .catch(() => {});
   }, []);
 
-  // Sync state → URL query params (replaceState so back/forward isn't littered)
   React.useEffect(() => {
     const sp = new URLSearchParams();
     if (page > 1)                       sp.set('page', String(page));
@@ -106,7 +99,6 @@ function HFBooks({ nav, goto }) {
     window.location.href = `/api/books/export?${params}`;
   };
 
-  // Map API rows to JSX shape
   const rows = (data.books || []).map(b => ({
     id:       b.id,
     title:    b.title,
@@ -121,10 +113,7 @@ function HFBooks({ nav, goto }) {
     updated:  '—',
   }));
 
-  // Client-side filters applied on top of server-filtered rows
-  // (shops range bucket — "0 shops" + conflicts are server-side)
   const filteredRows = rows.filter(r => {
-    // shopsFilter is now server-side via shop_count_min/max; no client-side guard needed
     return true;
   });
 
@@ -234,7 +223,6 @@ function HFBooks({ nav, goto }) {
         const perPage = 50;
         const start = (page - 1) * perPage + 1;
         const end = Math.min(page * perPage, data.total);
-        // Build visible page buttons: always show first, last, current ±1, with ellipsis gaps
         const pageNums = [];
         const addPage = n => { if (n >= 1 && n <= totalPages && !pageNums.includes(n)) pageNums.push(n); };
         addPage(1); addPage(page - 1); addPage(page); addPage(page + 1); addPage(totalPages);

@@ -3,27 +3,27 @@
 
 declare(strict_types=1);
 
-/**
- * Apply the PHP schema migrations in `php/schema/`, or report their status.
- *
- * Shared by the crawler and the dashboard — deliberately here and not in
- * `php/dashboard/database/migrations/`, whose `.gitkeep` explains why that
- * directory must stay empty.
- *
- *   bin/migrate status --database=postgresql://…/somedb
- *   bin/migrate apply  --database=postgresql://…/somedb
- *
- * The DSN must be given explicitly, by --database or DATABASE_URL. There is
- * no fall-through to config/default.toml, which names the production
- * catalogue: a migrator that picks a target when you forgot to name one
- * picks production.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 use App\Schema\Migrator;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-/** @return array{0: string, 1: array<string, string>} */
+
 function parseArgv(array $argv): array
 {
     $command = '';

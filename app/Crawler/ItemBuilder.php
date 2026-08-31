@@ -5,18 +5,13 @@ declare(strict_types=1);
 namespace App\Crawler;
 
 /**
- * Maps raw parser output onto the (data, properties) pair the repository
- * writes, mirroring the item construction in book_scraper/spiders/scan.py.
+ * @phpstan-import-type ParsedItem from CrawlerTypes
+ * @phpstan-import-type ItemPayload from CrawlerTypes
  */
 final class ItemBuilder
 {
-    /**
-     * Top-level parser keys that belong in shop_book_attributes rather than
-     * on the shop_books row itself.
-     */
     private const PROPERTY_KEYS = ['pages', 'cover_type', 'duration', 'narrator', 'translator'];
 
-    /** Columns written directly onto shop_books. */
     private const DATA_KEYS = [
         'type', 'author', 'sku', 'isbn', 'publisher', 'year', 'format',
         'description', 'image_url', 'categories', 'price', 'price_original',
@@ -24,8 +19,8 @@ final class ItemBuilder
     ];
 
     /**
-     * @param  array<string, mixed>  $parsed  Output of Parser::parseProductPage.
-     * @return array{data: array<string, mixed>, properties: array<string, mixed>|null}
+     * @param  ParsedItem  $parsed
+     * @return ItemPayload
      */
     public static function fromParsed(array $parsed): array
     {
@@ -37,16 +32,17 @@ final class ItemBuilder
         }
         $data['categories'] ??= [];
 
-        // Parser-supplied properties first: shop-specific extras (humanitas's
-        // `language`, pegasas's `ean`/`dimensions`) must survive into
-        // shop_book_attributes. Without this merge anything outside the five
-        // hardcoded keys below is silently dropped.
         $properties = [];
-        if (isset($parsed['properties']) && is_array($parsed['properties'])) {
-            $properties = $parsed['properties'];
+        $rawProperties = $parsed['properties'] ?? null;
+        if (is_array($rawProperties)) {
+            foreach ($rawProperties as $key => $value) {
+                if (is_string($key)) {
+                    $properties[$key] = $value;
+                }
+            }
         }
         foreach (self::PROPERTY_KEYS as $key) {
-            if (($parsed[$key] ?? null) !== null && !array_key_exists($key, $properties)) {
+            if (($parsed[$key] ?? null) !== null && ! array_key_exists($key, $properties)) {
                 $properties[$key] = $parsed[$key];
             }
         }

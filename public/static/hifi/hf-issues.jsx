@@ -1,16 +1,3 @@
-// Hi-fi Issues page — production-aligned + scale features.
-//
-// Versus the legacy hf-other.jsx HFIssues:
-//   • 4-tile lifecycle KPI strip (NEW / ACKNOWLEDGED / SNOOZED / RESOLVED) with sparkline + delta.
-//   • Lifecycle tabs with hover-help — each state explained.
-//   • Saved-filter chips row — one-click jump to common filter combos.
-//   • Filter row: Search · Shop · Severity · Type · URL type · Book type · Run.
-//   • View modes: Waves · By type · By type × shop · List. Waves group
-//     (type × shop × run) so one parser regression that fires 36,242 times
-//     shows up as ONE row. Run-failure waves are split into their own section.
-//   • Bulk-action toolbar in List view — multi-select then ack/snooze/assign/resolve thousands.
-//   • Inline row preview in List view — click the chevron to reveal raw HTML snippet
-//     and a per-row "Fix this" mini-panel without leaving the list.
 
 const HF_ISSUE_TYPES = [
   { type:'missing_price',         sev:'critical', tone:'err',     description:'No price scraped. Parser likely hit a broken or restructured product page.' },
@@ -32,7 +19,6 @@ const HF_LIFECYCLE_HELP = {
   all:          'Every issue regardless of lifecycle state.',
 };
 
-// Sparkline — 14 daily counts → tiny SVG. Tone-aware fill.
 function HFIssueSparkline({ data, tone = 'neutral', w = 88, h = 24 }) {
   const HF = getHF();
   const color = tone === 'err' ? HF.errInk : tone === 'warn' ? HF.warnInk : tone === 'ok' ? HF.okInk : HF.ink3;
@@ -83,18 +69,11 @@ function hfIssueDetailLine(issueType, bookTitle) {
 function HFIssues({ nav, goto }) {
   const HF = getHF();
 
-  // Filter+tab+view state is mirrored to the URL so the view is shareable.
   const _initialParams = React.useMemo(() => {
     const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const TABS = ['new','acknowledged','snoozed','resolved','all'];
     const VIEWS = ['by_type','list'];
     const run = sp.get('run') || sp.get('run_id') || 'any';
-    // When the user deep-links with a run filter (e.g. from the runs
-    // page), they want to see every issue THAT run touched — including
-    // ones already resolved by a follow-up validate. Defaulting to
-    // tab='new' produces a misleading empty list because validate
-    // auto-fires after scan/discover and resolves most fresh issues
-    // within seconds.
     const defaultTab = run !== 'any' ? 'all' : 'new';
     return {
       tab:  TABS.includes(sp.get('tab'))   ? sp.get('tab')   : defaultTab,
@@ -109,12 +88,11 @@ function HFIssues({ nav, goto }) {
 
   const [tab, setTab] = React.useState(_initialParams.tab);
   const [view, setView] = React.useState(_initialParams.view);
-  const [byTypeSort, setByTypeSort] = React.useState('priority');  // priority | count | type
+  const [byTypeSort, setByTypeSort] = React.useState('priority');
   const [listSort, setListSort] = React.useState({ col: 'age', dir: 'desc' });
   const [selected, setSelected] = React.useState(new Set());
   const [expanded, setExpanded] = React.useState(null);
 
-  // API state
   const [lifecycleCounts, setLifecycleCounts] = React.useState({ new: 0, acknowledged: 0, snoozed: 0, resolved: 0, total: 0 });
   const [groupsData, setGroupsData] = React.useState([]);
   const [wavesData, setWavesData] = React.useState([]);
@@ -122,7 +100,6 @@ function HFIssues({ nav, goto }) {
   const [listLoading, setListLoading] = React.useState(false);
   const [listPage, setListPage] = React.useState(1);
 
-  // Filter state for list view (managed locally; API-driven when view===list)
   const [shopFilter, setShopFilter] = React.useState(_initialParams.shop);
   const [sevFilter, setSevFilter] = React.useState(_initialParams.sev);
   const [typeFilter, setTypeFilter] = React.useState(_initialParams.type);
@@ -137,7 +114,6 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, []);
 
-  // Sync state → URL query params
   React.useEffect(() => {
     const sp = new URLSearchParams();
     if (tab !== 'new')         sp.set('tab', tab);
@@ -153,7 +129,6 @@ function HFIssues({ nav, goto }) {
     if (url !== cur) window.history.replaceState(null, '', url);
   }, [tab, view, shopFilter, sevFilter, typeFilter, searchQ, runFilter]);
 
-  // Fetch lifecycle counts on mount (and whenever tab changes to keep counts fresh)
   React.useEffect(() => {
     fetch('/api/issues?per_page=1')
       .then(r => r.json())
@@ -161,7 +136,6 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, []);
 
-  // Per-type 14-day trend, keyed by issue_type
   const [trendData, setTrendData] = React.useState({});
   React.useEffect(() => {
     fetch('/api/issues/trend?days=14&state=new')
@@ -170,17 +144,15 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, []);
 
-  // Aggregated 14-day trend across all types — used by the lifecycle "new" KPI tile.
   const newTrend = Object.values(trendData).reduce((acc, series) => {
     if (!Array.isArray(series)) return acc;
     if (acc.length === 0) return [...series];
     return acc.map((v, i) => v + (series[i] || 0));
   }, []);
 
-  // Fetch by-type groups whenever tab, shop, or run filter changes.
   React.useEffect(() => {
     const params = new URLSearchParams({ group_by: 'type' });
-    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
+    params.set('state', tab);
     if (shopFilter !== 'all') params.set('shop', shopFilter);
     if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
@@ -189,11 +161,10 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, [tab, shopFilter, runFilter]);
 
-  // Fetch type×shop groups for the waves view
   React.useEffect(() => {
     if (view !== 'waves') return;
     const params = new URLSearchParams({ group_by: 'type_shop' });
-    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
+    params.set('state', tab);
     if (runFilter !== 'any') params.set('run_id', runFilter.replace('run:', ''));
     fetch(`/api/issues/groups?${params}`)
       .then(r => r.json())
@@ -201,12 +172,11 @@ function HFIssues({ nav, goto }) {
       .catch(() => {});
   }, [view, tab, runFilter]);
 
-  // Fetch list when in list view
   React.useEffect(() => {
     if (view !== 'list') return;
     setListLoading(true);
     const params = new URLSearchParams({ page: listPage, per_page: 50 });
-    params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
+    params.set('state', tab);
     if (shopFilter !== 'all') params.set('shop', shopFilter);
     if (typeFilter !== 'all') params.set('issue_type', typeFilter);
     if (sevFilter !== 'all') params.set('severity', sevFilter);
@@ -220,7 +190,6 @@ function HFIssues({ nav, goto }) {
       .catch(() => { setListLoading(false); });
   }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter, listPage, listSort]);
 
-  // Reset page and selection when tab/view/filters change
   React.useEffect(() => { setListPage(1); setSelected(new Set()); }, [view, tab, shopFilter, sevFilter, typeFilter, searchQ, runFilter]);
 
   React.useEffect(() => { setSelected(new Set()); }, [view, tab]);
@@ -259,7 +228,6 @@ function HFIssues({ nav, goto }) {
     return a.type.localeCompare(b.type);
   });
 
-  // Map API list rows to the shape expected by ListRows
   const listRows = (listData.issues || []).map(issue => {
     const meta = HF_ISSUE_TYPES.find(t => t.type === issue.issue) || { sev: 'low', tone: 'neutral' };
     return {
@@ -281,7 +249,6 @@ function HFIssues({ nav, goto }) {
     };
   });
 
-  // Bulk selection helpers
   const toggleOne = (id) => setSelected(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -301,7 +268,6 @@ function HFIssues({ nav, goto }) {
   const someVisibleSelected = listRows.some(r => selected.has(r.id));
   const visibleIds = listRows.map(r => r.id);
 
-  // Type-specific "Fix this" actions — receives full row so actions can use shop/url/runRef
   const fixActionsFor = (r) => {
     const open = (page, params) => () => goto(page, params);
     const rescrapeUrl = async () => {
@@ -369,7 +335,6 @@ function HFIssues({ nav, goto }) {
     }
   };
 
-  // Dead-code stubs for disabled {false && ...} render blocks
   const itemWaves = wavesData
     .filter(w => w.issue_type !== 'scrape_run_failed')
     .map(w => ({
@@ -392,12 +357,9 @@ function HFIssues({ nav, goto }) {
     }));
   const byTypeShopRows = [];
 
-  // Bulk-rescrape: fetch the URL list for the issue group, then start a
-  // targeted scan run with `urls=` (same path as the per-issue rescrape).
   const bulkRescrapeGroup = async (issueType, shop) => {
     if (!shop) return window.alert('Select a shop first (use the Shop filter) before re-scraping.');
 
-    // Step 1: get the URLs for this issue group
     const qRes = await fetch('/api/issues/bulk-rescrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -407,7 +369,6 @@ function HFIssues({ nav, goto }) {
     if (!qRes.ok) { window.alert('Failed to collect URLs: ' + (qData.detail || qRes.status)); return; }
     if (!qData.count) { window.alert('No URLs found for this issue group.'); return; }
 
-    // Step 2: start a targeted scan run with those URLs
     const sRes = await fetch('/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -421,9 +382,7 @@ function HFIssues({ nav, goto }) {
     window.alert(`Scan started for ${qData.count} URL(s). When it finishes, run a Validate phase to close the resolved issues (click below or trigger from the Runs page).`);
   };
 
-  // Bulk-acknowledge: POST with optional type+shop filters derived from selected rows
   const bulkAcknowledge = () => {
-    // Derive a common type/shop if all selected rows share one (enables server-side batch)
     const selectedRows = listRows.filter(r => selected.has(r.id));
     const types = [...new Set(selectedRows.map(r => r.type).filter(Boolean))];
     const shops = [...new Set(selectedRows.map(r => r.shop).filter(Boolean))];
@@ -438,12 +397,11 @@ function HFIssues({ nav, goto }) {
       .then(r => r.json())
       .then(() => {
         setSelected(new Set());
-        // Refresh counts and list
         fetch('/api/issues?per_page=1').then(r => r.json()).then(d => { if (d.counts) setLifecycleCounts(d.counts); }).catch(() => {});
-        setListPage(p => p); // trigger list re-fetch via effect dep noop — force by toggling
+        setListPage(p => p);
         setListLoading(true);
         const params = new URLSearchParams({ page: listPage, per_page: 50 });
-        params.set('state', tab);  // always send — API defaults to 'new' when absent, so tab='all' was being treated as 'new'
+        params.set('state', tab);
         if (shopFilter !== 'all') params.set('shop', shopFilter);
         if (typeFilter !== 'all') params.set('issue_type', typeFilter);
         if (sevFilter !== 'all') params.set('severity', sevFilter);
@@ -499,7 +457,7 @@ function HFIssues({ nav, goto }) {
         <HFButton size="md" variant="subtle" style={{padding:'0 10px', minWidth:32, justifyContent:'center'}} title="Open issue-handling runbook">?</HFButton>
       </>}
     >
-      {/* Lifecycle tabs — counts live here, no separate KPI strip */}
+
       <HFCard style={{marginBottom:HF.gap, overflow:'visible'}}>
         <div style={{padding:`0 ${HF.cardP}px`, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
           <HFTabs active={tab} onChange={setTab} tabs={[
@@ -515,7 +473,7 @@ function HFIssues({ nav, goto }) {
         </div>
       </HFCard>
 
-      {/* Filter row OR bulk action bar */}
+
       {view === 'list' && selectedCount > 0 ? (
         <HFCard style={{marginBottom:HF.gap, background:HF.accentSoft, border:`1px solid ${HF.accentBorder}`, overflow:'visible'}} padding={12}>
           <div style={{display:'flex', alignItems:'center', gap:12, padding:'2px 4px'}}>
@@ -567,7 +525,7 @@ function HFIssues({ nav, goto }) {
         </HFCard>
       )}
 
-      {/* View toggle — segmented control. Two equal-weight options, joined pill. */}
+
       <div style={{marginBottom: HF.gap, display:'flex', gap:12, alignItems:'center', flexWrap:'wrap'}}>
         <span style={{
           display:'inline-flex',
@@ -675,7 +633,7 @@ function HFIssues({ nav, goto }) {
             })}
           </HFCard>
 
-          {/* Run failures — separate section, different shape */}
+
           <HFCard
             title="Run failures"
             sub={`${runFailureWaves.length} runs failed — these are run-level, not item-level. Click to open the run.`}
@@ -824,7 +782,6 @@ function HFIssues({ nav, goto }) {
   );
 }
 
-// ── List view with bulk select + inline expand-row preview ──
 function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleSelected, someVisibleSelected, expanded, setExpanded, sevTone, fixActionsFor, goto, sort, onSort }) {
   const COLS = '36px 1.1fr 0.7fr 1.2fr 0.7fr 1.3fr 1.4fr 1.8fr 0.7fr 28px';
   const SortHd = ({ col, label }) => {
@@ -839,7 +796,7 @@ function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleS
   };
   return (
     <div>
-      {/* Header */}
+
       <div style={{
         display:'grid', gridTemplateColumns:COLS, gap:0,
         padding:`8px ${HF.cardP}px`,
@@ -956,7 +913,6 @@ function ListRows({ HF, rows, selected, toggleOne, toggleAllVisible, allVisibleS
   );
 }
 
-// Synthetic raw-HTML / JSON snippet illustrating what the parser saw.
 function rawSnippetFor(r) {
   switch (r.type) {
     case 'missing_price':

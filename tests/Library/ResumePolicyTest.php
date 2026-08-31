@@ -4,23 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Library;
 
-use App\Support\Database;
 use App\Models\Shop;
+use App\Runs\ResumePolicy;
 use App\Runs\RunEvent;
 use App\Runs\RunFailsafe;
-use App\Runs\ResumePolicy;
+use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
-/**
- * The two brakes on auto-restart, and the failsafe finaliser.
- *
- * A depth cap alone let patogupirkti runs 363→365 burn the whole budget on
- * a bug that could never succeed, so the zero-progress breaker has to fire
- * first — these tests pin that ordering.
- */
 final class ResumePolicyTest extends TestCase
 {
     private static ?Capsule $capsule = null;
@@ -79,8 +72,6 @@ final class ResumePolicyTest extends TestCase
         ]);
     }
 
-    // ------------------------------------------------------------ depth
-
     public function test_a_fresh_run_may_restart(): void
     {
         $verdict = (new ResumePolicy(3))->evaluate($this->makeRun());
@@ -92,8 +83,7 @@ final class ResumePolicyTest extends TestCase
     public function test_restarting_is_capped_by_depth(): void
     {
         $runId = $this->makeRun();
-        // Progress differs each time, so the zero-progress breaker stays out
-        // of it and the depth cap is what fires.
+
         foreach ([10, 20, 30] as $snapshot) {
             $this->restart($runId, $snapshot);
         }
@@ -121,12 +111,10 @@ final class ResumePolicyTest extends TestCase
         self::assertFalse((new ResumePolicy(0))->evaluate($this->makeRun())['allowed']);
     }
 
-    // --------------------------------------------------- zero progress
-
     public function test_two_zero_progress_restarts_break_the_circuit(): void
     {
         $runId = $this->makeRun();
-        // Same snapshot twice: nothing happened between the attempts.
+
         $this->restart($runId, 0);
         $this->restart($runId, 0);
         $this->restart($runId, 0);
@@ -139,8 +127,7 @@ final class ResumePolicyTest extends TestCase
 
     public function test_the_circuit_breaker_fires_before_the_depth_cap(): void
     {
-        // The whole point: with max=10 the depth cap is nowhere near, yet a
-        // stuck chain still stops after two useless attempts.
+
         $runId = $this->makeRun();
         $this->restart($runId, 5);
         $this->restart($runId, 5);
@@ -158,30 +145,26 @@ final class ResumePolicyTest extends TestCase
         $this->restart($runId, 7);
         $this->restart($runId, 7);
 
-        // A single stalled attempt can be transient; only a streak is structural.
-        self::assertSame(1, ResumePolicy::consecutiveZeroProgress($runId));
+        self::assertSame(1, (new ResumePolicy(0))->consecutiveZeroProgress($runId));
         self::assertTrue((new ResumePolicy(10))->evaluate($runId)['allowed']);
     }
 
     public function test_a_missing_snapshot_does_not_count_as_zero_progress(): void
     {
-        // Older events predate the snapshot payload; absence must not be read
-        // as "made no progress".
+
         $runId = $this->makeRun();
         $this->restart($runId, null);
         $this->restart($runId, null);
 
-        self::assertSame(0, ResumePolicy::consecutiveZeroProgress($runId));
+        self::assertSame(0, (new ResumePolicy(0))->consecutiveZeroProgress($runId));
     }
-
-    // -------------------------------------------------- resumable runs
 
     public function test_a_failed_resumable_run_with_pending_work_is_adopted(): void
     {
         $runId = $this->makeRun('failed', resumable: true);
         $this->queueItem($runId, 'pending');
 
-        $found = ResumePolicy::findResumable($this->shopId, 'scan');
+        $found = (new ResumePolicy(0))->findResumable($this->shopId, 'scan');
 
         self::assertNotNull($found);
         self::assertSame($runId, $found->id);
@@ -192,7 +175,18 @@ final class ResumePolicyTest extends TestCase
         $runId = $this->makeRun('failed', resumable: false);
         $this->queueItem($runId, 'pending');
 
-        self::assertNull(ResumePolicy::findResumable($this->shopId, 'scan'));
+        self::assertNull((new ResumePolicy(0))->findResumable($this->shopId, 'scan'));
+    }
+
+    public function test_a_heartbeat_timeout_requires_operator_resume(): void
+    {
+        $runId = $this->makeRun('failed', resumable: true);
+        DB::table('scrape_runs')->where('id', $runId)->update([
+            'close_reason' => 'heartbeat_timeout',
+        ]);
+        $this->queueItem($runId, 'pending');
+
+        self::assertNull((new ResumePolicy(0))->findResumable($this->shopId, 'scan'));
     }
 
     public function test_a_run_with_no_pending_work_is_not_resumable(): void
@@ -200,7 +194,7 @@ final class ResumePolicyTest extends TestCase
         $runId = $this->makeRun('failed', resumable: true);
         $this->queueItem($runId, 'done');
 
-        self::assertNull(ResumePolicy::findResumable($this->shopId, 'scan'));
+        self::assertNull((new ResumePolicy(0))->findResumable($this->shopId, 'scan'));
     }
 
     public function test_a_running_run_owns_its_queue(): void
@@ -208,7 +202,7 @@ final class ResumePolicyTest extends TestCase
         $runId = $this->makeRun('running');
         $this->queueItem($runId, 'pending');
 
-        self::assertSame($runId, ResumePolicy::findResumable($this->shopId, 'scan')?->id);
+        self::assertSame($runId, (new ResumePolicy(0))->findResumable($this->shopId, 'scan')?->id);
     }
 
     private function queueItem(int $runId, string $status): void
@@ -223,17 +217,14 @@ final class ResumePolicyTest extends TestCase
         ]);
     }
 
-    // -------------------------------------------------------- failsafe
-
     public function test_the_failsafe_never_clobbers_a_completed_run(): void
     {
-        // The spider's own close path may already have succeeded; the
-        // failsafe firing afterwards must not rewrite that to failed.
+
         DB::commit();
         $runId = $this->makeRun('completed');
 
         try {
-            $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
 
             self::assertFalse($written);
             self::assertSame(
@@ -247,13 +238,12 @@ final class ResumePolicyTest extends TestCase
 
     public function test_the_failsafe_marks_a_running_run_failed_and_resumable(): void
     {
-        // Committed: the failsafe opens its OWN connection by design, so it
-        // cannot see this test's open transaction.
+
         DB::commit();
         $runId = $this->makeRun('running');
 
         try {
-            $written = RunFailsafe::finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
 
             $row = DB::table('scrape_runs')->where('id', $runId)->first();
             self::assertTrue($written);
@@ -268,18 +258,12 @@ final class ResumePolicyTest extends TestCase
 
     public function test_the_failsafe_records_a_reason_when_the_run_is_not_resumable(): void
     {
-        // The case that was broken and unnoticed. PDO binds PHP `false` as an
-        // empty string, Postgres rejects that for a boolean, and finalize()
-        // swallows its own failure — so every caller that left
-        // $resumableAfterFailure at its default silently did nothing. That is
-        // all three crash paths in bin/crawl, which is why a crawl killed by an
-        // exception never recorded the exception: the run stayed `running`
-        // until the reaper relabelled it `heartbeat_timeout`.
+
         DB::commit();
         $runId = $this->makeRun('running');
 
         try {
-            $written = RunFailsafe::finalize(
+            $written = (new RunFailsafe)->finalize(
                 $runId,
                 'failed',
                 'SQLSTATE[08006] connection refused',
@@ -298,26 +282,10 @@ final class ResumePolicyTest extends TestCase
         }
     }
 
-    /**
-     * Remove what the two failsafe tests had to commit.
-     *
-     * They cannot lean on tearDown's rollback — the point of committing is
-     * that the failsafe opens its own connection and must see the row. The
-     * cleanup therefore has to be committed too: deleting inside a fresh
-     * transaction, as this used to, left every suite run two `resume-test`
-     * runs in the shared database. They accumulated as the newest runs there,
-     * which silently changed what the dashboard's /api/overview returns and
-     * broke a characterisation golden two packages away.
-     *
-     * tearDown() calls rollBack() unconditionally, so a transaction is opened
-     * again on the way out.
-     */
     private function cleanUpCommitted(int $runId): void
     {
         DB::table('scrape_run_events')->where('run_id', $runId)->delete();
-        // Every run on this shop, not just $runId: the shop exists only for
-        // this test, so anything left on it is litter from an earlier suite
-        // run that could not be deleted while the shop was still referenced.
+
         DB::table('scrape_url_items')->where('shop_id', $this->shopId)->delete();
         DB::table('scrape_runs')->where('shop_id', $this->shopId)->delete();
         DB::table('shops')->where('id', $this->shopId)->delete();

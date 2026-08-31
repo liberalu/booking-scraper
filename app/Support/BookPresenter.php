@@ -6,23 +6,22 @@ namespace App\Support;
 
 use App\Models\ShopBook;
 
-/** Port of _book_dict in book_scraper/dashboard/routes/api.py. */
 final class BookPresenter
 {
-    /** @return array<string, mixed> */
+    /** @return array<string, bool|float|int|string|null> */
     public static function toArray(ShopBook $sb): array
     {
         return [
             'id' => $sb->id,
             'title' => $sb->title,
-            'author' => $sb->author ?: '—',
+            'author' => $sb->author !== null && $sb->author !== '' ? $sb->author : '—',
             'shop' => $sb->shop->name ?? '—',
             'isbn' => $sb->isbn,
             'sku' => $sb->sku,
-            'price' => $sb->price !== null ? '€' . number_format((float) $sb->price, 2, '.', '') : '—',
+            'price' => $sb->price !== null ? '€'.number_format((float) $sb->price, 2, '.', '') : '—',
             'price_raw' => $sb->price !== null ? (float) $sb->price : null,
             'status' => self::status($sb),
-            // Python hardcodes 0; per-book issue counts come from the detail page.
+
             'issues' => 0,
             'updated' => RunPresenter::relative($sb->last_seen_at),
             'url' => $sb->url,
@@ -41,10 +40,9 @@ final class BookPresenter
         ];
     }
 
-    /** active / out (was active, now flagged) / delisted (never flagged). */
     private static function status(ShopBook $sb): string
     {
-        if ($sb->is_active) {
+        if ($sb->is_active === true) {
             return 'active';
         }
 

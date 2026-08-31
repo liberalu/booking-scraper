@@ -4,100 +4,98 @@ declare(strict_types=1);
 
 namespace App\Parsers\Pegasas;
 
+use App\Crawler\CrawlerTypes;
+use App\Parsers\DiscoveryParser;
+use App\Parsers\LupaSearchParser;
+use App\Parsers\ProductParser;
+use App\Parsers\ScanUrlRewriter;
 use App\Support\CoverType;
 use App\Support\Isbn;
 
 /**
- * Port of book_scraper/spiders/pegasas/parsers.py.
+ * @phpstan-import-type ParsedItem from CrawlerTypes
  *
- * pegasas is a Magento 2 PWA: product pages serve a React shell with no
- * parseable data, so everything comes from JSON — Magento GraphQL (rich,
- * slow) or LupaSearch (fast, thinner). Both are normalised to the same
- * product shape so the spider needs no per-source branching.
+ * @phpstan-type ParsedProduct array{
+ *     url: string,
+ *     title: string|null,
+ *     author: string|null,
+ *     sku: string|null,
+ *     isbn: string|null,
+ *     publisher: string|null,
+ *     year: int|null,
+ *     format: string|null,
+ *     description: string|null,
+ *     image_url: string|null,
+ *     price: string|null,
+ *     price_original: string|null,
+ *     in_stock: bool,
+ *     type: string,
+ *     categories: list<string>,
+ *     properties: array<string, mixed>|null
+ * }
  */
-final class Parser
+final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, ScanUrlRewriter
 {
     private const BASE_URL = 'https://www.pegasas.lt';
 
-    /** Trailing numeric slug suffix is the unpadded Magento SKU. */
     private const SKU_FROM_SLUG = '/-(\d+)\/?$/';
 
     private const MAGENTO_SKU_WIDTH = 18;
 
-    /** Magento attribute labels. Stable platform labels, not user text. */
     private const LABEL_PUBLISHER = 'Leidykla';
+
     private const LABEL_TRANSLATOR = 'Vertėjas';
+
     private const LABEL_YEAR = 'Leidimo metai';
+
     private const LABEL_COVER = 'Viršelio tipas';
+
     private const LABEL_PAGES = 'Puslapių skaičius';
+
     private const LABEL_ISBN = 'ISBN kodas';
+
     private const LABEL_EAN = 'EAN kodas';
+
     private const LABEL_LANGUAGE = 'Leidinio kalba';
+
     private const LABEL_DIMENSIONS = 'Matmenys';
+
     private const LABEL_ORIGINAL_TITLE = 'Pav. originalo kalba';
+
     private const LABEL_COLOR = 'Spalvingumas';
 
-    /**
-     * pegasas mixes ~38k Lithuanian items with ~600k drop-shipped English
-     * imports under the same parent categories, so the language attribute
-     * is the only reliable way to scope to LT.
-     */
     private const LANG_LITHUANIAN = 'Lietuvių';
 
-    /** 8128 = "Knygos anglų kalba". LupaSearch omits language, so id is the proxy. */
     private const ENGLISH_CATEGORY_IDS = [8128];
 
-    /** 6122 = "Elektroninės knygos". Magento has is_book/is_audio_book but no is_ebook. */
     private const EBOOK_CATEGORY_IDS = [6122];
 
-    /**
-     * Category-name substrings that mean "book", used when Magento's
-     * `is_book` is false but the categories clearly disagree (educational
-     * textbooks, illustrated children's books, some new releases).
-     *
-     * Substring not prefix, so "Mokslo literatūra" matches on "literat"
-     * exactly as "Grožinė literatūra" does. Checked against pegasas's full
-     * 1,170-name catalogue: no cosmetics/toys/stationery collide.
-     */
     private const BOOK_CATEGORY_SUBSTRINGS = ['knyg', 'groz', 'literat', 'vadovel', 'pratyb'];
 
-    /** Values Magento uses for "empty". */
     private const EMPTY_MARKERS = ['-', '—'];
 
-    // ---------------------------------------------------------------- sitemap
-
-    /** pegasas.lt publishes no XML sitemap. */
-    public static function parseSitemapUrls(string $xml): array
+    /** @return list<string> */
+    public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
     {
         return [];
     }
 
-    // --------------------------------------------------------- category page
-
-    /**
-     * Magento GraphQL products-in-category response.
-     *
-     * `total_count` drives the spider's upfront pagination, without which
-     * concurrency never engages on discover.
-     *
-     * @return array{products: list<array<string, mixed>>, total: int|null}
-     */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseCategoryPage(string $body): array
     {
         $data = json_decode($body, true);
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return ['products' => [], 'total' => null];
         }
 
-        $node = $data['data']['products'] ?? [];
-        $items = is_array($node['items'] ?? null) ? $node['items'] : [];
-        $total = isset($node['total_count']) && is_numeric($node['total_count'])
-            ? (int) $node['total_count']
-            : null;
+        $dataNode = self::map($data['data'] ?? null);
+        $node = self::map($dataNode['products'] ?? null);
+        $items = self::listOfMaps($node['items'] ?? null);
+        $total = self::integer($node['total_count'] ?? null);
 
         $products = [];
         foreach ($items as $item) {
-            if (!is_array($item) || ($item['url_key'] ?? null) === null || $item['url_key'] === '') {
+            if (! is_string($item['url_key'] ?? null) || $item['url_key'] === '') {
                 continue;
             }
             $product = self::graphqlItemToProduct($item);
@@ -109,60 +107,43 @@ final class Parser
         return ['products' => $products, 'total' => $total];
     }
 
-    // ------------------------------------------------------------ lupasearch
-
-    /**
-     * LupaSearch query API response. Same product shape as GraphQL, but
-     * ISBN/year/pages are always null — LupaSearch doesn't expose them, and
-     * enrichment happens via GraphQL or a scan fetch.
-     *
-     * @return array{products: list<array<string, mixed>>, total: int}
-     */
+    /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseLupasearchResponse(string $body): array
     {
         $data = json_decode($body, true);
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return ['products' => [], 'total' => 0];
         }
 
         $products = [];
-        foreach (is_array($data['items'] ?? null) ? $data['items'] : [] as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
+        foreach (self::listOfMaps($data['items'] ?? null) as $item) {
             $product = self::lupasearchItemToProduct($item);
             if ($product !== null) {
                 $products[] = $product;
             }
         }
 
-        return ['products' => $products, 'total' => (int) ($data['total'] ?? 0)];
+        return ['products' => $products, 'total' => self::integer($data['total'] ?? null) ?? 0];
     }
 
-    // ---------------------------------------------------------- product page
-
-    /**
-     * Per-SKU GraphQL response, reached after rewriteScanUrl() swapped the
-     * product URL. Non-JSON means the PWA shell was served directly.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return ParsedItem */
     public static function parseProductPage(string $body): array
     {
         $data = json_decode($body, true);
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return self::emptyProductPage('pwa_shell_no_data');
         }
 
-        $items = $data['data']['products']['items'] ?? [];
-        if (!is_array($items) || $items === []) {
+        $dataNode = self::map($data['data'] ?? null);
+        $productsNode = self::map($dataNode['products'] ?? null);
+        $items = self::listOfMaps($productsNode['items'] ?? null);
+        if ($items === []) {
             return self::emptyProductPage('graphql_no_match');
         }
 
         $product = self::graphqlItemToProduct($items[0]);
         if ($product === null) {
-            // Language gate fired. Recorded as non-product so the row closes
-            // cleanly instead of raising a noisy validation error.
+
             return self::emptyProductPage('graphql_non_lt_filtered');
         }
 
@@ -178,7 +159,7 @@ final class Parser
             'sku' => $product['sku'],
             'publisher' => $product['publisher'],
             'image_url' => $product['image_url'],
-            'categories' => $product['categories'] ?? [],
+            'categories' => $product['categories'],
             'year' => $product['year'],
             'pages' => $properties['pages'] ?? null,
             'author' => $product['author'],
@@ -191,23 +172,14 @@ final class Parser
             'is_book_product' => in_array($product['type'], ['book', 'audio', 'ebook'], true),
             'book_score' => 100,
             'book_score_reasons' => [['key' => 'graphql_sku_match', 'points' => 100]],
-            'type' => $product['type'] ?: 'non_book',
+            'type' => $product['type'] === '' ? 'non_book' : $product['type'],
             'planned_availability_date' => null,
             'rating' => null,
             'review_count' => null,
         ];
     }
 
-    /**
-     * Rewrite a product URL into a single-SKU GraphQL request.
-     *
-     * The PWA serves a React shell for product pages, but GraphQL returns
-     * full metadata in 200–500ms when filtered to one SKU. Returns null when
-     * the slug carries no SKU; the spider then leaves the request alone and
-     * the response lands in the shell fallback.
-     *
-     * @return array{url: string, headers: array<string, string>}|null
-     */
+    /** @return array{url: string, headers: array<string, string>}|null */
     public static function rewriteScanUrl(string $url): ?array
     {
         $parts = parse_url($url);
@@ -218,29 +190,18 @@ final class Parser
 
         $sku = str_pad($m[1], self::MAGENTO_SKU_WIDTH, '0', STR_PAD_LEFT);
         $query = '{products('
-            . sprintf('filter:{sku:{eq:"%s"}},', $sku)
-            . 'pageSize:1,currentPage:1'
-            . '){items{' . GraphQl::PRODUCT_FIELDS . '}}}';
+            .sprintf('filter:{sku:{eq:"%s"}},', $sku)
+            .'pageSize:1,currentPage:1'
+            .'){items{'.GraphQl::PRODUCT_FIELDS.'}}}';
 
-        $base = ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? '');
+        $base = ($parts['scheme'] ?? 'https').'://'.($parts['host'] ?? '');
 
         return [
-            'url' => $base . '/graphql?' . http_build_query(['query' => $query]),
+            'url' => $base.'/graphql?'.http_build_query(['query' => $query]),
             'headers' => ['Accept' => 'application/json'],
         ];
     }
 
-    // ------------------------------------------------------ type derivation
-
-    /**
-     * Map Magento/LupaSearch boolean-ish flags to our `type`.
-     *
-     * `$hasBookCategory` is a fallback: Magento's `is_book` is false on a
-     * subset of real books (textbooks, illustrated children's titles, some
-     * new releases), and positive category evidence overrides it.
-     *
-     * @return 'book'|'audio'|'ebook'|'non_book'
-     */
     public static function deriveBookType(
         mixed $isBook,
         mixed $isAudioBook,
@@ -264,9 +225,6 @@ final class Parser
     public static function categoriesIndicateBook(?array $categories): bool
     {
         foreach ($categories ?? [] as $category) {
-            if (!is_string($category)) {
-                continue;
-            }
             $folded = self::foldAscii($category);
             foreach (self::BOOK_CATEGORY_SUBSTRINGS as $needle) {
                 if (str_contains($folded, $needle)) {
@@ -278,27 +236,28 @@ final class Parser
         return false;
     }
 
-    // -------------------------------------------------------------- mapping
-
     /**
      * @param  array<string, mixed>  $item
-     * @return array<string, mixed>|null  null when the language gate drops it
+     * @return ParsedProduct|null
      */
     private static function graphqlItemToProduct(array $item): ?array
     {
-        $canonicalUrl = self::BASE_URL . '/' . $item['url_key'];
+        $urlKey = $item['url_key'] ?? null;
+        if (! is_string($urlKey) || $urlKey === '') {
+            return null;
+        }
+        $canonicalUrl = self::BASE_URL.'/'.$urlKey;
 
-        // Price
-        $minimum = $item['price_range']['minimum_price'] ?? [];
-        $final = $minimum['final_price'] ?? [];
-        $regular = $minimum['regular_price'] ?? [];
+        $priceRange = self::map($item['price_range'] ?? null);
+        $minimum = self::map($priceRange['minimum_price'] ?? null);
+        $final = self::map($minimum['final_price'] ?? null);
+        $regular = self::map($minimum['regular_price'] ?? null);
         $price = isset($final['value']) ? self::numberToString($final['value']) : null;
         $priceOriginal = null;
         if (isset($regular['value']) && ($regular['value'] !== ($final['value'] ?? null))) {
             $priceOriginal = self::numberToString($regular['value']);
         }
 
-        // Author / narrator
         $authorLabels = [];
         foreach (is_array($item['author'] ?? null) ? $item['author'] : [] as $author) {
             $label = is_array($author) ? ($author['author_label'] ?? null) : null;
@@ -314,19 +273,18 @@ final class Parser
         ));
         $narratorStr = $narrators === [] ? null : implode(', ', $narrators);
 
-        // Categories — names deduped, deepest last preserved.
         $categoryNames = [];
         $categoryIds = [];
         foreach (is_array($item['categories'] ?? null) ? $item['categories'] : [] as $category) {
-            if (!is_array($category)) {
+            if (! is_array($category)) {
                 continue;
             }
             $name = $category['name'] ?? null;
-            if (is_string($name) && $name !== '' && !in_array($name, $categoryNames, true)) {
+            if (is_string($name) && $name !== '' && ! in_array($name, $categoryNames, true)) {
                 $categoryNames[] = $name;
             }
             $id = $category['id'] ?? null;
-            if (is_int($id) && !in_array($id, $categoryIds, true)) {
+            if (is_int($id) && ! in_array($id, $categoryIds, true)) {
                 $categoryIds[] = $id;
             }
         }
@@ -354,9 +312,7 @@ final class Parser
         $color = null;
 
         if ($labels !== []) {
-            // Language gate. Only filters when the attribute is POPULATED and
-            // clearly non-LT; untagged items (~1% of catalogue) fall through
-            // rather than being lost to a Magento omission.
+
             $langRaw = self::clean($labels[self::LABEL_LANGUAGE] ?? null);
             if ($langRaw !== null && $langRaw !== self::LANG_LITHUANIAN) {
                 return null;
@@ -378,9 +334,6 @@ final class Parser
             $color = self::clean($labels[self::LABEL_COLOR] ?? null);
         }
 
-        // JSON-LD fallback. Run through coerceIsbn as well: Magento puts
-        // EAN-13 in the Schema.org `isbn` slot, so sticker-kit GTINs would
-        // otherwise slip past the label-level filter and fail validation.
         if (($isbn === null || $publisher === null || $pages === null || $year === null)
             && is_string($item['structured_data'] ?? null)) {
             $structured = json_decode($item['structured_data'], true);
@@ -390,9 +343,9 @@ final class Parser
                 if ($publisher === null) {
                     $pub = $main['publisher'] ?? null;
                     if (is_array($pub)) {
-                        $publisher = ($pub['name'] ?? null) ?: null;
+                        $publisher = self::clean($pub['name'] ?? null);
                     } elseif (is_string($pub)) {
-                        $publisher = $pub ?: null;
+                        $publisher = $pub === '' ? null : $pub;
                     }
                 }
                 $pages ??= self::parseInt($main['numberOfPages'] ?? null);
@@ -401,9 +354,7 @@ final class Parser
         }
 
         $properties = [];
-        // Audiobooks must not carry pages: Magento sometimes reports the
-        // print edition's count, through both the attributes and the JSON-LD
-        // fallback. Duration is the right metric for audio.
+
         if ($pages !== null && $bookType !== 'audio') {
             $properties['pages'] = $pages;
         }
@@ -424,15 +375,15 @@ final class Parser
 
         return [
             'url' => $canonicalUrl,
-            'title' => $item['name'] ?? null,
+            'title' => self::clean($item['name'] ?? null),
             'author' => $authorStr,
-            'sku' => $item['sku'] ?? null,
+            'sku' => self::clean($item['sku'] ?? null),
             'isbn' => $isbn,
             'publisher' => $publisher,
             'year' => $year,
             'format' => self::formatFromBookType($bookType, $coverType),
             'description' => self::flattenAnotacija($item['anotacija'] ?? null),
-            'image_url' => $item['image']['url'] ?? null,
+            'image_url' => self::clean(self::map($item['image'] ?? null)['url'] ?? null),
             'price' => $price,
             'price_original' => $priceOriginal,
             'in_stock' => ($item['stock_status'] ?? null) === 'IN_STOCK',
@@ -444,24 +395,24 @@ final class Parser
 
     /**
      * @param  array<string, mixed>  $item
-     * @return array<string, mixed>|null
+     * @return ParsedProduct|null
      */
     private static function lupasearchItemToProduct(array $item): ?array
     {
-        // Language gate by category id: LupaSearch omits the attribute.
+
         $rawIds = is_array($item['category_ids'] ?? null) ? $item['category_ids'] : [];
         foreach ($rawIds as $id) {
-            if (ctype_digit((string) $id) && in_array((int) $id, self::ENGLISH_CATEGORY_IDS, true)) {
+            $categoryId = self::integer($id);
+            if ($categoryId !== null && in_array($categoryId, self::ENGLISH_CATEGORY_IDS, true)) {
                 return null;
             }
         }
 
-        // price is a stringified decimal, regular_price a float. Only emit an
-        // original when it actually differs.
         $price = isset($item['price']) ? self::numberToString($item['price']) : null;
         $priceOriginal = null;
-        if (isset($item['regular_price']) && $price !== null
-            && (float) $item['regular_price'] !== (float) $price) {
+        $regularPrice = self::number($item['regular_price'] ?? null);
+        $finalPrice = self::number($price);
+        if ($regularPrice !== null && $finalPrice !== null && $regularPrice !== $finalPrice) {
             $priceOriginal = self::numberToString($item['regular_price']);
         }
 
@@ -474,10 +425,8 @@ final class Parser
         $publisher = self::clean($item['leidykla'] ?? null);
 
         $coverList = is_array($item['virselio_tipas'] ?? null) ? $item['virselio_tipas'] : [];
-        $coverType = $coverList === [] ? null : ($coverList[0] ?? null);
+        $coverType = self::clean($coverList[0] ?? null);
 
-        // Only numeric ids come back, so resolve names through the generated
-        // map — otherwise the validator's non-book keyword checks see nothing.
         $categories = [];
         foreach ($rawIds as $id) {
             if (is_int($id)) {
@@ -507,17 +456,17 @@ final class Parser
         }
 
         return [
-            'url' => $item['url'] ?? '',
-            'title' => $item['name'] ?? null,
+            'url' => self::clean($item['url'] ?? null) ?? '',
+            'title' => self::clean($item['name'] ?? null),
             'author' => $authorStr,
-            'sku' => $item['sku'] ?? null,
-            // Absent from the LupaSearch payload; filled by GraphQL or scan.
+            'sku' => self::clean($item['sku'] ?? null),
+
             'isbn' => null,
             'publisher' => $publisher,
             'year' => null,
             'format' => self::formatFromBookType($bookType, $coverType),
             'description' => self::flattenAnotacija($item['anotacija'] ?? null),
-            'image_url' => $item['image'] ?? null,
+            'image_url' => self::clean($item['image'] ?? null),
             'price' => $price,
             'price_original' => $priceOriginal,
             'in_stock' => ($item['in_stock'] ?? null) === 1 || ($item['in_stock'] ?? null) === true,
@@ -527,26 +476,7 @@ final class Parser
         ];
     }
 
-    // -------------------------------------------------------- ISBN vs EAN
-
-    /**
-     * pegasas's `EAN kodas` also carries non-book GTINs (sticker kits,
-     * puzzles, `40100706…`), and its `ISBN kodas` sometimes holds a typo'd
-     * ISBN-10. Two real cases drive the rule:
-     *
-     *  1. "Rikiki skalbia" — ISBN field has a bad-check-digit ISBN-10, EAN
-     *     has the real ISBN-13. Both share publisher prefix 978-9986-02, so
-     *     the EAN is the correction and wins.
-     *  2. "Dina gėdytojos duktė" — ISBN field has a typo'd ISBN-10, EAN has
-     *     an unrelated valid ISBN-13 (a different book). Prefixes diverge
-     *     after 4 digits, so the EAN is ignored and the ISBN-10 core is
-     *     recovered.
-     *
-     * Hence: prefer EAN over a recovered ISBN only when the leading 9 digits
-     * (Bookland + group + publisher) agree — same publisher, same book.
-     *
-     * @return array{0: string|null, 1: string|null}  [isbn, ean]
-     */
+    /** @return array{string|null, string|null} */
     private static function resolveIsbnAndEan(?string $rawIsbn, ?string $rawEan): array
     {
         $strict = static function (?string $value): ?string {
@@ -573,23 +503,14 @@ final class Parser
             $isbn = $eanStrict ?? self::coerceIsbn($rawEan);
         }
 
-        // Keep the EAN only when it is a real GTIN distinct from the ISBN.
         $ean = ($rawEan !== null && $rawEan !== $isbn) ? $rawEan : null;
 
         return [$isbn, $ean];
     }
 
-    /**
-     * Normalise a raw field to ISBN-13, or null.
-     *
-     * Accepts a valid ISBN-13, a valid ISBN-10, or an ISBN-10 with a wrong
-     * check digit — recovered by taking the 9-digit core (pegasas stores
-     * 9955082484, whose correct ISBN-13 is 9789955082484). Anything outside
-     * the 978/979 Bookland space is rejected.
-     */
     public static function coerceIsbn(mixed $value): ?string
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return null;
         }
         $digits = trim(str_replace(['-', ' '], '', $value));
@@ -597,8 +518,7 @@ final class Parser
         if (Isbn::isValid($digits)) {
             return Isbn::toIsbn13($digits);
         }
-        // toIsbn13 validates format only, so it accepts an ISBN-10 whose
-        // check digit is wrong.
+
         if (strlen($digits) === 10 && ctype_digit(substr($digits, 0, 9))) {
             return Isbn::toIsbn13($digits);
         }
@@ -606,37 +526,29 @@ final class Parser
         return null;
     }
 
-    // -------------------------------------------------------------- helpers
-
-    /**
-     * Flatten product_page_attributes into label => value.
-     *
-     * Magento returns a list of containers, each holding
-     * primary_attributes and secondary_attributes.
-     *
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     private static function attrsToLabels(mixed $node): array
     {
-        if ($node === null || $node === []) {
+        if (! is_array($node) || $node === []) {
             return [];
         }
-        $containers = array_is_list((array) $node) ? (array) $node : [$node];
+        $containers = array_is_list($node) ? $node : [$node];
 
         $labels = [];
         foreach ($containers as $container) {
-            if (!is_array($container)) {
+            if (! is_array($container)) {
                 continue;
             }
             foreach (['primary_attributes', 'secondary_attributes'] as $bucket) {
                 foreach (is_array($container[$bucket] ?? null) ? $container[$bucket] : [] as $attr) {
-                    if (!is_array($attr)) {
+                    if (! is_array($attr)) {
                         continue;
                     }
                     $label = $attr['label'] ?? null;
                     $value = $attr['value'] ?? null;
-                    if (is_string($label) && $label !== '' && $value !== null) {
-                        $labels[$label] = (string) $value;
+                    $stringValue = self::scalarString($value);
+                    if (is_string($label) && $label !== '' && $stringValue !== null) {
+                        $labels[$label] = $stringValue;
                     }
                 }
             }
@@ -655,7 +567,6 @@ final class Parser
         };
     }
 
-    /** LupaSearch returns `anotacija` as a list; GraphQL as a string. */
     private static function flattenAnotacija(mixed $raw): ?string
     {
         if (is_array($raw)) {
@@ -681,10 +592,9 @@ final class Parser
         return $cleaned === '' ? null : $cleaned;
     }
 
-    /** Empty, whitespace-only and dash values all mean "missing". */
     private static function clean(mixed $value): ?string
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return null;
         }
         $trimmed = trim($value);
@@ -699,7 +609,8 @@ final class Parser
         if ($value === null || $value === '' || $value === false) {
             return null;
         }
-        if (preg_match('/^(\d{4})/', (string) $value, $m) !== 1) {
+        $string = self::scalarString($value);
+        if ($string === null || preg_match('/^(\d{4})/', $string, $m) !== 1) {
             return null;
         }
         $year = (int) $m[1];
@@ -712,36 +623,40 @@ final class Parser
         if ($value === null || $value === '') {
             return null;
         }
-        $trimmed = trim((string) $value);
+        $string = self::scalarString($value);
+        if ($string === null) {
+            return null;
+        }
+        $trimmed = trim($string);
 
         return preg_match('/^-?\d+$/', $trimmed) === 1 ? (int) $trimmed : null;
     }
 
-    /** Mirrors Python's truthiness for the Magento flag fields. */
     private static function truthy(mixed $value): bool
     {
         if (is_string($value)) {
-            // Python's bool("0") is True; only the empty string is falsey.
+
             return $value !== '';
         }
 
         return (bool) $value;
     }
 
-    /** Matches Python's str() on ints and floats. */
     private static function numberToString(mixed $value): ?string
     {
         if ($value === null) {
             return null;
         }
         if (is_float($value)) {
-            // Python renders a whole float as "12.0", PHP as "12".
+
             return $value === floor($value) && is_finite($value)
                 ? sprintf('%.1f', $value)
                 : (string) $value;
         }
 
-        return (string) $value;
+        return is_int($value) || is_string($value) && is_numeric($value)
+            ? (string) $value
+            : null;
     }
 
     private static function foldAscii(string $value): string
@@ -752,7 +667,7 @@ final class Parser
         return preg_replace('/\p{Mn}/u', '', $nfd === false ? $lower : $nfd) ?? $lower;
     }
 
-    /** @return array<string, mixed> */
+    /** @return ParsedItem */
     private static function emptyProductPage(string $reasonKey): array
     {
         return [
@@ -767,5 +682,72 @@ final class Parser
             'type' => 'non_book', 'planned_availability_date' => null,
             'rating' => null, 'review_count' => null,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function map(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($value as $key => $item) {
+            if (is_string($key)) {
+                $map[$key] = $item;
+            }
+        }
+
+        return $map;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function listOfMaps(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $maps = [];
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                $maps[] = self::map($item);
+            }
+        }
+
+        return $maps;
+    }
+
+    private static function scalarString(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        return is_int($value) || is_float($value) ? (string) $value : null;
+    }
+
+    private static function integer(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+        if (is_string($value) && preg_match('/^-?\d+$/', $value) === 1) {
+            return (int) $value;
+        }
+
+        return null;
+    }
+
+    private static function number(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+        if (is_string($value) && is_numeric($value)) {
+            return (float) $value;
+        }
+
+        return null;
     }
 }

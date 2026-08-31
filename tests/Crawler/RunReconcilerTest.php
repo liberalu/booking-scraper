@@ -4,18 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Crawler;
 
-use App\Support\Database;
 use App\Runs\RunEvent;
 use App\Runs\RunReconciler;
+use App\Support\Database;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Boot reconciliation. A row still marked `running` after a restart has no
- * process behind it, and leaving it there makes a dead run look alive to
- * every dashboard query and to find-resumable.
- */
 final class RunReconcilerTest extends TestCase
 {
     private static bool $booted = false;
@@ -24,7 +19,7 @@ final class RunReconcilerTest extends TestCase
 
     protected function setUp(): void
     {
-        if (!self::$booted) {
+        if (! self::$booted) {
             Database::boot(
                 getenv('TEST_DATABASE_URL')
                     ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test'
@@ -33,9 +28,6 @@ final class RunReconcilerTest extends TestCase
         }
         DB::beginTransaction();
 
-        // markOrphansFailed() is global by design, so park any pre-existing
-        // `running` row inside this transaction. Deleting is not an option:
-        // shop_books.last_run_id references scrape_runs.
         DB::table('scrape_runs')->where('status', 'running')->update(['status' => 'completed']);
 
         $this->shopId = (int) (DB::table('shops')->where('name', 'reconcile-test')->value('id')
@@ -70,7 +62,7 @@ final class RunReconcilerTest extends TestCase
     {
         $runId = $this->makeRun('running');
 
-        $orphans = RunReconciler::markOrphansFailed();
+        $orphans = (new RunReconciler)->markOrphansFailed();
 
         self::assertSame([['id' => $runId, 'shop' => 'reconcile-test', 'phase' => 'scan']], $orphans);
 
@@ -86,10 +78,10 @@ final class RunReconcilerTest extends TestCase
 
     public function test_the_transition_is_recorded_on_the_timeline(): void
     {
-        // Otherwise a run just changes state with no auditable cause.
+
         $runId = $this->makeRun('running');
 
-        RunReconciler::markOrphansFailed();
+        (new RunReconciler)->markOrphansFailed();
 
         $event = DB::table('scrape_run_events')
             ->where('run_id', $runId)
@@ -101,14 +93,13 @@ final class RunReconcilerTest extends TestCase
 
     public function test_terminal_and_paused_runs_are_untouched(): void
     {
-        // A paused run is alive and deliberately parked; reaping it would
-        // discard an operator's decision.
+
         $ids = [];
         foreach (['completed', 'failed', 'paused'] as $status) {
             $ids[$status] = $this->makeRun($status);
         }
 
-        self::assertSame([], RunReconciler::markOrphansFailed());
+        self::assertSame([], (new RunReconciler)->markOrphansFailed());
 
         foreach ($ids as $status => $id) {
             self::assertSame(
@@ -120,6 +111,6 @@ final class RunReconcilerTest extends TestCase
 
     public function test_reconciling_with_no_orphans_is_a_no_op(): void
     {
-        self::assertSame([], RunReconciler::markOrphansFailed());
+        self::assertSame([], (new RunReconciler)->markOrphansFailed());
     }
 }

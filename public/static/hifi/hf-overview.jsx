@@ -1,4 +1,3 @@
-// Hi-fi Overview — light mode, Retool/Metabase-feel
 
 function HFOverview({ nav, goto }) {
   const HF = getHF();
@@ -38,9 +37,6 @@ function HFOverview({ nav, goto }) {
     }
   }, [goto]);
 
-  // Shared loader — used for the initial mount fetch and the manual
-  // Refresh button. `manual=true` toggles the toast feedback so the
-  // first paint stays silent.
   const loadOverview = React.useCallback((manual = false) => {
     setRefreshing(true);
     fetch('/api/overview')
@@ -156,10 +152,10 @@ function HFOverview({ nav, goto }) {
         <HFButton>Last 7 days <span style={{display:'flex', opacity:.7}}>{HF_ICONS.chevronD}</span></HFButton>
       </>}
     >
-      {/* KPI strip */}
+
       <HFKpiStrip items={kpis}/>
 
-      {/* Activity + Completeness */}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 'var(--hf-gap)', marginBottom: 'var(--hf-gap)' }}>
         <HFCard title="Scrape activity" sub={`items scraped per day · last ${spark.length || 14} days`}
                 action={<a href={buildPath('runs')} className="hf-link" style={hfLink(HF)} onClick={(e)=>{if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();goto('runs');}}>View runs {HF_ICONS.arrow}</a>}>
@@ -224,7 +220,7 @@ function HFOverview({ nav, goto }) {
         </HFCard>
       </div>
 
-      {/* Recent runs */}
+
       <HFCard title="Recent runs" sub="live + last 24 hours"
               action={<a href={buildPath('runs')} style={hfLink(HF)} onClick={(e)=>{if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();goto('runs');}}>All runs {HF_ICONS.arrow}</a>}
               style={{ marginBottom: 'var(--hf-gap)' }}>
@@ -251,7 +247,7 @@ function HFOverview({ nav, goto }) {
         />
       </HFCard>
 
-      {/* Issue clusters + By shop */}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 'var(--hf-gap)' }}>
         <HFCard title="Needs attention" sub="open validation clusters · click to triage"
                 action={<a href={buildPath('issues')} style={hfLink(HF)} onClick={(e)=>{if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();goto('issues');}}>All issues {HF_ICONS.arrow}</a>}>

@@ -4,82 +4,63 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
-use App\Support\Database;
 use App\Models\CronJob;
+use App\Repositories\PostPhaseRepository;
 use App\Runs\RunEvent;
 use App\Runs\RunFailsafe;
+use App\Runs\RunPhase;
 use App\Services\MatchService;
-use Illuminate\Support\Facades\DB;
 use Throwable;
 
-/**
- * What happens after a scan or discover run closes.
- *
- * Two independent things, in priority order:
- *
- *  1. If this run was fired by a cron job that chains to another, spawn the
- *     chained job.
- *  2. Otherwise, link new books by ISBN (match step 1 — one UPDATE) and fire
- *     a validate run, so data-quality state never lags a scrape. Skipped when
- *     the cron chain already targets match or validate: firing both would
- *     double-run the validator.
- *
- * Every failure in here is swallowed and reported. A crawl that wrote its
- * rows successfully must not be marked failed because a follow-up could not
- * be spawned.
- */
 final class PostPhase
 {
     private const SPAWN_CONTEXT = 'post-phase-auto';
 
-    /** Runs after a SUCCESSFUL scan or discover. */
-    public static function after(
+    public function __construct(
+        private readonly PostPhaseRepository $repository,
+        private readonly MatchService $matcher,
+        private readonly RunFailsafe $failsafe,
+    ) {}
+
+    public function after(
         string $phase,
         string $shopName,
         int $runId,
         ?int $cronJobId,
     ): void {
-        $chainJob = $cronJobId === null ? null : self::chainTarget($cronJobId);
+        $chainJob = $cronJobId === null ? null : $this->chainTarget($cronJobId);
 
         if ($chainJob !== null) {
-            self::spawnCronChain($chainJob, $shopName);
+            $this->spawnCronChain($chainJob);
             if (in_array($chainJob->phase, ['match', 'validate'], true)) {
-                // The chain covers it — running our own validate too would
-                // produce two validate runs for one scrape.
+
                 return;
             }
         }
 
-        if (!self::autoTriggerEnabled()) {
+        if (! $this->autoTriggerEnabled()) {
             fwrite(STDOUT, "post-phase: disabled via env, skipping\n");
 
             return;
         }
 
         try {
-            $linked = (new MatchService())->isbnMatch($shopName);
+            $linked = $this->matcher->isbnMatch($shopName);
             printf("post-phase: ISBN-match linked %d shop_book(s)\n", $linked);
         } catch (Throwable $e) {
             fwrite(STDERR, "post-phase: ISBN-match failed: {$e->getMessage()}\n");
         }
 
-        self::spawnValidate($shopName);
+        $this->spawnValidate($shopName);
     }
 
-    /**
-     * Runs after a FAILED scan or discover.
-     *
-     * The skipped chain is recorded rather than passed over silently, so a
-     * gap in a cron chain is visible on the run's timeline instead of having
-     * to be inferred from the absence of a run.
-     */
-    public static function chainSkipped(int $runId, ?int $cronJobId, string $reason): void
+    public function chainSkipped(int $runId, ?int $cronJobId, string $reason): void
     {
         if ($cronJobId === null) {
             return;
         }
         try {
-            RunFailsafe::recordEvent($runId, RunEvent::CHAIN_SKIPPED, [
+            $this->failsafe->recordEvent($runId, RunEvent::CHAIN_SKIPPED, [
                 'parent_reason' => $reason,
                 'cron_job_id' => $cronJobId,
             ]);
@@ -88,16 +69,10 @@ final class PostPhase
         }
     }
 
-    /** The job this one chains to, or null. */
-    private static function chainTarget(int $cronJobId): ?CronJob
+    private function chainTarget(int $cronJobId): ?CronJob
     {
         try {
-            $job = CronJob::find($cronJobId);
-            if ($job === null || $job->chain_to_job_id === null) {
-                return null;
-            }
-
-            return CronJob::with('shop')->find((int) $job->chain_to_job_id);
+            return $this->repository->chainTarget($cronJobId);
         } catch (Throwable $e) {
             fwrite(STDERR, "post-phase: chain lookup failed: {$e->getMessage()}\n");
 
@@ -105,73 +80,80 @@ final class PostPhase
         }
     }
 
-    private static function spawnCronChain(CronJob $job, string $parentShop): void
+    private function spawnCronChain(CronJob $job): void
     {
-        $shop = $job->shop->name ?? $parentShop;
-        $cmd = self::crawlerCommand($job->phase, $shop);
+        $shop = $job->shop->name;
+        $phase = $job->phase;
+        $cmd = $this->crawlerCommand($phase, $shop);
         if ($cmd === null) {
             return;
         }
-        if ($job->phase === 'discover' && $job->strategy) {
+        if ($phase === 'discover' && $job->strategy !== null && $job->strategy !== '') {
             $cmd[] = "--strategy={$job->strategy}";
         }
         $cmd[] = "--cron-job-id={$job->id}";
         if (($job->args ?? '') !== '') {
-            foreach (preg_split('/\s+/', trim((string) $job->args), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $arg) {
+            $args = preg_split('/\s+/', trim($job->args ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+            foreach ($args !== false ? $args : [] as $arg) {
                 $cmd[] = $arg;
             }
         }
-        $cmd[] = '--database=' . self::databaseUrl();
+        $cmd[] = '--database='.$this->databaseUrl();
 
-        $log = self::detach($cmd, 'cron-chain', $shop);
-        printf("post-phase: spawned chain job %d (%s) log=%s\n", $job->id, $job->phase, $log);
+        $log = $this->detach($cmd, 'cron-chain', $shop);
+        printf("post-phase: spawned chain job %d (%s) log=%s\n", $job->id, $phase, $log);
     }
 
-    private static function spawnValidate(string $shopName): void
+    private function spawnValidate(string $shopName): void
     {
-        $binary = self::phpBinary();
-        $script = dirname(__DIR__, 2) . '/bin/validate';
-        if ($binary === null || !is_file($script)) {
+        $binary = $this->phpBinary();
+        $script = dirname(__DIR__, 2).'/bin/validate';
+        if ($binary === null || ! is_file($script)) {
             fwrite(STDERR, "post-phase: validate binary not found, skipping\n");
 
             return;
         }
-        $cmd = [$binary, $script, "--shop={$shopName}", '--database=' . self::databaseUrl()];
-        $log = self::detach($cmd, self::SPAWN_CONTEXT, $shopName);
+        $cmd = [$binary, $script, "--shop={$shopName}", '--database='.$this->databaseUrl()];
+        $log = $this->detach($cmd, self::SPAWN_CONTEXT, $shopName);
         printf("post-phase: spawned validate for %s log=%s\n", $shopName, $log);
     }
 
-    /** `crawl <phase>` for the phases this binary implements, else null. */
-    private static function crawlerCommand(string $phase, string $shop): ?array
+    /** @return list<string>|null */
+    private function crawlerCommand(string $phase, string $shop): ?array
     {
-        $binary = self::phpBinary();
+        $binary = $this->phpBinary();
         if ($binary === null) {
             return null;
         }
-        if (in_array($phase, ['scan', 'discover'], true)) {
-            return [$binary, dirname(__DIR__, 2) . '/bin/crawl', $phase, "--shop={$shop}"];
-        }
-        if ($phase === 'validate') {
-            return [$binary, dirname(__DIR__, 2) . '/bin/validate', "--shop={$shop}"];
-        }
-        if ($phase === 'match') {
-            // The full phase, not just step 1. Synthesis stays off unless
-            // MATCH_SYNTHESIS_ENABLED says otherwise — bin/match reads it.
-            return [$binary, dirname(__DIR__, 2) . '/bin/match', "--shop={$shop}"];
-        }
-        fwrite(STDERR, "post-phase: no crawler command for phase '{$phase}'\n");
+        $runPhase = RunPhase::tryFrom($phase);
+        if ($runPhase === null) {
+            fwrite(STDERR, "post-phase: no crawler command for phase '{$phase}'\n");
 
-        return null;
+            return null;
+        }
+
+        $command = in_array($runPhase, [RunPhase::Scan, RunPhase::Discover], true)
+            ? [$binary, dirname(__DIR__, 2).'/artisan', 'crawler:run']
+            : [$binary, dirname(__DIR__, 2).'/bin/'.$runPhase->script()];
+        if (in_array($runPhase, [RunPhase::Scan, RunPhase::Discover], true)) {
+            $command[] = $runPhase->value;
+        }
+        $command[] = "--shop={$shop}";
+
+        return $command;
     }
 
-    /** Detached so the follow-up outlives this process. Returns the log path. */
-    private static function detach(array $cmd, string $role, string $shop): string
+    /** @param list<string> $cmd */
+    private function detach(array $cmd, string $role, string $shop): string
     {
-        $log = self::logPath($role, $shop);
+        $log = $this->logPath($role, $shop);
         $script = sprintf(
             'mkdir -p %s && nohup %s >> %s 2>&1 &',
             escapeshellarg(dirname($log)),
-            implode(' ', array_map('escapeshellarg', $cmd)),
+            implode(' ', array_map(
+                static fn (string $argument): string => escapeshellarg($argument),
+                $cmd,
+            )),
             escapeshellarg($log)
         );
         $process = @proc_open(['/bin/sh', '-c', $script], [], $pipes);
@@ -184,40 +166,36 @@ final class PostPhase
         return $log;
     }
 
-    /**
-     * Where a spawned follow-up writes its output.
-     *
-     * The default is a container path. Running from the CLI on a host, `mkdir
-     * -p` on it fails and the whole spawn dies with it — which silently took
-     * the post-phase validate with it the first time a crawl ran outside a
-     * container. So an unwritable directory falls back to the system temp dir
-     * rather than costing the run its follow-up: the log is a convenience, the
-     * validate is not.
-     */
-    private static function logPath(string $role, string $shop): string
+    private function logPath(string $role, string $shop): string
     {
-        $dir = getenv('SPAWN_LOG_DIR') ?: '/var/log/scrapy_runs';
-        if (! self::isUsableDir($dir)) {
-            $fallback = sys_get_temp_dir() . '/book-scraper-spawn';
+        $configuredDir = getenv('SPAWN_LOG_DIR');
+        $dir = is_string($configuredDir) && $configuredDir !== ''
+            ? $configuredDir
+            : '/var/log/scrapy_runs';
+        if (! $this->isUsableDir($dir)) {
+            $fallback = sys_get_temp_dir().'/book-scraper-spawn';
             fwrite(STDERR, "post-phase: {$dir} is not writable, logging to {$fallback}\n");
             $dir = $fallback;
         }
         $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Ymd-Hisu');
-        $slug = static fn (string $v): string
-            => trim(preg_replace('/[^A-Za-z0-9._-]+/', '-', $v) ?? $v, '-') ?: 'unknown';
+        $slug = static function (string $value): string {
+            $normalized = trim(
+                preg_replace('/[^A-Za-z0-9._-]+/', '-', $value) ?? $value,
+                '-',
+            );
+
+            return $normalized !== '' ? $normalized : 'unknown';
+        };
 
         return sprintf('%s/spawn-%s-%s-%s.log', rtrim($dir, '/'), $stamp, $slug($role), $slug($shop));
     }
 
-    /** Exists and is writable, or can be created. */
-    private static function isUsableDir(string $dir): bool
+    private function isUsableDir(string $dir): bool
     {
         if (is_dir($dir)) {
             return is_writable($dir);
         }
 
-        // Walk up to the nearest existing ancestor: mkdir -p can only create
-        // the missing part if that part is writable.
         $parent = \dirname($dir);
         while ($parent !== '/' && $parent !== '.' && ! is_dir($parent)) {
             $parent = \dirname($parent);
@@ -226,7 +204,7 @@ final class PostPhase
         return is_writable($parent);
     }
 
-    private static function phpBinary(): ?string
+    private function phpBinary(): ?string
     {
         foreach ([getenv('CRAWLER_PHP_BINARY'), PHP_BINARY] as $candidate) {
             if (is_string($candidate) && $candidate !== '' && is_executable($candidate)) {
@@ -237,36 +215,19 @@ final class PostPhase
         return null;
     }
 
-    /**
-     * The database this process is using — passed explicitly so a follow-up
-     * cannot end up on a different one than the crawl it follows.
-     */
-    private static function databaseUrl(): string
+    private function databaseUrl(): string
     {
-        $dsn = Database::bootedDsn();
-        if ($dsn !== null) {
-            return $dsn;
-        }
-        $c = DB::connection()->getConfig();
-
-        return sprintf(
-            'postgresql://%s:%s@%s:%s/%s',
-            rawurlencode((string) ($c['username'] ?? '')),
-            rawurlencode((string) ($c['password'] ?? '')),
-            $c['host'] ?? '127.0.0.1',
-            $c['port'] ?? 5432,
-            $c['database'] ?? ''
-        );
+        return $this->repository->databaseUrl();
     }
 
-    private static function autoTriggerEnabled(): bool
+    private function autoTriggerEnabled(): bool
     {
-        // Legacy alias kept so an existing deploy's env keeps working.
+
         $raw = getenv('POST_PHASE_AUTO_TRIGGER');
-        if (!is_string($raw) || $raw === '') {
+        if (! is_string($raw) || $raw === '') {
             $raw = getenv('POST_SCAN_AUTO_TRIGGER');
         }
-        if (!is_string($raw) || $raw === '') {
+        if (! is_string($raw) || $raw === '') {
             return true;
         }
 

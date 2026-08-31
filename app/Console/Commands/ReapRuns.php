@@ -7,20 +7,6 @@ namespace App\Console\Commands;
 use App\Runs\Reaper;
 use Illuminate\Console\Command;
 
-/**
- * Fails runs whose process died.
- *
- * The Python dashboard runs this on an asyncio timer inside its own process.
- * PHP has no equivalent event loop, and putting it on the read path was
- * rejected on purpose: this dashboard's GET endpoints are read-only, and a
- * sweep triggered by whoever happens to load the runs page makes a write
- * depend on browsing. So it is a command — run it under a supervisor, a cron
- * entry, or `--watch`.
- *
- * Without something running it, a crawl that dies without unwinding leaves
- * its row `running` forever: the runs list shows it live, and the shop+phase
- * preflight refuses to start a replacement.
- */
 final class ReapRuns extends Command
 {
     protected $signature = 'runs:reap
@@ -29,15 +15,19 @@ final class ReapRuns extends Command
 
     protected $description = 'Fail runs whose heartbeat has gone stale';
 
+    public function __construct(private readonly Reaper $reaper)
+    {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
         $interval = max(5, (int) $this->option('interval'));
 
         do {
-            $killed = Reaper::sweep();
+            $killed = $this->reaper->sweep();
             foreach ($killed as $run) {
-                // WARNING-level in Python, and the Grafana panel greps for
-                // this phrasing — keep the wording recognisable.
+
                 $this->warn(sprintf(
                     'Reaper killed run #%d shop=%s phase=%s close_reason=%s',
                     $run['run_id'],

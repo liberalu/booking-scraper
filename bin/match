@@ -3,29 +3,14 @@
 
 declare(strict_types=1);
 
-/**
- * Run the match phase for a shop.
- *
- *   bin/match --shop=vaga
- *   bin/match --shop=vaga --synthesis     # include step 3
- *   bin/match --shop=vaga --run-id=123    # attribute to an existing run
- *
- * Steps 1 and 2 (ISBN linkage, author backfill) always run. Step 3 (canonical
- * synthesis from shop data) is off unless asked for, matching
- * MATCH_SYNTHESIS_ENABLED=0 on the Python side — see MatchService for why.
- *
- * Until now the only way to reach any of this was `bin/validate --match-first`,
- * which runs step 1 alone. A cron chain targeting `match` therefore did
- * two-thirds of nothing.
- */
-
 use App\Crawler\RunLifecycle;
-use App\Support\Database;
-use App\Models\ScrapeRun;
-use App\Models\Shop;
+use App\Repositories\CliRunRepository;
+use App\Repositories\DatabaseRepositoryFactory;
+use App\Repositories\ShopRepository;
 use App\Services\MatchService;
+use App\Support\Database;
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
 $opts = [];
 foreach (array_slice($argv, 1) as $arg) {
@@ -35,7 +20,7 @@ foreach (array_slice($argv, 1) as $arg) {
 }
 
 if (isset($opts['help'])) {
-    fwrite(STDOUT, <<<TXT
+    fwrite(STDOUT, <<<'TXT'
     Usage: bin/match --shop=vaga [options]
 
       --synthesis      also run step 3 (synthesise canonical books from shop
@@ -51,10 +36,9 @@ if (isset($opts['help'])) {
 $shopName = $opts['shop'] ?? 'vaga';
 
 Database::boot($opts['database'] ?? null);
-$shop = Shop::byName($shopName);
+$repositoryFactory = new DatabaseRepositoryFactory;
+$shop = (new ShopRepository)->byName($shopName);
 
-// A supplied run id is how the differential harness makes both stacks write
-// against the same row.
 $lifecycle = null;
 $runId = isset($opts['run-id']) ? (int) $opts['run-id'] : null;
 if ($runId === null) {
@@ -66,10 +50,11 @@ $synthesis = isset($opts['synthesis']) ? true : null;
 printf("match %s (run %d)%s\n", $shopName, $runId, $synthesis ? ' with synthesis' : '');
 
 try {
-    $counters = (new MatchService())->run($shopName, $synthesis);
+    $counters = (new MatchService($repositoryFactory->matching()))
+        ->run($shopName, $synthesis);
 } catch (Throwable $e) {
     $lifecycle?->fail($e);
-    fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
+    fwrite(STDERR, 'error: '.$e->getMessage()."\n");
     exit(1);
 }
 
@@ -77,8 +62,7 @@ foreach ($counters as $key => $count) {
     printf("  %-20s %6d\n", $key, $count);
 }
 
-// items_updated carries the linkage count, as the Python spider records it.
-ScrapeRun::whereKey($runId)->update(['items_updated' => $counters['books_linked']]);
+(new CliRunRepository)->setItemsUpdated($runId, $counters['books_linked']);
 $lifecycle?->progress(
     processed: $counters['books_linked'],
     added: $counters['books_synthesized'],

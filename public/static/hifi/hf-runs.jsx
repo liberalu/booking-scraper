@@ -1,11 +1,9 @@
-// Hi-fi Runs list + detail
 
 function HFRuns({ nav, goto }) {
   const HF = getHF();
   const statusTone = { running:'ok', paused:'warn', stopping:'warn', completed:'neutral', failed:'err', queued:'warn' };
   const typeTone = { full: 'accent', sitemap: 'neutral', discovered: 'muted' };
 
-  // Filter state — backend handles the actual filtering and pagination.
   const shopNames = useShopNames();
   const [q, setQ] = React.useState('');
   const [shop, setShop]     = React.useState('all');
@@ -15,7 +13,6 @@ function HFRuns({ nav, goto }) {
   const [page, setPage]     = React.useState(1);
   const PER_PAGE = 30;
 
-  // Reset to page 1 whenever a filter changes.
   React.useEffect(() => { setPage(1); }, [q, shop, phase, status, when]);
 
   const [data, setData] = React.useState({
@@ -42,7 +39,6 @@ function HFRuns({ nav, goto }) {
   }, [q, shop, phase, status, when, page]);
 
 
-  // Schedule info — "Next run in Xh", "Last success Xh ago" badges.
   const [scheduleItems, setScheduleItems] = React.useState([]);
   React.useEffect(() => {
     let cancelled = false;
@@ -69,7 +65,7 @@ function HFRuns({ nav, goto }) {
   };
 
   const allRows = data.runs;
-  const filtered = allRows;  // backend already filtered; keep alias for table render
+  const filtered = allRows;
 
   const activeCount =
     (shop!=='all'?1:0) + (phase!=='all'?1:0) +
@@ -85,7 +81,7 @@ function HFRuns({ nav, goto }) {
         <HFButton variant="primary" onClick={() => window.HF_APP && window.HF_APP.openNewRun()}><span style={{display:'flex'}}>{HF_ICONS.play}</span> New run</HFButton>
       </>}
     >
-      {/* Schedule badges — "Next run in Xh" + "Last success Xh ago" */}
+
       {scheduleItems.length > 0 && (
         <div style={{display:'flex', gap:8, marginBottom:'var(--hf-gap)', flexWrap:'wrap'}}>
           {scheduleItems.map((s, i) => (
@@ -101,7 +97,7 @@ function HFRuns({ nav, goto }) {
         </div>
       )}
 
-      {/* Summary strip — clickable filter shortcuts */}
+
       <HFKpiStrip items={[
         { label:'Running now', value: String(data.kpis.running_now), delta:<span style={{color:'var(--hf-ok-ink)'}}>● live</span>,
           onClick: () => { setStatus('running'); setWhen('any'); } },
@@ -111,7 +107,7 @@ function HFRuns({ nav, goto }) {
           onClick: clearAll },
       ]}/>
 
-      {/* Filters — overflow:visible so the dropdown isn't clipped by the card */}
+
       <HFCard style={{ marginBottom: 'var(--hf-gap)', overflow: 'visible' }} padding={12}>
         <HFFilterBar right={<>
           <span style={{fontSize:12, color: activeCount? 'var(--hf-accent-ink)' : 'var(--hf-ink4)', fontFamily:'var(--hf-mono)', fontVariantNumeric:'tabular-nums', fontWeight: activeCount? 500 : 400}}>
@@ -214,7 +210,7 @@ function HFRuns({ nav, goto }) {
         )}
       </HFCard>
 
-      {/* Pagination footer */}
+
       {(data.total || 0) > 0 && (
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:14, fontSize:13, color:'var(--hf-ink3)'}}>
           <span>
@@ -272,8 +268,6 @@ function HFRuns({ nav, goto }) {
   );
 }
 
-// Honest UI: the suffix tells the operator how trustworthy the throttle
-// number is, based on how it was measured. See live observability spec.
 const DELAY_SOURCE_LABELS = {
   autothrottle:      { suffix: 'autothrottle',
     title: 'Adaptive delay enforced inside HttpxMiddleware. Drifts toward response_latency / TARGET_CONCURRENCY, bounded by DOWNLOAD_DELAY (floor) and AUTOTHROTTLE_MAX_DELAY (ceiling).' },
@@ -319,16 +313,13 @@ function _fmtAge(seconds) {
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 
-// ── Run-event display metadata ──
-// `label` is shown as the row title. `defaultTone` is overridden in
-// `_eventTone` for events whose meaning depends on payload (e.g. failed
-// from a clean operator-stop is informational, not an error).
 const RUN_EVENT_META = {
   started:               { glyph: '▶',  label: 'Run started' },
   paused:                { glyph: '⏸',  label: 'Paused' },
   resumed:               { glyph: '▶',  label: 'Resumed' },
   stop_requested:        { glyph: '⏹',  label: 'Stop pressed' },
   retry_failures:        { glyph: '↻',  label: 'Retry queued' },
+  request_retried:       { glyph: '⟳',  label: 'Request retried' },
   rerun:                 { glyph: '⟲',  label: 'Re-run triggered' },
   continued:             { glyph: '▶',  label: 'Continued' },
   resumed_after_failure: { glyph: '⤴',  label: 'Picked up earlier run' },
@@ -338,7 +329,6 @@ const RUN_EVENT_META = {
   failed:                { glyph: '✗',  label: 'Failed' },
 };
 
-// Pretty labels for the phase value carried in `started` payloads.
 const PHASE_LABELS = {
   scan: 'Scan',
   discover_sitemap: 'Discover · sitemap',
@@ -349,7 +339,6 @@ const PHASE_LABELS = {
   discover_ibiblioteka_api: 'Discover · Ibiblioteka API',
 };
 
-// Pretty labels for close_reason values.
 const CLOSE_REASON_LABELS = {
   finished: 'Finished cleanly',
   shutdown: 'Container shutdown',
@@ -367,8 +356,6 @@ function _nfmt(n) {
   try { return Number(n).toLocaleString(); } catch (e) { return String(n); }
 }
 
-// Render a friendly one-liner for an event. Falls back to the event_type
-// label alone when there's nothing meaningful to add.
 function _eventSummary(eventType, payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   switch (eventType) {
@@ -400,6 +387,11 @@ function _eventSummary(eventType, payload) {
       const base = `${_nfmt(n)} URL${n === 1 ? '' : 's'} reset`;
       return filters.length ? `${base} (${filters.join(', ')})` : base;
     }
+    case 'request_retried': {
+      const status = p.http_status != null ? `HTTP ${p.http_status}` : (p.error || 'transport error');
+      const attempt = p.attempt != null ? `attempt ${p.attempt}` : 'retry';
+      return `${status} · ${attempt}${p.url ? ` · ${p.url}` : ''}`;
+    }
     case 'rerun':
       return p.previous_status ? `was ${p.previous_status}` : '';
     case 'continued':
@@ -416,9 +408,6 @@ function _eventSummary(eventType, payload) {
       return parts.join(' · ');
     }
     case 'subdivided': {
-      // Emitted when a 5xx forces the spider to retry a heavy
-      // pageSize=N request as N smaller sub-requests, OR when a
-      // depth=1 sub-request itself 5xx'd and was marked retryable.
       const where = p.page != null ? `page ${p.page}` : '';
       const size = p.page_size != null ? `size ${p.page_size}` : '';
       const status = p.http_status != null ? `HTTP ${p.http_status}` : '';
@@ -436,14 +425,12 @@ function _eventSummary(eventType, payload) {
     case 'paused':
     case 'resumed':
     case 'stop_requested':
-      return ''; // label says it all
+      return '';
     default:
       return '';
   }
 }
 
-// Tone is derived per-event with a payload-aware override for `failed`:
-// an operator-stopped run is conceptually "successful" — don't flag it red.
 function _eventTone(ev) {
   if (ev.event_type === 'completed') return 'ok';
   if (ev.event_type === 'failed') {
@@ -455,7 +442,6 @@ function _eventTone(ev) {
   return 'accent';
 }
 
-// "10:36" / "10:36 (2m ago)". The full timestamp is on the title attr.
 function _fmtEventTime(iso) {
   if (!iso) return { short: '—', full: '—', age: '', absolute: '' };
   try {
@@ -490,13 +476,8 @@ function HFRunTimelineCard({ events, style }) {
   const LIMIT = 10;
   const [expanded, setExpanded] = React.useState(false);
   const isClipped = list.length > LIMIT;
-  // Latest-N when clipped: operators care about what just happened. Original
-  // list is oldest-first; slicing from the tail preserves that ordering.
   const visible = !expanded && isClipped ? list.slice(-LIMIT) : list;
 
-  // Map tone → log level (INFO / WARN / ERROR), with an associated text
-  // color from the light-mode semantic ramp. Reuses the same tones already
-  // returned by _eventTone so behavior stays consistent.
   const levelFor = (tone) => {
     if (tone === 'err')  return { label: 'ERROR', color: 'var(--hf-err-ink)' };
     if (tone === 'warn') return { label: 'WARN ', color: 'var(--hf-warn-ink)' };
@@ -535,7 +516,6 @@ function HFRunTimelineCard({ events, style }) {
             const lvl = levelFor(tone);
             const summary = _eventSummary(ev.event_type, ev.payload);
             const t = _fmtEventTime(ev.created_at);
-            // Logger format: <YYYY-MM-DD HH:MM:SS>  <LEVEL>  <label> · <summary>
             return (
               <div key={ev.id}>
                 <span style={{color: 'var(--hf-ink4)', fontVariantNumeric: 'tabular-nums'}} title={t.absolute}>{t.full}</span>
@@ -575,10 +555,6 @@ function HFRunTimelineCard({ events, style }) {
 }
 
 
-// ─── History card — URL queue / discovered-URLs table w/ filters & paging ──
-// All state stays in HFRunDetail so applyGroupFilter (called from the
-// failures card) can reach the setters. Component is pure-render given
-// that state.
 function HFRunHistoryCard({
   urlData, retryCap = 3, historyRef, goto,
   urlStatus, setUrlStatus,
@@ -808,12 +784,11 @@ function HFRunHistoryCard({
                 </span>
                 {urlData.source === 'live' ? (
                   <>
-                    {/* Disc. URL — column 3, right after URL */}
+
                     {u.discovered_url_id != null ? (
                       <a href={(window.HF_BUILD_PATH && window.HF_BUILD_PATH('url-detail', {id: String(u.discovered_url_id)})) || '#'}
                          onClick={(e)=>{ if (e.metaKey||e.ctrlKey||e.shiftKey) return; e.preventDefault(); goto('url-detail', {id: String(u.discovered_url_id)});}}
                          style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-accent-ink)', fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:'none'}}>
-                        #{u.discovered_url_id}
                       </a>
                     ) : (
                       <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink5)'}}>—</span>
@@ -823,8 +798,6 @@ function HFRunHistoryCard({
                     <span style={{fontFamily:'var(--hf-mono)', fontSize:12, color:'var(--hf-ink4)'}}>{u.url_type}</span>
                     <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink4)', fontVariantNumeric:'tabular-nums'}}>{fmtDur(u.duration_ms)}</span>
                     {(() => {
-                      // Humanise response_bytes; highlight suspiciously small successful
-                      // responses (< 1 KB on a 2xx) — common signature of an anti-bot stub.
                       const b = u.response_bytes;
                       if (b == null) {
                         return <span style={{fontFamily:'var(--hf-mono)', fontSize:11, color:'var(--hf-ink5)', fontVariantNumeric:'tabular-nums'}}>—</span>;
@@ -854,9 +827,6 @@ function HFRunHistoryCard({
                       </>;
                     })()}
                     {(() => {
-                      // Per-URL retry counter. Cap surfaced via
-                      // /api/runs/{id}/live (book_scraper.settings.RETRY_CAP)
-                      // and threaded down as the `retryCap` prop.
                       const cap = retryCap;
                       const attempts = u.attempts ?? 0;
                       const capped = attempts >= cap;
@@ -948,9 +918,6 @@ function HFRunHistoryCard({
 }
 
 
-// ─── Failures card — server-aggregated failure groups w/ retry & ack ──
-// Owns its own disclosure state (expanded group + which example detail is
-// open). All actions go to handlers passed in by the parent.
 function HFRunFailuresCard({
   failureGroups, retryCap = 3, showAckedFailures, setShowAckedFailures,
   actionPending, retryRun, ackGroup, applyGroupFilter,
@@ -961,9 +928,6 @@ function HFRunFailuresCard({
 
   if (failureGroups.length === 0 && !showAckedFailures) return null;
 
-  // Sum unacked / acked across visible groups so the header reflects what's
-  // on screen given the toggle. Falls back to legacy `count` when older
-  // payloads lack the explicit split.
   const sumUnacked = failureGroups.reduce(
     (a, g) => a + (g.unacked_count ?? g.count ?? 0), 0);
   const sumAcked = failureGroups.reduce(
@@ -1079,9 +1043,6 @@ function HFRunFailuresCard({
                 <div style={{padding: `4px var(--hf-card-p) 14px`, paddingLeft: 'calc(var(--hf-card-p) + 24px)'}}>
                   <div style={{display:'flex', flexDirection:'column', gap: 6, marginBottom: 8}}>
                     {g.examples.map((ex, j) => {
-                      // Older /live payloads returned plain URL strings;
-                      // newer ones return { url, error_detail }. Accept both
-                      // so a stale browser tab doesn't break.
                       const exUrl = typeof ex === 'string' ? ex : ex?.url ?? '';
                       const exDetail = typeof ex === 'string' ? null : ex?.error_detail ?? null;
                       const detailKey = `${i}-${j}`;
@@ -1142,8 +1103,6 @@ function HFRunFailuresCard({
 }
 
 
-// ─── In-flight card — what's happening RIGHT NOW (only when live) ────
-// Pure-render given the current liveData snapshot + derived counts.
 function HFRunInFlightCard({
   liveData, runStatus, workerCount, inFlightFirst,
   liveHealth, healthTone, liveRate, rateDone, rateFailed,
@@ -1161,7 +1120,7 @@ function HFRunInFlightCard({
       style={{marginBottom: 'var(--hf-gap)'}}
     >
       <div style={{padding: 'var(--hf-card-p)', display:'grid', gridTemplateColumns:'1.4fr 1fr', gap: 'var(--hf-gap)', alignItems:'stretch'}}>
-        {/* Active fetch tile */}
+
         <div style={{
           background: 'var(--hf-accent-soft)', border: `1px solid ${'var(--hf-accent-border)'}`,
           borderRadius: 'var(--hf-r2)', padding: '14px 16px',
@@ -1221,7 +1180,7 @@ function HFRunInFlightCard({
           )}
         </div>
 
-        {/* Rate (last 60s) — done vs failed */}
+
         <div style={{display:'flex', flexDirection:'column', gap: 10}}>
           <div style={{fontSize: 11, fontWeight: 600, color: 'var(--hf-ink4)', letterSpacing: 0.6, textTransform:'uppercase'}}>
             Rate · last {liveRate.window_s}s
@@ -1258,10 +1217,6 @@ function HFRunInFlightCard({
 }
 
 
-// ─── Books card — books added/updated by this run, paginated ────────
-// Self-contained: owns its own tab/page state + data fetch. Parent only
-// passes the run id, the added/updated counts (used to choose default
-// inner tab), and the SPA navigator.
 function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
   const HF = getHF();
   const [booksTab, setBooksTab] = React.useState(null);
@@ -1269,13 +1224,11 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
   const [booksPerPage, setBooksPerPage] = React.useState(25);
   const [booksData, setBooksData] = React.useState(null);
 
-  // Default inner tab once counts are known: prefer 'added' if any added, else 'updated'.
   React.useEffect(() => {
     if (booksTab !== null) return;
     setBooksTab((itemsAdded ?? 0) > 0 ? 'added' : 'updated');
   }, [itemsAdded, itemsUpdated, booksTab]);
 
-  // Reset page when the inner tab or per-page selection changes.
   React.useEffect(() => { setBooksPage(1); }, [booksTab, booksPerPage]);
 
   React.useEffect(() => {
@@ -1423,7 +1376,6 @@ function HFRunBooksCard({ runId, itemsAdded, itemsUpdated, goto }) {
 }
 
 
-// ───────────────────────────── Run Detail ─────────────────────────────
 
 function HFRunDetail({ nav, goto, params }) {
   const HF = getHF();
@@ -1431,15 +1383,12 @@ function HFRunDetail({ nav, goto, params }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
-  // Active section tab — persisted in the URL so reload + sharing preserve view.
   const _initialTab = (() => {
     const t = new URLSearchParams(window.location.search).get('tab');
     return ['general', 'history', 'books'].includes(t) ? t : 'general';
   })();
   const [tab, setTab] = React.useState(_initialTab);
 
-  // URL queue / history state (separate fetch — its own filter & pagination)
-  // Persisted in the URL query string so reload preserves view.
   const _initialUrlParams = (() => {
     const sp = new URLSearchParams(window.location.search);
     const httpRaw = sp.get('url_http');
@@ -1471,13 +1420,11 @@ function HFRunDetail({ nav, goto, params }) {
   const [urlHttpIsNull, setUrlHttpIsNull] = React.useState(_initialUrlParams.httpIsNull);
   const [urlData, setUrlData] = React.useState(null);
   const historyRef = React.useRef(null);
-  // Reset to page 1 when filter / sort / per-page changes (but not when paginating).
   React.useEffect(() => { setUrlPage(1); }, [
     runId, urlStatus, urlSort, urlOrder, urlPerPage,
     urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull,
   ]);
 
-  // Mirror state into the URL bar without adding history entries.
   React.useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (tab !== 'general') sp.set('tab', tab); else sp.delete('tab');
@@ -1513,28 +1460,16 @@ function HFRunDetail({ nav, goto, params }) {
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     load();
-    // Re-poll while the run is alive so elapsed / errors / items / urls_processed
-    // stay current. Stops as soon as the status flips to a terminal value.
     const status = data?.status;
     const isActive = status === 'running' || status === 'paused' || status === 'stopping';
     const timer = isActive ? setInterval(load, 2000) : null;
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [runId, data?.status]);
 
-  // Live observability — poll /api/runs/{id}/live every 2s while running.
-  // Once we've polled at least once, treat the live endpoint as the
-  // source of truth for status (the parent /api/runs/{id} fetch is
-  // one-shot and would otherwise keep us polling a terminal run forever).
-  // Rolling throughput history: append reqPerMin on each live poll tick.
-  // Keeps last 60 samples (2s cadence → ~2 min of history). Frozen once
-  // the run reaches terminal state — postmortem chart stays visible.
   const THROUGHPUT_MAX_SAMPLES = 60;
   const [throughputHistory, setThroughputHistory] = React.useState([]);
 
   const [liveData, setLiveData] = React.useState(null);
-  // Failures card: show acknowledged groups too. Default off — triage stays
-  // focused on what hasn't been seen yet. Flipping on re-fetches /live with
-  // include_acked=true.
   const [showAckedFailures, setShowAckedFailures] = React.useState(false);
   React.useEffect(() => {
     if (!runId || !data) return;
@@ -1542,16 +1477,9 @@ function HFRunDetail({ nav, goto, params }) {
     const isActive = currentStatus === 'running' || currentStatus === 'stopping' || currentStatus === 'paused';
     const liveUrl = `/api/runs/${runId}/live${showAckedFailures ? '?include_acked=true' : ''}`;
     if (!isActive) {
-      // Run reached terminal state. Mirror the status into `data` for
-      // pills/KPIs, then do ONE final fetch to populate `liveData` if we
-      // never polled (e.g. page loaded against an already-finished run).
-      // Keep the panel rendered with the last known state — operators
-      // want the post-mortem snapshot, not a blank panel.
       if (liveData?.status && data.status !== liveData.status) {
         setData(d => d ? { ...d, status: liveData.status } : d);
       }
-      // Always re-fetch on terminal runs when showAckedFailures flips so the
-      // toggle works post-mortem too, not just for live runs.
       let cancelled = false;
       fetch(liveUrl)
         .then(r => r.ok ? r.json() : null)
@@ -1569,19 +1497,14 @@ function HFRunDetail({ nav, goto, params }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [runId, data?.status, liveData?.status, showAckedFailures]);
 
-  // Accumulate throughput samples whenever liveData arrives.
-  // For terminal runs a single postmortem fetch arrives; pre-seed the
-  // history with a flat line so the chart renders instead of a placeholder.
   React.useEffect(() => {
     if (!liveData) return;
     const rate = liveData.rate || { done: 0, window_s: 60 };
     const ratePerMin = rate.window_s > 0 ? Math.round((rate.done / rate.window_s) * 60) : 0;
     setThroughputHistory(prev => {
-      if (prev.length === 0 && ratePerMin === 0) return prev; // nothing to show
+      if (prev.length === 0 && ratePerMin === 0) return prev;
       const next = [...prev, ratePerMin];
       if (next.length === 1) {
-        // Duplicate so HFAreaChart has at least 2 points; the flat line
-        // honestly represents "this is the last-known rate in the 60s window".
         return [ratePerMin, ratePerMin];
       }
       return next.length > THROUGHPUT_MAX_SAMPLES
@@ -1608,7 +1531,6 @@ function HFRunDetail({ nav, goto, params }) {
       .then(d => { if (!cancelled) setUrlData(d); })
       .catch(() => {});
     load();
-    // Auto-refresh while the run is still live.
     const isLive = data?.status === 'running';
     const id = isLive ? setInterval(load, 3000) : null;
     return () => { cancelled = true; if (id) clearInterval(id); };
@@ -1617,34 +1539,21 @@ function HFRunDetail({ nav, goto, params }) {
 
   const id = data?.id ?? runId;
   const [actionPending, setActionPending] = React.useState(false);
-  // Action feedback flows through window.HF_APP.toast — short helper keeps
-  // the call sites tight. Falls back to no-op if the host isn't mounted yet.
   const toast = React.useCallback((opts) => {
     if (window.HF_APP && typeof window.HF_APP.toast === 'function') {
       window.HF_APP.toast(opts);
     }
   }, []);
-  // (Failure-group disclosure state lives inside HFRunFailuresCard now.)
-  // Confirm-action dialog state. `confirmDialog` carries title/body/onConfirm
-  // for stop/rerun/continue/retry; `ackDialog` carries the failure group for
-  // the labelled-note ack flow (replaces window.prompt).
   const [confirmDialog, setConfirmDialog] = React.useState(null);
   const [ackDialog, setAckDialog] = React.useState(null);
   const closeConfirm = React.useCallback(() => setConfirmDialog(null), []);
   const closeAck = React.useCallback(() => setAckDialog(null), []);
-  // Drives every group-aware button on the Failures card so behavior is
-  // uniform — pass `null` to clear (card-level "all groups" link) or a
-  // failure-group dict to narrow History to that bucket.
   const applyGroupFilter = React.useCallback((group) => {
     setUrlReason(group?.reason ?? '');
     setUrlReasonIsNull(!!group?.reason_is_null);
     setUrlHttp(group?.http ?? null);
     setUrlHttpIsNull(!!group?.http_is_null);
     setUrlStatus('failed');
-    // The History card lives in the History tab — switch to it first, then
-    // wait for React to mount the card before scrolling. Double rAF gives
-    // the new tab content one paint to appear in the DOM before
-    // historyRef.current resolves.
     setTab('history');
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -1652,9 +1561,6 @@ function HFRunDetail({ nav, goto, params }) {
       });
     });
   }, []);
-  // Retry all failed URLs (group=null) or just one bucket. POST /retry
-  // resets matching rows to `pending`; for terminal runs it also
-  // re-spawns the spider, mirroring /continue.
   const doRetry = React.useCallback((group) => {
     if (!id) return;
     const params = new URLSearchParams();
@@ -1674,13 +1580,8 @@ function HFRunDetail({ nav, goto, params }) {
           message: group ? 'Group queued for retry' : 'Failed URLs queued for retry',
           detail: n != null ? `${n.toLocaleString()} URL${n === 1 ? '' : 's'} reset to pending.` : '',
         });
-        // Refresh the three live data sources so the Failures card,
-        // History card, and run-level KPIs all reflect the reset.
         fetch(`/api/runs/${id}`).then(r => r.ok ? r.json() : null).then(rd => { if (rd) setData(rd); });
         fetch(`/api/runs/${id}/live`).then(r => r.ok ? r.json() : null).then(ld => { if (ld) setLiveData(ld); });
-        // The urlData fetch effect is keyed on filter state — filters
-        // didn't change here, so re-fetch directly with the current
-        // params to pick up the row-status flip.
         const sp = new URLSearchParams({
           status: urlStatus,
           page: String(urlPage),
@@ -1701,7 +1602,6 @@ function HFRunDetail({ nav, goto, params }) {
   }, [id, urlStatus, urlPage, urlPerPage, urlSort, urlOrder,
       urlReason, urlReasonIsNull, urlHttp, urlHttpIsNull, closeConfirm, toast]);
 
-  // Open the styled confirm dialog before kicking off a retry.
   const retryRun = React.useCallback((group) => {
     if (!id) return;
     const label = group
@@ -1717,9 +1617,6 @@ function HFRunDetail({ nav, goto, params }) {
       onConfirm: () => doRetry(group),
     });
   }, [id, data?.status, doRetry]);
-  // Acknowledge a failure-card group: flips all matching scrape_failures
-  // events to lifecycle_state='already_seen' so the bucket stops showing
-  // up on the card. PR 2d of the migration.
   const doAck = React.useCallback((group, note) => {
     if (!id || !group) return;
     const params = new URLSearchParams();
@@ -1734,13 +1631,11 @@ function HFRunDetail({ nav, goto, params }) {
       .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t || r.statusText); }))
       .then(_d => {
         toast({ tone: 'ok', message: 'Group acknowledged', detail: label });
-        // Refresh the live failure_groups so the bucket disappears.
         fetch(`/api/runs/${id}/live`).then(r => r.ok ? r.json() : null).then(ld => { if (ld) setLiveData(ld); });
       })
       .catch(e => toast({ tone: 'err', message: 'Acknowledge failed', detail: String(e.message || e) }))
       .finally(() => { setActionPending(false); closeAck(); });
   }, [id, closeAck, toast]);
-  // Open the ack-group dialog (replaces window.prompt).
   const ackGroup = React.useCallback((group) => {
     if (!id || !group) return;
     setAckDialog({ group });
@@ -1800,7 +1695,7 @@ function HFRunDetail({ nav, goto, params }) {
         const newId = d && d.id;
         toast({ tone: 'ok', message: 'New run created', detail: newId ? `Run #${newId} is queued for the same shop+phase.` : '' });
         goto('runs');
-      })  // back to list — new run will appear
+      })
       .catch(e => toast({ tone: 'err', message: 'Re-run failed', detail: String(e.message || e) }))
       .finally(() => { setActionPending(false); closeConfirm(); });
   }, [id, goto, closeConfirm, toast]);
@@ -1819,9 +1714,6 @@ function HFRunDetail({ nav, goto, params }) {
     fetch(`/api/runs/${id}/continue`, {method:'POST'})
       .then(r => r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText);}))
       .then(_d => {
-        // Drop the stale terminal-state liveData snapshot so the live-poll
-        // effect (which treats liveData.status as source of truth) doesn't
-        // immediately mirror 'failed' back over our optimistic 'running'.
         setLiveData(null);
         setThroughputHistory([]);
         setData(prev => prev ? {...prev, status: 'running', close_reason: null, finished_at: null} : prev);
@@ -1879,8 +1771,6 @@ function HFRunDetail({ nav, goto, params }) {
   };
   const isTerminal = runStatus === 'completed' || runStatus === 'failed';
   const closeReason = data.close_reason || null;
-  // Prefer the live breakdown — `data.pending_count` lags behind the queue
-  // state on freshly-failed runs, which would hide the Continue button.
   const pendingCount = data.pending_count ?? urlData?.breakdown?.pending ?? 0;
   const canContinue = (
     runStatus === 'failed' &&
@@ -1892,15 +1782,11 @@ function HFRunDetail({ nav, goto, params }) {
     runStatus === 'completed' ? 'ok' : 'neutral'
   );
 
-  // ── Worker / in-flight ──
-  // Stale `processing` rows linger in the DB after a reaped failure, so
-  // ignore in_flight for terminal runs to avoid a misleading worker count.
   const isTerminalForLive = runStatus === 'completed' || runStatus === 'failed';
   const inFlight = isTerminalForLive ? [] : (liveData?.in_flight || []);
   const inFlightFirst = inFlight[0];
   const workerCount = inFlight.length;
 
-  // ── Rate (last 60s) ──
   const liveRate = liveData?.rate || { window_s: 60, done: 0, failed: 0 };
   const rateDone = liveRate.done || 0;
   const rateFailed = liveRate.failed || 0;
@@ -1908,18 +1794,12 @@ function HFRunDetail({ nav, goto, params }) {
   const failPct = rateTotal > 0 ? Math.round((rateFailed / rateTotal) * 100) : 0;
   const ratePerMin = liveRate.window_s > 0 ? Math.round((rateDone / liveRate.window_s) * 60) : 0;
 
-  // ── Failure groups — server-side aggregation covers all error types.
-  // Previously computed client-side from recent_failures (capped at 10),
-  // which silently excluded error types not in the 10 most-recent rows.
   const failureGroups = liveData?.failure_groups || [];
 
-  // Backend single source of truth (book_scraper.settings.RETRY_CAP).
-  // Falls back to 3 only if the API hasn't responded yet.
   const retryCap = liveData?.retry_cap ?? 3;
 
   const validationIssueCount = (data.issues || []).reduce((s, g) => s + g.count, 0);
 
-  // ── Health pill (in-flight panel header) ──
   const liveHealth = liveData?.health || null;
   const healthTone = (
     liveHealth === 'healthy' ? 'ok' :
@@ -1927,18 +1807,9 @@ function HFRunDetail({ nav, goto, params }) {
     liveHealth === 'dead'    ? 'err'  : 'neutral'
   );
 
-  // ── Tabs for History card map straight onto urlStatus ──
   const tabCounts = urlData?.breakdown || {};
-  // Always sum the breakdown — urlData.total reflects the *active filter*'s
-  // row count, not the grand total, so it's wrong for the "all" pill when a
-  // filtered tab is selected.
   const tabAllCount = Object.values(tabCounts).reduce((a, b) => a + (b || 0), 0);
 
-  // ── Progress numerator + error count ──
-  // The run row's `urls_processed` and `error_count` counters lag the
-  // actual queue state (spider-driven, reaped/aborted rows often
-  // missed). Prefer breakdown.done+failed when we have it — that's the
-  // honest "what really happened" number. Falls back to the run row.
   const terminalCount =
     (tabCounts.done ?? 0) + (tabCounts.failed ?? 0);
   const progressNumerator = terminalCount > 0
@@ -1953,10 +1824,7 @@ function HFRunDetail({ nav, goto, params }) {
       title={<span style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
         <span style={{fontFamily:'var(--hf-mono)', fontSize:24, fontWeight:600, color:'var(--hf-ink)'}}>Run #{id}</span>
         <HFPill tone={runStatusTone[runStatus] || 'neutral'}><HFDot tone={runStatusTone[runStatus] || 'neutral'} pulse={runStatus==='running'} size={6}/> {runStatus}</HFPill>
-        {/* Live indicator — page is auto-refreshing every 2s while the run
-            is in an active state. Distinct from the run-status pill: even
-            a paused run is still being polled, so this tells operators the
-            data they're seeing is fresh. */}
+
         {(runStatus === 'running' || runStatus === 'stopping' || runStatus === 'paused') && (
           <HFPill tone="muted" title="This page is auto-refreshing every 2 seconds">
             <HFDot tone="ok" pulse size={6}/>
@@ -2004,7 +1872,7 @@ function HFRunDetail({ nav, goto, params }) {
         )}
       </>}
     >
-      {/* KPI strip — Progress · Elapsed · Errors · Workers */}
+
       <HFKpiStrip items={[
         { label:'Progress', value:`${data.progress}%`,
           delta:<span style={{color:'var(--hf-ink3)'}}>
@@ -2035,7 +1903,7 @@ function HFRunDetail({ nav, goto, params }) {
           </span> },
       ]}/>
 
-      {/* Paused callout — visible banner so it's impossible to miss */}
+
       {runStatus === 'paused' && (
         <div style={{
           display:'flex', alignItems:'center', gap:12,
@@ -2054,7 +1922,7 @@ function HFRunDetail({ nav, goto, params }) {
         </div>
       )}
 
-      {/* Section tabs — pivot between run health, URL history, and books */}
+
       <div style={{marginBottom: 'var(--hf-gap)'}}>
         <HFTabs
           active={tab}
@@ -2068,15 +1936,13 @@ function HFRunDetail({ nav, goto, params }) {
       </div>
 
       {tab === 'general' && <>
-      {/* Timeline + Throughput — paired summary row */}
+
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--hf-gap)', marginBottom:'var(--hf-gap)'}}>
         <HFRunTimelineCard events={liveData?.events ?? data.events ?? []} style={{marginBottom: 0}}/>
         {(() => {
           const ratePerMinFailed = liveRate.window_s > 0
             ? Math.round((rateFailed / liveRate.window_s) * 60) : 0;
-          // Scale the Y-axis to the rolling max so spikes don't pin the chart.
           const peak = Math.max(0, ...throughputHistory, ratePerMinFailed);
-          // Round up to a clean multiple of 5 (min of 5).
           const yMax = Math.max(5, Math.ceil(peak / 5) * 5);
           const yTicks = [yMax, Math.round(yMax * 0.75), Math.round(yMax / 2), Math.round(yMax / 4), 0];
           const sampleAgeS = (n) => Math.round(n * 2);
@@ -2129,7 +1995,7 @@ function HFRunDetail({ nav, goto, params }) {
         })()}
       </div>
 
-      {/* In-flight card — what's happening RIGHT NOW (only when live) */}
+
       <HFRunInFlightCard
         liveData={liveData}
         runStatus={runStatus}
@@ -2145,7 +2011,7 @@ function HFRunDetail({ nav, goto, params }) {
         tabCounts={tabCounts}
       />
 
-      {/* Failures card — grouped by error_reason from recent_failures */}
+
       <HFRunFailuresCard
         failureGroups={failureGroups}
         retryCap={retryCap}
@@ -2160,7 +2026,7 @@ function HFRunDetail({ nav, goto, params }) {
       </>}
 
       {tab === 'history' && <>
-      {/* History card — tabbed URL queue / discovered URL history */}
+
       <HFRunHistoryCard
         urlData={urlData}
         retryCap={retryCap}
@@ -2198,7 +2064,7 @@ function HFRunDetail({ nav, goto, params }) {
         />
       )}
 
-      {/* Action dialogs — replaces window.confirm/prompt for stop/retry/ack/etc. */}
+
       <HFConfirmDialog
         open={!!confirmDialog}
         title={confirmDialog?.title}

@@ -4,17 +4,12 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-/**
- * Port of book_scraper/isbn.py. Kept behaviourally identical — the
- * double-prefix rejection and the "978/979 is not an ISBN-10 group id"
- * rule both exist to stop known corruption signatures, not as tidiness.
- */
 final class Isbn
 {
     private const ISBN_13 = '/^97[89]\d{10}$/';
+
     private const ISBN_10 = '/^\d{9}[\dXx]$/';
 
-    /** Double-prefix corruption fingerprints — see isbn.py for the why. */
     private const DOUBLE_PREFIXED = ['9789789', '9799789', '9789979', '9799979'];
 
     public static function normalize(?string $raw): string
@@ -35,7 +30,7 @@ final class Isbn
         }
 
         if (preg_match(self::ISBN_10, $cleaned) === 1) {
-            // 978/979 are EAN Bookland prefixes, never ISBN-10 group ids.
+
             if (in_array(substr($cleaned, 0, 3), ['978', '979'], true)) {
                 return false;
             }
@@ -63,9 +58,9 @@ final class Isbn
             if (in_array(substr($cleaned, 0, 3), ['978', '979'], true)) {
                 return null;
             }
-            $body = '978' . substr($cleaned, 0, 9);
+            $body = '978'.substr($cleaned, 0, 9);
 
-            return $body . (string) ((10 - self::checksum13($body) % 10) % 10);
+            return $body.(string) ((10 - self::checksum13($body) % 10) % 10);
         }
 
         return null;
@@ -81,7 +76,7 @@ final class Isbn
             return strtoupper($cleaned);
         }
         if (preg_match(self::ISBN_13, $cleaned) === 1) {
-            if (!str_starts_with($cleaned, '978')) {
+            if (! str_starts_with($cleaned, '978')) {
                 return null;
             }
             $body = substr($cleaned, 3, 9);
@@ -91,13 +86,12 @@ final class Isbn
             }
             $check = (11 - $total % 11) % 11;
 
-            return $body . ($check === 10 ? 'X' : (string) $check);
+            return $body.($check === 10 ? 'X' : (string) $check);
         }
 
         return null;
     }
 
-    /** Weighted 1,3,1,3… sum used by both the ISBN-13 check and conversion. */
     private static function checksum13(string $digits): int
     {
         $total = 0;

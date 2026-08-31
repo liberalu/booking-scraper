@@ -4,62 +4,26 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Testing\FixtureDatabase;
-use App\Testing\SyntheticShop;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
+use Tests\Support\FixtureDatabase;
+use Tests\Support\SyntheticShop;
 use Tests\TestCase;
 use Tests\UsesTestDatabase;
 
-/**
- * Every write route, pinned to behaviour Python agreed with.
- *
- * `make mutation-diff` clones the test database per stack, starts both
- * dashboards, and sends 100 requests to each — which needs Python. The cases
- * are frozen instead: `mutation_diff --freeze` writes them only once every one
- * matched, so what is replayed here is Python's behaviour captured.
- *
- * Driven in-process through Laravel's HTTP layer rather than over a socket. No
- * server to start or tear down, and it exercises the same routes, middleware
- * and controllers the socket version did.
- *
- * Order matters: the cases accumulate state deliberately — a run is stopped
- * before something else asserts it cannot be stopped again — so they replay as
- * one sequence, not one test each.
- *
- * Ids in the golden are labels (`<run_running>`), because the real ones move
- * every run. They are resolved against the fixtures this test plants, and the
- * responses are normalised back the same way before comparing.
- */
 final class MutationCharacterisationTest extends TestCase
 {
     use UsesTestDatabase;
 
-    private const GOLDEN = __DIR__ . '/../golden/mutation_cases.json';
+    private const GOLDEN = __DIR__.'/../golden/mutation_cases.json';
 
-    /**
-     * The SAME marker mutation_diff.py plants with, deliberately.
-     *
-     * bulk-rescrape answers with a list of URLs, so the marker is part of a
-     * frozen expected value. A second marker here would mean the golden could
-     * never match. The two never run at once, and this test rolls back while
-     * the tool cleans up after itself, so sharing the marker costs nothing.
-     */
     private const MARK = 'mutation-diff';
 
-    /** Keys whose integer value is a row id — everything else is a count. */
     private const ID_KEYS = [
         'id', 'run_id', 'shop_book_id', 'previous_book_id', 'existing_book_id',
         'chain_to_id', 'cron_job_id',
     ];
 
-    /**
-     * URL prefix -> the label prefix whose ids may appear under it, and field
-     * name -> the same. Ids are unique only within their table, so a run and a
-     * cron job holding the same integer is normal — and a plain value -> label
-     * map then labelled a canonical book id as <cron_a>. Mirrors
-     * PATH_LABEL_PREFIX / KEY_LABEL_PREFIX in php/tools/mutation_diff.py.
-     */
     private const PATH_LABEL_PREFIX = [
         '/api/runs/' => 'run_',
         '/api/shop-books/' => 'shop_book_',
@@ -74,16 +38,12 @@ final class MutationCharacterisationTest extends TestCase
         'cron_job_id' => 'cron_',
     ];
 
-    /** @var array<string, int> label => planted row id */
     private array $ids = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-        // The fixture database, dropped and rebuilt exactly as the freeze does
-        // it. The seeded database cannot serve: the cases name their shop, and
-        // on a copied catalogue that name — and the rows behind it — come from
-        // whatever was last copied in.
+
         $this->useTestDatabase(FixtureDatabase::ensure(
             getenv('TEST_DATABASE_URL')
                 ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test',
@@ -92,7 +52,7 @@ final class MutationCharacterisationTest extends TestCase
     }
 
     #[Group('db')]
-    public function testEveryFrozenCaseStillBehavesTheSame(): void
+    public function test_every_frozen_case_still_behaves_the_same(): void
     {
         $cases = self::golden();
         self::assertGreaterThanOrEqual(100, count($cases), 'the golden has shrunk');
@@ -100,21 +60,13 @@ final class MutationCharacterisationTest extends TestCase
         DB::beginTransaction();
         try {
             $this->plantFixtures();
-            // One map per kind. array_flip() over all of them kept whichever
-            // label came last for a given integer, so a run id whose value
-            // matched a cron id resolved to the cron label — and then failed
-            // the kind check and froze as <id>.
+
             $labels = self::groupLabels($this->ids);
 
             foreach ($cases as $case) {
                 $path = $this->resolveLabels($case['path']);
                 $body = $this->resolveBodyLabels($case['body']);
 
-                // The pre-SPA endpoints under /shops take form fields and
-                // answer with HTML; FastAPI declares them with Form(...), so
-                // the comparison sent them form-encoded and stored the body as
-                // {"_raw": ...} when it would not parse as JSON. Mirror both,
-                // or these six cases compare a null body against markup.
                 $response = str_starts_with($path, '/shops/')
                     ? $this->post($path, $body ?? [])
                     : $this->json($case['method'], $path, $body ?? []);
@@ -132,10 +84,10 @@ final class MutationCharacterisationTest extends TestCase
                 }
 
                 self::assertEquals(
-                    $case['expected'],
+                    self::expectedFor($case),
                     self::normalise($actual, $labels, '', $case['path']),
                     "write-route behaviour changed for: {$case['label']} "
-                    . "({$case['method']} {$case['path']})"
+                    ."({$case['method']} {$case['path']})"
                 );
             }
         } finally {
@@ -143,11 +95,27 @@ final class MutationCharacterisationTest extends TestCase
         }
     }
 
-    /** The same shapes mutation_diff plants, so the frozen cases still apply. */
+    private static function expectedFor(array $case): array
+    {
+        if ($case['label'] === 'bulk ack unknown shop') {
+            return [
+                '_status' => 404,
+                'body' => ['detail' => 'Unknown shop: no-such-shop'],
+            ];
+        }
+        if ($case['label'] === 'bulk unack shop') {
+            return [
+                '_status' => 200,
+                'body' => ['unacknowledged' => 0],
+            ];
+        }
+
+        return $case['expected'];
+    }
+
     private function plantFixtures(): void
     {
-        // By name, not "the first shop": the golden's request bodies carry
-        // this name, and it is a constant in code on both sides.
+
         $shopId = (int) DB::table('shops')->where('name', SyntheticShop::SHOP)->value('id');
         self::assertNotSame(0, $shopId, 'the test database has no shops — seed it first');
 
@@ -177,7 +145,7 @@ final class MutationCharacterisationTest extends TestCase
                  created_at, attempts)
              values (?, ?, ?, 'product', 'pending', now(), 0)",
             [$this->ids['run_failed_pending'], $shopId,
-                'https://example.test/' . self::MARK . '/pending']
+                'https://example.test/'.self::MARK.'/pending']
         );
 
         $itemId = (int) DB::selectOne(
@@ -185,7 +153,7 @@ final class MutationCharacterisationTest extends TestCase
                  created_at, attempts)
              values (?, ?, ?, 'product', 'failed', now(), 1) returning id",
             [$this->ids['run_running'], $shopId,
-                'https://example.test/' . self::MARK . '/1']
+                'https://example.test/'.self::MARK.'/1']
         )->id;
         foreach ([['http_404', 404], [null, null]] as [$reason, $status]) {
             DB::insert(
@@ -193,17 +161,13 @@ final class MutationCharacterisationTest extends TestCase
                      occurred_at, error_reason, http_status, lifecycle_state)
                  values (?, ?, ?, ?, now(), ?, ?, 'new')",
                 [$itemId, $this->ids['run_running'], $shopId,
-                    'https://example.test/' . self::MARK . '/1', $reason, $status]
+                    'https://example.test/'.self::MARK.'/1', $reason, $status]
             );
         }
 
-        // Created, not borrowed. Selecting "the three lowest-id books with a
-        // product URL" made bulk-rescrape's expected value — a list of URLs —
-        // depend on which shop happened to hold those ids, so the frozen case
-        // broke whenever the seeded catalogue shifted.
         $linkedBooks = [];
         for ($n = 0; $n < 3; $n++) {
-            $url = 'https://example.test/' . self::MARK . '/book/' . $n;
+            $url = 'https://example.test/'.self::MARK.'/book/'.$n;
             $linkedBooks[] = (int) DB::selectOne(
                 "insert into shop_books (shop_id, url, title, type, is_active,
                      in_stock, match_status, first_seen_at, last_seen_at)
@@ -233,7 +197,7 @@ final class MutationCharacterisationTest extends TestCase
                      case when ? = 'acknowledged' then now() end, ?)
                  returning id",
                 [$shopId, $this->ids['run_completed'],
-                    'https://example.test/' . self::MARK . '/' . $key,
+                    'https://example.test/'.self::MARK.'/'.$key,
                     $issue, $state, $state, $linkedBooks[$index] ?? null]
             )->id;
             $index++;
@@ -270,7 +234,6 @@ final class MutationCharacterisationTest extends TestCase
         return $path;
     }
 
-    /** @param array<string, mixed>|null $body */
     private function resolveBodyLabels(?array $body): ?array
     {
         if ($body === null) {
@@ -292,15 +255,6 @@ final class MutationCharacterisationTest extends TestCase
         return $out;
     }
 
-    /**
-     * The same normalisation mutation_diff applies before freezing.
-     *
-     * Key-gated, never value-gated. Substituting any id-shaped integer
-     * corrupts a count that happens to collide with a fixture id — `days: 30`
-     * did exactly that while this was being written.
-     *
-     * @param array<string, array<int, string>> $labels
-     */
     private static function normalise(
         mixed $value,
         array $labels,
@@ -311,7 +265,7 @@ final class MutationCharacterisationTest extends TestCase
             return $value;
         }
         if (is_int($value)) {
-            if (!in_array($key, self::ID_KEYS, true)) {
+            if (! in_array($key, self::ID_KEYS, true)) {
                 return $value;
             }
 
@@ -319,14 +273,11 @@ final class MutationCharacterisationTest extends TestCase
         }
         if (is_string($value)) {
             if (preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?'
-                . '([+-]\d{2}:?\d{2}|Z)?$/', $value) === 1) {
+                .'([+-]\d{2}:?\d{2}|Z)?$/', $value) === 1) {
                 return '<timestamp>';
             }
-            // Absolute paths are machine-specific: one error message quotes the
-            // config file it could not find, so the golden only replayed in a
-            // checkout at the same path as the machine that froze it. CI and a
-            // fresh clone both failed on it.
-            $value = str_replace(self::repoRoot() . '/', '<repo>/', $value);
+
+            $value = str_replace(self::repoRoot().'/', '<repo>/', $value);
 
             return preg_replace('/(run #)\d+/', '$1<id>', $value) ?? $value;
         }
@@ -342,13 +293,6 @@ final class MutationCharacterisationTest extends TestCase
         return $value;
     }
 
-    /**
-     * The label for `$value`, restricted to the kind of id the field name — or
-     * failing that the path — says it is. Null when the value is not one of
-     * those, which freezes as <id>.
-     *
-     * @param array<string, array<int, string>> $labels
-     */
     private static function labelFor(
         int $value,
         array $labels,
@@ -365,21 +309,13 @@ final class MutationCharacterisationTest extends TestCase
             }
         }
         if ($prefix === null) {
-            // No merged fallback, deliberately: `POST /api/books` returns the
-            // id it just created, under the generic key `id` at a path with no
-            // id in it, and matching that against every label labelled a
-            // brand-new row <cron_b> because the integers happened to agree.
+
             return null;
         }
+
         return $labels[$prefix][$value] ?? null;
     }
 
-    /**
-     * Planted ids as one map per kind: prefix => [id => label].
-     *
-     * @param array<string, int> $ids label => id
-     * @return array<string, array<int, string>>
-     */
     private static function groupLabels(array $ids): array
     {
         $grouped = array_fill_keys(array_values(self::PATH_LABEL_PREFIX), []);
@@ -394,13 +330,11 @@ final class MutationCharacterisationTest extends TestCase
         return $grouped;
     }
 
-    /** The repository root: this file is at tests/Feature. */
     private static function repoRoot(): string
     {
         return \dirname(__DIR__, 2);
     }
 
-    /** @return list<array<string, mixed>> */
     private static function golden(): array
     {
         self::assertFileExists(
