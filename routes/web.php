@@ -7,12 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpStatus;
-
-defined('SPA_INDEX') || define(
-    'SPA_INDEX',
-    __DIR__.'/../public/static/hifi/index.html'
-);
 
 Route::post('/shops/{shop}/rate-settings', [LegacyFormsController::class, 'rateSettings'])
     ->missing(static fn (): HttpResponse => new HttpResponse(
@@ -40,5 +36,9 @@ Route::get('/shops/{shop}/not-listed', fn (string $shop): mixed => redirect(
     HttpStatus::HTTP_MOVED_PERMANENTLY,
 ));
 
-Route::get('/{any?}', fn (): mixed => Response::file(SPA_INDEX))
+Route::get('/{any?}', function (): BinaryFileResponse {
+    $built = public_path('build/hifi/index.html');
+
+    return Response::file(is_file($built) ? $built : public_path('static/hifi/index.html'));
+})
     ->where('any', '^(?!api).*$');

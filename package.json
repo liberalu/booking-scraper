@@ -1,0 +1,23 @@
+{
+    "name": "book-scraper-dashboard",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "node tools/build-frontend.mjs",
+        "lint": "eslint public/static/hifi tools/build-frontend.mjs",
+        "format": "prettier --write public/static/hifi tools/build-frontend.mjs eslint.config.js package.json",
+        "format:check": "prettier --check public/static/hifi tools/build-frontend.mjs eslint.config.js package.json",
+        "test": "npm run build && node --test tests/Frontend/*.mjs"
+    },
+    "dependencies": {
+        "react": "18.3.1",
+        "react-dom": "18.3.1"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.28.0",
+        "@babel/preset-react": "^7.27.1",
+        "eslint": "^10.9.1",
+        "globals": "^17.12.0",
+        "prettier": "^3.6.2"
+    }
+}

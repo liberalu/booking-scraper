@@ -1,200 +1,368 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8"/>
-<title>BookScraper Dashboard</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<style>
-  html, body, #root { height: 100%; margin: 0; background: #f7f8fa; }
-  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; color: #111827; overflow: hidden; }
-  a { color: inherit; }
-  button { font-family: inherit; }
-</style>
-</head>
-<body>
-<div id="root"></div>
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<script type="text/babel" src="/static/hifi/hf-tokens.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-icons.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-ui.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-shell.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-overview.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-runs.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-books.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-book.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-shopbooks.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-urls-shops.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-other.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-details.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-more-details.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-overlays.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-issues.jsx"></script>
-<script type="text/babel" src="/static/hifi/hf-issue-detail.jsx"></script>
-<script type="text/babel">
-const DETAIL_BY_HEAD = {
-  'runs':       { page: 'run-detail',       param: 'id' },
-  'books':      { page: 'book-detail',      param: 'id' },
-  'shop-books': { page: 'shop-book-detail', param: 'id' },
-  'urls':       { page: 'url-detail',       param: 'id' },
-  'shops':      { page: 'shop-detail',      param: 'name' },
-  'cron':       { page: 'schedule-detail',  param: 'id' },
-  'issues':     { page: 'issue-detail',     param: 'id' },
-};
+    <head>
+        <meta charset="utf-8" />
+        <title>BookScraper Dashboard</title>
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            html,
+            body,
+            #root {
+                height: 100%;
+                margin: 0;
+                background: #f7f8fa;
+            }
+            body {
+                font-family: "Inter", sans-serif;
+                -webkit-font-smoothing: antialiased;
+                color: #111827;
+                overflow: hidden;
+            }
+            a {
+                color: inherit;
+            }
+            button {
+                font-family: inherit;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script>
+            window.fetch = (
+                (nativeFetch) =>
+                (input, init = {}) => {
+                    const method = String(init.method || "GET").toUpperCase();
+                    const target = new URL(
+                        typeof input === "string" ? input : input.url,
+                        window.location.href,
+                    );
+                    if (
+                        target.origin === window.location.origin &&
+                        !["GET", "HEAD", "OPTIONS"].includes(method)
+                    ) {
+                        const token = document.cookie
+                            .split("; ")
+                            .find((row) => row.startsWith("XSRF-TOKEN="))
+                            ?.split("=")
+                            .slice(1)
+                            .join("=");
+                        if (token) {
+                            init.headers = {
+                                ...Object.fromEntries(
+                                    new Headers(init.headers).entries(),
+                                ),
+                                "X-XSRF-TOKEN": decodeURIComponent(token),
+                            };
+                        }
+                    }
+                    return nativeFetch(input, init);
+                }
+            )(window.fetch.bind(window));
+        </script>
+        <script
+            src="https://unpkg.com/react@18.3.1/umd/react.development.js"
+            integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"
+            integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"
+            integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+            crossorigin="anonymous"
+        ></script>
+        <script type="text/babel" src="/static/hifi/hf-tokens.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-icons.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-ui.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-shell.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-overview.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-runs.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-books.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-book.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-shopbooks.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-urls-shops.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-other.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-details.jsx"></script>
+        <script
+            type="text/babel"
+            src="/static/hifi/hf-more-details.jsx"
+        ></script>
+        <script type="text/babel" src="/static/hifi/hf-overlays.jsx"></script>
+        <script type="text/babel" src="/static/hifi/hf-issues.jsx"></script>
+        <script
+            type="text/babel"
+            src="/static/hifi/hf-issue-detail.jsx"
+        ></script>
+        <script type="text/babel">
+            const DETAIL_BY_HEAD = {
+                runs: { page: "run-detail", param: "id" },
+                books: { page: "book-detail", param: "id" },
+                "shop-books": { page: "shop-book-detail", param: "id" },
+                urls: { page: "url-detail", param: "id" },
+                shops: { page: "shop-detail", param: "name" },
+                cron: { page: "schedule-detail", param: "id" },
+                issues: { page: "issue-detail", param: "id" },
+            };
 
-const URL_BUILDERS = {
-  'overview':         () => '/',
-  'runs':             () => '/runs',
-  'run-detail':       (p) => `/runs/${encodeURIComponent(p?.id ?? '')}`,
-  'books':            () => '/books',
-  'book':             (p) => `/books/${encodeURIComponent(p?.id ?? '')}`,
-  'book-detail':      (p) => `/books/${encodeURIComponent(p?.id ?? '')}`,
-  'shop-books':       () => '/shop-books',
-  'shop-book-detail': (p) => `/shop-books/${encodeURIComponent(p?.id ?? '')}`,
-  'urls':             (p) => p?.q ? `/urls?q=${encodeURIComponent(p.q)}` : '/urls',
-  'url-detail':       (p) => `/urls/${encodeURIComponent(p?.id ?? '')}`,
-  'shops':            () => '/shops',
-  'shop-detail':      (p) => `/shops/${encodeURIComponent(p?.name ?? '')}`,
-  'cron':             () => '/cron',
-  'schedule-detail':  (p) => `/cron/${encodeURIComponent(p?.id ?? '')}`,
-  'issues':           () => '/issues',
-  'issue-detail':     (p) => `/issues/${encodeURIComponent(p?.id ?? '')}`,
-  'prices':           () => '/prices',
-};
+            const URL_BUILDERS = {
+                overview: () => "/",
+                runs: () => "/runs",
+                "run-detail": (p) => `/runs/${encodeURIComponent(p?.id ?? "")}`,
+                books: () => "/books",
+                book: (p) => `/books/${encodeURIComponent(p?.id ?? "")}`,
+                "book-detail": (p) =>
+                    `/books/${encodeURIComponent(p?.id ?? "")}`,
+                "shop-books": () => "/shop-books",
+                "shop-book-detail": (p) =>
+                    `/shop-books/${encodeURIComponent(p?.id ?? "")}`,
+                urls: (p) =>
+                    p?.q ? `/urls?q=${encodeURIComponent(p.q)}` : "/urls",
+                "url-detail": (p) => `/urls/${encodeURIComponent(p?.id ?? "")}`,
+                shops: () => "/shops",
+                "shop-detail": (p) =>
+                    `/shops/${encodeURIComponent(p?.name ?? "")}`,
+                cron: () => "/cron",
+                "schedule-detail": (p) =>
+                    `/cron/${encodeURIComponent(p?.id ?? "")}`,
+                issues: () => "/issues",
+                "issue-detail": (p) =>
+                    `/issues/${encodeURIComponent(p?.id ?? "")}`,
+                prices: () => "/prices",
+            };
 
-function parsePath(pathname, search) {
-  const parts = pathname.split('/').filter(Boolean);
-  const qp = {};
-  if (search) {
-    new URLSearchParams(search).forEach((v, k) => { qp[k] = v; });
-  }
-  if (parts.length === 0) return { page: 'overview', params: qp };
-  const head = parts[0];
-  const rest = parts.slice(1).map(decodeURIComponent);
-  if (rest.length > 0 && DETAIL_BY_HEAD[head]) {
-    const m = DETAIL_BY_HEAD[head];
-    return { page: m.page, params: { [m.param]: rest.join('/'), ...qp } };
-  }
-  return { page: head, params: qp };
-}
+            function parsePath(pathname, search) {
+                const parts = pathname.split("/").filter(Boolean);
+                const qp = {};
+                if (search) {
+                    new URLSearchParams(search).forEach((v, k) => {
+                        qp[k] = v;
+                    });
+                }
+                if (parts.length === 0) return { page: "overview", params: qp };
+                const head = parts[0];
+                const rest = parts.slice(1).map(decodeURIComponent);
+                if (rest.length > 0 && DETAIL_BY_HEAD[head]) {
+                    const m = DETAIL_BY_HEAD[head];
+                    return {
+                        page: m.page,
+                        params: { [m.param]: rest.join("/"), ...qp },
+                    };
+                }
+                return { page: head, params: qp };
+            }
 
-function buildPath(page, params) {
-  const fn = URL_BUILDERS[page] || (() => '/');
-  return fn(params || {});
-}
-window.HF_BUILD_PATH = buildPath;
+            function buildPath(page, params) {
+                const fn = URL_BUILDERS[page] || (() => "/");
+                return fn(params || {});
+            }
+            window.HF_BUILD_PATH = buildPath;
 
-function App() {
-  const initial = parsePath(window.location.pathname, window.location.search);
-  const [page, setPage] = React.useState(initial.page);
-  const [params, setParams] = React.useState(initial.params);
-  const [collapsed, setCollapsed] = React.useState(false);
-  const [accent, setAccent] = React.useState(localStorage.getItem('hf_accent') || 'forest');
-  const [density, setDensity] = React.useState(localStorage.getItem('hf_density') || 'ultra');
-  const [newRunOpen, setNewRunOpen]           = React.useState(false);
-  const [newScheduleOpen, setNewScheduleOpen] = React.useState(false);
-  const [cronKey, setCronKey]                 = React.useState(0);
-  const [addURLOpen, setAddURLOpen]           = React.useState(false);
-  const [addShopOpen, setAddShopOpen]         = React.useState(false);
-  const [addBookOpen, setAddBookOpen]         = React.useState(false);
-  const [cmdKOpen, setCmdKOpen]               = React.useState(false);
-  const [avatarMenu, setAvatarMenu]           = React.useState({ open: false, rect: null });
-  React.useEffect(() => {
-    window.HF_ACCENT = accent;
-    localStorage.setItem('hf_accent', accent);
-    if (window.getHF) window.getHF();
-  }, [accent]);
-  React.useEffect(() => {
-    window.HF_DENSITY = density;
-    localStorage.setItem('hf_density', density);
-    if (window.getHF) window.getHF();
-  }, [density]);
+            function App() {
+                const initial = parsePath(
+                    window.location.pathname,
+                    window.location.search,
+                );
+                const [page, setPage] = React.useState(initial.page);
+                const [params, setParams] = React.useState(initial.params);
+                const [collapsed, setCollapsed] = React.useState(false);
+                const [accent, setAccent] = React.useState(
+                    localStorage.getItem("hf_accent") || "forest",
+                );
+                const [density, setDensity] = React.useState(
+                    localStorage.getItem("hf_density") || "ultra",
+                );
+                const [newRunOpen, setNewRunOpen] = React.useState(false);
+                const [newScheduleOpen, setNewScheduleOpen] =
+                    React.useState(false);
+                const [cronKey, setCronKey] = React.useState(0);
+                const [addURLOpen, setAddURLOpen] = React.useState(false);
+                const [addShopOpen, setAddShopOpen] = React.useState(false);
+                const [addBookOpen, setAddBookOpen] = React.useState(false);
+                const [cmdKOpen, setCmdKOpen] = React.useState(false);
+                const [avatarMenu, setAvatarMenu] = React.useState({
+                    open: false,
+                    rect: null,
+                });
+                React.useEffect(() => {
+                    window.HF_ACCENT = accent;
+                    localStorage.setItem("hf_accent", accent);
+                    if (window.getHF) window.getHF();
+                }, [accent]);
+                React.useEffect(() => {
+                    window.HF_DENSITY = density;
+                    localStorage.setItem("hf_density", density);
+                    if (window.getHF) window.getHF();
+                }, [density]);
 
-  React.useEffect(() => {
-    const onPop = () => {
-      const p = parsePath(window.location.pathname, window.location.search);
-      setPage(p.page);
-      setParams(p.params);
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+                React.useEffect(() => {
+                    const onPop = () => {
+                        const p = parsePath(
+                            window.location.pathname,
+                            window.location.search,
+                        );
+                        setPage(p.page);
+                        setParams(p.params);
+                    };
+                    window.addEventListener("popstate", onPop);
+                    return () => window.removeEventListener("popstate", onPop);
+                }, []);
 
-  React.useEffect(() => {
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCmdKOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+                React.useEffect(() => {
+                    const onKey = (e) => {
+                        if (
+                            (e.metaKey || e.ctrlKey) &&
+                            e.key.toLowerCase() === "k"
+                        ) {
+                            e.preventDefault();
+                            setCmdKOpen(true);
+                        }
+                    };
+                    window.addEventListener("keydown", onKey);
+                    return () => window.removeEventListener("keydown", onKey);
+                }, []);
 
-  const goto = (p, pms = {}) => {
-    setPage(p);
-    setParams(pms);
-    const url = buildPath(p, pms);
-    const current = window.location.pathname + window.location.search;
-    if (url !== current) window.history.pushState(null, '', url);
-    window.scrollTo(0, 0);
-  };
-  const nav = { collapsed, setCollapsed, setPage: goto, activePage: page };
+                const goto = (p, pms = {}) => {
+                    setPage(p);
+                    setParams(pms);
+                    const url = buildPath(p, pms);
+                    const current =
+                        window.location.pathname + window.location.search;
+                    if (url !== current)
+                        window.history.pushState(null, "", url);
+                    window.scrollTo(0, 0);
+                };
+                const nav = {
+                    collapsed,
+                    setCollapsed,
+                    setPage: goto,
+                    activePage: page,
+                };
 
-  window.HF_APP = {
-    openNewRun:      () => setNewRunOpen(true),
-    openNewSchedule: () => setNewScheduleOpen(true),
-    openAddURL:      () => setAddURLOpen(true),
-    openAddShop:     () => setAddShopOpen(true),
-    openAddBook:     () => setAddBookOpen(true),
-    openCmdK:        () => setCmdKOpen(true),
-    openAvatarMenu:  (rect) => setAvatarMenu({ open: true, rect }),
-    toast:           (opts) => window._hfPushToast(opts),
-    dismissToast:    (id) => window._hfDismissToast(id),
-  };
+                window.HF_APP = {
+                    openNewRun: () => setNewRunOpen(true),
+                    openNewSchedule: () => setNewScheduleOpen(true),
+                    openAddURL: () => setAddURLOpen(true),
+                    openAddShop: () => setAddShopOpen(true),
+                    openAddBook: () => setAddBookOpen(true),
+                    openCmdK: () => setCmdKOpen(true),
+                    openAvatarMenu: (rect) =>
+                        setAvatarMenu({ open: true, rect }),
+                    toast: (opts) => window._hfPushToast(opts),
+                    dismissToast: (id) => window._hfDismissToast(id),
+                };
 
-  const pages = {
-    'overview':         () => <HFOverview nav={nav} goto={goto} />,
-    'runs':             () => <HFRuns nav={nav} goto={goto} />,
-    'run-detail':       () => <HFRunDetail nav={nav} goto={goto} params={params} />,
-    'books':            () => <HFBooks nav={nav} goto={goto} />,
-    'book':             () => <HFBook nav={nav} goto={goto} params={params} />,
-    'book-detail':      () => <HFBook nav={nav} goto={goto} params={params} />,
-    'shop-books':       () => <HFShopBooks nav={nav} goto={goto} />,
-    'shop-book-detail': () => <HFShopBookDetail nav={nav} goto={goto} params={params} />,
-    'urls':             () => <HFUrls nav={nav} goto={goto} params={params} />,
-    'url-detail':       () => <HFUrlDetail nav={nav} goto={goto} params={params} />,
-    'shops':            () => <HFShops nav={nav} goto={goto} />,
-    'shop-detail':      () => <HFShopDetail nav={nav} goto={goto} params={params} />,
-    'cron':             () => <HFCron key={cronKey} nav={nav} goto={goto} />,
-    'schedule-detail':  () => <HFScheduleDetail nav={nav} goto={goto} params={params} />,
-    'issues':           () => <HFIssues nav={nav} goto={goto} />,
-    'issue-detail':     () => <HFIssueDetail nav={nav} goto={goto} params={params} />,
-    'prices':           () => <HFPrices nav={nav} goto={goto} />,
-  };
+                const pages = {
+                    overview: () => <HFOverview nav={nav} goto={goto} />,
+                    runs: () => <HFRuns nav={nav} goto={goto} />,
+                    "run-detail": () => (
+                        <HFRunDetail nav={nav} goto={goto} params={params} />
+                    ),
+                    books: () => <HFBooks nav={nav} goto={goto} />,
+                    book: () => (
+                        <HFBook nav={nav} goto={goto} params={params} />
+                    ),
+                    "book-detail": () => (
+                        <HFBook nav={nav} goto={goto} params={params} />
+                    ),
+                    "shop-books": () => <HFShopBooks nav={nav} goto={goto} />,
+                    "shop-book-detail": () => (
+                        <HFShopBookDetail
+                            nav={nav}
+                            goto={goto}
+                            params={params}
+                        />
+                    ),
+                    urls: () => (
+                        <HFUrls nav={nav} goto={goto} params={params} />
+                    ),
+                    "url-detail": () => (
+                        <HFUrlDetail nav={nav} goto={goto} params={params} />
+                    ),
+                    shops: () => <HFShops nav={nav} goto={goto} />,
+                    "shop-detail": () => (
+                        <HFShopDetail nav={nav} goto={goto} params={params} />
+                    ),
+                    cron: () => <HFCron key={cronKey} nav={nav} goto={goto} />,
+                    "schedule-detail": () => (
+                        <HFScheduleDetail
+                            nav={nav}
+                            goto={goto}
+                            params={params}
+                        />
+                    ),
+                    issues: () => <HFIssues nav={nav} goto={goto} />,
+                    "issue-detail": () => (
+                        <HFIssueDetail nav={nav} goto={goto} params={params} />
+                    ),
+                    prices: () => <HFPrices nav={nav} goto={goto} />,
+                };
 
-  const renderer = pages[page];
-  return (
-    <>
-      {renderer ? renderer() : <div style={{padding:40}}>Unknown page: {page}</div>}
-      <HFNewRunDialog      open={newRunOpen}      onClose={() => setNewRunOpen(false)}      goto={goto}/>
-      <HFNewScheduleDialog open={newScheduleOpen} onClose={(created) => { setNewScheduleOpen(false); if (created) setCronKey(k => k + 1); }}/>
-      <HFAddURLDialog      open={addURLOpen}      onClose={() => setAddURLOpen(false)}/>
-      <HFAddShopDialog     open={addShopOpen}     onClose={() => setAddShopOpen(false)}     goto={goto}/>
-      <HFAddBookDialog     open={addBookOpen}     onClose={() => setAddBookOpen(false)}/>
-      <HFCommandK          open={cmdKOpen}        onClose={() => setCmdKOpen(false)}        goto={goto}/>
-      <HFAvatarMenu        open={avatarMenu.open} anchorRect={avatarMenu.rect}
-                           onClose={() => setAvatarMenu({ open: false, rect: null })} goto={goto}/>
-      <HFToastHost/>
-    </>
-  );
-}
+                const renderer = pages[page];
+                return (
+                    <>
+                        {renderer ? (
+                            renderer()
+                        ) : (
+                            <div style={{ padding: 40 }}>
+                                Unknown page: {page}
+                            </div>
+                        )}
+                        <HFNewRunDialog
+                            open={newRunOpen}
+                            onClose={() => setNewRunOpen(false)}
+                            goto={goto}
+                        />
+                        <HFNewScheduleDialog
+                            open={newScheduleOpen}
+                            onClose={(created) => {
+                                setNewScheduleOpen(false);
+                                if (created) setCronKey((k) => k + 1);
+                            }}
+                        />
+                        <HFAddURLDialog
+                            open={addURLOpen}
+                            onClose={() => setAddURLOpen(false)}
+                        />
+                        <HFAddShopDialog
+                            open={addShopOpen}
+                            onClose={() => setAddShopOpen(false)}
+                            goto={goto}
+                        />
+                        <HFAddBookDialog
+                            open={addBookOpen}
+                            onClose={() => setAddBookOpen(false)}
+                        />
+                        <HFCommandK
+                            open={cmdKOpen}
+                            onClose={() => setCmdKOpen(false)}
+                            goto={goto}
+                        />
+                        <HFAvatarMenu
+                            open={avatarMenu.open}
+                            anchorRect={avatarMenu.rect}
+                            onClose={() =>
+                                setAvatarMenu({ open: false, rect: null })
+                            }
+                            goto={goto}
+                        />
+                        <HFToastHost />
+                    </>
+                );
+            }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
+            ReactDOM.createRoot(document.getElementById("root")).render(
+                <App />,
+            );
+        </script>
+    </body>
 </html>

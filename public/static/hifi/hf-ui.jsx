@@ -1,673 +1,1415 @@
-
 const _shopsCache = { names: null, promise: null };
 function useShopNames() {
-  const [names, setNames] = React.useState(_shopsCache.names);
-  React.useEffect(() => {
-    if (_shopsCache.names) { setNames(_shopsCache.names); return; }
-    if (!_shopsCache.promise) {
-      _shopsCache.promise = fetch('/api/shops')
-        .then(r => r.json())
-        .then(d => { _shopsCache.names = (d.shops || []).map(s => s.name); return _shopsCache.names; });
-    }
-    _shopsCache.promise.then(n => setNames(n));
-  }, []);
-  return names ? ['all', ...names] : ['all'];
+    const [names, setNames] = React.useState(_shopsCache.names);
+    React.useEffect(() => {
+        if (_shopsCache.names) {
+            setNames(_shopsCache.names);
+            return;
+        }
+        if (!_shopsCache.promise) {
+            _shopsCache.promise = fetch("/api/shops")
+                .then((r) => r.json())
+                .then((d) => {
+                    _shopsCache.names = (d.shops || []).map((s) => s.name);
+                    return _shopsCache.names;
+                });
+        }
+        _shopsCache.promise.then((n) => setNames(n));
+    }, []);
+    return names ? ["all", ...names] : ["all"];
 }
 
 function useHFFilters(rows, spec) {
-  const initial = {};
-  spec.filters.forEach(f => { initial[f.id] = f.default || 'all'; });
-  const [q, setQ] = React.useState('');
-  const [vals, setVals] = React.useState(initial);
-
-  const setVal = (id, v) => setVals(prev => ({ ...prev, [id]: v }));
-
-  const filtered = React.useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    return rows.filter(r => {
-      for (const f of spec.filters) {
-        const v = vals[f.id];
-        if (v && v !== (f.default || 'all') && !f.match(r, v)) return false;
-      }
-      if (qq && spec.search) {
-        const hay = (spec.search.fields(r) || '').toLowerCase();
-        if (!hay.includes(qq)) return false;
-      }
-      return true;
+    const initial = {};
+    spec.filters.forEach((f) => {
+        initial[f.id] = f.default || "all";
     });
-  }, [rows, vals, q]);
+    const [q, setQ] = React.useState("");
+    const [vals, setVals] = React.useState(initial);
 
-  const activeCount = (q.trim() ? 1 : 0) +
-    spec.filters.reduce((n, f) => n + (vals[f.id] !== (f.default || 'all') ? 1 : 0), 0);
+    const setVal = (id, v) => setVals((prev) => ({ ...prev, [id]: v }));
 
-  const clearAll = () => {
-    setQ('');
-    setVals(initial);
-  };
+    const filtered = React.useMemo(() => {
+        const qq = q.trim().toLowerCase();
+        return rows.filter((r) => {
+            for (const f of spec.filters) {
+                const v = vals[f.id];
+                if (v && v !== (f.default || "all") && !f.match(r, v))
+                    return false;
+            }
+            if (qq && spec.search) {
+                const hay = (spec.search.fields(r) || "").toLowerCase();
+                if (!hay.includes(qq)) return false;
+            }
+            return true;
+        });
+    }, [rows, vals, q]);
 
-  return { q, setQ, vals, setVal, filtered, activeCount, clearAll };
+    const activeCount =
+        (q.trim() ? 1 : 0) +
+        spec.filters.reduce(
+            (n, f) => n + (vals[f.id] !== (f.default || "all") ? 1 : 0),
+            0,
+        );
+
+    const clearAll = () => {
+        setQ("");
+        setVals(initial);
+    };
+
+    return { q, setQ, vals, setVal, filtered, activeCount, clearAll };
 }
 
-function HFSkeleton({ w = '100%', h = 12, br = 4, circle, style, inline }) {
-  const HF = getHF();
-  return (
-    <span aria-hidden="true" style={{
-      display: inline ? 'inline-block' : 'block',
-      width: circle ? h : w, height: h,
-      borderRadius: circle ? '50%' : br,
-      background: `linear-gradient(90deg, ${'var(--hf-subtle)'} 0%, ${'var(--hf-border)'} 50%, ${'var(--hf-subtle)'} 100%)`,
-      backgroundSize: '200% 100%',
-      animation: 'hfShimmer 1.5s ease-in-out infinite',
-      flexShrink: 0,
-      ...style,
-    }}/>
-  );
+function HFSkeleton({ w = "100%", h = 12, br = 4, circle, style, inline }) {
+    const HF = getHF();
+    return (
+        <span
+            aria-hidden="true"
+            style={{
+                display: inline ? "inline-block" : "block",
+                width: circle ? h : w,
+                height: h,
+                borderRadius: circle ? "50%" : br,
+                background: `linear-gradient(90deg, ${"var(--hf-subtle)"} 0%, ${"var(--hf-border)"} 50%, ${"var(--hf-subtle)"} 100%)`,
+                backgroundSize: "200% 100%",
+                animation: "hfShimmer 1.5s ease-in-out infinite",
+                flexShrink: 0,
+                ...style,
+            }}
+        />
+    );
 }
 
 function HFTableSkeleton({ columns, rows = 6, density }) {
-  const HF = getHF();
-  const gridCols = columns.map(c => c.w || '1fr').join(' ');
-  return (
-    <div role="status" aria-label="Loading table">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: gridCols,
-          padding: `var(--hf-cell-y) var(--hf-card-p)`,
-          minHeight: 'var(--hf-row-h)',
-          borderBottom: i < rows - 1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
-          alignItems: 'center', gap: 0,
-        }}>
-          {columns.map((c, j) => (
-            <div key={j} style={{
-              paddingRight: j < columns.length - 1 ? 12 : 0,
-              display: 'flex',
-              justifyContent: c.align === 'right' ? 'flex-end' : 'flex-start',
-            }}>
-              <HFSkeleton w={c.skelW || (c.mono ? 64 : 120)} h={12}/>
-            </div>
-          ))}
+    const HF = getHF();
+    const gridCols = columns.map((c) => c.w || "1fr").join(" ");
+    return (
+        <div role="status" aria-label="Loading table">
+            {Array.from({ length: rows }).map((_, i) => (
+                <div
+                    key={i}
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: gridCols,
+                        padding: `var(--hf-cell-y) var(--hf-card-p)`,
+                        minHeight: "var(--hf-row-h)",
+                        borderBottom:
+                            i < rows - 1
+                                ? `1px solid ${"var(--hf-border-faint)"}`
+                                : "none",
+                        alignItems: "center",
+                        gap: 0,
+                    }}
+                >
+                    {columns.map((c, j) => (
+                        <div
+                            key={j}
+                            style={{
+                                paddingRight: j < columns.length - 1 ? 12 : 0,
+                                display: "flex",
+                                justifyContent:
+                                    c.align === "right"
+                                        ? "flex-end"
+                                        : "flex-start",
+                            }}
+                        >
+                            <HFSkeleton
+                                w={c.skelW || (c.mono ? 64 : 120)}
+                                h={12}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    );
 }
 
 function HFKpiStripSkeleton({ count = 5 }) {
-  const HF = getHF();
-  return (
-    <div role="status" aria-label="Loading metrics" style={{
-      display: 'grid', gridTemplateColumns: `repeat(${count}, 1fr)`,
-      border: `1px solid ${'var(--hf-border)'}`, borderRadius: 'var(--hf-r3)',
-      background: 'var(--hf-surface)', boxShadow: 'var(--hf-shadow)',
-      overflow: 'hidden', marginBottom: 'var(--hf-gap)',
-    }}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} style={{
-          padding: `var(--hf-kpi-p) calc(var(--hf-kpi-p) + 2px)`,
-          borderRight: i < count - 1 ? `1px solid ${'var(--hf-border)'}` : 'none',
-        }}>
-          <HFSkeleton w={70} h={9} style={{ marginBottom: 10 }}/>
-          <HFSkeleton w={90} h={22} style={{ marginBottom: 10 }}/>
-          <HFSkeleton w={60} h={10}/>
+    const HF = getHF();
+    return (
+        <div
+            role="status"
+            aria-label="Loading metrics"
+            style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${count}, 1fr)`,
+                border: `1px solid ${"var(--hf-border)"}`,
+                borderRadius: "var(--hf-r3)",
+                background: "var(--hf-surface)",
+                boxShadow: "var(--hf-shadow)",
+                overflow: "hidden",
+                marginBottom: "var(--hf-gap)",
+            }}
+        >
+            {Array.from({ length: count }).map((_, i) => (
+                <div
+                    key={i}
+                    style={{
+                        padding: `var(--hf-kpi-p) calc(var(--hf-kpi-p) + 2px)`,
+                        borderRight:
+                            i < count - 1
+                                ? `1px solid ${"var(--hf-border)"}`
+                                : "none",
+                    }}
+                >
+                    <HFSkeleton w={70} h={9} style={{ marginBottom: 10 }} />
+                    <HFSkeleton w={90} h={22} style={{ marginBottom: 10 }} />
+                    <HFSkeleton w={60} h={10} />
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    );
 }
 
-function HFEmptyState({ title, sub, onClear, actionLabel = 'Clear filters' }) {
-  const HF = getHF();
-  return (
-    <div style={{padding:'60px 20px', textAlign:'center', color:'var(--hf-ink3)'}}>
-      <div style={{fontSize:28, marginBottom:8, color:'var(--hf-ink5)', display:'flex', justifyContent:'center'}}>{HF_ICONS.search}</div>
-      <div style={{fontSize:14, color:'var(--hf-ink)', fontWeight:500, marginBottom:4}}>{title}</div>
-      {sub && <div style={{fontSize:13, color:'var(--hf-ink3)', marginBottom:14, maxWidth:360, margin:'0 auto 14px', lineHeight:1.5}}>{sub}</div>}
-      {onClear && <HFButton size="sm" onClick={onClear}>{actionLabel}</HFButton>}
-    </div>
-  );
+function HFEmptyState({ title, sub, onClear, actionLabel = "Clear filters" }) {
+    const HF = getHF();
+    return (
+        <div
+            style={{
+                padding: "60px 20px",
+                textAlign: "center",
+                color: "var(--hf-ink3)",
+            }}
+        >
+            <div
+                style={{
+                    fontSize: 28,
+                    marginBottom: 8,
+                    color: "var(--hf-ink5)",
+                    display: "flex",
+                    justifyContent: "center",
+                }}
+            >
+                {HF_ICONS.search}
+            </div>
+            <div
+                style={{
+                    fontSize: 14,
+                    color: "var(--hf-ink)",
+                    fontWeight: 500,
+                    marginBottom: 4,
+                }}
+            >
+                {title}
+            </div>
+            {sub && (
+                <div
+                    style={{
+                        fontSize: 13,
+                        color: "var(--hf-ink3)",
+                        marginBottom: 14,
+                        maxWidth: 360,
+                        margin: "0 auto 14px",
+                        lineHeight: 1.5,
+                    }}
+                >
+                    {sub}
+                </div>
+            )}
+            {onClear && (
+                <HFButton size="sm" onClick={onClear}>
+                    {actionLabel}
+                </HFButton>
+            )}
+        </div>
+    );
 }
 
-function HFButton({ children, variant = 'default', size = 'md', style, ...rest }) {
-  const HF = getHF();
-  const sizes = {
-    sm: { padding: '4px 9px', fontSize: 12, height: 26 },
-    md: { padding: '6px 12px', fontSize: 13, height: 32 },
-    lg: { padding: '8px 16px', fontSize: 14, height: 36 },
-  };
-  const variants = {
-    default: { background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border-strong)'}`, color: 'var(--hf-ink)', boxShadow: '0 1px 2px rgba(16,24,40,.04)' },
-    primary: { background: 'var(--hf-accent)', border: `1px solid ${'var(--hf-accent)'}`, color: '#fff', fontWeight: 500, boxShadow: '0 1px 2px rgba(16,24,40,.06)' },
-    subtle:  { background: 'transparent', border: `1px solid transparent`, color: 'var(--hf-ink2)' },
-    ghost:   { background: 'var(--hf-bg)', border: `1px solid ${'var(--hf-border)'}`, color: 'var(--hf-ink2)' },
-    danger:  { background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-err-border)'}`, color: 'var(--hf-err)' },
-    accent:  { background: 'var(--hf-accent-soft)', border: `1px solid ${'var(--hf-accent-border)'}`, color: 'var(--hf-accent-ink)', fontWeight: 500 },
-  };
-  const cls = variant === 'primary' ? 'hf-btn hf-btn-primary' : 'hf-btn';
-  return (
-    <button {...rest} className={cls} style={{
-      ...sizes[size],
-      ...variants[variant],
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontFamily: 'var(--hf-sans)',
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      whiteSpace: 'nowrap',
-      transition: 'border-color 120ms, background 120ms, filter 120ms',
-      ...style,
-    }}>{children}</button>
-  );
+function HFButton({
+    children,
+    variant = "default",
+    size = "md",
+    style,
+    ...rest
+}) {
+    const HF = getHF();
+    const sizes = {
+        sm: { padding: "4px 9px", fontSize: 12, height: 26 },
+        md: { padding: "6px 12px", fontSize: 13, height: 32 },
+        lg: { padding: "8px 16px", fontSize: 14, height: 36 },
+    };
+    const variants = {
+        default: {
+            background: "var(--hf-surface)",
+            border: `1px solid ${"var(--hf-border-strong)"}`,
+            color: "var(--hf-ink)",
+            boxShadow: "0 1px 2px rgba(16,24,40,.04)",
+        },
+        primary: {
+            background: "var(--hf-accent)",
+            border: `1px solid ${"var(--hf-accent)"}`,
+            color: "#fff",
+            fontWeight: 500,
+            boxShadow: "0 1px 2px rgba(16,24,40,.06)",
+        },
+        subtle: {
+            background: "transparent",
+            border: `1px solid transparent`,
+            color: "var(--hf-ink2)",
+        },
+        ghost: {
+            background: "var(--hf-bg)",
+            border: `1px solid ${"var(--hf-border)"}`,
+            color: "var(--hf-ink2)",
+        },
+        danger: {
+            background: "var(--hf-surface)",
+            border: `1px solid ${"var(--hf-err-border)"}`,
+            color: "var(--hf-err)",
+        },
+        accent: {
+            background: "var(--hf-accent-soft)",
+            border: `1px solid ${"var(--hf-accent-border)"}`,
+            color: "var(--hf-accent-ink)",
+            fontWeight: 500,
+        },
+    };
+    const cls = variant === "primary" ? "hf-btn hf-btn-primary" : "hf-btn";
+    return (
+        <button
+            {...rest}
+            className={cls}
+            style={{
+                ...sizes[size],
+                ...variants[variant],
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "var(--hf-sans)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+                transition:
+                    "border-color 120ms, background 120ms, filter 120ms",
+                ...style,
+            }}
+        >
+            {children}
+        </button>
+    );
 }
 
-function HFPill({ children, tone = 'neutral', soft = true, style }) {
-  const HF = getHF();
-  const tones = {
-    neutral: { bg: 'var(--hf-subtle)', fg: 'var(--hf-ink2)', bd: 'var(--hf-border)' },
-    ok:      { bg: 'var(--hf-ok-soft)', fg: 'var(--hf-ok-ink)', bd: 'var(--hf-ok-border)' },
-    warn:    { bg: 'var(--hf-warn-soft)', fg: 'var(--hf-warn-ink)', bd: 'var(--hf-warn-border)' },
-    err:     { bg: 'var(--hf-err-soft)', fg: 'var(--hf-err-ink)', bd: 'var(--hf-err-border)' },
-    accent:  { bg: 'var(--hf-accent-soft)', fg: 'var(--hf-accent-ink)', bd: 'var(--hf-accent-border)' },
-    muted:   { bg: 'var(--hf-bg)', fg: 'var(--hf-ink3)', bd: 'var(--hf-border)' },
-  };
-  const t = tones[tone] || tones.neutral;
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '1px 8px', height: 20,
-      background: t.bg, color: t.fg, border: `1px solid ${t.bd}`,
-      borderRadius: 4, fontSize: 12, fontWeight: 500,
-      fontFamily: 'var(--hf-sans)', whiteSpace: 'nowrap', lineHeight: '18px',
-      ...style,
-    }}>{children}</span>
-  );
+function HFPill({ children, tone = "neutral", soft = true, style }) {
+    const HF = getHF();
+    const tones = {
+        neutral: {
+            bg: "var(--hf-subtle)",
+            fg: "var(--hf-ink2)",
+            bd: "var(--hf-border)",
+        },
+        ok: {
+            bg: "var(--hf-ok-soft)",
+            fg: "var(--hf-ok-ink)",
+            bd: "var(--hf-ok-border)",
+        },
+        warn: {
+            bg: "var(--hf-warn-soft)",
+            fg: "var(--hf-warn-ink)",
+            bd: "var(--hf-warn-border)",
+        },
+        err: {
+            bg: "var(--hf-err-soft)",
+            fg: "var(--hf-err-ink)",
+            bd: "var(--hf-err-border)",
+        },
+        accent: {
+            bg: "var(--hf-accent-soft)",
+            fg: "var(--hf-accent-ink)",
+            bd: "var(--hf-accent-border)",
+        },
+        muted: {
+            bg: "var(--hf-bg)",
+            fg: "var(--hf-ink3)",
+            bd: "var(--hf-border)",
+        },
+    };
+    const t = tones[tone] || tones.neutral;
+    return (
+        <span
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "1px 8px",
+                height: 20,
+                background: t.bg,
+                color: t.fg,
+                border: `1px solid ${t.bd}`,
+                borderRadius: 4,
+                fontSize: 12,
+                fontWeight: 500,
+                fontFamily: "var(--hf-sans)",
+                whiteSpace: "nowrap",
+                lineHeight: "18px",
+                ...style,
+            }}
+        >
+            {children}
+        </span>
+    );
 }
 
-function HFDot({ tone = 'ok', pulse = false, size = 8 }) {
-  const HF = getHF();
-  const c = { ok: 'var(--hf-ok)', warn: 'var(--hf-warn)', err: 'var(--hf-err)', neutral: 'var(--hf-ink4)', accent: 'var(--hf-accent)' }[tone] || 'var(--hf-ink4)';
-  return (
-    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }}>
-      {pulse && <span style={{
-        position: 'absolute', inset: -2,
-        borderRadius: '50%', background: c, opacity: 0.3,
-        animation: 'hfPulse 1.6s ease-out infinite',
-      }}/>}
-      <span style={{ width: size, height: size, borderRadius: '50%', background: c, boxShadow: `0 0 0 2px ${'var(--hf-surface)'}` }}/>
-    </span>
-  );
+function HFDot({ tone = "ok", pulse = false, size = 8 }) {
+    const HF = getHF();
+    const c =
+        {
+            ok: "var(--hf-ok)",
+            warn: "var(--hf-warn)",
+            err: "var(--hf-err)",
+            neutral: "var(--hf-ink4)",
+            accent: "var(--hf-accent)",
+        }[tone] || "var(--hf-ink4)";
+    return (
+        <span
+            style={{
+                position: "relative",
+                display: "inline-flex",
+                width: size,
+                height: size,
+            }}
+        >
+            {pulse && (
+                <span
+                    style={{
+                        position: "absolute",
+                        inset: -2,
+                        borderRadius: "50%",
+                        background: c,
+                        opacity: 0.3,
+                        animation: "hfPulse 1.6s ease-out infinite",
+                    }}
+                />
+            )}
+            <span
+                style={{
+                    width: size,
+                    height: size,
+                    borderRadius: "50%",
+                    background: c,
+                    boxShadow: `0 0 0 2px ${"var(--hf-surface)"}`,
+                }}
+            />
+        </span>
+    );
 }
 
 function HFFilterBar({ children, right }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-      {children}
-      {right && <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>{right}</div>}
-    </div>
-  );
-}
-
-function HFFilter({ label, value, options, onChange, active, allLabel = 'all' }) {
-  const HF = getHF();
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef(null);
-  const isActive = active !== undefined ? active : (value != null && value !== '' && value !== allLabel);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const handlePick = (v) => { onChange && onChange(v); setOpen(false); };
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button className="hf-btn" onClick={() => options && setOpen(!open)} style={{
-        padding: '5px 10px', height: 30,
-        background: isActive ? 'var(--hf-accent-soft)' : 'var(--hf-surface)',
-        border: `1px solid ${isActive ? 'var(--hf-accent-border)' : 'var(--hf-border-strong)'}`,
-        borderRadius: 6,
-        color: 'var(--hf-ink)',
-        fontSize: 13, fontFamily: 'var(--hf-sans)',
-        cursor: options ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 6,
-        boxShadow: '0 1px 2px rgba(16,24,40,.03)',
-      }}>
-        <span style={{ color: 'var(--hf-ink3)' }}>{label}:</span>
-        <span style={{ color: isActive ? 'var(--hf-accent-ink)' : 'var(--hf-ink)', fontWeight: 500 }}>{value}</span>
-        <span style={{ color: 'var(--hf-ink4)', display: 'flex', transform: open?'rotate(180deg)':'none', transition:'transform 120ms' }}>{HF_ICONS.chevronD}</span>
-      </button>
-      {open && options && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 40,
-          minWidth: 160, maxHeight: 280, overflow: 'auto',
-          background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border)'}`, borderRadius: 6,
-          boxShadow: '0 8px 24px rgba(16,24,40,.12)', padding: 4,
-        }}>
-          {options.map(opt => {
-            const v = typeof opt === 'string' ? opt : opt.value;
-            const lbl = typeof opt === 'string' ? opt : (opt.label || opt.value);
-            const sel = v === value;
-            return (
-              <div key={v} onClick={() => handlePick(v)} style={{
-                padding: '6px 10px', fontSize: 13,
-                borderRadius: 4, cursor: 'pointer',
-                color: sel ? 'var(--hf-accent-ink)' : 'var(--hf-ink2)',
-                background: sel ? 'var(--hf-accent-soft)' : 'transparent',
-                fontWeight: sel ? 500 : 400,
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}
-              onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = 'var(--hf-subtle)'; }}
-              onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
-                <span style={{ flex: 1 }}>{lbl}</span>
-                {sel && <span style={{ color: 'var(--hf-accent)', display: 'flex' }}>{HF_ICONS.check}</span>}
-              </div>
-            );
-          })}
+    return (
+        <div
+            style={{
+                display: "flex",
+                gap: 6,
+                marginBottom: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+            }}
+        >
+            {children}
+            {right && (
+                <div
+                    style={{
+                        marginLeft: "auto",
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                    }}
+                >
+                    {right}
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }
 
-function HFSearch({ placeholder = 'Search…', width = 260, value, onChange }) {
-  const HF = getHF();
-  const controlled = value !== undefined;
-  return (
-    <label style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '0 10px', height: 32,
-      background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border-strong)'}`, borderRadius: 6,
-      color: 'var(--hf-ink4)', fontSize: 13, width,
-      boxShadow: '0 1px 2px rgba(16,24,40,.03)',
-      cursor: 'text',
-    }}>
-      <span style={{ color: 'var(--hf-ink4)', display: 'flex' }}>{HF_ICONS.search}</span>
-      <input
-        type="text"
-        placeholder={placeholder}
-        value={controlled ? value : undefined}
-        onChange={(e) => onChange && onChange(e.target.value)}
-        style={{
-          flex: 1, border: 'none', outline: 'none', background: 'transparent',
-          color: 'var(--hf-ink)', fontSize: 13, fontFamily: 'var(--hf-sans)', padding: 0,
-          minWidth: 0,
-        }}
-      />
-      {controlled && value && (
-        <span onClick={(e) => { e.preventDefault(); onChange(''); }} style={{
-          color: 'var(--hf-ink4)', fontSize: 14, cursor: 'pointer', padding: '0 2px',
-        }}>×</span>
-      )}
-    </label>
-  );
+function HFFilter({
+    label,
+    value,
+    options,
+    onChange,
+    active,
+    allLabel = "all",
+}) {
+    const HF = getHF();
+    const [open, setOpen] = React.useState(false);
+    const ref = React.useRef(null);
+    const isActive =
+        active !== undefined
+            ? active
+            : value != null && value !== "" && value !== allLabel;
+
+    React.useEffect(() => {
+        if (!open) return;
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDoc);
+        return () => document.removeEventListener("mousedown", onDoc);
+    }, [open]);
+
+    const handlePick = (v) => {
+        onChange && onChange(v);
+        setOpen(false);
+    };
+
+    return (
+        <div
+            ref={ref}
+            style={{ position: "relative", display: "inline-block" }}
+        >
+            <button
+                className="hf-btn"
+                onClick={() => options && setOpen(!open)}
+                style={{
+                    padding: "5px 10px",
+                    height: 30,
+                    background: isActive
+                        ? "var(--hf-accent-soft)"
+                        : "var(--hf-surface)",
+                    border: `1px solid ${isActive ? "var(--hf-accent-border)" : "var(--hf-border-strong)"}`,
+                    borderRadius: 6,
+                    color: "var(--hf-ink)",
+                    fontSize: 13,
+                    fontFamily: "var(--hf-sans)",
+                    cursor: options ? "pointer" : "default",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    boxShadow: "0 1px 2px rgba(16,24,40,.03)",
+                }}
+            >
+                <span style={{ color: "var(--hf-ink3)" }}>{label}:</span>
+                <span
+                    style={{
+                        color: isActive
+                            ? "var(--hf-accent-ink)"
+                            : "var(--hf-ink)",
+                        fontWeight: 500,
+                    }}
+                >
+                    {value}
+                </span>
+                <span
+                    style={{
+                        color: "var(--hf-ink4)",
+                        display: "flex",
+                        transform: open ? "rotate(180deg)" : "none",
+                        transition: "transform 120ms",
+                    }}
+                >
+                    {HF_ICONS.chevronD}
+                </span>
+            </button>
+            {open && options && (
+                <div
+                    style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        left: 0,
+                        zIndex: 40,
+                        minWidth: 160,
+                        maxHeight: 280,
+                        overflow: "auto",
+                        background: "var(--hf-surface)",
+                        border: `1px solid ${"var(--hf-border)"}`,
+                        borderRadius: 6,
+                        boxShadow: "0 8px 24px rgba(16,24,40,.12)",
+                        padding: 4,
+                    }}
+                >
+                    {options.map((opt) => {
+                        const v = typeof opt === "string" ? opt : opt.value;
+                        const lbl =
+                            typeof opt === "string"
+                                ? opt
+                                : opt.label || opt.value;
+                        const sel = v === value;
+                        return (
+                            <div
+                                key={v}
+                                onClick={() => handlePick(v)}
+                                style={{
+                                    padding: "6px 10px",
+                                    fontSize: 13,
+                                    borderRadius: 4,
+                                    cursor: "pointer",
+                                    color: sel
+                                        ? "var(--hf-accent-ink)"
+                                        : "var(--hf-ink2)",
+                                    background: sel
+                                        ? "var(--hf-accent-soft)"
+                                        : "transparent",
+                                    fontWeight: sel ? 500 : 400,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!sel)
+                                        e.currentTarget.style.background =
+                                            "var(--hf-subtle)";
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!sel)
+                                        e.currentTarget.style.background =
+                                            "transparent";
+                                }}
+                            >
+                                <span style={{ flex: 1 }}>{lbl}</span>
+                                {sel && (
+                                    <span
+                                        style={{
+                                            color: "var(--hf-accent)",
+                                            display: "flex",
+                                        }}
+                                    >
+                                        {HF_ICONS.check}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function HFSearch({ placeholder = "Search…", width = 260, value, onChange }) {
+    const HF = getHF();
+    const controlled = value !== undefined;
+    return (
+        <label
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "0 10px",
+                height: 32,
+                background: "var(--hf-surface)",
+                border: `1px solid ${"var(--hf-border-strong)"}`,
+                borderRadius: 6,
+                color: "var(--hf-ink4)",
+                fontSize: 13,
+                width,
+                boxShadow: "0 1px 2px rgba(16,24,40,.03)",
+                cursor: "text",
+            }}
+        >
+            <span style={{ color: "var(--hf-ink4)", display: "flex" }}>
+                {HF_ICONS.search}
+            </span>
+            <input
+                type="text"
+                placeholder={placeholder}
+                value={controlled ? value : undefined}
+                onChange={(e) => onChange && onChange(e.target.value)}
+                style={{
+                    flex: 1,
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    color: "var(--hf-ink)",
+                    fontSize: 13,
+                    fontFamily: "var(--hf-sans)",
+                    padding: 0,
+                    minWidth: 0,
+                }}
+            />
+            {controlled && value && (
+                <span
+                    onClick={(e) => {
+                        e.preventDefault();
+                        onChange("");
+                    }}
+                    style={{
+                        color: "var(--hf-ink4)",
+                        fontSize: 14,
+                        cursor: "pointer",
+                        padding: "0 2px",
+                    }}
+                >
+                    ×
+                </span>
+            )}
+        </label>
+    );
 }
 
 function HFCard({ title, sub, action, children, style, padding, flush }) {
-  const HF = getHF();
-  return (
-    <div style={{
-      background: 'var(--hf-surface)', border: `1px solid ${'var(--hf-border)'}`,
-      borderRadius: 'var(--hf-r3)', overflow: 'hidden',
-      boxShadow: 'var(--hf-shadow)',
-      ...style,
-    }}>
-      {(title || action) && (
-        <div style={{
-          padding: `var(--hf-card-head-y) var(--hf-card-p)`,
-          borderBottom: `1px solid ${'var(--hf-border-faint)'}`,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-        }}>
-          <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            {title && <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--hf-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: -0.1 }}>{title}</div>}
-            {sub && <div style={{ fontSize: 12, color: 'var(--hf-ink3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
-          </div>
-          {action && <div style={{ flexShrink: 0, display:'flex', gap:8 }}>{action}</div>}
+    const HF = getHF();
+    return (
+        <div
+            style={{
+                background: "var(--hf-surface)",
+                border: `1px solid ${"var(--hf-border)"}`,
+                borderRadius: "var(--hf-r3)",
+                overflow: "hidden",
+                boxShadow: "var(--hf-shadow)",
+                ...style,
+            }}
+        >
+            {(title || action) && (
+                <div
+                    style={{
+                        padding: `var(--hf-card-head-y) var(--hf-card-p)`,
+                        borderBottom: `1px solid ${"var(--hf-border-faint)"}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
+                    }}
+                >
+                    <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+                        {title && (
+                            <div
+                                style={{
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                    color: "var(--hf-ink)",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    letterSpacing: -0.1,
+                                }}
+                            >
+                                {title}
+                            </div>
+                        )}
+                        {sub && (
+                            <div
+                                style={{
+                                    fontSize: 12,
+                                    color: "var(--hf-ink3)",
+                                    marginTop: 2,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                }}
+                            >
+                                {sub}
+                            </div>
+                        )}
+                    </div>
+                    {action && (
+                        <div style={{ flexShrink: 0, display: "flex", gap: 8 }}>
+                            {action}
+                        </div>
+                    )}
+                </div>
+            )}
+            <div style={{ padding: padding == null ? 0 : padding }}>
+                {children}
+            </div>
         </div>
-      )}
-      <div style={{ padding: padding == null ? 0 : padding }}>{children}</div>
-    </div>
-  );
+    );
 }
 
-function HFTable({ columns, rows, stripe = false, onRowClick, sortBy: extSortBy, sortDir: extSortDir, onSort }) {
-  const HF = getHF();
-  const gridCols = columns.map(c => c.w || '1fr').join(' ');
+function HFTable({
+    columns,
+    rows,
+    stripe = false,
+    onRowClick,
+    sortBy: extSortBy,
+    sortDir: extSortDir,
+    onSort,
+}) {
+    const HF = getHF();
+    const gridCols = columns.map((c) => c.w || "1fr").join(" ");
 
-  const [uSortBy, setUSortBy] = React.useState(null);
-  const [uSortDir, setUSortDir] = React.useState('asc');
-  const sortBy  = extSortBy  !== undefined ? extSortBy  : uSortBy;
-  const sortDir = extSortDir !== undefined ? extSortDir : uSortDir;
+    const [uSortBy, setUSortBy] = React.useState(null);
+    const [uSortDir, setUSortDir] = React.useState("asc");
+    const sortBy = extSortBy !== undefined ? extSortBy : uSortBy;
+    const sortDir = extSortDir !== undefined ? extSortDir : uSortDir;
 
-  const handleSort = (key) => {
-    if (onSort) { onSort(key); return; }
-    if (uSortBy === key) setUSortDir(uSortDir === 'asc' ? 'desc' : 'asc');
-    else { setUSortBy(key); setUSortDir('asc'); }
-  };
+    const handleSort = (key) => {
+        if (onSort) {
+            onSort(key);
+            return;
+        }
+        if (uSortBy === key) setUSortDir(uSortDir === "asc" ? "desc" : "asc");
+        else {
+            setUSortBy(key);
+            setUSortDir("asc");
+        }
+    };
 
-  const displayRows = React.useMemo(() => {
-    if (!sortBy) return rows;
-    const col = columns.find(c => c.key === sortBy);
-    if (!col || !col.sortable) return rows;
-    const sortVal = col.sortVal || ((r) => r[sortBy]);
-    const copy = rows.slice();
-    copy.sort((a,b) => {
-      const va = sortVal(a), vb = sortVal(b);
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      if (typeof va === 'number' && typeof vb === 'number') return sortDir==='asc'? va - vb : vb - va;
-      return sortDir==='asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-    });
-    return copy;
-  }, [rows, sortBy, sortDir, columns]);
+    const displayRows = React.useMemo(() => {
+        if (!sortBy) return rows;
+        const col = columns.find((c) => c.key === sortBy);
+        if (!col || !col.sortable) return rows;
+        const sortVal = col.sortVal || ((r) => r[sortBy]);
+        const copy = rows.slice();
+        copy.sort((a, b) => {
+            const va = sortVal(a),
+                vb = sortVal(b);
+            if (va == null && vb == null) return 0;
+            if (va == null) return 1;
+            if (vb == null) return -1;
+            if (typeof va === "number" && typeof vb === "number")
+                return sortDir === "asc" ? va - vb : vb - va;
+            return sortDir === "asc"
+                ? String(va).localeCompare(String(vb))
+                : String(vb).localeCompare(String(va));
+        });
+        return copy;
+    }, [rows, sortBy, sortDir, columns]);
 
-  const SortIcon = ({ active, dir }) => (
-    <svg width="9" height="11" viewBox="0 0 9 11" style={{flexShrink:0, marginLeft:4, verticalAlign:'middle'}}>
-      <path d="M4.5 0.5 L8 4 L1 4 Z" fill={active && dir==='asc' ? 'var(--hf-ink)' : 'var(--hf-ink5)'}/>
-      <path d="M4.5 10.5 L1 7 L8 7 Z" fill={active && dir==='desc' ? 'var(--hf-ink)' : 'var(--hf-ink5)'}/>
-    </svg>
-  );
+    const SortIcon = ({ active, dir }) => (
+        <svg
+            width="9"
+            height="11"
+            viewBox="0 0 9 11"
+            style={{ flexShrink: 0, marginLeft: 4, verticalAlign: "middle" }}
+        >
+            <path
+                d="M4.5 0.5 L8 4 L1 4 Z"
+                fill={
+                    active && dir === "asc" ? "var(--hf-ink)" : "var(--hf-ink5)"
+                }
+            />
+            <path
+                d="M4.5 10.5 L1 7 L8 7 Z"
+                fill={
+                    active && dir === "desc"
+                        ? "var(--hf-ink)"
+                        : "var(--hf-ink5)"
+                }
+            />
+        </svg>
+    );
 
-  return (
-    <div>
-      <div style={{
-        display: 'grid', gridTemplateColumns: gridCols,
-        padding: `8px var(--hf-card-p)`,
-        borderBottom: `1px solid ${'var(--hf-border)'}`,
-        background: 'var(--hf-subtle)',
-        fontSize: 11, color: 'var(--hf-ink3)', fontWeight: 600,
-        textTransform: 'uppercase', letterSpacing: 0.5,
-      }}>
-        {columns.map((c, i) => {
-          const isActive = sortBy === c.key;
-          const clickable = !!c.sortable;
-          return (
-            <div key={i}
-              onClick={clickable ? (e) => { e.stopPropagation(); handleSort(c.key); } : undefined}
-              style={{
-                textAlign: c.align || 'left',
-                paddingRight: i < columns.length - 1 ? 12 : 0,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                cursor: clickable ? 'pointer' : 'default',
-                userSelect: 'none',
-                color: isActive ? 'var(--hf-ink)' : 'var(--hf-ink3)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0,
-                justifyContent: c.align === 'right' ? 'flex-end' : 'flex-start',
-                transition: 'color 100ms',
-              }}
-              onMouseEnter={(e) => { if (clickable) e.currentTarget.style.color = 'var(--hf-ink)'; }}
-              onMouseLeave={(e) => { if (clickable && !isActive) e.currentTarget.style.color = 'var(--hf-ink3)'; }}
+    return (
+        <div>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: gridCols,
+                    padding: `8px var(--hf-card-p)`,
+                    borderBottom: `1px solid ${"var(--hf-border)"}`,
+                    background: "var(--hf-subtle)",
+                    fontSize: 11,
+                    color: "var(--hf-ink3)",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                }}
             >
-              <span>{c.label}</span>
-              {clickable && <SortIcon active={isActive} dir={sortDir}/>}
+                {columns.map((c, i) => {
+                    const isActive = sortBy === c.key;
+                    const clickable = !!c.sortable;
+                    return (
+                        <div
+                            key={i}
+                            onClick={
+                                clickable
+                                    ? (e) => {
+                                          e.stopPropagation();
+                                          handleSort(c.key);
+                                      }
+                                    : undefined
+                            }
+                            style={{
+                                textAlign: c.align || "left",
+                                paddingRight: i < columns.length - 1 ? 12 : 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                cursor: clickable ? "pointer" : "default",
+                                userSelect: "none",
+                                color: isActive
+                                    ? "var(--hf-ink)"
+                                    : "var(--hf-ink3)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0,
+                                justifyContent:
+                                    c.align === "right"
+                                        ? "flex-end"
+                                        : "flex-start",
+                                transition: "color 100ms",
+                            }}
+                            onMouseEnter={(e) => {
+                                if (clickable)
+                                    e.currentTarget.style.color =
+                                        "var(--hf-ink)";
+                            }}
+                            onMouseLeave={(e) => {
+                                if (clickable && !isActive)
+                                    e.currentTarget.style.color =
+                                        "var(--hf-ink3)";
+                            }}
+                        >
+                            <span>{c.label}</span>
+                            {clickable && (
+                                <SortIcon active={isActive} dir={sortDir} />
+                            )}
+                        </div>
+                    );
+                })}
             </div>
-          );
-        })}
-      </div>
-      {displayRows.map((r, i) => (
-        <div key={i} className="hf-row" onClick={onRowClick ? () => onRowClick(r, i) : undefined} style={{
-          display: 'grid', gridTemplateColumns: gridCols,
-          padding: `var(--hf-cell-y) var(--hf-card-p)`,
-          minHeight: 'var(--hf-row-h)',
-          borderBottom: i < displayRows.length - 1 ? `1px solid ${'var(--hf-border-faint)'}` : 'none',
-          fontSize: 'var(--hf-fs-body)', color: 'var(--hf-ink)', alignItems: 'center',
-          background: stripe && i % 2 === 1 ? 'var(--hf-subtle)' : 'var(--hf-surface)',
-          cursor: onRowClick ? 'pointer' : 'default',
-          transition: 'background 80ms',
-        }}>
-          {columns.map((c, j) => (
-            <div key={j} style={{
-              textAlign: c.align || 'left',
-              color: c.muted ? 'var(--hf-ink3)' : 'var(--hf-ink)',
-              fontFamily: c.mono ? 'var(--hf-mono)' : 'var(--hf-sans)',
-              fontSize: c.mono ? 'var(--hf-fs-mono)' : 'var(--hf-fs-body)',
-              paddingRight: j < columns.length - 1 ? 12 : 0,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              minWidth: 0,
-              fontVariantNumeric: c.mono ? 'tabular-nums' : undefined,
-            }}>
-              {c.cell ? c.cell(r[c.key], r, i) : r[c.key]}
-            </div>
-          ))}
+            {displayRows.map((r, i) => (
+                <div
+                    key={i}
+                    className="hf-row"
+                    onClick={onRowClick ? () => onRowClick(r, i) : undefined}
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: gridCols,
+                        padding: `var(--hf-cell-y) var(--hf-card-p)`,
+                        minHeight: "var(--hf-row-h)",
+                        borderBottom:
+                            i < displayRows.length - 1
+                                ? `1px solid ${"var(--hf-border-faint)"}`
+                                : "none",
+                        fontSize: "var(--hf-fs-body)",
+                        color: "var(--hf-ink)",
+                        alignItems: "center",
+                        background:
+                            stripe && i % 2 === 1
+                                ? "var(--hf-subtle)"
+                                : "var(--hf-surface)",
+                        cursor: onRowClick ? "pointer" : "default",
+                        transition: "background 80ms",
+                    }}
+                >
+                    {columns.map((c, j) => (
+                        <div
+                            key={j}
+                            style={{
+                                textAlign: c.align || "left",
+                                color: c.muted
+                                    ? "var(--hf-ink3)"
+                                    : "var(--hf-ink)",
+                                fontFamily: c.mono
+                                    ? "var(--hf-mono)"
+                                    : "var(--hf-sans)",
+                                fontSize: c.mono
+                                    ? "var(--hf-fs-mono)"
+                                    : "var(--hf-fs-body)",
+                                paddingRight: j < columns.length - 1 ? 12 : 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                                fontVariantNumeric: c.mono
+                                    ? "tabular-nums"
+                                    : undefined,
+                            }}
+                        >
+                            {c.cell ? c.cell(r[c.key], r, i) : r[c.key]}
+                        </div>
+                    ))}
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    );
 }
 
 function HFTabs({ tabs, active, onChange }) {
-  const HF = getHF();
-  return (
-    <div style={{
-      display: 'flex', gap: 2, borderBottom: `1px solid ${'var(--hf-border)'}`,
-      marginBottom: 14,
-    }}>
-      {tabs.map(t => {
-        const a = t.id === active;
-        return (
-          <button key={t.id} onClick={() => onChange && onChange(t.id)} style={{
-            padding: '9px 14px',
-            background: 'transparent', border: 'none',
-            borderBottom: a ? `2px solid ${'var(--hf-accent)'}` : '2px solid transparent',
-            color: a ? 'var(--hf-ink)' : 'var(--hf-ink3)',
-            fontSize: 13, fontWeight: a ? 600 : 500,
-            cursor: 'pointer', fontFamily: 'var(--hf-sans)',
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            marginBottom: -1,
-          }}>
-            {t.label}
-            {t.count != null && (
-              <span style={{
-                fontFamily: 'var(--hf-mono)', fontSize: 11,
-                padding: '1px 6px', borderRadius: 4,
-                background: a ? 'var(--hf-accent-soft)' : 'var(--hf-subtle)',
-                color: a ? 'var(--hf-accent-ink)' : 'var(--hf-ink3)',
-              }}>{t.count}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function hfChartSummary(data, label = 'Series') {
-  if (!data || data.length === 0) return `${label}: no data`;
-  const peak = Math.max(...data);
-  const latest = data[data.length - 1];
-  const fmt = (n) => Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2);
-  return `${label}, ${data.length} points. Peak ${fmt(peak)}. Latest ${fmt(latest)}.`;
-}
-
-function HFAreaChart({ data, h = 140, w = 900, strokeW = 1.8, label = 'Trend' }) {
-  const HF = getHF();
-  if (!data || data.length === 0) {
-    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--hf-ink4)', fontSize: 12 }}>No data</div>;
-  }
-  const max = Math.max(...data), min = Math.min(...data);
-  const range = max - min || 1;
-  const denom = data.length === 1 ? 1 : data.length - 1;
-  const pts = data.map((v, i) => {
-    const x = (i / denom) * w;
-    const y = h - ((v - min) / range) * (h - 14) - 7;
-    return [x, y];
-  });
-  const path = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const areaPath = `${path} L${w},${h} L0,${h} Z`;
-  const gid = 'hfA_' + Math.random().toString(36).slice(2, 8);
-  const lines = [0.25, 0.5, 0.75].map(p => h * p);
-  const summary = hfChartSummary(data, label);
-  return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }} role="img" aria-label={summary}>
-      <title>{summary}</title>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={'var(--hf-chart-fill-from)'} stopOpacity="0.9"/>
-          <stop offset="100%" stopColor={'var(--hf-chart-fill-to)'} stopOpacity="0.15"/>
-        </linearGradient>
-      </defs>
-      {lines.map((y, i) => (
-        <line key={i} x1="0" y1={y} x2={w} y2={y} stroke={'var(--hf-chart-grid)'} strokeWidth="1" strokeDasharray="2 4" vectorEffect="non-scaling-stroke"/>
-      ))}
-      <path d={areaPath} fill={`url(#${gid})`}/>
-      <path d={path} stroke={'var(--hf-chart-primary)'} strokeWidth={strokeW} fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
-    </svg>
-  );
-}
-
-function HFBarChart({ data, h = 140, colorFn, label = 'Bar chart' }) {
-  const HF = getHF();
-  if (!data || data.length === 0) {
-    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--hf-ink4)', fontSize: 12 }}>No data</div>;
-  }
-  const max = Math.max(...data.map(d => Math.abs(d))) || 1;
-  return (
-    <div role="img" aria-label={hfChartSummary(data, label)} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
-      {data.map((v, i) => {
-        const c = colorFn ? colorFn(v, i, HF) : (v >= 0 ? 'var(--hf-accent)' : 'var(--hf-err)');
-        return (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
-            <div style={{
-              height: `${(Math.abs(v) / max) * 100}%`,
-              background: c, opacity: i === data.length - 1 ? 1 : 0.75,
-              borderRadius: '3px 3px 0 0', minHeight: 2,
-            }}/>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function HFSparkBars({ data, h = 80, label = 'Activity' }) {
-  const HF = getHF();
-  if (!data || data.length === 0) {
-    return <div role="img" aria-label={`${label}: no data`} style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--hf-ink4)', fontSize: 12 }}>No data</div>;
-  }
-  const max = Math.max(...data) || 1;
-  return (
-    <div role="img" aria-label={hfChartSummary(data, label)} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: h }}>
-      {data.map((v, i) => (
-        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
-          <div style={{
-            height: `${(v / max) * 100}%`,
-            background: i === data.length - 1 ? 'var(--hf-accent)' : 'var(--hf-accent-border)',
-            borderRadius: '3px 3px 0 0',
-            minHeight: 2,
-          }}/>
+    const HF = getHF();
+    return (
+        <div
+            style={{
+                display: "flex",
+                gap: 2,
+                borderBottom: `1px solid ${"var(--hf-border)"}`,
+                marginBottom: 14,
+            }}
+        >
+            {tabs.map((t) => {
+                const a = t.id === active;
+                return (
+                    <button
+                        key={t.id}
+                        onClick={() => onChange && onChange(t.id)}
+                        style={{
+                            padding: "9px 14px",
+                            background: "transparent",
+                            border: "none",
+                            borderBottom: a
+                                ? `2px solid ${"var(--hf-accent)"}`
+                                : "2px solid transparent",
+                            color: a ? "var(--hf-ink)" : "var(--hf-ink3)",
+                            fontSize: 13,
+                            fontWeight: a ? 600 : 500,
+                            cursor: "pointer",
+                            fontFamily: "var(--hf-sans)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginBottom: -1,
+                        }}
+                    >
+                        {t.label}
+                        {t.count != null && (
+                            <span
+                                style={{
+                                    fontFamily: "var(--hf-mono)",
+                                    fontSize: 11,
+                                    padding: "1px 6px",
+                                    borderRadius: 4,
+                                    background: a
+                                        ? "var(--hf-accent-soft)"
+                                        : "var(--hf-subtle)",
+                                    color: a
+                                        ? "var(--hf-accent-ink)"
+                                        : "var(--hf-ink3)",
+                                }}
+                            >
+                                {t.count}
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
         </div>
-      ))}
-    </div>
-  );
+    );
+}
+
+function hfChartSummary(data, label = "Series") {
+    if (!data || data.length === 0) return `${label}: no data`;
+    const peak = Math.max(...data);
+    const latest = data[data.length - 1];
+    const fmt = (n) =>
+        Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2);
+    return `${label}, ${data.length} points. Peak ${fmt(peak)}. Latest ${fmt(latest)}.`;
+}
+
+function HFAreaChart({
+    data,
+    h = 140,
+    w = 900,
+    strokeW = 1.8,
+    label = "Trend",
+}) {
+    const HF = getHF();
+    if (!data || data.length === 0) {
+        return (
+            <div
+                role="img"
+                aria-label={`${label}: no data`}
+                style={{
+                    height: h,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--hf-ink4)",
+                    fontSize: 12,
+                }}
+            >
+                No data
+            </div>
+        );
+    }
+    const max = Math.max(...data),
+        min = Math.min(...data);
+    const range = max - min || 1;
+    const denom = data.length === 1 ? 1 : data.length - 1;
+    const pts = data.map((v, i) => {
+        const x = (i / denom) * w;
+        const y = h - ((v - min) / range) * (h - 14) - 7;
+        return [x, y];
+    });
+    const path = pts
+        .map(
+            ([x, y], i) =>
+                `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`,
+        )
+        .join(" ");
+    const areaPath = `${path} L${w},${h} L0,${h} Z`;
+    const gid = "hfA_" + Math.random().toString(36).slice(2, 8);
+    const lines = [0.25, 0.5, 0.75].map((p) => h * p);
+    const summary = hfChartSummary(data, label);
+    return (
+        <svg
+            width="100%"
+            viewBox={`0 0 ${w} ${h}`}
+            preserveAspectRatio="none"
+            style={{ display: "block" }}
+            role="img"
+            aria-label={summary}
+        >
+            <title>{summary}</title>
+            <defs>
+                <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                        offset="0%"
+                        stopColor={"var(--hf-chart-fill-from)"}
+                        stopOpacity="0.9"
+                    />
+                    <stop
+                        offset="100%"
+                        stopColor={"var(--hf-chart-fill-to)"}
+                        stopOpacity="0.15"
+                    />
+                </linearGradient>
+            </defs>
+            {lines.map((y, i) => (
+                <line
+                    key={i}
+                    x1="0"
+                    y1={y}
+                    x2={w}
+                    y2={y}
+                    stroke={"var(--hf-chart-grid)"}
+                    strokeWidth="1"
+                    strokeDasharray="2 4"
+                    vectorEffect="non-scaling-stroke"
+                />
+            ))}
+            <path d={areaPath} fill={`url(#${gid})`} />
+            <path
+                d={path}
+                stroke={"var(--hf-chart-primary)"}
+                strokeWidth={strokeW}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+            />
+        </svg>
+    );
+}
+
+function HFBarChart({ data, h = 140, colorFn, label = "Bar chart" }) {
+    const HF = getHF();
+    if (!data || data.length === 0) {
+        return (
+            <div
+                role="img"
+                aria-label={`${label}: no data`}
+                style={{
+                    height: h,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--hf-ink4)",
+                    fontSize: 12,
+                }}
+            >
+                No data
+            </div>
+        );
+    }
+    const max = Math.max(...data.map((d) => Math.abs(d))) || 1;
+    return (
+        <div
+            role="img"
+            aria-label={hfChartSummary(data, label)}
+            style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 4,
+                height: h,
+            }}
+        >
+            {data.map((v, i) => {
+                const c = colorFn
+                    ? colorFn(v, i, HF)
+                    : v >= 0
+                      ? "var(--hf-accent)"
+                      : "var(--hf-err)";
+                return (
+                    <div
+                        key={i}
+                        style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "flex-end",
+                            height: "100%",
+                        }}
+                    >
+                        <div
+                            style={{
+                                height: `${(Math.abs(v) / max) * 100}%`,
+                                background: c,
+                                opacity: i === data.length - 1 ? 1 : 0.75,
+                                borderRadius: "3px 3px 0 0",
+                                minHeight: 2,
+                            }}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function HFSparkBars({ data, h = 80, label = "Activity" }) {
+    const HF = getHF();
+    if (!data || data.length === 0) {
+        return (
+            <div
+                role="img"
+                aria-label={`${label}: no data`}
+                style={{
+                    height: h,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--hf-ink4)",
+                    fontSize: 12,
+                }}
+            >
+                No data
+            </div>
+        );
+    }
+    const max = Math.max(...data) || 1;
+    return (
+        <div
+            role="img"
+            aria-label={hfChartSummary(data, label)}
+            style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 4,
+                height: h,
+            }}
+        >
+            {data.map((v, i) => (
+                <div
+                    key={i}
+                    style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "flex-end",
+                        height: "100%",
+                    }}
+                >
+                    <div
+                        style={{
+                            height: `${(v / max) * 100}%`,
+                            background:
+                                i === data.length - 1
+                                    ? "var(--hf-accent)"
+                                    : "var(--hf-accent-border)",
+                            borderRadius: "3px 3px 0 0",
+                            minHeight: 2,
+                        }}
+                    />
+                </div>
+            ))}
+        </div>
+    );
 }
 
 function HFKpiTile({ label, value, delta, tone, href, last, icon, onClick }) {
-  const HF = getHF();
-  const toneColor = tone === 'ok' ? 'var(--hf-ok-ink)' : tone === 'warn' ? 'var(--hf-warn-ink)' : tone === 'err' ? 'var(--hf-err-ink)' : tone === 'accent' ? 'var(--hf-accent-ink)' : 'var(--hf-ink3)';
-  const clickable = !!onClick || !!href;
-  const handleClick = onClick ? (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-    e.preventDefault();
-    onClick();
-  } : undefined;
-  return (
-    <a href={href || '#'}
-       onClick={handleClick}
-       aria-label={`${label}: ${value}`}
-       className="hf-link" style={{
-      display: 'block', textDecoration: 'none', color: 'var(--hf-ink)',
-      padding: `var(--hf-kpi-p) calc(var(--hf-kpi-p) + 2px)`,
-      borderRight: last ? 'none' : `1px solid ${'var(--hf-border)'}`,
-      background: 'var(--hf-surface)',
-      cursor: clickable ? 'pointer' : 'default',
-      transition: 'background 100ms',
-    }}
-    onMouseEnter={clickable ? (e) => { e.currentTarget.style.background = 'var(--hf-subtle)'; } : undefined}
-    onMouseLeave={clickable ? (e) => { e.currentTarget.style.background = 'var(--hf-surface)'; } : undefined}>
-      <div style={{
-        fontSize: 12, color: 'var(--hf-ink3)', fontWeight: 500,
-        textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
-      }}>{label}</div>
-      <div style={{
-        fontFamily: 'var(--hf-mono)', fontSize: 'var(--hf-fs-kpi)', fontWeight: 500,
-        letterSpacing: -0.5, lineHeight: 1, color: 'var(--hf-ink)',
-        fontVariantNumeric: 'tabular-nums',
-      }}>{value}</div>
-      {delta && (
-        <div style={{ fontSize: 12, color: toneColor, marginTop: 6, display:'flex', alignItems:'center', gap:4 }}>{delta}</div>
-      )}
-    </a>
-  );
+    const HF = getHF();
+    const toneColor =
+        tone === "ok"
+            ? "var(--hf-ok-ink)"
+            : tone === "warn"
+              ? "var(--hf-warn-ink)"
+              : tone === "err"
+                ? "var(--hf-err-ink)"
+                : tone === "accent"
+                  ? "var(--hf-accent-ink)"
+                  : "var(--hf-ink3)";
+    const clickable = !!onClick || !!href;
+    const handleClick = onClick
+        ? (e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1)
+                  return;
+              e.preventDefault();
+              onClick();
+          }
+        : undefined;
+    return (
+        <a
+            href={href || "#"}
+            onClick={handleClick}
+            aria-label={`${label}: ${value}`}
+            className="hf-link"
+            style={{
+                display: "block",
+                textDecoration: "none",
+                color: "var(--hf-ink)",
+                padding: `var(--hf-kpi-p) calc(var(--hf-kpi-p) + 2px)`,
+                borderRight: last ? "none" : `1px solid ${"var(--hf-border)"}`,
+                background: "var(--hf-surface)",
+                cursor: clickable ? "pointer" : "default",
+                transition: "background 100ms",
+            }}
+            onMouseEnter={
+                clickable
+                    ? (e) => {
+                          e.currentTarget.style.background = "var(--hf-subtle)";
+                      }
+                    : undefined
+            }
+            onMouseLeave={
+                clickable
+                    ? (e) => {
+                          e.currentTarget.style.background =
+                              "var(--hf-surface)";
+                      }
+                    : undefined
+            }
+        >
+            <div
+                style={{
+                    fontSize: 12,
+                    color: "var(--hf-ink3)",
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    marginBottom: 6,
+                }}
+            >
+                {label}
+            </div>
+            <div
+                style={{
+                    fontFamily: "var(--hf-mono)",
+                    fontSize: "var(--hf-fs-kpi)",
+                    fontWeight: 500,
+                    letterSpacing: -0.5,
+                    lineHeight: 1,
+                    color: "var(--hf-ink)",
+                    fontVariantNumeric: "tabular-nums",
+                }}
+            >
+                {value}
+            </div>
+            {delta && (
+                <div
+                    style={{
+                        fontSize: 12,
+                        color: toneColor,
+                        marginTop: 6,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                    }}
+                >
+                    {delta}
+                </div>
+            )}
+        </a>
+    );
 }
 
 function HFKpiStrip({ items }) {
-  const HF = getHF();
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`,
-      border: `1px solid ${'var(--hf-border)'}`, borderRadius: 'var(--hf-r3)',
-      background: 'var(--hf-surface)', boxShadow: 'var(--hf-shadow)',
-      overflow: 'hidden', marginBottom: 'var(--hf-gap)',
-    }}>
-      {items.map((k, i) => <HFKpiTile key={i} {...k} last={i === items.length - 1}/>)}
-    </div>
-  );
+    const HF = getHF();
+    return (
+        <div
+            style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${items.length}, 1fr)`,
+                border: `1px solid ${"var(--hf-border)"}`,
+                borderRadius: "var(--hf-r3)",
+                background: "var(--hf-surface)",
+                boxShadow: "var(--hf-shadow)",
+                overflow: "hidden",
+                marginBottom: "var(--hf-gap)",
+            }}
+        >
+            {items.map((k, i) => (
+                <HFKpiTile key={i} {...k} last={i === items.length - 1} />
+            ))}
+        </div>
+    );
 }
 
 const hfLink = (HF) => ({
-  fontSize: 13, color: 'var(--hf-accent-ink)',
-  textDecoration: 'none', fontFamily: 'var(--hf-sans)', fontWeight: 500,
-  display: 'inline-flex', alignItems: 'center', gap: 4,
+    fontSize: 13,
+    color: "var(--hf-accent-ink)",
+    textDecoration: "none",
+    fontFamily: "var(--hf-sans)",
+    fontWeight: 500,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
 });
 
 function HFBreadcrumbLink({ page, params, goto, children, style }) {
-  const HF = getHF();
-  const href = (window.HF_BUILD_PATH && window.HF_BUILD_PATH(page, params)) || '#';
-  const onClick = (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-    e.preventDefault();
-    goto && goto(page, params);
-  };
-  return (
-    <a href={href} onClick={onClick} className="hf-link" style={{ color: 'var(--hf-ink3)', textDecoration: 'none', ...style }}>
-      {children}
-    </a>
-  );
+    const HF = getHF();
+    const href =
+        (window.HF_BUILD_PATH && window.HF_BUILD_PATH(page, params)) || "#";
+    const onClick = (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+        e.preventDefault();
+        goto && goto(page, params);
+    };
+    return (
+        <a
+            href={href}
+            onClick={onClick}
+            className="hf-link"
+            style={{
+                color: "var(--hf-ink3)",
+                textDecoration: "none",
+                ...style,
+            }}
+        >
+            {children}
+        </a>
+    );
 }
 
-function HFExtLink({ href, title = 'Open in new tab', size = 12 }) {
-  const HF = getHF();
-  const [hover, setHover] = React.useState(false);
-  return (
-    <a
-      href={href || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      title={title}
-      aria-label={title}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 18, height: 18, flexShrink: 0,
-        color: hover ? 'var(--hf-accent-ink)' : 'var(--hf-ink4)',
-        textDecoration: 'none', borderRadius: 3,
-        background: hover ? 'var(--hf-bg)' : 'transparent',
-        transition: 'color 120ms, background 120ms',
-      }}
-    >
-      <HFIcon d={<><path d="M6 3 H3 V13 H13 V10 M9 3 H13 V7 M13 3 L8 8"/></>} size={size} sw={1.6}/>
-    </a>
-  );
+function HFExtLink({ href, title = "Open in new tab", size = 12 }) {
+    const HF = getHF();
+    const [hover, setHover] = React.useState(false);
+    return (
+        <a
+            href={href || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            title={title}
+            aria-label={title}
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 18,
+                height: 18,
+                flexShrink: 0,
+                color: hover ? "var(--hf-accent-ink)" : "var(--hf-ink4)",
+                textDecoration: "none",
+                borderRadius: 3,
+                background: hover ? "var(--hf-bg)" : "transparent",
+                transition: "color 120ms, background 120ms",
+            }}
+        >
+            <HFIcon
+                d={
+                    <>
+                        <path d="M6 3 H3 V13 H13 V10 M9 3 H13 V7 M13 3 L8 8" />
+                    </>
+                }
+                size={size}
+                sw={1.6}
+            />
+        </a>
+    );
 }
 
 Object.assign(window, {
-  HFButton, HFPill, HFDot, HFFilterBar, HFFilter, HFSearch,
-  HFTable, HFTabs, HFAreaChart, HFBarChart, HFSparkBars,
-  HFKpiTile, HFKpiStrip, HFCard, hfLink, HFExtLink,
-  HFSkeleton, HFTableSkeleton, HFKpiStripSkeleton,
-  HFBreadcrumbLink,
+    HFButton,
+    HFPill,
+    HFDot,
+    HFFilterBar,
+    HFFilter,
+    HFSearch,
+    HFTable,
+    HFTabs,
+    HFAreaChart,
+    HFBarChart,
+    HFSparkBars,
+    HFKpiTile,
+    HFKpiStrip,
+    HFCard,
+    hfLink,
+    HFExtLink,
+    HFSkeleton,
+    HFTableSkeleton,
+    HFKpiStripSkeleton,
+    HFBreadcrumbLink,
 });
