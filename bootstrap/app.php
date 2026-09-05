@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Exceptions\ActionFailed;
 use App\Exceptions\FailureKind;
 use App\Http\Middleware\DashboardBasicAuth;
+use App\Http\Middleware\SecurityHeaders;
 use App\Models\Book;
 use App\Models\CronJob;
 use App\Models\DiscoveredUrl;
@@ -26,29 +29,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-
-        $middleware->preventRequestForgery(except: [
-            'scrape/*',
-            'shops/*/rate-settings',
-        ]);
-
-        $middleware->web(append: DashboardBasicAuth::class);
+        $middleware->web(
+            append: SecurityHeaders::class,
+            prepend: DashboardBasicAuth::class,
+        );
         $middleware->api(
-            append: DashboardBasicAuth::class,
-            prepend: 'throttle:300,1',
+            prepend: ['web', 'throttle:300,1'],
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (ActionFailed $failure): JsonResponse {
-            return new JsonResponse($failure->payload, match ($failure->kind) {
-                FailureKind::BadRequest => Response::HTTP_BAD_REQUEST,
-                FailureKind::Conflict => Response::HTTP_CONFLICT,
-                FailureKind::NotFound => Response::HTTP_NOT_FOUND,
-                FailureKind::PayloadTooLarge => Response::HTTP_REQUEST_ENTITY_TOO_LARGE,
-                FailureKind::Unavailable => Response::HTTP_SERVICE_UNAVAILABLE,
-                FailureKind::Unprocessable => Response::HTTP_UNPROCESSABLE_ENTITY,
-            });
-        });
+        $exceptions->render(fn (ActionFailed $failure): JsonResponse => new JsonResponse($failure->payload, match ($failure->kind) {
+            FailureKind::BadRequest => Response::HTTP_BAD_REQUEST,
+            FailureKind::Conflict => Response::HTTP_CONFLICT,
+            FailureKind::NotFound => Response::HTTP_NOT_FOUND,
+            FailureKind::PayloadTooLarge => Response::HTTP_REQUEST_ENTITY_TOO_LARGE,
+            FailureKind::Unavailable => Response::HTTP_SERVICE_UNAVAILABLE,
+            FailureKind::Unprocessable => Response::HTTP_UNPROCESSABLE_ENTITY,
+        }));
 
         $exceptions->render(function (NotFoundHttpException $exception, Request $request): ?JsonResponse {
             $previous = $exception->getPrevious();
@@ -73,6 +70,6 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
         );
     })->create();
