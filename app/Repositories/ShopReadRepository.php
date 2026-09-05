@@ -46,7 +46,7 @@ final readonly class ShopReadRepository
                 'last_run_status' => $last->status ?? '—',
                 'discover_strategies' => $this->strategies($shop->name),
             ];
-        })->all();
+        })->values()->all();
 
         return ['shops' => $shops];
     }

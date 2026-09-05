@@ -44,7 +44,7 @@ final readonly class OverviewReadRepository
                 ),
                 'last_run_status' => $last->status ?? '—',
             ];
-        })->all();
+        })->values()->all();
 
         return [
             'stats' => [
