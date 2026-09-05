@@ -40,8 +40,8 @@ themselves are generic.
 | Discover | `php artisan crawler:run discover --shop=pegasas --strategy=graphql` | Magento GraphQL: full metadata, slow |
 | Discover | `php artisan crawler:run discover --shop=pegasas --strategy=lupasearch` | Third-party search index: fast price/stock rescan |
 | Scan | `php artisan crawler:run scan --shop=vaga` | Scrape full product pages, resumable after a crash |
-| Validate | `bin/validate --shop=vaga` | 20 data-quality checks over what was scraped |
-| Match | `bin/match --shop=vaga` | Link shop books to canonical books by ISBN, backfill authors |
+| Validate | `php artisan books:validate --shop=vaga` | 20 data-quality checks over what was scraped |
+| Match | `php artisan books:match --shop=vaga` | Link shop books to canonical books by ISBN, backfill authors |
 
 Schedules live in `cron_jobs` and are fired by `artisan runs:schedule`, which
 replaced the crontab the Python container rendered at boot. Expressions are
@@ -166,9 +166,10 @@ database/schema/              # schema applied by bin/migrate
 tests/Support/                # synthetic database fixtures and helpers
 tests/golden/                 # immutable characterisation goldens
 tests/fixtures/               # saved HTML/JSON parser inputs
-public/static/hifi/           # built React dashboard
+public/static/hifi/           # React dashboard source
+public/build/hifi/            # generated production assets (`npm run build`)
 monitoring/                   # Loki, Alloy, Grafana provisioning
-docs/                         # port history and current follow-ups
+docs/                         # port history and architecture constraints
 ```
 
 ## Database
@@ -198,8 +199,9 @@ then the global default.
 
 ## Deployment
 
-Compose builds one application image and runs it as the dashboard, scheduler,
-and reaper services, alongside PostgreSQL, FlareSolverr, Loki, Alloy, and
-Grafana. Published service ports are loopback-only by default; the dashboard
-has no authentication, so do not widen its bind address without adding an
-authenticated reverse proxy.
+Compose builds one non-root Nginx/PHP-FPM application image and runs it as the
+dashboard, scheduler, and reaper services, alongside PostgreSQL, FlareSolverr,
+Loki, Alloy, and Grafana. Published service ports are loopback-only. Dashboard
+Basic Auth fails closed unless `DASHBOARD_AUTH_DISABLED=true` is deliberately
+set for local development. Set every required secret in `.env` before starting
+Compose and use an authenticated TLS reverse proxy for any non-local exposure.

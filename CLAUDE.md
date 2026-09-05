@@ -23,7 +23,8 @@ Homebrew's default `php` is 8.5). Outside make, use
 `/opt/homebrew/opt/php@8.4/bin/php`.
 
 ```bash
-make install                                  # composer install, all three projects
+make install                                  # install the single Composer project
+npm ci && npm run build                       # build the production dashboard assets
 docker compose up -d postgres                 # the live database
 docker compose --profile test up -d postgres-test   # the test database
 php bin/migrate status --database=$DATABASE_URL  # schema state
@@ -41,9 +42,9 @@ php artisan crawler:run scan --shop=vaga --urls=https://vaga.lt/some-book
 php artisan crawler:run discover --shop=pegasas --strategy=graphql       # full LT metadata, slow
 php artisan crawler:run discover --shop=pegasas --strategy=lupasearch    # fast price/stock rescan
 php artisan crawler:run discover --shop=humanitas --strategy=categories  # via FlareSolverr (~10 min)
-php bin/validate --shop=vaga                                   # data-quality validator
-php bin/match --shop=vaga                                      # steps 1 + 2
-php bin/match --shop=vaga --synthesis                          # + step 3
+php artisan books:validate --shop=vaga                         # data-quality validator
+php artisan books:match --shop=vaga                            # steps 1 + 2
+php artisan books:match --shop=vaga --synthesis                # + step 3
 docker compose up -d flaresolverr                              # required for humanitas
 
 # Tests
@@ -63,7 +64,7 @@ php artisan runs:schedule --dry-run           # what the schedules would fire no
 php artisan runs:schedule --watch             # fire them (the thing that must stay up)
 
 # Observability
-open http://localhost:3000                                           # Grafana — admin/admin on first use
+open http://localhost:3000                                           # Grafana — credentials come from .env
 docker compose up -d loki alloy grafana                             # bring the stack up
 docker compose restart grafana                                       # reload provisioning
 docker compose restart alloy                                         # reload monitoring/alloy/config.alloy
@@ -162,7 +163,7 @@ Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider res
 `PostPhase` (`app/Crawler/PostPhase.php`) wires every successful `scan` or `discover` close into:
 
 1. **Match step 1 (ISBN match) inline** — a single fast `UPDATE shop_books SET book_id = bi.book_id WHERE sb.isbn = bi.isbn AND sb.book_id IS NULL`, in the crawler process (no separate `scrape_runs` row). Links any newly-scraped shop_book to existing canonical books by ISBN within milliseconds.
-2. **Validate as a subprocess** — spawns `bin/validate --shop=<shop>` as a fire-and-forget detached process (`CRAWLER_PHP_BINARY` overrides which PHP it uses; spawn logs go to `SPAWN_LOG_DIR`, default `/var/log/scrapy_runs`). Creates a regular `scrape_runs` row (phase=`validate`). Picks up data-quality changes immediately and auto-resolves stale issues via `resolve_gone_issues`.
+2. **Validate as a subprocess** — spawns `php artisan books:validate --shop=<shop>` as a fire-and-forget detached process (`CRAWLER_PHP_BINARY` overrides which PHP it uses; spawn logs go to `SPAWN_LOG_DIR`, default `/var/log/scrapy_runs`). Creates a regular `scrape_runs` row (phase=`validate`). Picks up data-quality changes immediately and auto-resolves stale issues via `resolve_gone_issues`.
 
 Hooks both `scan` and `discover` because shops like pegasas/iBiblioteka yield `ShopBookItem`s in the discover phase (scan is a no-op for them).
 
@@ -191,7 +192,7 @@ blocks its shop.
 | Expressions are **UTC** | `CronSchedule::previousDue()` | The container's cron was UTC — job 1 is `0 2 * * *` and its runs start at 02:00Z. Reading them locally would shift every schedule in the table. |
 | At most `--max-per-tick` (2) fire per pass | `ScheduleRuns` | Nine windows were due the first time it ran. The rest stay due and drain over later ticks. |
 | One scheduled crawl per **shop**, any phase | `ScheduleRuns::activePhase()` | A backlog would otherwise start patogupirkti's sitemap discover, category discover and scan together — three crawls against one shop, tripling the request rate its delay exists to cap. |
-| `paused` does **not** count as busy | same | The reaper leaves paused runs alone by design, so they sit indefinitely (there is one on patogupirkti from May). Counting it would stop that shop's schedules permanently. |
+| `paused` counts as busy | same | The watchdog suspends the crawler parent with SIGSTOP and resumes it with SIGCONT. Starting another crawl while it is paused would violate the per-shop request-rate limit. |
 | `last_run_at` is not written here | `RunLifecycle` writes it | One writer. Note what the column means: it is stamped for **every** cron job of that shop+phase, so a manual scan suppresses the next scheduled one. |
 | Spawns go to the DASHBOARD's database | `CrawlSpawner::databaseUrl()` | Built from Laravel's config, i.e. `.env` (`DB_*`/`DB_URL`) — **not** `DATABASE_URL`, which the crawler uses and the dashboard ignores. So a dashboard pointed at the test database can only start test-database crawls. |
 | A failed spawn is not marked fired | `ScheduleRuns::$firedAt` | `last_run_at` is only stamped once the crawl boots, so without an in-process record a job whose spawn dies is re-fired every tick. Demonstrated: the fixture shop has no parser, so its spawn exits and the guard is what stops the loop. |
@@ -281,7 +282,7 @@ ON CONFLICT (shop_id, key) DO UPDATE SET value=EXCLUDED.value, type=EXCLUDED.typ
 - `prices` table is append-only (one row per scrape per shop_book)
 - `books` table is for canonical records (shop-independent) — populated by match phase
 - Per-shop settings in `config/shops/<shop>.toml`, loaded at spider init time
-- The React SPA is canonical at `public/static/hifi`. It was a symlink into the Python tree while both stacks existed, so the differential compared the API alone.
+- React source is canonical at `public/static/hifi`; `npm run build` writes production assets to ignored `public/build/hifi`. The source was a symlink into the Python tree while both stacks existed, so the differential compared the API alone.
 
 ### Database
 
@@ -404,13 +405,13 @@ Two things learned bringing this up on the PHP stack:
   a `stage.label_drop` for it in both pipelines and it cannot work, because the
   label is added downstream. The fix is `limits_config.discover_service_name: []`
   in `monitoring/loki/loki-config.yml`.
-- **`filename` is still a label on the spawn-file streams, and it is unbounded** —
-  one per crawl, so one new stream per crawl, forever. Not changed, for two
-  reasons: `stage.regex` extracts `role` and `shop` *from* it, so any drop has to
-  come after that, and losing it costs an operator the ability to tell which
-  spawn a line came from. Worth revisiting if the index gets heavy.
+- **`filename` must be dropped after extracting `role` and `shop`.** It contains
+  a timestamp and is therefore unbounded. Individual runs remain searchable by
+  the run ID in their log content without creating a stream per crawl.
 
 Alloy also keeps only this project's containers now (`com.docker.compose.project == book-scraper`). The Docker socket shows every container on the host, so without that filter Loki was indexing an unrelated project's app/web/mysql/redis/mailpit logs.
+Its storage path is a named volume so file positions survive restarts and old
+spawn logs are not ingested again.
 
 ### Counter drift probe (single-row restart era)
 
