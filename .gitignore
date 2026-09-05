@@ -13,6 +13,11 @@ composer.phar
 _preview_*.html
 
 .claude/
+.junie/
+.planning/
+.superpowers/
+.supperpowers/
+.venv/
 
 *.log
 
