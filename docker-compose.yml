@@ -1,14 +1,22 @@
 services:
   postgres:
-    image: postgres:16
+    image: postgres@sha256:2586e2a95d1c9b31cb2967feb562948f7d364854453d703039b6efa45fe48417
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: book_scraper
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=500
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -16,19 +24,24 @@ services:
       retries: 5
 
   postgres-test:
-    image: postgres:16
+    image: postgres@sha256:2586e2a95d1c9b31cb2967feb562948f7d364854453d703039b6efa45fe48417
     profiles: ["test"]
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-postgres}
       POSTGRES_DB: book_scraper_php_test
     ports:
       - "127.0.0.1:5433:5432"
-    volumes:
-      - pgdata_test:/var/lib/postgresql/data
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
 
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr@sha256:7962759d99d7e125e108e0f5e7f3cdbcd36161776d058d1d9b7153b92ef1af9e
     restart: unless-stopped
     environment:
       LOG_LEVEL: info
@@ -49,16 +62,16 @@ services:
     environment: &php_env
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:-base64:Ym9vay1zY3JhcGVyLWxvY2FsLWtleS0zMi1ieXRlcyE=}
-      DASHBOARD_AUTH_USERNAME: ${DASHBOARD_AUTH_USERNAME:-admin}
-      DASHBOARD_AUTH_PASSWORD: ${DASHBOARD_AUTH_PASSWORD:-admin}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in .env}
+      DASHBOARD_AUTH_DISABLED: ${DASHBOARD_AUTH_DISABLED:-false}
+      DASHBOARD_AUTH_USERNAME: ${DASHBOARD_AUTH_USERNAME:?Set DASHBOARD_AUTH_USERNAME in .env}
+      DASHBOARD_AUTH_PASSWORD: ${DASHBOARD_AUTH_PASSWORD:?Set DASHBOARD_AUTH_PASSWORD in .env}
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_DATABASE: book_scraper
       DB_USERNAME: postgres
-      DB_PASSWORD: postgres
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/book_scraper
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       SESSION_DRIVER: file
       CACHE_STORE: file
       QUEUE_CONNECTION: sync
@@ -96,7 +109,7 @@ services:
 
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     ports:
@@ -106,7 +119,7 @@ services:
       - loki_data:/loki
 
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy@sha256:51aeb9d829239345070619dad3edd6873186f913c84f45b365b74574fcb38ec0
     restart: unless-stopped
     command:
       - run
@@ -120,6 +133,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - scraper_logs:/var/log:ro
       - ./monitoring/alloy:/etc/alloy:ro
+      - alloy_data:/var/lib/alloy/data
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/12345"]
       interval: 10s
@@ -128,7 +142,7 @@ services:
       start_period: 30s
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana@sha256:2d1f9ae67c1778d33e291d4c3c759cd8b650e67491f02533499eb950e075eeb5
     restart: unless-stopped
     depends_on:
       loki:
@@ -138,8 +152,10 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GRAFANA_DB_USER: grafana_reader
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD in .env}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: ""
@@ -156,7 +172,7 @@ services:
 
 volumes:
   pgdata:
-  pgdata_test:
   scraper_logs:
   loki_data:
+  alloy_data:
   grafana_data:

@@ -6,28 +6,42 @@ CLEAR_PROXY := HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PRO
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5433/book_scraper_php_test
 DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/book_scraper
 
-.PHONY: compose-build compose-up compose-up-scheduler compose-down compose-logs \
-        ci install test test-offline parse syntax lint dashboard fixture-db crawl discover validate match reconcile reap migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
+.PHONY: compose-build compose-up compose-up-scheduler compose-down compose-logs frontend \
+        cache-check ci install test test-schema test-offline parse syntax lint dashboard fixture-db crawl discover validate match reconcile reap migrate migrate-status schema-baseline schema-gate schema-gate-sabotage
 
 install:
 	$(COMPOSER) install
 
-test:
+test-schema:
+	DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) bin/migrate apply
+
+test: test-schema
 	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(PHP) vendor/bin/phpunit
 
 test-offline:
 	$(PHP) vendor/bin/phpunit --exclude-group db --filter 'Parser|UrlUtils|SubSecond'
 
 parse:
-	$(PHP) bin/parse $(if $(URL),--url=$(URL),) $(if $(FILE),--file=$(FILE),) $(if $(KIND),--kind=$(KIND),)
+	$(PHP) artisan crawler:parse $(if $(URL),--url=$(URL),) $(if $(FILE),--file=$(FILE),) $(if $(KIND),--kind=$(KIND),)
 
 syntax:
 	@for f in $$(find app bootstrap config database routes tests -name '*.php') bin/*; do \
 		$(PHP) -l $$f > /dev/null || exit 1; done
 	@echo "syntax ok"
 
-lint: syntax
+cache-check:
+	$(PHP) artisan config:cache --no-ansi
+	$(PHP) artisan route:cache --no-ansi
+	$(PHP) artisan optimize:clear --no-ansi
+
+lint: syntax cache-check
 	$(COMPOSER) lint
+	npm run lint
+	npm run format:check
+	npm test
+
+frontend:
+	npm run build
 
 ci: lint test
 
@@ -49,11 +63,11 @@ reconcile:
 	DATABASE_URL="$(DATABASE_URL)" $(PHP) artisan crawler:run reconcile
 
 match:
-	DATABASE_URL="$(DATABASE_URL)" $(PHP) bin/match --shop=$(or $(SHOP),vaga) \
+	DATABASE_URL="$(DATABASE_URL)" $(PHP) artisan books:match --shop=$(or $(SHOP),vaga) \
 		$(if $(SYNTHESIS),--synthesis,)
 
 validate:
-	DATABASE_URL="$(DATABASE_URL)" $(PHP) bin/validate --shop=$(or $(SHOP),vaga)
+	DATABASE_URL="$(DATABASE_URL)" $(PHP) artisan books:validate --shop=$(or $(SHOP),vaga)
 
 reap:
 	$(PHP) artisan runs:reap $(ARGS)

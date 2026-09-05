@@ -10,9 +10,9 @@ datasources:
     type: postgres
     access: proxy
     url: postgres:5432
-    user: postgres
+    user: $GRAFANA_DB_USER
     secureJsonData:
-      password: postgres
+      password: $GRAFANA_DB_PASSWORD
     jsonData:
       database: book_scraper
       sslmode: disable
