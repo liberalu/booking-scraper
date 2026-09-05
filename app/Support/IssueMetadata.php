@@ -6,7 +6,7 @@ namespace App\Support;
 
 final class IssueMetadata
 {
-    public const SEVERITY = [
+    public const array SEVERITY = [
         'active_no_price' => 'critical',
         'attribute_invalid_value' => 'warning',
         'attribute_unknown_key' => 'warning',
@@ -48,7 +48,7 @@ final class IssueMetadata
         'zero_price' => 'critical',
     ];
 
-    public const DESCRIPTIONS = [
+    public const array DESCRIPTIONS = [
         'active_no_price' => 'Book is marked active but has no price on record. The pricing element may have moved or the product was unpublished from the shop.',
         'attribute_invalid_value' => 'A property value doesn\'t match the allowed enum or regex in the shop config.',
         'attribute_unknown_key' => 'A property key not in the shop\'s allowed attribute list. Add to config or fix the parser.',

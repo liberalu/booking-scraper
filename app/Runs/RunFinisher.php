@@ -6,10 +6,10 @@ namespace App\Runs;
 
 use App\Repositories\RunFinisherRepository;
 
-final class RunFinisher
+final readonly class RunFinisher
 {
     public function __construct(
-        private readonly RunFinisherRepository $repository = new RunFinisherRepository,
+        private RunFinisherRepository $repository = new RunFinisherRepository,
     ) {}
 
     public function finish(

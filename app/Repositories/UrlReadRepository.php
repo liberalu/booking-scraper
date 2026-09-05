@@ -92,7 +92,7 @@ final class UrlReadRepository
             ->keyBy('id');
         $urls = Collection::make($urlIds)
             ->map(static fn (int $id): ?DiscoveredUrl => $urlsById->get($id))
-            ->filter(static fn (?DiscoveredUrl $url): bool => $url !== null)
+            ->filter(static fn (?DiscoveredUrl $url): bool => $url instanceof DiscoveredUrl)
             ->values();
 
         return [

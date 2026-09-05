@@ -22,7 +22,7 @@ final class Database
     public static function boot(?string $dsn = null): Capsule
     {
         $booted = self::$capsule;
-        if ($booted !== null) {
+        if ($booted instanceof Capsule) {
             self::ensureGlobalBindings();
 
             return $booted;
@@ -48,7 +48,7 @@ final class Database
 
     private static function ensureGlobalBindings(): void
     {
-        if (self::$capsule === null || self::$container === null) {
+        if (! self::$capsule instanceof Capsule || ! self::$container instanceof Application) {
             return;
         }
 

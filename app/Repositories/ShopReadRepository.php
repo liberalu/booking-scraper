@@ -13,10 +13,10 @@ use Illuminate\Support\Facades\DB;
 use stdClass;
 use Throwable;
 
-final class ShopReadRepository
+final readonly class ShopReadRepository
 {
     public function __construct(
-        private readonly DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
+        private DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
     ) {}
 
     private const array STRATEGY_ORDER = [
@@ -26,8 +26,12 @@ final class ShopReadRepository
     /** @return array<string, mixed> */
     public function index(): array
     {
-        $shops = Shop::with('latestScrapeRun')->get()->sortBy('name')->map(function (Shop $shop): array {
-            $stats = $this->statistics->shopStats($shop->id);
+        $statsByShop = $this->statistics->shopStatsByShop();
+        $shops = Shop::with('latestScrapeRun')->get()->sortBy('name')->map(function (Shop $shop) use ($statsByShop): array {
+            $stats = $statsByShop[$shop->id] ?? [
+                'shop_books' => 0, 'active' => 0, 'discovered_urls' => 0, 'prices' => 0,
+                'issues' => 0,
+            ];
             $last = $shop->latestScrapeRun;
 
             return [
@@ -69,7 +73,7 @@ final class ShopReadRepository
         $stats = $this->statistics->shopStats($shop->id);
         $runIds = array_values(DB::table('scrape_runs')
             ->where('shop_id', $shop->id)
-            ->orderByDesc('started_at')
+            ->latest('started_at')
             ->limit(20)
             ->pluck('id')
             ->map(static fn (mixed $id): int => DatabaseRow::from(['id' => $id])->int('id'))
@@ -77,7 +81,7 @@ final class ShopReadRepository
         $runsById = ScrapeRun::whereIn('id', $runIds)->with('shop')->get()->keyBy('id');
         $runs = Collection::make($runIds)
             ->map(static fn (int $id): ?ScrapeRun => $runsById->get($id))
-            ->filter(static fn (?ScrapeRun $run): bool => $run !== null)
+            ->filter(static fn (?ScrapeRun $run): bool => $run instanceof ScrapeRun)
             ->values();
         $last = $runs->first();
 

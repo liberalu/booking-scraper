@@ -15,6 +15,7 @@ final class RunCrawler extends Command
         {--strategy=}
         {--mode=}
         {--urls=}
+        {--urls-file=}
         {--max-urls=}
         {--max-pages=}
         {--max-bands=}
@@ -41,6 +42,7 @@ final class RunCrawler extends Command
             'strategy',
             'mode',
             'urls',
+            'urls-file',
             'max-urls',
             'max-pages',
             'max-bands',

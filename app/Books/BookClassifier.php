@@ -8,7 +8,7 @@ use App\Support\Isbn;
 
 final class BookClassifier
 {
-    private const BOOK_CATEGORY_LABELS = [
+    private const array BOOK_CATEGORY_LABELS = [
         'negrožinė literatūra',
         'grožinė literatūra',
         'knygos vaikams ir jaunimui',
@@ -16,15 +16,15 @@ final class BookClassifier
         'audioknygos',
     ];
 
-    private const NON_BOOK_CATEGORY_KEYWORDS = ['žaisl', 'album'];
+    private const array NON_BOOK_CATEGORY_KEYWORDS = ['žaisl', 'album'];
 
-    private const AUDIO_FORMATS = ['audiobook', 'audio', 'audiobookas'];
+    private const array AUDIO_FORMATS = ['audiobook', 'audio', 'audiobookas'];
 
-    private const EBOOK_FORMATS = ['ebook', 'e-book', 'eknyga', 'e-knyga', 'elektroninė knyga'];
+    private const array EBOOK_FORMATS = ['ebook', 'e-book', 'eknyga', 'e-knyga', 'elektroninė knyga'];
 
-    private const BOOK_FORMATS = ['book', 'hardcover', 'paperback'];
+    private const array BOOK_FORMATS = ['book', 'hardcover', 'paperback'];
 
-    private const GAME_OR_TOY_PATTERNS = [
+    private const array GAME_OR_TOY_PATTERNS = [
         '/^\s*stalo\s+žaidim/u',
         '/^\s*kort[ųu]\s+žaidim/u',
         '/^\s*edukacinis\s+žaidim/u',
@@ -152,13 +152,8 @@ final class BookClassifier
             return false;
         }
         $normalized = self::normalizeText($title);
-        foreach (self::GAME_OR_TOY_PATTERNS as $pattern) {
-            if (preg_match($pattern, $normalized) === 1) {
-                return true;
-            }
-        }
 
-        return false;
+        return array_any(self::GAME_OR_TOY_PATTERNS, fn ($pattern): bool => preg_match($pattern, $normalized) === 1);
     }
 
     /** @param list<string> $keywords */
@@ -194,13 +189,8 @@ final class BookClassifier
                 $normalized[self::normalizeText($category)] = true;
             }
         }
-        foreach ($labels as $label) {
-            if (isset($normalized[$label])) {
-                return true;
-            }
-        }
 
-        return false;
+        return array_any($labels, fn ($label): bool => isset($normalized[$label]));
     }
 
     private static function normalizeText(string $value): string

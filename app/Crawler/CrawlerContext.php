@@ -7,6 +7,7 @@ namespace App\Crawler;
 use App\Repositories\CanonicalBookRepository;
 use App\Repositories\DiscoveredUrlRepository;
 use App\Runs\ProgressReporter;
+use InvalidArgumentException;
 
 final class CrawlerContext
 {
@@ -24,22 +25,22 @@ final class CrawlerContext
 
     private ?Watchdog $watchdog = null;
 
-    private int $filtered = 0;
+    private int $filtered;
 
     /** @var array<string, true> */
     private array $seen = [];
 
-    private int $added = 0;
+    private int $added;
 
-    private int $updated = 0;
+    private int $updated;
 
-    private int $urlCount = 0;
+    private int $urlCount;
 
-    private int $nonProduct = 0;
+    private int $nonProduct;
 
-    private int $canonicalCount = 0;
+    private int $canonicalCount;
 
-    private int $failed = 0;
+    private int $failed;
 
     public function __construct(private readonly IssueBuffer $issues = new IssueBuffer)
     {
@@ -104,7 +105,7 @@ final class CrawlerContext
             'non_product' => $this->nonProduct++,
             'canonical' => $this->canonicalCount++,
             'failed' => $this->failed++,
-            default => throw new \InvalidArgumentException("Unknown crawler tally: {$key}"),
+            default => throw new InvalidArgumentException("Unknown crawler tally: {$key}"),
         };
     }
 

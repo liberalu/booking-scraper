@@ -6,14 +6,14 @@ namespace App\Repositories;
 
 use Illuminate\Support\Facades\DB;
 
-final class RunReconcilerRepository
+final readonly class RunReconcilerRepository
 {
-    private const RETRYABLE_REASONS = ['run_aborted', 'stuck_in_processing', 'subdivision_5xx'];
+    private const array RETRYABLE_REASONS = ['run_aborted', 'stuck_in_processing', 'subdivision_5xx'];
 
-    public const RETRY_CAP = 3;
+    public const int RETRY_CAP = 3;
 
     public function __construct(
-        private readonly RunFinisherRepository $finisher = new RunFinisherRepository,
+        private RunFinisherRepository $finisher = new RunFinisherRepository,
     ) {}
 
     /** @return list<array{id: int, shop: string, phase: string}> */

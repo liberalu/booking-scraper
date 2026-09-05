@@ -6,11 +6,11 @@ namespace App\Support;
 
 final class Isbn
 {
-    private const ISBN_13 = '/^97[89]\d{10}$/';
+    private const string ISBN_13 = '/^97[89]\d{10}$/';
 
-    private const ISBN_10 = '/^\d{9}[\dXx]$/';
+    private const string ISBN_10 = '/^\d{9}[\dXx]$/';
 
-    private const DOUBLE_PREFIXED = ['9789789', '9799789', '9789979', '9799979'];
+    private const array DOUBLE_PREFIXED = ['9789789', '9799789', '9789979', '9799979'];
 
     public static function normalize(?string $raw): string
     {
@@ -60,7 +60,7 @@ final class Isbn
             }
             $body = '978'.substr($cleaned, 0, 9);
 
-            return $body.(string) ((10 - self::checksum13($body) % 10) % 10);
+            return $body.((10 - self::checksum13($body) % 10) % 10);
         }
 
         return null;

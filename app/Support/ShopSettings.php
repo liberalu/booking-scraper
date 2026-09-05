@@ -9,13 +9,13 @@ use Throwable;
 
 final class ShopSettings
 {
-    private const DELAY_MIN = 0.1;
+    private const float DELAY_MIN = 0.1;
 
-    private const DELAY_MAX = 60.0;
+    private const float DELAY_MAX = 60.0;
 
-    private const CONCURRENCY_MIN = 1;
+    private const int CONCURRENCY_MIN = 1;
 
-    private const CONCURRENCY_MAX = 16;
+    private const int CONCURRENCY_MAX = 16;
 
     /** @var array<string, array<string, array{value: string, type: string}>> */
     private static array $cache = [];

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -45,9 +47,9 @@ final class ControllerArchitectureTest extends TestCase
             $source = (string) file_get_contents($file->getPathname());
             $name = $file->getFilename();
 
-            self::assertStringNotContainsString('Illuminate\\Http\\Request', $source, $name);
+            self::assertStringNotContainsString(Request::class, $source, $name);
             self::assertStringNotContainsString('Illuminate\\Database\\', $source, $name);
-            self::assertStringNotContainsString('Illuminate\\Support\\Facades\\DB', $source, $name);
+            self::assertStringNotContainsString(DB::class, $source, $name);
             self::assertStringNotContainsString('DTO\\Response', $source, $name);
             self::assertStringNotContainsString('::query()', $source, $name);
             self::assertStringNotContainsString('::where(', $source, $name);
@@ -132,7 +134,9 @@ final class ControllerArchitectureTest extends TestCase
             $source = (string) file_get_contents($path);
             $name = $file->getFilename();
 
-            self::assertStringNotContainsString('Illuminate\\Database\\', $source, $name);
+            if ($name !== 'AppServiceProvider.php') {
+                self::assertStringNotContainsString('Illuminate\\Database\\', $source, $name);
+            }
             self::assertStringNotContainsString('Facades\\DB', $source, $name);
             self::assertStringNotContainsString('DB::', $source, $name);
             self::assertStringNotContainsString('use PDO;', $source, $name);

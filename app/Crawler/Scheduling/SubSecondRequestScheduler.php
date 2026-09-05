@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Crawler\Scheduling;
 
+use DateTimeImmutable;
 use RoachPHP\Http\Request;
 use RoachPHP\Scheduling\RequestSchedulerInterface;
 use RoachPHP\Scheduling\Timing\ClockInterface;
@@ -17,7 +18,7 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
     /** @var list<Request> */
     private array $requests = [];
 
-    private \DateTimeImmutable $nextBatchReadyAt;
+    private DateTimeImmutable $nextBatchReadyAt;
 
     public function __construct(private readonly ClockInterface $clock)
     {
@@ -75,7 +76,7 @@ final class SubSecondRequestScheduler implements RequestSchedulerInterface
         return $this->delay;
     }
 
-    private function addDelay(\DateTimeImmutable $from): \DateTimeImmutable
+    private function addDelay(DateTimeImmutable $from): DateTimeImmutable
     {
         if ($this->delay <= 0.0) {
             return $from;

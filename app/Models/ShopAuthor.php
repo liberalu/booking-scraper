@@ -15,7 +15,7 @@ final class ShopAuthor extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['created_at'];
+    public const array TIMESTAMP_DEFAULTS = ['created_at'];
 
     protected $fillable = ['name', 'normalized_name', 'created_at', 'canonical_author_id'];
 

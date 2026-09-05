@@ -6,39 +6,39 @@ namespace App\Runs;
 
 final class RunEvent
 {
-    public const STARTED = 'started';
+    public const string STARTED = 'started';
 
-    public const PAUSED = 'paused';
+    public const string PAUSED = 'paused';
 
-    public const RESUMED = 'resumed';
+    public const string RESUMED = 'resumed';
 
-    public const STOP_REQUESTED = 'stop_requested';
+    public const string STOP_REQUESTED = 'stop_requested';
 
-    public const RETRY_FAILURES = 'retry_failures';
+    public const string RETRY_FAILURES = 'retry_failures';
 
-    public const REQUEST_RETRIED = 'request_retried';
+    public const string REQUEST_RETRIED = 'request_retried';
 
-    public const RERUN = 'rerun';
+    public const string RERUN = 'rerun';
 
-    public const CONTINUED = 'continued';
+    public const string CONTINUED = 'continued';
 
-    public const RESUMED_AFTER_FAILURE = 'resumed_after_failure';
+    public const string RESUMED_AFTER_FAILURE = 'resumed_after_failure';
 
-    public const COMPLETED = 'completed';
+    public const string COMPLETED = 'completed';
 
-    public const FAILED = 'failed';
+    public const string FAILED = 'failed';
 
-    public const SUBDIVIDED = 'subdivided';
+    public const string SUBDIVIDED = 'subdivided';
 
-    public const RESTARTED = 'restarted';
+    public const string RESTARTED = 'restarted';
 
-    public const CHAIN_SKIPPED = 'chain_skipped';
+    public const string CHAIN_SKIPPED = 'chain_skipped';
 
-    public const ACTOR_OPERATOR = 'operator';
+    public const string ACTOR_OPERATOR = 'operator';
 
-    public const ACTOR_SYSTEM = 'system';
+    public const string ACTOR_SYSTEM = 'system';
 
-    public const ALL = [
+    public const array ALL = [
         self::STARTED, self::PAUSED, self::RESUMED, self::STOP_REQUESTED,
         self::RETRY_FAILURES, self::REQUEST_RETRIED, self::RERUN, self::CONTINUED,
         self::RESUMED_AFTER_FAILURE, self::RESTARTED, self::COMPLETED,

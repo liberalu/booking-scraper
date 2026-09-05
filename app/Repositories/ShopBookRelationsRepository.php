@@ -6,7 +6,7 @@ namespace App\Repositories;
 
 use App\Models\ShopAuthor;
 use App\Models\ShopBookAttribute;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class ShopBookRelationsRepository
@@ -21,7 +21,7 @@ final class ShopBookRelationsRepository
         }
         $existing = ShopBookAttribute::where('shop_book_id', $shopBookId)->get()->keyBy('key');
         foreach ($properties as $key => $value) {
-            $stringValue = self::pythonString($value);
+            $stringValue = $this->pythonString($value);
             $row = $existing->get($key);
             if ($row === null) {
                 ShopBookAttribute::create([
@@ -47,13 +47,11 @@ final class ShopBookRelationsRepository
                 continue;
             }
             $author = ShopAuthor::where('normalized_name', $normalized)->first();
-            if ($author === null) {
-                $author = ShopAuthor::create([
-                    'name' => $name,
-                    'normalized_name' => $normalized,
-                    'created_at' => Carbon::now('UTC'),
-                ]);
-            }
+            $author ??= ShopAuthor::create([
+                'name' => $name,
+                'normalized_name' => $normalized,
+                'created_at' => Date::now('UTC'),
+            ]);
             if (isset($seen[$author->id])) {
                 continue;
             }
@@ -95,7 +93,7 @@ final class ShopBookRelationsRepository
         }
         $split = preg_split(self::MULTI_AUTHOR_PATTERN, $raw);
         $parts = array_values(array_filter(
-            array_map(static fn (string $part): string => trim($part), $split === false ? [] : $split),
+            array_map(trim(...), $split === false ? [] : $split),
             static fn (string $part): bool => $part !== '',
         ));
 
@@ -107,7 +105,7 @@ final class ShopBookRelationsRepository
         return trim(preg_replace('/\s+/u', ' ', mb_strtolower(trim($name), 'UTF-8')) ?? '');
     }
 
-    private static function pythonString(mixed $value): ?string
+    private function pythonString(mixed $value): ?string
     {
         if ($value === null) {
             return null;

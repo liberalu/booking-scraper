@@ -11,7 +11,7 @@ use DateTimeZone;
 
 final class CronSchedule
 {
-    private const ARG_TRANSLATIONS = [
+    private const array ARG_TRANSLATIONS = [
         'rescrape=true' => ['mode' => 'full'],
         'rescrape=false' => ['mode' => 'delta'],
     ];
@@ -33,7 +33,7 @@ final class CronSchedule
                 continue;
             }
             $due = self::previousDue($job->cron_expression, $now);
-            if ($due === null) {
+            if (! $due instanceof DateTimeImmutable) {
                 continue;
             }
 

@@ -6,7 +6,7 @@ namespace App\Parsers\Pegasas;
 
 final class GraphQl
 {
-    public const PRODUCT_FIELDS = 'name sku url_key '
+    public const string PRODUCT_FIELDS = 'name sku url_key '
         .'image{url} '
         .'price_range{minimum_price{final_price{value currency}regular_price{value currency}}} '
         .'stock_status is_book is_audio_book narrator '

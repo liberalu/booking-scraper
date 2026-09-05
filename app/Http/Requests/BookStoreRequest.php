@@ -12,11 +12,11 @@ final class BookStoreRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'title' => ['sometimes', 'nullable'],
-            'isbn' => ['sometimes', 'nullable'],
-            'year' => ['sometimes', 'nullable'],
-            'author' => ['sometimes', 'nullable'],
-            'publisher' => ['sometimes', 'nullable'],
+            'title' => ['required', 'string', 'max:1000'],
+            'isbn' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'year' => ['sometimes', 'nullable', 'integer', 'between:1000,2100'],
+            'author' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'publisher' => ['sometimes', 'nullable', 'string', 'max:500'],
         ];
     }
 

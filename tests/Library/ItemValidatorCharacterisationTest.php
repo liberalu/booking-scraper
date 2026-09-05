@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 
 final class ItemValidatorCharacterisationTest extends TestCase
 {
-    private static function cases(): array
+    private function cases(): array
     {
         $path = __DIR__.'/../golden/validator_cases.json';
         self::assertFileExists(
@@ -23,7 +23,7 @@ final class ItemValidatorCharacterisationTest extends TestCase
 
     public function test_every_frozen_case_still_behaves_the_same(): void
     {
-        foreach (self::cases() as $case) {
+        foreach ($this->cases() as $case) {
             $issues = new IssueBuffer;
             ['item' => $item, 'reject' => $reject] = ItemValidator::apply(
                 $case['item'],
@@ -41,7 +41,7 @@ final class ItemValidatorCharacterisationTest extends TestCase
                     array_filter($item, static fn (mixed $v): bool => $v !== null),
                 ),
                 'reject' => $reject !== null,
-                'issues' => self::sortedIssues($issues->drain()),
+                'issues' => $this->sortedIssues($issues->drain()),
             ];
 
             self::assertEquals(
@@ -54,7 +54,7 @@ final class ItemValidatorCharacterisationTest extends TestCase
 
     public function test_the_corpus_is_intact(): void
     {
-        $cases = self::cases();
+        $cases = $this->cases();
         self::assertGreaterThanOrEqual(46, count($cases));
 
         $issues = array_merge(...array_map(
@@ -79,7 +79,7 @@ final class ItemValidatorCharacterisationTest extends TestCase
         }
     }
 
-    private static function sortedIssues(array $issues): array
+    private function sortedIssues(array $issues): array
     {
         $rows = array_map(
             static fn (array $i): array => [$i['issue'], $i['field'], $i['url'], $i['raw_value']],

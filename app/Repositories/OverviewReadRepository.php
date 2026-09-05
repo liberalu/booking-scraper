@@ -7,13 +7,11 @@ namespace App\Repositories;
 use App\Models\ScrapeRun;
 use App\Models\Shop;
 use App\Support\RunPresenter;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
-final class OverviewReadRepository
+final readonly class OverviewReadRepository
 {
     public function __construct(
-        private readonly DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
+        private DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
     ) {}
 
     /** @return array<string, mixed> */
@@ -27,24 +25,24 @@ final class OverviewReadRepository
         $terminal = $this->statistics->runTerminalCounts($runIds);
         $rescrape = $this->statistics->rescrapeFlags($runIds);
 
-        $shopCards = Shop::orderBy('name')->get()->map(function (Shop $shop): array {
-            $stats = $this->statistics->shopStats($shop->id);
-            $last = DatabaseRow::nullable(DB::table('scrape_runs')
-                ->where('shop_id', $shop->id)
-                ->orderByDesc('started_at')
-                ->first());
-            $startedAt = $last?->nullableString('started_at');
+        $shopStats = $this->statistics->shopStatsByShop();
+        $shopCards = Shop::query()->with('latestScrapeRun')->get()->sortBy('name')->map(function (Shop $shop) use ($shopStats): array {
+            $stats = $shopStats[$shop->id] ?? [
+                'shop_books' => 0, 'active' => 0, 'discovered_urls' => 0, 'prices' => 0,
+                'issues' => 0,
+            ];
+            $last = $shop->latestScrapeRun;
 
             return [
                 'name' => $shop->name,
                 'books' => $stats['shop_books'],
                 'active' => $stats['active'],
 
-                'issues' => 0,
+                'issues' => $stats['issues'],
                 'last_run_ago' => RunPresenter::relative(
-                    $startedAt === null ? null : Carbon::parse($startedAt),
+                    $last?->started_at,
                 ),
-                'last_run_status' => $last?->nullableString('status') ?? '—',
+                'last_run_status' => $last->status ?? '—',
             ];
         })->all();
 

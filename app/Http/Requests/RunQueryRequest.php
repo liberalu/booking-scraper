@@ -5,29 +5,33 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\DTO\Request\RunQueryInput;
+use Illuminate\Validation\Rule;
 
 final class RunQueryRequest extends ApiFormRequest
 {
-    /** @return array<string, list<string>> */
+    /** @return array<string, list<mixed>> */
     public function rules(): array
     {
         return [
-            'shop' => ['sometimes', 'nullable'],
-            'phase' => ['sometimes', 'nullable'],
-            'status' => ['sometimes', 'nullable'],
-            'when' => ['sometimes', 'nullable'],
-            'q' => ['sometimes', 'nullable'],
-            'page' => ['sometimes', 'nullable'],
-            'per_page' => ['sometimes', 'nullable'],
-            'type' => ['sometimes', 'nullable'],
-            'sort' => ['sometimes', 'nullable'],
-            'order' => ['sometimes', 'nullable'],
-            'error_reason' => ['sometimes', 'nullable'],
-            'error_reason_is_null' => ['sometimes'],
-            'http_status' => ['sometimes', 'nullable'],
-            'http_status_is_null' => ['sometimes'],
-            'include_acked' => ['sometimes'],
-            'note' => ['sometimes', 'nullable'],
+            'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
+            'phase' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'status' => ['sometimes', 'nullable', 'string', Rule::in([
+                'all', 'running', 'paused', 'stopping', 'completed', 'failed',
+                'pending', 'processing', 'done',
+            ])],
+            'when' => ['sometimes', 'nullable', 'string', Rule::in(['any', 'today', '24h', '7d', '30d'])],
+            'q' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'page' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['sometimes', 'nullable', 'integer', 'between:1,200'],
+            'type' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sort' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'order' => ['sometimes', 'nullable', 'string', Rule::in(['asc', 'desc'])],
+            'error_reason' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'error_reason_is_null' => ['sometimes', 'boolean'],
+            'http_status' => ['sometimes', 'nullable', 'integer', 'between:100,599'],
+            'http_status_is_null' => ['sometimes', 'boolean'],
+            'include_acked' => ['sometimes', 'boolean'],
+            'note' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ];
     }
 

@@ -8,7 +8,7 @@ use App\DTO\Request\PriceQueryInput;
 use App\Models\Shop;
 use App\Support\Queries;
 use App\Support\RunPresenter;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class PriceReadRepository
@@ -28,7 +28,7 @@ final class PriceReadRepository
             ])->nullableInt('id') ?? -1;
         }
 
-        $cutoff = Carbon::now('UTC')->subDays($days);
+        $cutoff = Date::now('UTC')->subDays($days);
         $bindings = ['cutoff' => $cutoff];
         $shopFilter = '';
         if ($shopId !== null) {
@@ -81,7 +81,7 @@ final class PriceReadRepository
         foreach ($rows as $raw) {
             $row = DatabaseRow::from($raw);
             $scrapedAt = $row->nullableString('scraped_at');
-            $timestamp = $scrapedAt === null ? null : Carbon::parse($scrapedAt);
+            $timestamp = $scrapedAt === null ? null : Date::parse($scrapedAt);
             $changes[] = [
                 'shop_book_id' => $row->int('shop_book_id'),
                 'title' => $row->string('title'),

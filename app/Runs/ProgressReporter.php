@@ -9,7 +9,7 @@ use Closure;
 
 final class ProgressReporter
 {
-    private const EVERY = 10;
+    private const int EVERY = 10;
 
     private ?int $runId = null;
 
@@ -49,7 +49,7 @@ final class ProgressReporter
     /** @param array<string, int> $tally */
     public function flush(array $tally): void
     {
-        if ($this->runId === null || $this->processedFrom === null) {
+        if ($this->runId === null || ! $this->processedFrom instanceof Closure) {
             return;
         }
 

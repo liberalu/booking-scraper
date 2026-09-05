@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Models\ScrapeRun;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final class ProgressReporterRepository
 {
@@ -17,7 +17,7 @@ final class ProgressReporterRepository
             'items_added' => $tally['added'] ?? 0,
             'items_updated' => $tally['updated'] ?? 0,
             'error_count' => $tally['failed'] ?? 0,
-            'last_heartbeat' => Carbon::now('UTC'),
+            'last_heartbeat' => Date::now('UTC'),
         ]);
     }
 }

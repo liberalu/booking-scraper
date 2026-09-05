@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Runs;
 
+use App\Contracts\RunLauncher;
 use App\DTO\ReadModel\RunStateSnapshot;
 use App\DTO\Request\RunMutationInput;
 use App\Exceptions\ActionFailed;
@@ -13,12 +14,14 @@ use App\Repositories\RunSpawnRepository;
 use App\Runs\RunLaunchRequest;
 use App\Runs\RunPhase;
 use App\Support\Config;
-use App\Support\CrawlSpawner;
 use Throwable;
 
 final readonly class RunSpawnService
 {
-    public function __construct(private RunSpawnRepository $runs) {}
+    public function __construct(
+        private RunSpawnRepository $runs,
+        private RunLauncher $launcher,
+    ) {}
 
     /** @return array{status: string, shop: string, phase: string, strategy: string, mode: string} */
     public function store(RunMutationInput $input): array
@@ -190,17 +193,22 @@ final readonly class RunSpawnService
             throw ActionFailed::notFound(['detail' => "Unknown shop: {$shopName}"]);
         }
         try {
-            Config::forShop($shopName);
-        } catch (Throwable $e) {
+            $config = Config::forShop($shopName);
+        } catch (Throwable) {
             throw ActionFailed::badRequest([
-                'detail' => "Shop config failed to load: {$e->getMessage()}",
+                'detail' => 'Shop configuration is invalid',
             ]);
         }
 
-        $existing = $this->runs->activeRun($shop->id, $phase);
+        [$basePhase, $strategy] = $this->splitPhase($phase);
+        if ($basePhase === 'discover' && ($strategy === '' || ! $config->hasStrategy($strategy))) {
+            throw ActionFailed::badRequest(['detail' => "Unknown discover strategy: {$strategy}"]);
+        }
+
+        $existing = $this->runs->activeRunForShop($shop->id);
         if ($existing instanceof ScrapeRun) {
             throw ActionFailed::conflict([
-                'detail' => "A {$phase} run for {$shop->name} is already "
+                'detail' => "A {$existing->phase} run for {$shop->name} is already "
                     ."{$existing->status} (run #{$existing->id}).",
             ]);
         }
@@ -209,7 +217,7 @@ final readonly class RunSpawnService
     private function spawnRequest(RunLaunchRequest $request): void
     {
         try {
-            CrawlSpawner::spawnRequest($request);
+            $this->launcher->spawnRequest($request);
         } catch (Throwable $e) {
             throw ActionFailed::unavailable(['detail' => $e->getMessage()]);
         }
@@ -222,7 +230,7 @@ final readonly class RunSpawnService
         ?int $adoptRunId = null,
     ): void {
         try {
-            CrawlSpawner::spawn($phase, $shop, $strategy, adoptRunId: $adoptRunId);
+            $this->launcher->spawn($phase, $shop, $strategy, adoptRunId: $adoptRunId);
         } catch (Throwable $e) {
             throw ActionFailed::unavailable(['detail' => $e->getMessage()]);
         }

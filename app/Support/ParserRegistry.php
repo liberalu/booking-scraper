@@ -10,7 +10,7 @@ use RuntimeException;
 
 final class ParserRegistry
 {
-    private const PARSERS = [
+    private const array PARSERS = [
         'vaga' => Parser::class,
         'pegasas' => \App\Parsers\Pegasas\Parser::class,
         'patogupirkti' => \App\Parsers\Patogupirkti\Parser::class,

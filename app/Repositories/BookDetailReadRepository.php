@@ -6,7 +6,7 @@ namespace App\Repositories;
 
 use App\Casts\PostgresTextArray;
 use App\Models\Book;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
@@ -144,7 +144,7 @@ final class BookDetailReadRepository
                 .' max(prices.price) as price',
             )
             ->where('shop_books.book_id', $bookId)
-            ->where('prices.scraped_at', '>=', Carbon::now('UTC')->subDays(30))
+            ->where('prices.scraped_at', '>=', Date::now('UTC')->subDays(30))
             ->groupBy('shops.name', DB::raw("date_trunc('day', prices.scraped_at)"))
             ->orderBy('shops.name')
             ->orderBy(DB::raw("date_trunc('day', prices.scraped_at)"))
@@ -154,7 +154,7 @@ final class BookDetailReadRepository
         foreach ($rows as $raw) {
             $row = DatabaseRow::from($raw);
             $series[$row->string('shop')][] = [
-                'date' => Carbon::parse($row->string('day'))->format('Y-m-d'),
+                'date' => Date::parse($row->string('day'))->format('Y-m-d'),
                 'price' => $row->float('price'),
             ];
         }
@@ -205,7 +205,7 @@ final class BookDetailReadRepository
             return null;
         }
 
-        $date = Carbon::parse($timestamp)->utc();
+        $date = Date::parse($timestamp)->utc();
 
         return $date->micro === 0
             ? $date->format('Y-m-d\TH:i:sP')

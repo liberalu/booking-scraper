@@ -18,7 +18,7 @@ final class PostgresTextArray implements CastsAttributes
             return [];
         }
         if (is_array($value)) {
-            return self::stringList($value);
+            return $this->stringList($value);
         }
 
         if (! is_string($value)) {
@@ -33,7 +33,7 @@ final class PostgresTextArray implements CastsAttributes
         if ($value === null) {
             return null;
         }
-        $items = is_array($value) ? self::stringList($value) : [$value];
+        $items = is_array($value) ? $this->stringList($value) : [$value];
 
         return self::encode($items);
     }
@@ -124,7 +124,7 @@ final class PostgresTextArray implements CastsAttributes
      * @param  array<array-key, mixed>  $items
      * @return list<string>
      */
-    private static function stringList(array $items): array
+    private function stringList(array $items): array
     {
         $strings = [];
         foreach ($items as $item) {

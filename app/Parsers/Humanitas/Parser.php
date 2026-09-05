@@ -14,45 +14,45 @@ use App\Support\Isbn;
 /** @phpstan-import-type ParsedItem from CrawlerTypes */
 final class Parser implements DiscoveryParser, ProductParser
 {
-    private const BASE_URL = 'https://www.humanitas.lt';
+    private const string BASE_URL = 'https://www.humanitas.lt';
 
-    private const PRODUCT_ANCHOR = '/<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"/i';
+    private const string PRODUCT_ANCHOR = '/<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"/i';
 
-    private const CARD_OPENING = '/<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>/si';
+    private const string CARD_OPENING = '/<a\b(?=[^>]*\bclass="[^"]*\bbook-item\b[^"]*")[^>]*\bhref="([^"]+)"[^>]*>/si';
 
-    private const LANG_LITHUANIAN = 'Lietuvių';
+    private const string LANG_LITHUANIAN = 'Lietuvių';
 
-    private const TITLE_SUFFIX = '/\s*-\s*Humanitas\s*$/i';
+    private const string TITLE_SUFFIX = '/\s*-\s*Humanitas\s*$/i';
 
-    private const BOOK_INFO_BLOCK = '/<div\s+class="book-info">(.*?)<\/div>/si';
+    private const string BOOK_INFO_BLOCK = '/<div\s+class="book-info">(.*?)<\/div>/si';
 
-    private const BOOK_INFO_ROW = '/<b>\s*([^<]+?)\s*:?\s*<\/b>\s*([^<]+?)\s*(?:<br|<b>|<\/div>)/si';
+    private const string BOOK_INFO_ROW = '/<b>\s*([^<]+?)\s*:?\s*<\/b>\s*([^<]+?)\s*(?:<br|<b>|<\/div>)/si';
 
-    private const PRICE = '/([\d ]+[.,]\d+)\s*€/u';
+    private const string PRICE = '/([\d ]+[.,]\d+)\s*€/u';
 
-    private const SCRIPT_BLOCK = '/<script\b.*?<\/script>/si';
+    private const string SCRIPT_BLOCK = '/<script\b.*?<\/script>/si';
 
-    private const OOS_PRICE_HIDDEN = '/<div\s+class="cart-price\s+price-hidden\b/i';
+    private const string OOS_PRICE_HIDDEN = '/<div\s+class="cart-price\s+price-hidden\b/i';
 
-    private const OOS_CART_DISABLED = '/<a\b[^>]*\bclass="[^"]*\bext_button\b[^"]*\bdisabled\b/i';
+    private const string OOS_CART_DISABLED = '/<a\b[^>]*\bclass="[^"]*\bext_button\b[^"]*\bdisabled\b/i';
 
-    private const CART_PRICE_BLOCK_OPEN = '/<div\s+class="cart-price[^"]*"[^>]*>/i';
+    private const string CART_PRICE_BLOCK_OPEN = '/<div\s+class="cart-price[^"]*"[^>]*>/i';
 
-    private const PRICE_CONTAINER = '/<div\s+class="price-container"/i';
+    private const string PRICE_CONTAINER = '/<div\s+class="price-container"/i';
 
-    private const CARD_TITLE = '/<div\s+class="title"[^>]*>\s*([^<]+?)\s*<\/div>/i';
+    private const string CARD_TITLE = '/<div\s+class="title"[^>]*>\s*([^<]+?)\s*<\/div>/i';
 
-    private const CARD_AUTHOR = '/<div\s+class="author"[^>]*>\s*([^<]+?)\s*<\/div>/i';
+    private const string CARD_AUTHOR = '/<div\s+class="author"[^>]*>\s*([^<]+?)\s*<\/div>/i';
 
-    private const CARD_PRICE_PAIR = '/<div\s+class="price-container"[^>]*>\s*'
+    private const string CARD_PRICE_PAIR = '/<div\s+class="price-container"[^>]*>\s*'
         .'<div\s+class="discount"[^>]*>\s*([^<]+?)\s*<\/div>\s*'
         .'<div\s+class="price"[^>]*>\s*([^<]+?)\s*<\/div>/si';
 
-    private const CARD_SINGLE_PRICE = '/<div\s+class="price"[^>]*>\s*([\d ]+[.,]\d+\s*€)\s*<\/div>/i';
+    private const string CARD_SINGLE_PRICE = '/<div\s+class="price"[^>]*>\s*([\d ]+[.,]\d+\s*€)\s*<\/div>/i';
 
-    private const CARD_IMG = '/<img\s[^>]*\bsrc="([^"]+)"/i';
+    private const string CARD_IMG = '/<img\s[^>]*\bsrc="([^"]+)"/i';
 
-    private const CART_PRICE_WINDOW = 600;
+    private const int CART_PRICE_WINDOW = 600;
 
     /** @return list<string> */
     public static function parseSitemapUrls(string $html, ?callable $fetchChild = null): array

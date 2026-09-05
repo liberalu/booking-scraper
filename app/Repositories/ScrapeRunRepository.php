@@ -9,7 +9,7 @@ use App\Runs\RunEvent;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final readonly class ScrapeRunRepository
 {
@@ -33,7 +33,7 @@ final readonly class ScrapeRunRepository
         $this->connection()->transaction(function () use ($run): void {
             ScrapeRun::whereKey($run->getKey())->update([
                 'status' => 'running',
-                'last_heartbeat' => Carbon::now('UTC'),
+                'last_heartbeat' => Date::now('UTC'),
             ]);
             $this->failsafe->recordEvent(
                 $run->id,
@@ -66,7 +66,7 @@ final readonly class ScrapeRunRepository
 
         $values = [
             'lifecycle_state' => 'acknowledged',
-            'acknowledged_at' => Carbon::now('UTC'),
+            'acknowledged_at' => Date::now('UTC'),
         ];
         if ($note !== '') {
             $values['acknowledged_note'] = $note;

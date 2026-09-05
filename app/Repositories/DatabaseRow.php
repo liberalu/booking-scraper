@@ -150,10 +150,10 @@ final readonly class DatabaseRow
         if (is_bool($value)) {
             return $value;
         }
-        if ($value === 1 || $value === '1' || $value === 't' || $value === 'true') {
+        if (in_array($value, [1, '1', 't', 'true'], true)) {
             return true;
         }
-        if ($value === 0 || $value === '0' || $value === 'f' || $value === 'false') {
+        if (in_array($value, [0, '0', 'f', 'false'], true)) {
             return false;
         }
 

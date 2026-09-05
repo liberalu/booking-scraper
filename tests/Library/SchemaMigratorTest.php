@@ -30,15 +30,20 @@ final class SchemaMigratorTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach ((array) glob($this->dir.'/*') as $f) {
-            if (is_string($f)) {
-                unlink($f);
+        $temporaryRoot = rtrim(sys_get_temp_dir(), '/').'/';
+        if (str_starts_with($this->dir, $temporaryRoot.'bs_migrator_test_')) {
+            foreach ((array) glob($this->dir.'/*') as $file) {
+                if (is_string($file)) {
+                    unlink($file);
+                }
+            }
+            if (is_dir($this->dir)) {
+                rmdir($this->dir);
             }
         }
-        if (is_dir($this->dir)) {
-            rmdir($this->dir);
+        if ($this->dbName !== '') {
+            $this->admin()->exec('DROP DATABASE IF EXISTS "'.$this->dbName.'" WITH (FORCE)');
         }
-        $this->admin()->exec('DROP DATABASE IF EXISTS "'.$this->dbName.'" WITH (FORCE)');
     }
 
     public function test_apply_creates_the_objects_and_records_the_version(): void
@@ -125,7 +130,12 @@ final class SchemaMigratorTest extends TestCase
     {
         $shipped = array_keys((new Migrator($this->target(), Migrator::defaultDir()))->available());
 
-        self::assertSame(['0001_baseline', '0002_request_retry_event'], $shipped);
+        self::assertSame([
+            '0001_baseline',
+            '0002_request_retry_event',
+            '0003_query_indexes',
+            '0004_postgres_observability',
+        ], $shipped);
     }
 
     private function migrator(): Migrator
@@ -142,15 +152,15 @@ final class SchemaMigratorTest extends TestCase
 
     private function target(): PDO
     {
-        return Migrator::connect(self::clusterDsn($this->dbName));
+        return Migrator::connect($this->clusterDsn($this->dbName));
     }
 
     private function admin(): PDO
     {
-        return Migrator::connect(self::clusterDsn('postgres'));
+        return Migrator::connect($this->clusterDsn('postgres'));
     }
 
-    private static function clusterDsn(string $database): string
+    private function clusterDsn(string $database): string
     {
         $base = getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';

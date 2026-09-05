@@ -9,6 +9,7 @@ use App\Support\RunPresenter;
 use Cron\CronExpression;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -23,16 +24,19 @@ final class CronReadRepository
     /** @return array<string, mixed> */
     public function index(): array
     {
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
+        $cronJobs = CronJob::orderBy('id')->with(['shop', 'chainTo.shop'])->get();
+        $metricsByJob = $this->metricsForJobs($cronJobs);
         $jobs = [];
-        foreach (CronJob::orderBy('id')->with('shop')->get() as $job) {
+        foreach ($cronJobs as $job) {
             $runPhase = $this->runPhase($job->phase, $job->strategy);
             [$nextAt, $nextInSeconds] = $this->nextFiring($job->cron_expression, $now);
-            $metrics = $this->metrics($job->shop_id, $runPhase);
-
-            $chain = $job->chain_to_job_id === null ? null : CronJob::find($job->chain_to_job_id);
-            $chain?->load('shop');
+            $metrics = $metricsByJob[$this->metricKey($job->shop_id, $runPhase)] ?? [
+                'last_status' => null,
+                'avg_dur_s' => null,
+            ];
+            $chain = $job->chainTo;
 
             $jobs[] = [
                 'id' => $job->id,
@@ -40,7 +44,7 @@ final class CronReadRepository
                 'shop' => $job->shop->name,
                 'phase' => $job->phase,
                 'strategy' => $job->strategy ?? '',
-                'args' => $job->args === '' ? '' : $job->args,
+                'args' => $job->args,
                 'cron' => $job->cron_expression,
                 'enabled' => $job->enabled,
                 'last' => RunPresenter::relative($job->last_run_at),
@@ -75,48 +79,82 @@ final class CronReadRepository
         return $phase === '' ? 'scan' : $phase;
     }
 
-    /** @return array{last_status: string|null, avg_dur_s: float|null} */
-    private function metrics(int $shopId, string $runPhase): array
+    /**
+     * @param  iterable<CronJob>  $jobs
+     * @return array<string, array{last_status: string|null, avg_dur_s: float|null}>
+     */
+    private function metricsForJobs(iterable $jobs): array
     {
-        $lastRun = DB::table('scrape_runs')
-            ->where('shop_id', $shopId)
-            ->where('phase', $runPhase)
-            ->whereIn('status', ['completed', 'failed'])
-            ->orderByRaw('finished_at desc nulls last')
-            ->first();
+        $shopIds = [];
+        $phases = [];
+        $wanted = [];
+        $metrics = [];
+        foreach ($jobs as $job) {
+            $phase = $this->runPhase($job->phase, $job->strategy);
+            $key = $this->metricKey($job->shop_id, $phase);
+            $wanted[$key] = true;
+            $metrics[$key] = ['last_status' => null, 'avg_dur_s' => null];
+            $shopIds[$job->shop_id] = $job->shop_id;
+            $phases[$phase] = $phase;
+        }
+        if ($wanted === []) {
+            return [];
+        }
 
-        $recent = DB::table('scrape_runs')
-            ->where('shop_id', $shopId)
-            ->where('phase', $runPhase)
-            ->where('status', 'completed')
-            ->whereNotNull('finished_at')
-            ->orderByRaw('finished_at desc nulls last')
-            ->limit(self::AVG_WINDOW)
-            ->get();
+        $ranked = DB::table('scrape_runs')
+            ->select('shop_id', 'phase', 'status', 'started_at', 'finished_at')
+            ->selectRaw('row_number() over (
+                partition by shop_id, phase order by finished_at desc nulls last, id desc
+            ) as terminal_rank')
+            ->selectRaw('row_number() over (
+                partition by shop_id, phase, status order by finished_at desc nulls last, id desc
+            ) as status_rank')
+            ->whereIn('shop_id', array_values($shopIds))
+            ->whereIn('phase', array_values($phases))
+            ->whereIn('status', ['completed', 'failed']);
 
         $durations = [];
-        foreach ($recent as $raw) {
+        foreach (DB::query()->fromSub($ranked, 'runs')->get() as $raw) {
             $run = DatabaseRow::from($raw);
-            if ($run->nullableString('finished_at') !== null && $run->nullableString('started_at') !== null) {
-                $durations[] = $run->dateTime('started_at')->diffInSeconds($run->dateTime('finished_at'), true);
+            $key = $this->metricKey($run->int('shop_id'), $run->string('phase'));
+            if (! isset($wanted[$key])) {
+                continue;
+            }
+            if ($run->int('terminal_rank') === 1) {
+                $metrics[$key] = [
+                    'last_status' => $run->string('status') === 'completed' ? 'ok' : 'fail',
+                    'avg_dur_s' => $metrics[$key]['avg_dur_s'],
+                ];
+            }
+            if ($run->string('status') === 'completed'
+                && $run->int('status_rank') <= self::AVG_WINDOW
+                && $run->nullableString('finished_at') !== null
+                && $run->nullableString('started_at') !== null) {
+                $durations[$key][] = $run->dateTime('started_at')
+                    ->diffInSeconds($run->dateTime('finished_at'), true);
             }
         }
 
-        $last = DatabaseRow::nullable($lastRun);
+        foreach ($durations as $durationKey => $values) {
+            $metrics[$durationKey] = [
+                'last_status' => $metrics[$durationKey]['last_status'],
+                'avg_dur_s' => array_sum($values) / count($values),
+            ];
+        }
 
-        return [
-            'last_status' => $last === null
-                ? null
-                : ($last->string('status') === 'completed' ? 'ok' : 'fail'),
-            'avg_dur_s' => $durations === [] ? null : array_sum($durations) / count($durations),
-        ];
+        return $metrics;
+    }
+
+    private function metricKey(int $shopId, string $phase): string
+    {
+        return "{$shopId}:{$phase}";
     }
 
     /** @return array{string|null, int|null} */
     private function nextFiring(string $expression, Carbon $now): array
     {
         try {
-            $next = Carbon::instance((new CronExpression($expression))->getNextRunDate($now))->utc();
+            $next = Date::instance((new CronExpression($expression))->getNextRunDate($now))->utc();
         } catch (Throwable) {
 
             return [null, null];
@@ -175,7 +213,7 @@ final class CronReadRepository
         $job->load('shop');
 
         $runPhase = $this->runPhase($job->phase, $job->strategy);
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         $terminal = fn (): Builder => DB::table('scrape_runs')
             ->where('shop_id', $job->shop_id)
@@ -222,7 +260,7 @@ final class CronReadRepository
         $recentRows = DB::table('scrape_runs')
             ->where('shop_id', $job->shop_id)
             ->where('phase', $runPhase)
-            ->orderByDesc('started_at')
+            ->latest('started_at')
             ->limit(20)
             ->get();
         $recentRuns = [];
@@ -235,8 +273,8 @@ final class CronReadRepository
                 : null;
             $recentRuns[] = [
                 'id' => $run->int('id'),
-                'started' => RunPresenter::relative($startedAt === null ? null : Carbon::parse($startedAt)),
-                'started_at' => RunPresenter::iso($startedAt === null ? null : Carbon::parse($startedAt)),
+                'started' => RunPresenter::relative($startedAt === null ? null : Date::parse($startedAt)),
+                'started_at' => RunPresenter::iso($startedAt === null ? null : Date::parse($startedAt)),
                 'dur' => $this->formatDuration($duration),
                 'dur_s' => $duration,
                 'items' => $run->int('items_added') + $run->int('items_updated'),
@@ -268,14 +306,14 @@ final class CronReadRepository
                     : null,
                 'avg_dur' => $this->formatDuration($avgDuration),
                 'avg_dur_s' => $avgDuration,
-                'last_status' => $lastRun === null
-                    ? null
-                    : ($lastRun->string('status') === 'completed' ? 'ok' : 'fail'),
-                'last_run_ago' => $lastRun !== null
+                'last_status' => $lastRun instanceof DatabaseRow
+                    ? $lastRun->string('status') === 'completed' ? 'ok' : 'fail'
+                    : (null),
+                'last_run_ago' => $lastRun instanceof DatabaseRow
                     ? RunPresenter::relative(
                         $lastRun->nullableString('finished_at') === null
                             ? null
-                            : Carbon::parse($lastRun->string('finished_at')),
+                            : Date::parse($lastRun->string('finished_at')),
                     )
                     : '—',
             ],
@@ -298,7 +336,7 @@ final class CronReadRepository
 
         for ($i = 0; $i < self::UPCOMING_COUNT; $i++) {
             try {
-                $next = Carbon::instance($cron->getNextRunDate($cursor))->utc();
+                $next = Date::instance($cron->getNextRunDate($cursor))->utc();
             } catch (Throwable) {
                 break;
             }
@@ -307,7 +345,7 @@ final class CronReadRepository
             $local = $next->copy()->setTimezone(self::DISPLAY_TZ);
             $date = $local->toDateString();
 
-            $daysAway = (int) Carbon::parse($today)->diffInDays(Carbon::parse($date), false);
+            $daysAway = (int) Date::parse($today)->diffInDays(Date::parse($date), false);
 
             $upcoming[] = [
                 'when' => $this->formatNext((int) $now->diffInSeconds($next, true)),

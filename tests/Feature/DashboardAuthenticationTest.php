@@ -13,9 +13,30 @@ final class DashboardAuthenticationTest extends TestCase
     {
         parent::setUp();
         config([
+            'dashboard.authentication_disabled' => false,
             'dashboard.username' => 'operator',
             'dashboard.password' => 'secret',
         ]);
+    }
+
+    public function test_missing_credentials_fail_closed(): void
+    {
+        config(['dashboard.username' => null, 'dashboard.password' => null]);
+
+        $this->getJson('/api/overview')
+            ->assertServiceUnavailable()
+            ->assertExactJson(['detail' => 'Dashboard authentication is not configured']);
+    }
+
+    public function test_authentication_can_only_be_disabled_explicitly(): void
+    {
+        config([
+            'dashboard.authentication_disabled' => true,
+            'dashboard.username' => null,
+            'dashboard.password' => null,
+        ]);
+
+        $this->get('/validation')->assertMovedPermanently();
     }
 
     public function test_api_requests_require_credentials(): void

@@ -3,69 +3,7 @@
 
 declare(strict_types=1);
 
-use App\Crawler\RunLifecycle;
-use App\Repositories\DatabaseRepositoryFactory;
-use App\Repositories\ShopRepository;
-use App\Services\MatchService;
-use App\Services\ValidateService;
-use App\Support\Database;
-
-require __DIR__.'/../vendor/autoload.php';
-
-$opts = [];
-foreach (array_slice($argv, 1) as $arg) {
-    if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $arg, $m) === 1) {
-        $opts[$m[1]] = $m[2] ?? '1';
-    }
-}
-
-if (isset($opts['help'])) {
-    fwrite(STDOUT, <<<'TXT'
-    Usage: bin/validate --shop=vaga [options]
-
-      --run-id=N       attribute findings to an existing run instead of
-                       creating one
-      --match-first    run match step 1 (ISBN linkage) before validating
-      --database=DSN   override DATABASE_URL
-
-    TXT);
-    exit(0);
-}
-
-$shopName = $opts['shop'] ?? 'vaga';
-
-Database::boot($opts['database'] ?? null);
-$repositoryFactory = new DatabaseRepositoryFactory;
-$shop = (new ShopRepository)->byName($shopName);
-
-if (isset($opts['match-first'])) {
-    $linked = (new MatchService($repositoryFactory->matching()))->isbnMatch($shopName);
-    printf("match step 1: %d shop_book(s) linked by ISBN\n", $linked);
-}
-
-$lifecycle = null;
-$runId = isset($opts['run-id']) ? (int) $opts['run-id'] : null;
-if ($runId === null) {
-    $lifecycle = new RunLifecycle($shop->id, 'validate');
-    $runId = $lifecycle->start()->id;
-}
-
-printf("validate %s (run %d)\n", $shopName, $runId);
-
-try {
-    $counters = (new ValidateService($repositoryFactory->validation()))
-        ->run($shop->id, $runId);
-} catch (Throwable $e) {
-    $lifecycle?->fail($e);
-    fwrite(STDERR, 'error: '.$e->getMessage()."\n");
-    exit(1);
-}
-
-$total = array_sum($counters);
-foreach ($counters as $key => $count) {
-    printf("  %-26s %6d\n", $key, $count);
-}
-printf("total %d issue(s)\n", $total);
-
-$lifecycle?->progress(processed: $total, added: 0, updated: 0, errors: 0);
-$lifecycle?->finish('completed');
+$arguments = array_slice($argv, 1);
+$command = [PHP_BINARY, dirname(__DIR__).'/artisan', 'books:validate', ...$arguments];
+passthru(implode(' ', array_map(escapeshellarg(...), $command)), $status);
+exit($status);

@@ -9,7 +9,9 @@ use App\Exceptions\ActionFailed;
 use App\Models\CronJob;
 use App\Models\Shop;
 use App\Repositories\CronJobRepository;
+use App\Support\Config;
 use Cron\CronExpression;
+use RuntimeException;
 
 final readonly class CronMutationsService
 {
@@ -40,6 +42,7 @@ final readonly class CronMutationsService
 
         $trimmedStrategy = trim($input->strategy ?? '');
         $strategy = $trimmedStrategy !== '' ? $trimmedStrategy : null;
+        $this->validateStrategy($shop->name, $phase, $strategy);
         $job = $this->jobs->create($shop, $phase, $strategy, $expression, $chainToId);
 
         return [
@@ -75,6 +78,19 @@ final readonly class CronMutationsService
         if ($strategy !== null) {
             $trimmedStrategy = trim($strategy);
             $fields['strategy'] = $trimmedStrategy !== '' ? $trimmedStrategy : null;
+        }
+
+        $effectivePhase = is_string($fields['phase'] ?? null) ? $fields['phase'] : $job->phase;
+        $effectiveStrategy = array_key_exists('strategy', $fields)
+            ? (is_string($fields['strategy']) ? $fields['strategy'] : null)
+            : $job->strategy;
+        if ($effectivePhase === 'scan') {
+            $effectiveStrategy = null;
+            $fields['strategy'] = null;
+        }
+        if (array_key_exists('phase', $fields) || array_key_exists('strategy', $fields)) {
+            $job->loadMissing('shop');
+            $this->validateStrategy($job->shop->name, $effectivePhase, $effectiveStrategy);
         }
 
         $chainToId = $input->chainToId;
@@ -147,6 +163,31 @@ final readonly class CronMutationsService
         }
 
         return null;
+    }
+
+    private function validateStrategy(string $shop, string $phase, ?string $strategy): void
+    {
+        if ($phase === 'scan') {
+            if ($strategy !== null) {
+                throw ActionFailed::unprocessable(['detail' => 'Scan schedules cannot have a strategy']);
+            }
+
+            return;
+        }
+
+        try {
+            $configured = $strategy !== null && Config::forShop($shop)->hasStrategy($strategy);
+        } catch (RuntimeException) {
+            throw ActionFailed::unprocessable([
+                'detail' => "Shop is not configured for crawling: {$shop}",
+            ]);
+        }
+
+        if (! $configured) {
+            throw ActionFailed::unprocessable([
+                'detail' => "Unknown discover strategy for {$shop}: ".($strategy ?? '(missing)'),
+            ]);
+        }
     }
 
     private function wouldCycle(int $jobId, int $chainToId): bool

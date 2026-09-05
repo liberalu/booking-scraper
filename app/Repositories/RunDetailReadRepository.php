@@ -11,7 +11,7 @@ use App\Models\ShopBook;
 use App\Support\BookPresenter;
 use App\Support\Queries;
 use App\Support\RunPresenter;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final readonly class RunDetailReadRepository
@@ -24,7 +24,7 @@ final readonly class RunDetailReadRepository
         $run->load('shop');
         $runId = $run->id;
         $terminal = DatabaseRow::from(['value' => $this->statistics->runTerminalCounts([$runId])[$runId] ?? null])->nullableInt('value');
-        $rescrape = self::boolean($this->statistics->rescrapeFlags([$runId])[$runId] ?? false);
+        $rescrape = $this->boolean($this->statistics->rescrapeFlags([$runId])[$runId] ?? false);
         $counts = $this->itemCounts($runId);
         $base = RunPresenter::toArray($run, terminalCount: $terminal, rescrape: $rescrape);
         $base['items_added'] = $counts['items_added'];
@@ -38,14 +38,14 @@ final readonly class RunDetailReadRepository
             $issues[] = ['field' => $row->string('field'), 'issue' => $row->string('issue'), 'count' => $row->int('count')];
         }
         $events = [];
-        foreach (DB::table('scrape_run_events')->where('run_id', $runId)->orderBy('created_at')->orderBy('id')->get() as $raw) {
+        foreach (DB::table('scrape_run_events')->where('run_id', $runId)->oldest()->orderBy('id')->get() as $raw) {
             $row = DatabaseRow::from($raw);
             $createdAt = $row->nullableString('created_at');
             $payload = $row->nullableString('payload');
             $events[] = [
                 'id' => $row->int('id'),
                 'event_type' => $row->string('event_type'),
-                'created_at' => RunPresenter::iso($createdAt === null ? null : Carbon::parse($createdAt)),
+                'created_at' => RunPresenter::iso($createdAt === null ? null : Date::parse($createdAt)),
                 'actor' => $row->nullableString('actor'),
                 'payload' => $payload === null ? null : json_decode($payload, true),
             ];
@@ -135,8 +135,8 @@ final readonly class RunDetailReadRepository
         ];
     }
 
-    private static function boolean(mixed $value): bool
+    private function boolean(mixed $value): bool
     {
-        return $value === true || $value === 1 || $value === '1' || $value === 't' || $value === 'true';
+        return in_array($value, [true, 1, '1', 't', 'true'], true);
     }
 }

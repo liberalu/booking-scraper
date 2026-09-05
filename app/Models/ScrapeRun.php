@@ -37,7 +37,7 @@ final class ScrapeRun extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['started_at'];
+    public const array TIMESTAMP_DEFAULTS = ['started_at'];
 
     protected $attributes = [
         'urls_processed' => 0,

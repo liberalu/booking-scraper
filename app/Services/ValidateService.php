@@ -9,7 +9,7 @@ use RuntimeException;
 
 final readonly class ValidateService
 {
-    public const ISSUE_KEYS = [
+    public const array ISSUE_KEYS = [
         'active_no_price',
         'book_no_metadata',
         'book_no_signals',

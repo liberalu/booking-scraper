@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Legacy;
 
+use App\Contracts\RunLauncher;
 use App\DTO\LegacyAction;
 use App\DTO\ReadModel\ShopUrlBatch;
 use App\DTO\Request\LegacyFormInput;
@@ -11,14 +12,16 @@ use App\Exceptions\ActionFailed;
 use App\Models\DiscoveredUrl;
 use App\Models\Shop;
 use App\Repositories\LegacyFormsRepository;
-use App\Support\CrawlSpawner;
 use Throwable;
 
 final readonly class LegacyFormsService
 {
     private const int MAX_FILTERED_URLS = 5000;
 
-    public function __construct(private LegacyFormsRepository $forms) {}
+    public function __construct(
+        private LegacyFormsRepository $forms,
+        private RunLauncher $launcher,
+    ) {}
 
     public function rateSettings(LegacyFormInput $input, Shop $shop): LegacyAction
     {
@@ -91,7 +94,7 @@ final readonly class LegacyFormsService
             throw ActionFailed::payloadTooLarge([
                 'detail' => sprintf(
                     'Filter matches %d+ shop_books — over the %d cap. Narrow the '
-                    .'filter, pick a shop, or run `scrapy crawl scan` for a full pass.',
+                    .'filter, pick a shop, or run `php artisan crawler:run scan` for a full pass.',
                     $count,
                     self::MAX_FILTERED_URLS,
                 ),
@@ -157,7 +160,7 @@ final readonly class LegacyFormsService
     private function spawn(string $shop, array $urls): array
     {
         try {
-            return CrawlSpawner::spawn('scan', $shop, urls: implode(',', $urls));
+            return $this->launcher->spawn('scan', $shop, urls: implode(',', $urls));
         } catch (Throwable $e) {
             throw ActionFailed::unavailable(['detail' => $e->getMessage()]);
         }

@@ -10,35 +10,38 @@ use App\Parsers\DiscoveryParser;
 use App\Parsers\ProductParser;
 use App\Support\CoverType;
 use App\Support\Isbn;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 
 /** @phpstan-import-type ParsedItem from CrawlerTypes */
 final class Parser implements DiscoveryParser, ProductParser
 {
-    private const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+    private const string SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
 
-    private const CARD_OPEN = '/<div\s+class="product">/i';
+    private const string CARD_OPEN = '/<div\s+class="product">/i';
 
-    private const CARD_LINK = '/href="(https?:\/\/www\.patogupirkti\.lt\/knyga\/[^"]+\.html)"/i';
+    private const string CARD_LINK = '/href="(https?:\/\/www\.patogupirkti\.lt\/knyga\/[^"]+\.html)"/i';
 
-    private const TRACKING_DATA = '/var\s+product_tracking_data_(\d+)\s*=\s*(\{.*?\})\s*;/s';
+    private const string TRACKING_DATA = '/var\s+product_tracking_data_(\d+)\s*=\s*(\{.*?\})\s*;/s';
 
-    private const PRICE_VALUE = '/([\d ]+[.,]\d+)\s*(?:<[^>]+>)?\s*€/u';
+    private const string PRICE_VALUE = '/([\d ]+[.,]\d+)\s*(?:<[^>]+>)?\s*€/u';
 
-    private const NEW_PRICE = '/<div\s+class="new-price"[^>]*>(.*?)<\/div>/si';
+    private const string NEW_PRICE = '/<div\s+class="new-price"[^>]*>(.*?)<\/div>/si';
 
-    private const OLD_PRICE = '/<strong[^>]*\bclass="[^"]*\bold-price\b[^"]*"[^>]*>(.*?)<\/strong>/si';
+    private const string OLD_PRICE = '/<strong[^>]*\bclass="[^"]*\bold-price\b[^"]*"[^>]*>(.*?)<\/strong>/si';
 
-    private const STOCK = '/<div\s+class="(instock|outstock)\s+stock-status/i';
+    private const string STOCK = '/<div\s+class="(instock|outstock)\s+stock-status/i';
 
-    private const NOT_FOR_SALE = '/neparduodama/i';
+    private const string NOT_FOR_SALE = '/neparduodama/i';
 
-    private const SPEC_ROW = '/<td\s+class="title"[^>]*>\s*([^<]+?)\s*:?\s*<\/td>\s*'
+    private const string SPEC_ROW = '/<td\s+class="title"[^>]*>\s*([^<]+?)\s*:?\s*<\/td>\s*'
         .'<td\s+class="value"[^>]*>(.*?)<\/td>/si';
 
-    private const BREADCRUMB = '/itemprop=["\']itemListElement["\'][^>]*>.*?'
+    private const string BREADCRUMB = '/itemprop=["\']itemListElement["\'][^>]*>.*?'
         .'itemprop=["\']name["\'][^>]*>\s*([^<]+?)\s*</si';
 
-    private const BREADCRUMB_ROOT = 'pirmas';
+    private const string BREADCRUMB_ROOT = 'pirmas';
 
     /**
      * @param  (callable(string): string)|null  $fetchChild
@@ -47,18 +50,18 @@ final class Parser implements DiscoveryParser, ProductParser
     public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
     {
         $doc = self::loadXml($xml);
-        if ($doc === null) {
+        if (! $doc instanceof DOMDocument) {
             return [];
         }
 
         $root = $doc->documentElement;
-        if ($root === null) {
+        if (! $root instanceof DOMElement) {
             return [];
         }
 
         if (str_ends_with($root->tagName, 'sitemapindex')) {
             $urls = [];
-            $xpath = new \DOMXPath($doc);
+            $xpath = new DOMXPath($doc);
             $xpath->registerNamespace('s', self::SITEMAP_NS);
             $nodes = $xpath->query('//s:sitemap/s:loc');
             if ($nodes === false) {
@@ -86,10 +89,10 @@ final class Parser implements DiscoveryParser, ProductParser
     private static function parseUrlset(string $xml): array
     {
         $doc = self::loadXml($xml);
-        if ($doc === null) {
+        if (! $doc instanceof DOMDocument) {
             return [];
         }
-        $xpath = new \DOMXPath($doc);
+        $xpath = new DOMXPath($doc);
         $xpath->registerNamespace('s', self::SITEMAP_NS);
 
         $urls = [];
@@ -443,18 +446,18 @@ final class Parser implements DiscoveryParser, ProductParser
         return is_int($value) || is_float($value) ? (string) $value : null;
     }
 
-    private static function loadXml(string $xml): ?\DOMDocument
+    private static function loadXml(string $xml): ?DOMDocument
     {
 
         if (trim($xml) === '') {
             return null;
         }
 
-        $doc = new \DOMDocument;
+        $doc = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
         $ok = $doc->loadXML($xml);
         libxml_use_internal_errors($previous);
 
-        return ($ok && $doc->documentElement !== null) ? $doc : null;
+        return ($ok && $doc->documentElement instanceof DOMElement) ? $doc : null;
     }
 }

@@ -8,6 +8,7 @@ use App\Models\ValidationIssue;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final readonly class IssueRepository
 {
@@ -17,7 +18,7 @@ final readonly class IssueRepository
     {
         $this->connection()->table('validation_issues')->where('id', $issue->getKey())->update([
             'lifecycle_state' => $state,
-            'acknowledged_at' => $state === 'acknowledged' ? Carbon::now('UTC') : null,
+            'acknowledged_at' => $state === 'acknowledged' ? Date::now('UTC') : null,
         ]);
     }
 
@@ -52,7 +53,7 @@ final readonly class IssueRepository
 
         return $query->update([
             'lifecycle_state' => $to,
-            'acknowledged_at' => $to === 'acknowledged' ? Carbon::now('UTC') : null,
+            'acknowledged_at' => $to === 'acknowledged' ? Date::now('UTC') : null,
         ]);
     }
 

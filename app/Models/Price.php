@@ -16,7 +16,7 @@ final class Price extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['scraped_at'];
+    public const array TIMESTAMP_DEFAULTS = ['scraped_at'];
 
     protected $fillable = [
         'shop_book_id', 'price', 'price_original', 'in_stock',

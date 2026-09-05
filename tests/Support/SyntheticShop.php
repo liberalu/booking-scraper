@@ -9,15 +9,15 @@ use RuntimeException;
 
 final class SyntheticShop
 {
-    public const SHOP = 'synthetic';
+    public const string SHOP = 'synthetic';
 
-    public const SHOP_TWO = 'synthetic-two';
+    public const string SHOP_TWO = 'synthetic-two';
 
-    private const BASE = 'https://synthetic.test';
+    private const string BASE = 'https://synthetic.test';
 
-    private const AUTHOR = 'Synthetic Canonical Author';
+    private const string AUTHOR = 'Synthetic Canonical Author';
 
-    private const ISBN = [
+    private const array ISBN = [
         'nonbook' => '9790000000015',
         'nonbook_puzzle' => '9790000000022',
         'nonbook_dvd' => '9790000000039',
@@ -27,7 +27,7 @@ final class SyntheticShop
         'matchable' => '9790000000077',
     ];
 
-    private const TEST_PORT = 5433;
+    private const int TEST_PORT = 5433;
 
     private static function cases(): array
     {

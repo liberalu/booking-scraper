@@ -6,17 +6,20 @@ namespace App\Crawler;
 
 use App\Repositories\WatchdogRepository;
 use App\Runs\RunFailsafe;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 final class Watchdog
 {
-    private const TICKING_STATUSES = ['running', 'paused'];
+    private const array TICKING_STATUSES = ['running', 'paused'];
 
     private ?int $childPid = null;
 
     private readonly string $markerPath;
 
     private bool $supervising = true;
+
+    private bool $parentSuspended = false;
 
     public function __construct(
         private readonly int $runId,
@@ -117,10 +120,23 @@ final class Watchdog
 
             if ($status === 'stopping') {
                 fwrite(STDERR, "  watchdog: operator stop requested — signalling parent\n");
+                $this->continueParent($parentPid);
                 posix_kill($parentPid, SIGTERM);
 
                 return;
             }
+
+            if ($status === 'paused') {
+                if (! $this->parentSuspended) {
+                    fwrite(STDERR, "  watchdog: operator pause requested — suspending parent\n");
+                    posix_kill($parentPid, SIGSTOP);
+                    $this->parentSuspended = true;
+                }
+
+                continue;
+            }
+
+            $this->continueParent($parentPid);
 
             if ($status !== null && ! in_array($status, self::TICKING_STATUSES, true)) {
                 return;
@@ -132,6 +148,19 @@ final class Watchdog
                 return;
             }
         }
+
+        $this->continueParent($parentPid);
+    }
+
+    private function continueParent(int $parentPid): void
+    {
+        if (! $this->parentSuspended) {
+            return;
+        }
+
+        posix_kill($parentPid, SIGCONT);
+        $this->parentSuspended = false;
+        $this->recordActivity();
     }
 
     private function tick(): ?string
@@ -220,7 +249,7 @@ final class Watchdog
     {
         $deadline = microtime(true) + $seconds;
         while (microtime(true) < $deadline) {
-            usleep(200_000);
+            Sleep::usleep(200_000);
             pcntl_signal_dispatch();
         }
     }

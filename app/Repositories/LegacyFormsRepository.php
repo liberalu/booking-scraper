@@ -18,13 +18,15 @@ final readonly class LegacyFormsRepository
 
     public function saveRateSettings(int $shopId, float $delay, int $concurrency): void
     {
-        $this->upsertSetting($shopId, 'download_delay', $this->floatValue($delay), 'float');
-        $this->upsertSetting(
-            $shopId,
-            'concurrent_requests_per_domain',
-            (string) $concurrency,
-            'int',
-        );
+        $this->connection()->transaction(function () use ($shopId, $delay, $concurrency): void {
+            $this->upsertSetting($shopId, 'download_delay', $this->floatValue($delay), 'float');
+            $this->upsertSetting(
+                $shopId,
+                'concurrent_requests_per_domain',
+                (string) $concurrency,
+                'int',
+            );
+        });
     }
 
     public function shopNameForUrl(DiscoveredUrl $url): ?string
@@ -80,7 +82,9 @@ final readonly class LegacyFormsRepository
         if ($input->format !== '') {
             $query->where('sb.format', $input->format);
         }
-        if ($input->missing !== '' && preg_match('/^[a-z_]+$/', $input->missing) === 1) {
+        if (in_array($input->missing, [
+            'title', 'author', 'isbn', 'publisher', 'year', 'price', 'format', 'image_url',
+        ], true)) {
             $query->whereNull('sb.'.$input->missing);
         }
         if ($input->active === 'true') {

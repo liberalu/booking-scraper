@@ -12,7 +12,7 @@ final class Config
     /** @var array<string, int|float> */
     private array $overrides = [];
 
-    private const FALLBACKS = [
+    private const array FALLBACKS = [
         'download_delay' => 1.0,
         'concurrent_requests_per_domain' => 1,
         'max_retries' => 2,
@@ -50,7 +50,7 @@ final class Config
 
     public function baseUrl(): string
     {
-        $url = self::map($this->shop['shop'] ?? null)['base_url'] ?? null;
+        $url = $this->map($this->shop['shop'] ?? null)['base_url'] ?? null;
         if (! is_string($url) || $url === '') {
             throw new RuntimeException("[shop].base_url missing for {$this->name}");
         }
@@ -85,7 +85,7 @@ final class Config
 
     public function matchTrust(int $default = 50): int
     {
-        $trust = self::map($this->shop['match'] ?? null)['trust'] ?? null;
+        $trust = $this->map($this->shop['match'] ?? null)['trust'] ?? null;
 
         return is_numeric($trust) ? (int) $trust : $default;
     }
@@ -93,7 +93,7 @@ final class Config
     /** @return array{endpoint: string, max_timeout_ms: int, session_ttl_minutes: int}|null */
     public function flaresolverr(): ?array
     {
-        $block = self::map($this->shop['flaresolverr'] ?? null);
+        $block = $this->map($this->shop['flaresolverr'] ?? null);
         $configuredEndpoint = $block['endpoint'] ?? null;
         if (! is_string($configuredEndpoint) || $configuredEndpoint === '') {
             return null;
@@ -106,22 +106,22 @@ final class Config
 
         return [
             'endpoint' => $endpoint,
-            'max_timeout_ms' => self::integer($block['max_timeout_ms'] ?? null, 120000),
-            'session_ttl_minutes' => self::integer($block['session_ttl_minutes'] ?? null, 25),
+            'max_timeout_ms' => $this->integer($block['max_timeout_ms'] ?? null, 120000),
+            'session_ttl_minutes' => $this->integer($block['session_ttl_minutes'] ?? null, 25),
         ];
     }
 
     /** @return array<string, mixed> */
     public function strategy(string $name): array
     {
-        $strategy = self::map($this->shop['discover'] ?? null)[$name] ?? null;
+        $strategy = $this->map($this->shop['discover'] ?? null)[$name] ?? null;
         if (! is_array($strategy)) {
             throw new RuntimeException(
                 "No [discover.{$name}] block in config/shops/{$this->name}.toml"
             );
         }
 
-        return self::map($strategy);
+        return $this->map($strategy);
     }
 
     /** @return non-empty-list<string> */
@@ -154,7 +154,7 @@ final class Config
 
     public function urlIncludePattern(): ?string
     {
-        $pattern = self::map($this->shop['discover'] ?? null)['url_include_pattern'] ?? null;
+        $pattern = $this->map($this->shop['discover'] ?? null)['url_include_pattern'] ?? null;
 
         return is_string($pattern) && $pattern !== '' ? $pattern : null;
     }
@@ -168,11 +168,11 @@ final class Config
         if (! is_array($rawBlock)) {
             return null;
         }
-        $block = self::map($rawBlock);
+        $block = $this->map($rawBlock);
         $rules = [];
         foreach ($block as $key => $value) {
             if ($key !== 'allowed_keys' && is_array($value)) {
-                $rules[$key] = self::map($value);
+                $rules[$key] = $this->map($value);
             }
         }
 
@@ -194,15 +194,15 @@ final class Config
 
     public function hasStrategy(string $name): bool
     {
-        return is_array(self::map($this->shop['discover'] ?? null)[$name] ?? null);
+        return is_array($this->map($this->shop['discover'] ?? null)[$name] ?? null);
     }
 
     private function setting(string $key): mixed
     {
 
         return $this->overrides[$key]
-            ?? self::map($this->shop['scraping'] ?? null)[$key]
-            ?? self::map($this->default['scrapy'] ?? null)[$key]
+            ?? $this->map($this->shop['scraping'] ?? null)[$key]
+            ?? $this->map($this->default['scrapy'] ?? null)[$key]
             ?? self::FALLBACKS[$key]
             ?? throw new RuntimeException("No value or fallback for setting '{$key}'");
     }
@@ -210,7 +210,7 @@ final class Config
     private function floatSetting(string $key): float
     {
         $value = $this->setting($key);
-        if (! is_int($value) && ! is_float($value) && ! (is_string($value) && is_numeric($value))) {
+        if (! is_int($value) && ! is_float($value) && (! is_string($value) || ! is_numeric($value))) {
             throw new RuntimeException("Setting '{$key}' must be numeric.");
         }
 
@@ -220,14 +220,14 @@ final class Config
     private function intSetting(string $key): int
     {
         $value = $this->setting($key);
-        if (! is_int($value) && ! (is_string($value) && is_numeric($value))) {
+        if (! is_int($value) && (! is_string($value) || ! is_numeric($value))) {
             throw new RuntimeException("Setting '{$key}' must be an integer.");
         }
 
         return (int) $value;
     }
 
-    private static function integer(mixed $value, int $default): int
+    private function integer(mixed $value, int $default): int
     {
         if (is_int($value)) {
             return $value;
@@ -240,7 +240,7 @@ final class Config
     }
 
     /** @return array<string, mixed> */
-    private static function map(mixed $value): array
+    private function map(mixed $value): array
     {
         if (! is_array($value)) {
             return [];

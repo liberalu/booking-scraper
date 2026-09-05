@@ -11,7 +11,7 @@ use ReflectionClass;
 
 final class ValidateServiceStructuralTest extends TestCase
 {
-    private static function source(): string
+    private function source(): string
     {
         return (string) file_get_contents(
             (string) (new ReflectionClass(ValidationRepository::class))->getFileName()
@@ -23,7 +23,7 @@ final class ValidateServiceStructuralTest extends TestCase
 
         self::assertSame(
             1,
-            substr_count(self::source(), 'is_active = true'),
+            substr_count($this->source(), 'is_active = true'),
             'is_active = true must only appear inside liveBooks(); '
             .'a check writing its own gate is the drift that caused seven regressions'
         );
@@ -33,14 +33,14 @@ final class ValidateServiceStructuralTest extends TestCase
     {
         self::assertSame(
             1,
-            substr_count(self::source(), 'in_stock = true'),
+            substr_count($this->source(), 'in_stock = true'),
             'in_stock = true must only appear inside liveBooks()'
         );
     }
 
     public function test_every_check_group_is_called_by_run(): void
     {
-        $repositorySource = self::source();
+        $repositorySource = $this->source();
         $serviceSource = (string) file_get_contents(
             (string) (new ReflectionClass(ValidateService::class))->getFileName()
         );

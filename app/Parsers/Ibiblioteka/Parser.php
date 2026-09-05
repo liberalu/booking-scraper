@@ -13,11 +13,11 @@ use App\Parsers\ScanUrlRewriter;
 /** @phpstan-import-type ParsedItem from CrawlerTypes */
 final class Parser implements DiscoveryParser, IbibliotekaSearchParser, ProductParser, ScanUrlRewriter
 {
-    private const COVER_BASE = 'https://ibiblioteka.lt';
+    private const string COVER_BASE = 'https://ibiblioteka.lt';
 
-    private const DETAIL_PATH = '/metis-api/bibliographic-records/public/';
+    private const string DETAIL_PATH = '/metis-api/bibliographic-records/public/';
 
-    private const ROLE_CODES = [
+    private const array ROLE_CODES = [
         '070' => 'author',
         '080' => 'author',
         '730' => 'translator',
@@ -27,15 +27,15 @@ final class Parser implements DiscoveryParser, IbibliotekaSearchParser, ProductP
         '220' => 'compiler',
     ];
 
-    private const PAGES = '/(\d+)\s*(?:p\b|psl\.)/u';
+    private const string PAGES = '/(\d+)\s*(?:p\b|psl\.)/u';
 
-    private const DURATION = '/\d+\s*(?:val|min|sek)\.?(?:[^)]*)/u';
+    private const string DURATION = '/\d+\s*(?:val|min|sek)\.?(?:[^)]*)/u';
 
-    private const YEAR = '/\b(1[89]\d{2}|20\d{2})\b/';
+    private const string YEAR = '/\b(1[89]\d{2}|20\d{2})\b/';
 
-    private const DIMENSIONS = '/(\d+)\s*cm/u';
+    private const string DIMENSIONS = '/(\d+)\s*cm/u';
 
-    private const AUDIO_KEYWORDS = ['mp3', 'audio', 'val.,', 'min.,'];
+    private const array AUDIO_KEYWORDS = ['mp3', 'audio', 'val.,', 'min.,'];
 
     /** @return array{products: list<ParsedItem>, total: int|null} */
     public static function parseSearchResponse(string $json): array
@@ -51,7 +51,7 @@ final class Parser implements DiscoveryParser, IbibliotekaSearchParser, ProductP
         $products = [];
         foreach ($items as $item) {
             $id = self::scalarString($item['id'] ?? null);
-            if ($id === null || $id === '' || $id === '0') {
+            if (in_array($id, [null, '', '0'], true)) {
                 continue;
             }
 
@@ -439,11 +439,11 @@ final class Parser implements DiscoveryParser, IbibliotekaSearchParser, ProductP
 
     private static function boolean(mixed $value): bool
     {
-        return $value === true || $value === 1 || $value === '1';
+        return in_array($value, [true, 1, '1'], true);
     }
 
     private static function nonEmptyValue(mixed $value): mixed
     {
-        return $value === null || $value === '' || $value === [] ? null : $value;
+        return in_array($value, [null, '', []], true) ? null : $value;
     }
 }

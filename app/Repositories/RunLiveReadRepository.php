@@ -9,6 +9,7 @@ use App\Models\ScrapeRun;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class RunLiveReadRepository
@@ -32,7 +33,7 @@ final class RunLiveReadRepository
     {
         $runId = $run->id;
 
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         $heartbeatAge = $run->last_heartbeat !== null
             ? $this->seconds($run->last_heartbeat, $now)
             : null;
@@ -93,7 +94,7 @@ final class RunLiveReadRepository
         $rows = DB::table('scrape_url_items')
             ->where('run_id', $runId)
             ->where('status', 'processing')
-            ->orderBy('claimed_at')
+            ->oldest('claimed_at')
             ->orderBy('id')
             ->limit(self::IN_FLIGHT_CAP)
             ->get();
@@ -104,7 +105,7 @@ final class RunLiveReadRepository
             $items[] = [
                 'url' => $row->string('url'),
                 'claimed_at' => $this->iso($claimed),
-                'claimed_age_s' => $claimed === null ? null : $this->seconds($claimed, $now),
+                'claimed_age_s' => $claimed instanceof Carbon ? $this->seconds($claimed, $now) : null,
                 'request_delay_s' => $row->nullableFloat('request_delay_s'),
                 'delay_source' => $row->nullableString('delay_source'),
                 'retry_count' => $row->int('retry_count'),
@@ -117,7 +118,7 @@ final class RunLiveReadRepository
     /** @return array{window_s: int, done: int, failed: int} */
     private function rateWindow(int $runId): array
     {
-        $cutoff = Carbon::now('UTC')->subSeconds(self::RATE_WINDOW_S);
+        $cutoff = Date::now('UTC')->subSeconds(self::RATE_WINDOW_S);
 
         $count = static fn (string $status): int => DB::table('scrape_url_items')
             ->where('run_id', $runId)
@@ -188,13 +189,61 @@ final class RunLiveReadRepository
             ->where('shop_id', $run->shop_id)
             ->where('id', '!=', $run->id)
             ->whereNotNull('started_at')
-            ->orderByDesc('started_at')
+            ->latest('started_at')
             ->limit(self::RECURRENCE_LOOKBACK_RUNS)
             ->pluck('id')
             ->all();
         $priorRunIds = [];
         foreach ($rawPriorRunIds as $rawId) {
             $priorRunIds[] = DatabaseRow::from(['id' => $rawId])->int('id');
+        }
+
+        $recurrences = [];
+        if ($priorRunIds !== []) {
+            $recurrenceRows = DB::table('scrape_failures')
+                ->select('error_reason', 'http_status')
+                ->selectRaw('count(distinct run_id) as recurring_count')
+                ->whereIn('run_id', $priorRunIds)
+                ->groupBy('error_reason', 'http_status')
+                ->get();
+            foreach ($recurrenceRows as $recurrenceRaw) {
+                $recurrence = DatabaseRow::from($recurrenceRaw);
+                $key = $this->failureKey(
+                    $recurrence->nullableString('error_reason'),
+                    $recurrence->nullableInt('http_status'),
+                );
+                $recurrences[$key] = $recurrence->int('recurring_count');
+            }
+        }
+
+        $exampleQuery = DB::query()
+            ->fromSub($latest, 'lf')
+            ->join('scrape_url_items as sui', 'sui.id', '=', 'lf.scrape_url_item_id')
+            ->select('sui.url', 'lf.error_detail', 'lf.error_reason', 'lf.http_status')
+            ->selectRaw('row_number() over (
+                partition by lf.error_reason, lf.http_status order by sui.id
+            ) as example_rank')
+            ->where('lf.rn', 1)
+            ->where('sui.status', 'failed')
+            ->unless($includeAcked, fn (Builder $query): Builder => $query
+                ->where('lf.lifecycle_state', '!=', 'acknowledged'));
+        $examplesByGroup = [];
+        foreach (DB::query()->fromSub($exampleQuery, 'examples')
+            ->where('example_rank', '<=', self::FAILURE_EXAMPLES)
+            ->orderBy('error_reason')
+            ->orderBy('http_status')
+            ->orderBy('example_rank')
+            ->get() as $exampleRaw) {
+            $example = DatabaseRow::from($exampleRaw);
+            $detail = $example->nullableString('error_detail');
+            $key = $this->failureKey(
+                $example->nullableString('error_reason'),
+                $example->nullableInt('http_status'),
+            );
+            $examplesByGroup[$key][] = [
+                'url' => $example->string('url'),
+                'error_detail' => $detail === null ? null : mb_substr($detail, 0, 4000),
+            ];
         }
 
         $result = [];
@@ -204,45 +253,7 @@ final class RunLiveReadRepository
             $acked = $row->nullableInt('acked_count') ?? 0;
             $errorReason = $row->nullableString('error_reason');
             $httpStatus = $row->nullableInt('http_status');
-
-            $recurring = 0;
-            if ($priorRunIds !== []) {
-                $recurring = DB::table('scrape_failures')
-                    ->whereIn('run_id', $priorRunIds)
-                    ->where(fn (Builder $q): Builder => $errorReason === null
-                        ? $q->whereNull('error_reason')
-                        : $q->where('error_reason', $errorReason))
-                    ->where(fn (Builder $q): Builder => $httpStatus === null
-                        ? $q->whereNull('http_status')
-                        : $q->where('http_status', $httpStatus))
-                    ->distinct()
-                    ->count('run_id');
-            }
-
-            $exampleRows = DB::query()
-                ->fromSub($latest, 'lf')
-                ->join('scrape_url_items as sui', 'sui.id', '=', 'lf.scrape_url_item_id')
-                ->select('sui.url', 'lf.error_detail')
-                ->where('lf.rn', 1)
-                ->where('sui.status', 'failed')
-                ->where(fn (Builder $q): Builder => $errorReason === null
-                    ? $q->whereNull('lf.error_reason')
-                    : $q->where('lf.error_reason', $errorReason))
-                ->where(fn (Builder $q): Builder => $httpStatus === null
-                    ? $q->whereNull('lf.http_status')
-                    : $q->where('lf.http_status', $httpStatus))
-                ->when(! $includeAcked, fn (Builder $q): Builder => $q->where('lf.lifecycle_state', '!=', 'acknowledged'))
-                ->limit(self::FAILURE_EXAMPLES)
-                ->get();
-            $examples = [];
-            foreach ($exampleRows as $exampleRaw) {
-                $example = DatabaseRow::from($exampleRaw);
-                $detail = $example->nullableString('error_detail');
-                $examples[] = [
-                    'url' => $example->string('url'),
-                    'error_detail' => $detail === null ? null : mb_substr($detail, 0, 4000),
-                ];
-            }
+            $key = $this->failureKey($errorReason, $httpStatus);
 
             $result[] = [
                 'reason' => $errorReason,
@@ -254,10 +265,10 @@ final class RunLiveReadRepository
                 'count' => $includeAcked ? $unacked + $acked : $unacked,
                 'unacked_count' => $unacked,
                 'acked_count' => $acked,
-                'recurring_in_runs' => $recurring,
+                'recurring_in_runs' => $recurrences[$key] ?? 0,
                 'max_attempts' => $row->nullableInt('max_attempts') ?? 0,
                 'capped_count' => $row->nullableInt('capped_count') ?? 0,
-                'examples' => $examples,
+                'examples' => $examplesByGroup[$key] ?? [],
             ];
         }
 
@@ -283,7 +294,7 @@ final class RunLiveReadRepository
             ->where('sui.run_id', $runId)
             ->whereIn('sui.status', ['done', 'failed'])
             ->whereNotNull('sui.done_at')
-            ->orderByDesc('sui.done_at')
+            ->latest('sui.done_at')
             ->orderByDesc('sui.id')
             ->limit(self::ACTIVITY_LIMIT)
             ->get();
@@ -300,10 +311,10 @@ final class RunLiveReadRepository
                 'error_reason' => $status === 'failed' ? $row->nullableString('latest_error_reason') : null,
                 'claimed_at' => $this->iso($claimed),
                 'done_at' => $this->iso($done),
-                'duration_s' => $claimed !== null && $done !== null
+                'duration_s' => $claimed instanceof Carbon && $done instanceof Carbon
                     ? $this->seconds($claimed, $done)
                     : null,
-                'done_age_s' => $done === null ? null : $this->seconds($done, $now),
+                'done_age_s' => $done instanceof Carbon ? $this->seconds($done, $now) : null,
                 'request_delay_s' => $row->nullableFloat('request_delay_s'),
                 'delay_source' => $row->nullableString('delay_source'),
                 'response_bytes' => $row->nullableInt('response_bytes'),
@@ -317,8 +328,7 @@ final class RunLiveReadRepository
     private function events(int $runId): array
     {
         $rows = DB::table('scrape_run_events')
-            ->where('run_id', $runId)
-            ->orderBy('created_at')
+            ->where('run_id', $runId)->oldest()
             ->orderBy('id')
             ->get();
         $events = [];
@@ -342,6 +352,11 @@ final class RunLiveReadRepository
         return round(max(0.0, $from->diffInSeconds($to, true)), 6);
     }
 
+    private function failureKey(?string $reason, ?int $httpStatus): string
+    {
+        return json_encode([$reason, $httpStatus], JSON_THROW_ON_ERROR);
+    }
+
     private function iso(?Carbon $dt): ?string
     {
         if (! $dt instanceof Carbon) {
@@ -356,6 +371,6 @@ final class RunLiveReadRepository
 
     private function time(?string $value): ?Carbon
     {
-        return $value === null ? null : Carbon::parse($value);
+        return $value === null ? null : Date::parse($value);
     }
 }

@@ -7,7 +7,7 @@ namespace Tests\Crawler;
 use App\Crawler\DiscoverSpider;
 use App\Discovery\GraphQlUrls;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -16,7 +16,7 @@ use RoachPHP\Http\Response;
 
 final class GraphQlSubdivisionTest extends TestCase
 {
-    private const BASE = 'https://www.pegasas.lt';
+    private const string BASE = 'https://www.pegasas.lt';
 
     private function spider(array $context = []): DiscoverSpider
     {
@@ -42,7 +42,7 @@ final class GraphQlSubdivisionTest extends TestCase
         int $status = 503,
     ): array {
         $url = GraphQlUrls::buildPageUrl(self::BASE, ['5107', '5125'], $pageSize, $page, $depth);
-        $request = new Request('GET', $url, [$spider, 'parse'], ['page' => $page]);
+        $request = new Request('GET', $url, $spider->parse(...), ['page' => $page]);
         $response = new Response(new \Nyholm\Psr7\Response($status, [], ''), $request);
 
         $out = [];
@@ -143,7 +143,7 @@ final class GraphQlSubdivisionTest extends TestCase
                 'shop_id' => $shopId,
                 'phase' => 'discover_graphql',
                 'status' => 'running',
-                'started_at' => Carbon::now('UTC'),
+                'started_at' => Date::now('UTC'),
                 'urls_processed' => 0,
                 'items_added' => 0,
                 'items_updated' => 0,

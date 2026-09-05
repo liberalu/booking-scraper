@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace App\Crawler;
 
 use GuzzleHttp\Exception\BadResponseException;
+use ReflectionClass;
 use RoachPHP\Http\ClientInterface;
 use RoachPHP\Http\RequestException;
 
-final class RecordingClient implements ClientInterface
+final readonly class RecordingClient implements ClientInterface
 {
     public function __construct(
-        private readonly ClientInterface $inner,
-        private readonly IssueBuffer $issues = new IssueBuffer,
+        private ClientInterface $inner,
+        private IssueBuffer $issues = new IssueBuffer,
     ) {}
 
     public function pool(
@@ -29,20 +30,20 @@ final class RecordingClient implements ClientInterface
                     'discover_fetch_failed',
                     'url',
                     $request->getUri(),
-                    self::detail($exception),
+                    $this->detail($exception),
                 );
             },
         );
     }
 
-    private static function detail(RequestException $exception): string
+    private function detail(RequestException $exception): string
     {
         $previous = $exception->getPrevious();
         if ($previous instanceof BadResponseException) {
             return 'HTTP '.$previous->getResponse()->getStatusCode();
         }
-        $class = $previous === null ? $exception : $previous;
+        $class = $previous ?? $exception;
 
-        return (new \ReflectionClass($class))->getShortName();
+        return (new ReflectionClass($class))->getShortName();
     }
 }

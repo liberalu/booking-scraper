@@ -7,13 +7,13 @@ namespace App\Repositories;
 use App\Support\UrlUtils;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
-final class ValidationIssueRepository
+final readonly class ValidationIssueRepository
 {
-    private const OPEN_STATES = ['new', 'acknowledged', 'snoozed'];
+    private const array OPEN_STATES = ['new', 'acknowledged', 'snoozed'];
 
-    public function __construct(private readonly DatabaseManager $database) {}
+    public function __construct(private DatabaseManager $database) {}
 
     /** @param list<array<string, mixed>> $issues */
     public function upsert(array $issues, int $shopId, int $runId): void
@@ -121,7 +121,7 @@ final class ValidationIssueRepository
             return;
         }
 
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         foreach (array_chunk($batch, 500) as $chunk) {
             $rows = [];
@@ -130,21 +130,17 @@ final class ValidationIssueRepository
                 $issueRow = DatabaseRow::from($issue);
                 $state = $issueRow->nullableString('initial_state') ?? 'new';
                 $rows[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)';
-                array_push(
-                    $bindings,
-                    $shopId,
-                    $runId,
-                    $runId,
-                    $issueRow->nullableString('url') ?? '',
-                    $issueRow->nullableString('field') ?? '',
-                    $issueRow->nullableString('issue') ?? '',
-                    $issueRow->nullableString('raw_value'),
-                    $issueRow->nullableInt('shop_book_id'),
-                    $issueRow->nullableInt('discovered_url_id'),
-                    $state,
-
-                    $state === 'acknowledged' ? $now : null,
-                );
+                $bindings[] = $shopId;
+                $bindings[] = $runId;
+                $bindings[] = $runId;
+                $bindings[] = $issueRow->nullableString('url') ?? '';
+                $bindings[] = $issueRow->nullableString('field') ?? '';
+                $bindings[] = $issueRow->nullableString('issue') ?? '';
+                $bindings[] = $issueRow->nullableString('raw_value');
+                $bindings[] = $issueRow->nullableInt('shop_book_id');
+                $bindings[] = $issueRow->nullableInt('discovered_url_id');
+                $bindings[] = $state;
+                $bindings[] = $state === 'acknowledged' ? $now : null;
             }
 
             $this->connection()->statement(
@@ -193,7 +189,7 @@ final class ValidationIssueRepository
             ->whereIn('lifecycle_state', self::OPEN_STATES)
             ->update([
                 'lifecycle_state' => 'resolved',
-                'resolved_at' => Carbon::now('UTC'),
+                'resolved_at' => Date::now('UTC'),
             ]);
     }
 

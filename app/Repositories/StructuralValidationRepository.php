@@ -18,24 +18,24 @@ final readonly class StructuralValidationRepository
         $results = [];
         foreach ($this->rows(
             'select sb.id, sb.url, sb.isbn from shop_books sb
-             where '.self::liveBooks('sb')."
+             where '.$this->liveBooks('sb')."
                and sb.isbn is not null and sb.isbn != ''
                and exists (
                    select 1 from shop_books sb2
-                   where ".self::liveBooks('sb2').'
+                   where ".$this->liveBooks('sb2').'
                      and sb2.isbn = sb.isbn and sb2.id != sb.id
                )',
             [$shopId, $shopId],
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'isbn', 'isbn_duplicate', $row->nullableString('isbn'), $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'isbn', 'isbn_duplicate', $row->nullableString('isbn'), $row->int('id'));
         }
         foreach ($this->rows(
             'select sb.id, sb.url, sb.title, sb.author from shop_books sb
-             where '.self::liveBooks('sb').'
+             where '.$this->liveBooks('sb').'
                and sb.title is not null and sb.author is not null
                and exists (
                    select 1 from shop_books sb2
-                   where '.self::liveBooks('sb2').'
+                   where '.$this->liveBooks('sb2').'
                      and lower(sb2.title) = lower(sb.title)
                      and lower(sb2.author) = lower(sb.author)
                      and sb2.id != sb.id
@@ -43,10 +43,7 @@ final readonly class StructuralValidationRepository
                )',
             [$shopId, $shopId],
         ) as $row) {
-            $results[] = self::issue(
-                $runId, $row->string('url'), 'title_author', 'title_author_duplicate',
-                $row->string('title').' / '.$row->string('author'), $row->int('id'),
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'title_author', 'title_author_duplicate', $row->string('title').' / '.$row->string('author'), $row->int('id'));
         }
 
         return $results;
@@ -60,7 +57,7 @@ final readonly class StructuralValidationRepository
             $slug = ValidationRules::slugFromUrl($row->string('url'));
             if (ValidationRules::shouldFlagSlugTitle($slug, $row->nullableString('title'))
                 && ! ValidationRules::looksDiacriticLossy($slug, $row->nullableString('title'))) {
-                $results[] = self::issue($runId, $row->string('url'), 'slug', 'slug_title_mismatch', $slug, $row->int('id'));
+                $results[] = $this->issue($runId, $row->string('url'), 'slug', 'slug_title_mismatch', $slug, $row->int('id'));
             }
         }
 
@@ -76,7 +73,7 @@ final readonly class StructuralValidationRepository
             if (! ValidationRules::looksDiacriticLossy($slug, $row->nullableString('title'))) {
                 continue;
             }
-            $issue = self::issue($runId, $row->string('url'), 'slug', 'slug_diacritic_loss', $slug, $row->int('id'));
+            $issue = $this->issue($runId, $row->string('url'), 'slug', 'slug_diacritic_loss', $slug, $row->int('id'));
             $issue['initial_state'] = 'acknowledged';
             $results[] = $issue;
         }
@@ -87,10 +84,10 @@ final readonly class StructuralValidationRepository
     /** @return list<DatabaseRow> */
     private function titledBooks(int $shopId): array
     {
-        return $this->rows('select id, url, title from shop_books where '.self::liveBooks().' and title is not null', [$shopId]);
+        return $this->rows('select id, url, title from shop_books where '.$this->liveBooks().' and title is not null', [$shopId]);
     }
 
-    private static function liveBooks(string $alias = ''): string
+    private function liveBooks(string $alias = ''): string
     {
         $prefix = $alias !== '' ? "{$alias}." : '';
 
@@ -98,7 +95,7 @@ final readonly class StructuralValidationRepository
     }
 
     /** @return array{scrape_run_id: int, url: string, field: string, issue: string, raw_value: string|null, shop_book_id: int} */
-    private static function issue(int $runId, string $url, string $field, string $issue, ?string $rawValue, int $shopBookId): array
+    private function issue(int $runId, string $url, string $field, string $issue, ?string $rawValue, int $shopBookId): array
     {
         return [
             'scrape_run_id' => $runId,

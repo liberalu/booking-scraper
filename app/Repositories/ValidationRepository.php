@@ -6,18 +6,19 @@ namespace App\Repositories;
 
 use App\Casts\PostgresTextArray;
 use App\Support\ValidationRules;
+use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
 
-final class ValidationRepository
+final readonly class ValidationRepository
 {
-    private const STALE_CADENCE_DAYS = 14;
+    private const int STALE_CADENCE_DAYS = 14;
 
-    private readonly StructuralValidationRepository $structural;
+    private StructuralValidationRepository $structural;
 
     public function __construct(
-        private readonly ValidationIssueRepository $writer,
-        private readonly DatabaseManager $database,
+        private ValidationIssueRepository $writer,
+        private DatabaseManager $database,
         ?StructuralValidationRepository $structural = null,
     ) {
         $this->structural = $structural ?? new StructuralValidationRepository($database);
@@ -32,7 +33,7 @@ final class ValidationRepository
         });
     }
 
-    private static function liveBooks(string $alias = '', bool $inStock = false): string
+    private function liveBooks(string $alias = '', bool $inStock = false): string
     {
         $prefix = $alias !== '' ? "{$alias}." : '';
         $clauses = ["{$prefix}shop_id = ?", "{$prefix}is_active = true"];
@@ -69,32 +70,32 @@ final class ValidationRepository
         foreach (['active_no_price', 'in_stock_no_price'] as $key) {
             foreach ($this->rows(
                 'select id, url from shop_books
-                 where '.self::liveBooks('', true).' and price is null',
+                 where '.$this->liveBooks('', true).' and price is null',
                 [$shopId]
             ) as $row) {
-                $results[] = self::issue($runId, $row->string('url'), 'price', $key, null, $row->int('id'));
+                $results[] = $this->issue($runId, $row->string('url'), 'price', $key, null, $row->int('id'));
             }
         }
 
         foreach ($this->rows(
             'select id, url, title, categories from shop_books
-             where '.self::liveBooks()." and type = 'book'
+             where '.$this->liveBooks()." and type = 'book'
                and isbn is null and author is null and year is null",
             [$shopId]
         ) as $row) {
             if ($this->looksNonBook($row)) {
                 continue;
             }
-            $results[] = self::issue($runId, $row->string('url'), 'metadata', 'book_no_metadata', null, $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'metadata', 'book_no_metadata', null, $row->int('id'));
         }
 
         foreach ($this->rows(
             'select sb.id, sb.url from shop_books sb
              left join prices p on p.shop_book_id = sb.id
-             where '.self::liveBooks('sb', true).' and p.id is null',
+             where '.$this->liveBooks('sb', true).' and p.id is null',
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'price_history', 'no_price_history', null, $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'price_history', 'no_price_history', null, $row->int('id'));
         }
 
         return $results;
@@ -107,28 +108,28 @@ final class ValidationRepository
 
         foreach ($this->rows(
             'select id, url, year from shop_books
-             where '.self::liveBooks().' and year is not null
+             where '.$this->liveBooks().' and year is not null
                and (year < 1800 or year > extract(year from now())::int + 2)',
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'year', 'year_out_of_range', $row->string('year'), $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'year', 'year_out_of_range', $row->string('year'), $row->int('id'));
         }
 
         foreach ($this->rows(
             'select id, url from shop_books
-             where '.self::liveBooks('', true).' and price = 0',
+             where '.$this->liveBooks('', true).' and price = 0',
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'price', 'price_zero', '0', $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'price', 'price_zero', '0', $row->int('id'));
         }
 
         foreach ($this->rows(
             'select id, url, format from shop_books
-             where '.self::liveBooks()." and format is not null
+             where '.$this->liveBooks()." and format is not null
                and format ~ '^\\d+.*[xX×].*\\d+'",
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'format', 'format_is_dimensions', $row->nullableString('format'), $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'format', 'format_is_dimensions', $row->nullableString('format'), $row->int('id'));
         }
 
         return $results;
@@ -141,7 +142,7 @@ final class ValidationRepository
 
         foreach ($this->rows(
             'select id, url, title, categories from shop_books
-             where '.self::liveBooks()." and type = 'book'
+             where '.$this->liveBooks()." and type = 'book'
                and isbn is null and author is null
                and year is null and format is null",
             [$shopId]
@@ -149,32 +150,25 @@ final class ValidationRepository
             if ($this->looksNonBook($row)) {
                 continue;
             }
-            $results[] = self::issue($runId, $row->string('url'), 'type', 'book_no_signals', null, $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'type', 'book_no_signals', null, $row->int('id'));
         }
 
         foreach ($this->rows(
             'select id, url, isbn, title, categories from shop_books
-             where '.self::liveBooks()." and type = 'non_book'
+             where '.$this->liveBooks()." and type = 'non_book'
                and isbn is not null and isbn ~ '^97[89]'",
             [$shopId]
         ) as $row) {
             if ($this->looksNonBook($row)) {
                 continue;
             }
-            $results[] = self::issue(
-                $runId,
-                $row->string('url'),
-                'type',
-                'non_book_has_isbn',
-                $row->nullableString('isbn'),
-                $row->int('id'),
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'type', 'non_book_has_isbn', $row->nullableString('isbn'), $row->int('id'));
         }
 
         $this->connection()->update(
             'update shop_books sb
              set is_active = false, inactive_since = now()
-             where '.self::liveBooks('sb')."
+             where '.$this->liveBooks('sb')."
                and not exists (
                    select 1 from discovered_urls du
                    where du.shop_book_id = sb.id and du.url_type != 'non_product'
@@ -189,10 +183,10 @@ final class ValidationRepository
         foreach ($this->rows(
             'select sb.id, sb.url from shop_books sb
              join discovered_urls du on du.shop_book_id = sb.id
-             where '.self::liveBooks('sb')." and du.url_type = 'non_product'",
+             where '.$this->liveBooks('sb')." and du.url_type = 'non_product'",
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'url_type', 'non_product_active', 'non_product', $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'url_type', 'non_product_active', 'non_product', $row->int('id'));
         }
 
         return $results;
@@ -206,39 +200,29 @@ final class ValidationRepository
 
         foreach ($this->rows(
             'select id, url, last_seen_at from shop_books
-             where '.self::liveBooks().'
+             where '.$this->liveBooks().'
                and last_seen_at < now() - make_interval(days => ?)',
             [$shopId, $days]
         ) as $row) {
-            $results[] = self::issue(
-                $runId, $row->string('url'), 'last_seen_at', 'stale_active',
-                self::isoTimestamp($row->nullableString('last_seen_at')), $row->int('id')
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'last_seen_at', 'stale_active', $this->isoTimestamp($row->nullableString('last_seen_at')), $row->int('id'));
         }
 
         foreach ($this->rows(
             'select sb.id, sb.url from shop_books sb
              join discovered_urls du on du.shop_book_id = sb.id
-             where '.self::liveBooks('sb')." and du.url_type = 'unreachable'",
+             where '.$this->liveBooks('sb')." and du.url_type = 'unreachable'",
             [$shopId]
         ) as $row) {
-            $results[] = self::issue($runId, $row->string('url'), 'url_type', 'unreachable_active', 'unreachable', $row->int('id'));
+            $results[] = $this->issue($runId, $row->string('url'), 'url_type', 'unreachable_active', 'unreachable', $row->int('id'));
         }
 
         foreach ($this->rows(
             'select sb.id, sb.url from shop_books sb
              left join discovered_urls du on du.shop_book_id = sb.id
-             where '.self::liveBooks('sb').' and du.id is null',
+             where '.$this->liveBooks('sb').' and du.id is null',
             [$shopId]
         ) as $row) {
-            $results[] = self::issue(
-                $runId,
-                $row->string('url'),
-                'url',
-                'orphan_no_url',
-                $row->string('url'),
-                $row->int('id'),
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'url', 'orphan_no_url', $row->string('url'), $row->int('id'));
         }
 
         return $results;
@@ -251,18 +235,11 @@ final class ValidationRepository
 
         foreach ($this->rows(
             'select id, url, isbn from shop_books
-             where '.self::liveBooks()." and match_status = 'unmatched'
+             where '.$this->liveBooks()." and match_status = 'unmatched'
                and isbn is not null",
             [$shopId]
         ) as $row) {
-            $results[] = self::issue(
-                $runId,
-                $row->string('url'),
-                'match_status',
-                'unmatched_has_isbn',
-                $row->nullableString('isbn'),
-                $row->int('id'),
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'match_status', 'unmatched_has_isbn', $row->nullableString('isbn'), $row->int('id'));
         }
 
         foreach ($this->rows(
@@ -271,7 +248,7 @@ final class ValidationRepository
                      order by bi2.isbn_type desc limit 1) as book_isbn
              from shop_books sb
              join books b on b.id = sb.book_id
-             where '.self::liveBooks('sb')." and sb.match_status = 'matched'
+             where '.$this->liveBooks('sb')." and sb.match_status = 'matched'
                and sb.isbn is not null
                and not exists (
                    select 1 from book_isbns bi
@@ -286,10 +263,7 @@ final class ValidationRepository
                )",
             [$shopId]
         ) as $row) {
-            $results[] = self::issue(
-                $runId, $row->string('url'), 'isbn', 'match_isbn_drift',
-                $row->string('sb_isbn').' vs '.$row->nullableString('book_isbn'), $row->int('id')
-            );
+            $results[] = $this->issue($runId, $row->string('url'), 'isbn', 'match_isbn_drift', $row->string('sb_isbn').' vs '.$row->nullableString('book_isbn'), $row->int('id'));
         }
 
         return $results;
@@ -302,7 +276,7 @@ final class ValidationRepository
             'select sb.id, sb.url, du.url as alias_url
              from shop_books sb
              join discovered_urls du on du.shop_book_id = sb.id
-             where '.self::liveBooks('sb')."
+             where '.$this->liveBooks('sb')."
                and rtrim(du.url, '/') != rtrim(sb.url, '/')
                and regexp_replace(rtrim(du.url, '/'), '^.+/', '')
                  != regexp_replace(rtrim(sb.url, '/'), '^.+/', '')",
@@ -324,10 +298,7 @@ final class ValidationRepository
 
         $results = [];
         foreach ($perBook as $shopBookId => $found) {
-            $results[] = self::issue(
-                $runId, $found['url'], 'url', 'url_aliases',
-                (string) $found['count'], $shopBookId
-            );
+            $results[] = $this->issue($runId, $found['url'], 'url', 'url_aliases', (string) $found['count'], $shopBookId);
         }
 
         return $results;
@@ -354,7 +325,7 @@ final class ValidationRepository
      *     shop_book_id: int
      * }
      */
-    private static function issue(
+    private function issue(
         int $runId,
         string $url,
         string $field,
@@ -372,12 +343,12 @@ final class ValidationRepository
         ];
     }
 
-    private static function isoTimestamp(?string $value): ?string
+    private function isoTimestamp(?string $value): ?string
     {
         if ($value === null) {
             return null;
         }
-        $dt = new \DateTimeImmutable($value);
+        $dt = new DateTimeImmutable($value);
 
         return $dt->format('u') === '000000'
             ? $dt->format('Y-m-d\TH:i:sP')

@@ -6,9 +6,9 @@ namespace App\Support;
 
 final class UrlUtils
 {
-    private const TRACKING_PREFIXES = ['utm_'];
+    private const array TRACKING_PREFIXES = ['utm_'];
 
-    private const TRACKING_EXACT = [
+    private const array TRACKING_EXACT = [
         'fbclid', 'gclid', 'msclkid', 'mc_cid', 'mc_eid',
         '_ga', 'yclid', 'ref', 'ref_src', 'ref_url',
     ];

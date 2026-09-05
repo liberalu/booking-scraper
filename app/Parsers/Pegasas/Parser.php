@@ -11,6 +11,8 @@ use App\Parsers\ProductParser;
 use App\Parsers\ScanUrlRewriter;
 use App\Support\CoverType;
 use App\Support\Isbn;
+use Illuminate\Support\Str;
+use Normalizer;
 
 /**
  * @phpstan-import-type ParsedItem from CrawlerTypes
@@ -36,43 +38,43 @@ use App\Support\Isbn;
  */
 final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, ScanUrlRewriter
 {
-    private const BASE_URL = 'https://www.pegasas.lt';
+    private const string BASE_URL = 'https://www.pegasas.lt';
 
-    private const SKU_FROM_SLUG = '/-(\d+)\/?$/';
+    private const string SKU_FROM_SLUG = '/-(\d+)\/?$/';
 
-    private const MAGENTO_SKU_WIDTH = 18;
+    private const int MAGENTO_SKU_WIDTH = 18;
 
-    private const LABEL_PUBLISHER = 'Leidykla';
+    private const string LABEL_PUBLISHER = 'Leidykla';
 
-    private const LABEL_TRANSLATOR = 'Vertėjas';
+    private const string LABEL_TRANSLATOR = 'Vertėjas';
 
-    private const LABEL_YEAR = 'Leidimo metai';
+    private const string LABEL_YEAR = 'Leidimo metai';
 
-    private const LABEL_COVER = 'Viršelio tipas';
+    private const string LABEL_COVER = 'Viršelio tipas';
 
-    private const LABEL_PAGES = 'Puslapių skaičius';
+    private const string LABEL_PAGES = 'Puslapių skaičius';
 
-    private const LABEL_ISBN = 'ISBN kodas';
+    private const string LABEL_ISBN = 'ISBN kodas';
 
-    private const LABEL_EAN = 'EAN kodas';
+    private const string LABEL_EAN = 'EAN kodas';
 
-    private const LABEL_LANGUAGE = 'Leidinio kalba';
+    private const string LABEL_LANGUAGE = 'Leidinio kalba';
 
-    private const LABEL_DIMENSIONS = 'Matmenys';
+    private const string LABEL_DIMENSIONS = 'Matmenys';
 
-    private const LABEL_ORIGINAL_TITLE = 'Pav. originalo kalba';
+    private const string LABEL_ORIGINAL_TITLE = 'Pav. originalo kalba';
 
-    private const LABEL_COLOR = 'Spalvingumas';
+    private const string LABEL_COLOR = 'Spalvingumas';
 
-    private const LANG_LITHUANIAN = 'Lietuvių';
+    private const string LANG_LITHUANIAN = 'Lietuvių';
 
-    private const ENGLISH_CATEGORY_IDS = [8128];
+    private const array ENGLISH_CATEGORY_IDS = [8128];
 
-    private const EBOOK_CATEGORY_IDS = [6122];
+    private const array EBOOK_CATEGORY_IDS = [6122];
 
-    private const BOOK_CATEGORY_SUBSTRINGS = ['knyg', 'groz', 'literat', 'vadovel', 'pratyb'];
+    private const array BOOK_CATEGORY_SUBSTRINGS = ['knyg', 'groz', 'literat', 'vadovel', 'pratyb'];
 
-    private const EMPTY_MARKERS = ['-', '—'];
+    private const array EMPTY_MARKERS = ['-', '—'];
 
     /** @return list<string> */
     public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
@@ -495,7 +497,7 @@ final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, 
         if ($isbnStrict !== null) {
             $isbn = $isbnStrict;
         } elseif ($eanStrict !== null && $isbnRecovered !== null
-            && substr($isbnRecovered, 0, 9) === substr($eanStrict, 0, 9)) {
+            && Str::startsWith($isbnRecovered, substr($eanStrict, 0, 9))) {
             $isbn = $eanStrict;
         } elseif ($isbnRecovered !== null) {
             $isbn = $isbnRecovered;
@@ -570,7 +572,7 @@ final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, 
     private static function flattenAnotacija(mixed $raw): ?string
     {
         if (is_array($raw)) {
-            $joined = implode(' ', array_filter($raw, 'is_string'));
+            $joined = implode(' ', array_filter($raw, is_string(...)));
         } elseif (is_string($raw)) {
             $joined = $raw;
         } else {
@@ -606,7 +608,7 @@ final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, 
 
     private static function parseYear(mixed $value): ?int
     {
-        if ($value === null || $value === '' || $value === false) {
+        if (in_array($value, [null, '', false], true)) {
             return null;
         }
         $string = self::scalarString($value);
@@ -662,7 +664,7 @@ final class Parser implements DiscoveryParser, LupaSearchParser, ProductParser, 
     private static function foldAscii(string $value): string
     {
         $lower = mb_strtolower($value, 'UTF-8');
-        $nfd = \Normalizer::normalize($lower, \Normalizer::FORM_D);
+        $nfd = Normalizer::normalize($lower, Normalizer::FORM_D);
 
         return preg_replace('/\p{Mn}/u', '', $nfd === false ? $lower : $nfd) ?? $lower;
     }

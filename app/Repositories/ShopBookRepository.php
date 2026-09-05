@@ -8,6 +8,7 @@ use App\Books\BookClassifier;
 use App\Models\ShopBook;
 use App\Support\UrlUtils;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -32,13 +33,13 @@ use Psr\Log\NullLogger;
  *     in_stock?: bool
  * }
  */
-final class ShopBookRepository
+final readonly class ShopBookRepository
 {
-    private const TRACKED_FIELDS = ['url', 'title'];
+    private const array TRACKED_FIELDS = ['url', 'title'];
 
     public function __construct(
-        private readonly LoggerInterface $logger = new NullLogger,
-        private readonly ShopBookRelationsRepository $relations = new ShopBookRelationsRepository,
+        private LoggerInterface $logger = new NullLogger,
+        private ShopBookRelationsRepository $relations = new ShopBookRelationsRepository,
     ) {}
 
     public function unlinkCanonical(ShopBook $shopBook): void
@@ -59,15 +60,15 @@ final class ShopBookRepository
         ?int $runId = null,
     ): UpsertResult {
         $url = UrlUtils::normalize($url);
-        $data = self::normalizeData($data);
+        $data = $this->normalizeData($data);
         $sku = $data['sku'] ?? null;
 
         $shopBook = $this->locate($shopId, $url, is_string($sku) ? $sku : null);
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
-        return $shopBook === null
-            ? $this->create($shopId, $url, $title, $data, $properties, $runId, $now)
-            : $this->update($shopBook, $url, $title, $data, $properties, $runId, $now);
+        return $shopBook instanceof ShopBook
+            ? $this->update($shopBook, $url, $title, $data, $properties, $runId, $now)
+            : $this->create($shopId, $url, $title, $data, $properties, $runId, $now);
     }
 
     private function locate(int $shopId, string $url, ?string $sku): ?ShopBook
@@ -120,7 +121,7 @@ final class ShopBookRepository
         $shopBook->shop_id = $shopId;
         $shopBook->url = $url;
         $shopBook->title = $title;
-        $shopBook->type = $data['type'] ?? self::inferType($title, $data, $properties);
+        $shopBook->type = $data['type'] ?? $this->inferType($title, $data, $properties);
         $shopBook->author = $data['author'] ?? null;
         $shopBook->sku = $data['sku'] ?? null;
         $shopBook->isbn = $data['isbn'] ?? null;
@@ -180,37 +181,37 @@ final class ShopBookRepository
         foreach (self::TRACKED_FIELDS as $field) {
             $new = $incoming[$field];
             if ($shopBook->{$field} !== $new) {
-                $changes[] = self::change($field, $shopBook->{$field}, $new);
+                $changes[] = $this->change($field, $shopBook->{$field}, $new);
             }
             $shopBook->{$field} = $new;
         }
 
         if (($data['author'] ?? null) !== null) {
-            $changes = self::track($changes, 'author', $shopBook->author, $data['author']);
+            $changes = $this->track($changes, 'author', $shopBook->author, $data['author']);
             $shopBook->author = $data['author'];
         }
         if (($data['sku'] ?? null) !== null) {
-            $changes = self::track($changes, 'sku', $shopBook->sku, $data['sku']);
+            $changes = $this->track($changes, 'sku', $shopBook->sku, $data['sku']);
             $shopBook->sku = $data['sku'];
         }
         if (($data['isbn'] ?? null) !== null) {
-            $changes = self::track($changes, 'isbn', $shopBook->isbn, $data['isbn']);
+            $changes = $this->track($changes, 'isbn', $shopBook->isbn, $data['isbn']);
             $shopBook->isbn = $data['isbn'];
         }
         if (($data['publisher'] ?? null) !== null) {
-            $changes = self::track($changes, 'publisher', $shopBook->publisher, $data['publisher']);
+            $changes = $this->track($changes, 'publisher', $shopBook->publisher, $data['publisher']);
             $shopBook->publisher = $data['publisher'];
         }
         if (($data['year'] ?? null) !== null) {
-            $changes = self::track($changes, 'year', $shopBook->year, $data['year']);
+            $changes = $this->track($changes, 'year', $shopBook->year, $data['year']);
             $shopBook->year = $data['year'];
         }
         if (($data['format'] ?? null) !== null) {
-            $changes = self::track($changes, 'format', $shopBook->format, $data['format']);
+            $changes = $this->track($changes, 'format', $shopBook->format, $data['format']);
             $shopBook->format = $data['format'];
         }
         if (($data['description'] ?? null) !== null) {
-            $changes = self::track($changes, 'description', $shopBook->description, $data['description']);
+            $changes = $this->track($changes, 'description', $shopBook->description, $data['description']);
             $shopBook->description = $data['description'];
         }
 
@@ -224,17 +225,13 @@ final class ShopBookRepository
             $shopBook->type = $data['type'];
         } elseif (($data['format'] ?? null) !== null) {
             $categories = $data['categories'] ?? $shopBook->categories;
-            $shopBook->type = self::inferType(
-                $shopBook->title,
-                [
-                    'author' => $shopBook->author,
-                    'isbn' => $shopBook->isbn,
-                    'year' => $shopBook->year,
-                    'format' => $shopBook->format,
-                    'categories' => $categories,
-                ],
-                $properties
-            );
+            $shopBook->type = $this->inferType($shopBook->title, [
+                'author' => $shopBook->author,
+                'isbn' => $shopBook->isbn,
+                'year' => $shopBook->year,
+                'format' => $shopBook->format,
+                'categories' => $categories,
+            ], $properties);
         }
 
         if (($data['categories'] ?? null) !== null) {
@@ -286,9 +283,9 @@ final class ShopBookRepository
             return [];
         }
 
-        $changes = [self::change('book_id', (string) $shopBook->book_id, null)];
+        $changes = [$this->change('book_id', (string) $shopBook->book_id, null)];
         if ($shopBook->match_status !== 'unmatched') {
-            $changes[] = self::change('match_status', $shopBook->match_status, 'unmatched');
+            $changes[] = $this->change('match_status', $shopBook->match_status, 'unmatched');
         }
         $shopBook->book_id = null;
         $shopBook->match_status = 'unmatched';
@@ -311,7 +308,7 @@ final class ShopBookRepository
      * @param  NormalizedData  $data
      * @param  array<string, mixed>|null  $properties
      */
-    private static function inferType(string $title, array $data, ?array $properties): string
+    private function inferType(string $title, array $data, ?array $properties): string
     {
         $properties ??= [];
 
@@ -332,12 +329,12 @@ final class ShopBookRepository
     }
 
     /** @return array{field: string, old: string|null, new: string|null} */
-    private static function change(string $field, mixed $old, mixed $new): array
+    private function change(string $field, mixed $old, mixed $new): array
     {
         return [
             'field' => $field,
-            'old' => self::changeValue($old),
-            'new' => self::changeValue($new),
+            'old' => $this->changeValue($old),
+            'new' => $this->changeValue($new),
         ];
     }
 
@@ -345,25 +342,22 @@ final class ShopBookRepository
      * @param  list<array{field: string, old: string|null, new: string|null}>  $changes
      * @return list<array{field: string, old: string|null, new: string|null}>
      */
-    private static function track(array $changes, string $field, mixed $old, mixed $new): array
+    private function track(array $changes, string $field, mixed $old, mixed $new): array
     {
         if ($old !== $new) {
-            $changes[] = self::change($field, $old, $new);
+            $changes[] = $this->change($field, $old, $new);
         }
 
         return $changes;
     }
 
-    private static function changeValue(mixed $value): ?string
+    private function changeValue(mixed $value): ?string
     {
         if ($value === null) {
             return null;
         }
         if (is_string($value)) {
             return $value;
-        }
-        if (is_int($value) || is_float($value) || is_bool($value)) {
-            return json_encode($value, JSON_THROW_ON_ERROR);
         }
 
         return json_encode($value, JSON_THROW_ON_ERROR);
@@ -373,7 +367,7 @@ final class ShopBookRepository
      * @param  array<string, mixed>  $data
      * @return NormalizedData
      */
-    private static function normalizeData(array $data): array
+    private function normalizeData(array $data): array
     {
         $row = DatabaseRow::from($data);
         $normalized = [];
@@ -390,21 +384,21 @@ final class ShopBookRepository
         }
         foreach (['price', 'price_original', 'rating'] as $field) {
             if ($row->has($field)) {
-                $normalized[$field] = self::numericString($row->value($field));
+                $normalized[$field] = $this->numericString($row->value($field));
             }
         }
         if ($row->has('in_stock')) {
             $normalized['in_stock'] = $row->nullableBool('in_stock') ?? true;
         }
         if ($row->has('categories')) {
-            $normalized['categories'] = self::stringList($row->value('categories'));
+            $normalized['categories'] = $this->stringList($row->value('categories'));
         }
 
         return $normalized;
     }
 
     /** @return numeric-string|null */
-    private static function numericString(mixed $value): ?string
+    private function numericString(mixed $value): ?string
     {
         if ($value === null) {
             return null;
@@ -413,16 +407,14 @@ final class ShopBookRepository
             return $value;
         }
         if (is_int($value) || is_float($value)) {
-            $string = (string) $value;
-
-            return $string;
+            return (string) $value;
         }
 
         return null;
     }
 
     /** @return list<string>|null */
-    private static function stringList(mixed $value): ?array
+    private function stringList(mixed $value): ?array
     {
         if ($value === null) {
             return null;

@@ -6,7 +6,7 @@ namespace App\Repositories;
 
 use Generator;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class CrawlerQueueRepository
@@ -19,10 +19,10 @@ final class CrawlerQueueRepository
     /** @return list<string> */
     public function stableUrls(int $shopId): array
     {
-        return self::strings(DB::table('discovered_urls')
+        return $this->strings(DB::table('discovered_urls')
             ->where('shop_id', $shopId)
             ->whereIn('url_type', ['product', 'non_product', 'unreachable'])
-            ->where('last_checked_at', '>=', Carbon::now('UTC')->subDays(7))
+            ->where('last_checked_at', '>=', Date::now('UTC')->subDays(7))
             ->pluck('normalized_url')
             ->all());
     }
@@ -30,7 +30,7 @@ final class CrawlerQueueRepository
     /** @return list<string> */
     public function pendingRunUrls(int $runId): array
     {
-        return self::strings(DB::table('scrape_url_items')
+        return $this->strings(DB::table('scrape_url_items')
             ->where('run_id', $runId)
             ->where('status', 'pending')
             ->orderBy('id')
@@ -64,7 +64,7 @@ final class CrawlerQueueRepository
     /** @return list<string> */
     public function scanUrls(int $shopId, string $mode, int $limit): array
     {
-        return self::strings($this->scanQuery($shopId, $mode)
+        return $this->strings($this->scanQuery($shopId, $mode)
             ->orderByRaw('last_checked_at asc nulls first')
             ->limit($limit)
             ->pluck('url')
@@ -98,7 +98,7 @@ final class CrawlerQueueRepository
             ->where('url_type', '!=', 'non_product')
             ->where(static function (Builder $query): void {
                 $query->where('fail_count', '<', 3)
-                    ->orWhere('last_checked_at', '<', Carbon::now('UTC')->subDays(7))
+                    ->orWhere('last_checked_at', '<', Date::now('UTC')->subDays(7))
                     ->orWhereNull('last_checked_at');
             });
 
@@ -136,7 +136,7 @@ final class CrawlerQueueRepository
      * @param  array<mixed>  $values
      * @return list<string>
      */
-    private static function strings(array $values): array
+    private function strings(array $values): array
     {
         return array_values(array_filter($values, is_string(...)));
     }

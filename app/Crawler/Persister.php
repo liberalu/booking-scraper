@@ -9,20 +9,21 @@ use App\Repositories\CrawlerPersistenceRepository;
 use App\Repositories\DiscoveredUrlRepository;
 use App\Repositories\ShopBookRepository;
 use App\Repositories\UpsertResult;
+use InvalidArgumentException;
 
 /**
  * @phpstan-import-type ParsedItem from CrawlerTypes
  * @phpstan-import-type AttributeSchema from CrawlerTypes
  */
-final class Persister
+final readonly class Persister
 {
     /** @param AttributeSchema|null $attributeSchema */
     public function __construct(
-        private readonly ShopBookRepository $shopBooks = new ShopBookRepository,
-        private readonly DiscoveredUrlRepository $urls = new DiscoveredUrlRepository,
-        private readonly CrawlerPersistenceRepositoryInterface $persistence = new CrawlerPersistenceRepository,
-        private readonly ?array $attributeSchema = null,
-        private readonly IssueBuffer $issues = new IssueBuffer,
+        private ShopBookRepository $shopBooks = new ShopBookRepository,
+        private DiscoveredUrlRepository $urls = new DiscoveredUrlRepository,
+        private CrawlerPersistenceRepositoryInterface $persistence = new CrawlerPersistenceRepository,
+        private ?array $attributeSchema = null,
+        private IssueBuffer $issues = new IssueBuffer,
     ) {}
 
     /**
@@ -43,12 +44,12 @@ final class Persister
             $this->issues,
         );
         if ($reject !== null) {
-            throw new \InvalidArgumentException("{$reject} ({$url})");
+            throw new InvalidArgumentException("{$reject} ({$url})");
         }
 
         $title = $parsed['title'] ?? null;
         if (! is_string($title) || trim($title) === '') {
-            throw new \InvalidArgumentException("Parsed page for {$url} has no title");
+            throw new InvalidArgumentException("Parsed page for {$url} has no title");
         }
         $title = trim($title);
 

@@ -9,28 +9,19 @@ use App\Models\ValidationIssue;
 use App\Support\IssueMetadata;
 use App\Support\Queries;
 use App\Support\RunPresenter;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
 /**
- * @phpstan-type UnifiedIssue array{
- *     id: int, kind: string, url: string, field: string, issue: string,
- *     raw_value: string|null, error_reason: string|null, http_status: int|null,
- *     scrape_run_id: int, shop_book_id: int|null, shop_book_title: string|null,
- *     shop_id: int|null, shop_name: string|null, url_type: string|null,
- *     book_type: string|null, lifecycle_state: string, severity: string,
- *     added_at: string|null
- * }
+ * @phpstan-import-type UnifiedIssue from UnifiedIssueReadRepository
  */
 final readonly class IssueReadRepository
 {
     private const array SORTABLE = ['age', 'id', 'type', 'shop', 'book', 'sev'];
 
     public function __construct(
-        private ValidationIssueListRepository $validationIssues = new ValidationIssueListRepository,
-        private ScrapeFailureListRepository $scrapeFailures = new ScrapeFailureListRepository,
+        private UnifiedIssueReadRepository $issues = new UnifiedIssueReadRepository,
         private IssueAggregateReadRepository $aggregates = new IssueAggregateReadRepository,
         private IssueDetailReadRepository $details = new IssueDetailReadRepository,
     ) {}
@@ -53,38 +44,18 @@ final readonly class IssueReadRepository
             ? $input->kind
             : 'all';
         $shopId = $this->shopId($input->shop);
-        $helperPage = $kind === 'all' ? 1 : $page;
-        $helperPerPage = $kind === 'all' ? $page * $perPage : $perPage;
-        $rows = [];
-        $total = 0;
-
-        if ($kind === 'all' || $kind === 'validation') {
-            [$validationRows, $validationTotal] = $this->validationIssues->fetch(
-                $state, $shopId, $issueType, $runId, $search, $severity,
-                $urlType, $bookType, $order, $sortBy, $helperPage, $helperPerPage,
-            );
-            $rows = [...$rows, ...$validationRows];
-            $total += $validationTotal;
-        }
-        if ($kind === 'all' || $kind === 'scrape_failure') {
-            [$failureRows, $failureTotal] = $this->scrapeFailures->fetch(
-                $state, $shopId, $issueType, $runId, $search, $severity,
-                $order, $sortBy, $helperPage, $helperPerPage,
-            );
-            $rows = [...$rows, ...$failureRows];
-            $total += $failureTotal;
-        }
-        if ($kind === 'all') {
-            $rows = array_slice($this->sort($rows, $sortBy, $order), ($page - 1) * $perPage, $perPage);
-        }
+        $result = $this->issues->fetch(
+            $kind, $state, $shopId, $issueType, $runId, $search, $severity,
+            $urlType, $bookType, $sortBy, $order, $page, $perPage,
+        );
 
         return [
-            'issues' => array_map($this->present(...), $rows),
-            'total' => $total,
+            'issues' => array_map($this->present(...), $result['rows']),
+            'total' => $result['total'],
             'page' => $page,
             'per_page' => $perPage,
-            'pages' => Queries::pageCount($total, $perPage),
-            'counts' => $this->lifecycleCounts($shopId, $issueType, $runId, $search, $severity),
+            'pages' => Queries::pageCount($result['total'], $perPage),
+            'counts' => $result['counts'],
             'kind' => $kind,
         ];
     }
@@ -92,7 +63,7 @@ final readonly class IssueReadRepository
     /** @return array<string, mixed> */
     public function groups(IssueQueryInput $input): array
     {
-        return self::map($this->aggregates->groups($input));
+        return $this->map($this->aggregates->groups($input));
     }
 
     /** @return array<string, list<int>>|stdClass */
@@ -104,7 +75,7 @@ final readonly class IssueReadRepository
     /** @return array<string, mixed> */
     public function show(ValidationIssue $issue): array
     {
-        return self::map($this->details->show($issue));
+        return $this->map($this->details->show($issue));
     }
 
     private function shopId(string $shopName): ?int
@@ -119,29 +90,12 @@ final readonly class IssueReadRepository
     }
 
     /**
-     * @param  list<UnifiedIssue>  $rows
-     * @return list<UnifiedIssue>
-     */
-    private function sort(array $rows, string $sortBy, string $order): array
-    {
-        $severityRank = ['critical' => 1, 'warning' => 2];
-        usort($rows, function (array $left, array $right) use ($sortBy, $order, $severityRank): int {
-            $comparison = $this->sortKey($left, $sortBy, $severityRank)
-                <=> $this->sortKey($right, $sortBy, $severityRank);
-
-            return $order === 'asc' ? $comparison : -$comparison;
-        });
-
-        return $rows;
-    }
-
-    /**
      * @param  UnifiedIssue  $row
      * @return array<string, mixed>
      */
     private function present(array $row): array
     {
-        $addedAt = $row['added_at'] === null ? null : Carbon::parse($row['added_at']);
+        $addedAt = $row['added_at'] === null ? null : Date::parse($row['added_at']);
 
         return [
             'id' => $row['id'],
@@ -167,44 +121,6 @@ final readonly class IssueReadRepository
         ];
     }
 
-    /** @return array{new: int, acknowledged: int, snoozed: int, resolved: int, total: int} */
-    private function lifecycleCounts(?int $shopId, string $issueType, ?int $runId, string $search, string $severity): array
-    {
-        $query = DB::table('validation_issues as vi');
-        if ($shopId !== null) {
-            $query->where('vi.shop_id', $shopId);
-        }
-        if ($issueType !== '') {
-            $query->where('vi.issue', $issueType);
-        }
-        if ($runId !== null) {
-            $query->where('vi.last_seen_run_id', $runId);
-        }
-        if ($severity !== '') {
-            $query->whereIn('vi.issue', IssueMetadata::typesWithSeverity($severity));
-        }
-        if ($search !== '') {
-            $like = "%{$search}%";
-            $query->leftJoin('shop_books as sb', 'sb.id', '=', 'vi.shop_book_id')
-                ->where(fn (Builder $nested): Builder => $nested->where('vi.url', 'ilike', $like)
-                    ->orWhere('sb.title', 'ilike', $like));
-        }
-        $counts = [];
-        foreach ($query->select('vi.lifecycle_state')->selectRaw('count(vi.id) as cnt')
-            ->groupBy('vi.lifecycle_state')->get() as $raw) {
-            $row = DatabaseRow::from($raw);
-            $counts[$row->string('lifecycle_state')] = $row->int('cnt');
-        }
-
-        return [
-            'new' => $counts['new'] ?? 0,
-            'acknowledged' => $counts['acknowledged'] ?? 0,
-            'snoozed' => $counts['snoozed'] ?? 0,
-            'resolved' => $counts['resolved'] ?? 0,
-            'total' => array_sum($counts),
-        ];
-    }
-
     private function filterValue(mixed $value): ?string
     {
         $value = is_string($value) ? $value : '';
@@ -213,26 +129,10 @@ final readonly class IssueReadRepository
     }
 
     /**
-     * @param  UnifiedIssue  $row
-     * @param  array<string, int>  $severityRank
-     */
-    private function sortKey(array $row, string $sortBy, array $severityRank): int|string
-    {
-        return match ($sortBy) {
-            'id' => $row['id'],
-            'type' => mb_strtolower($row['issue'], 'UTF-8'),
-            'shop' => mb_strtolower($row['shop_name'] ?? '', 'UTF-8'),
-            'book' => mb_strtolower($row['shop_book_title'] ?? '', 'UTF-8'),
-            'sev' => $severityRank[$row['severity']] ?? 2,
-            default => $row['added_at'] ?? '0001-01-01 00:00:00',
-        };
-    }
-
-    /**
      * @param  array<mixed>  $value
      * @return array<string, mixed>
      */
-    private static function map(array $value): array
+    private function map(array $value): array
     {
         $map = [];
         foreach ($value as $key => $item) {

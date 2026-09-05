@@ -10,9 +10,9 @@ namespace App\Crawler;
  */
 final class ItemBuilder
 {
-    private const PROPERTY_KEYS = ['pages', 'cover_type', 'duration', 'narrator', 'translator'];
+    private const array PROPERTY_KEYS = ['pages', 'cover_type', 'duration', 'narrator', 'translator'];
 
-    private const DATA_KEYS = [
+    private const array DATA_KEYS = [
         'type', 'author', 'sku', 'isbn', 'publisher', 'year', 'format',
         'description', 'image_url', 'categories', 'price', 'price_original',
         'in_stock', 'planned_availability_date', 'rating', 'review_count',

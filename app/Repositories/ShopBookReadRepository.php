@@ -12,13 +12,13 @@ use App\Support\IssueMetadata;
 use App\Support\Queries;
 use App\Support\RunPresenter;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
-final class ShopBookReadRepository
+final readonly class ShopBookReadRepository
 {
     public function __construct(
-        private readonly DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
+        private DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
     ) {}
 
     private const array SORT_COLUMNS = [
@@ -190,7 +190,7 @@ final class ShopBookReadRepository
 
         $changes = DB::table('shop_book_changes')
             ->where('shop_book_id', $bookId)
-            ->orderByDesc('changed_at')
+            ->latest('changed_at')
             ->limit(20)
             ->get();
 
@@ -210,7 +210,7 @@ final class ShopBookReadRepository
         if ($uniqueRunIds !== []) {
             $orderedIds = [];
             foreach (DB::table('scrape_runs')->whereIn('id', $uniqueRunIds)
-                ->orderByDesc('started_at')
+                ->latest('started_at')
                 ->limit(20)
                 ->pluck('id')->all() as $rawId) {
                 $orderedIds[] = DatabaseRow::from(['id' => $rawId])->int('id');
@@ -250,7 +250,7 @@ final class ShopBookReadRepository
         $detail['issues_list'] = $issues;
         $priceRows = DB::table('prices')
             ->where('shop_book_id', $bookId)
-            ->orderBy('scraped_at')
+            ->oldest('scraped_at')
             ->get();
         $priceHistory = [];
         foreach ($priceRows as $raw) {
@@ -295,7 +295,7 @@ final class ShopBookReadRepository
         $detail['discovery_url'] = $linked?->nullableString('url');
         $detail['url_status'] = $linked?->nullableString('url_type');
         $detail['url_fail_count'] = $linked?->nullableInt('fail_count') ?? 0;
-        $detail['classification'] = ($linked !== null && $linked->nullableInt('book_score') !== null)
+        $detail['classification'] = ($linked instanceof DatabaseRow && $linked->nullableInt('book_score') !== null)
             ? [
                 'book_score' => $linked->int('book_score'),
                 'is_book_product' => $linked->bool('is_book_product'),
@@ -305,7 +305,7 @@ final class ShopBookReadRepository
                 'classified_at' => $this->iso($linked->nullableString('classified_at')),
                 'classified_ago' => RunPresenter::relative(
                     $linked->nullableString('classified_at') !== null
-                        ? Carbon::parse($linked->string('classified_at'))
+                        ? Date::parse($linked->string('classified_at'))
                         : null
                 ),
             ]
@@ -319,7 +319,7 @@ final class ShopBookReadRepository
         if ($timestamp === null) {
             return null;
         }
-        $dt = Carbon::parse($timestamp)->utc();
+        $dt = Date::parse($timestamp)->utc();
 
         return $dt->micro === 0
             ? $dt->format('Y-m-d\TH:i:sP')

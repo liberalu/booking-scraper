@@ -10,7 +10,7 @@ use App\Runs\RunEvent;
 use App\Runs\RunFailsafe;
 use App\Runs\RunReconciler;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
@@ -23,7 +23,7 @@ final class RunAdoptionTest extends TestCase
     protected function setUp(): void
     {
         if (! self::$booted) {
-            Database::boot(self::dsn());
+            Database::boot($this->dsn());
             self::$booted = true;
         }
         DB::beginTransaction();
@@ -40,7 +40,7 @@ final class RunAdoptionTest extends TestCase
         DB::rollBack();
     }
 
-    private static function dsn(): string
+    private function dsn(): string
     {
         return getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
@@ -52,8 +52,8 @@ final class RunAdoptionTest extends TestCase
             'shop_id' => $this->shopId,
             'phase' => 'scan',
             'status' => 'failed',
-            'started_at' => Carbon::now('UTC')->subMinutes(10),
-            'finished_at' => Carbon::now('UTC')->subMinutes(1),
+            'started_at' => Date::now('UTC')->subMinutes(10),
+            'finished_at' => Date::now('UTC')->subMinutes(1),
             'close_reason' => 'stall_timeout',
             'resumable_after_failure' => true,
             'urls_total' => 10,
@@ -72,7 +72,7 @@ final class RunAdoptionTest extends TestCase
                 'url' => "https://adopt.test/item-{$i}",
                 'url_type' => 'product',
                 'status' => $status,
-                'created_at' => Carbon::now('UTC'),
+                'created_at' => Date::now('UTC'),
             ]);
         }
 
@@ -169,7 +169,7 @@ final class RunAdoptionTest extends TestCase
         $found = (new ResumePolicy(0))->findResumable($this->shopId, 'scan');
         self::assertSame($runId, $found?->id);
         self::assertSame('running', $found?->status);
-        self::assertFalse((bool) $found?->resumableAfterFailure);
+        self::assertFalse($found?->resumableAfterFailure);
     }
 
     public function test_adoption_releases_items_stuck_in_processing(): void
@@ -182,8 +182,8 @@ final class RunAdoptionTest extends TestCase
             'url' => 'https://adopt.test/in-flight',
             'url_type' => 'product',
             'status' => 'processing',
-            'created_at' => Carbon::now('UTC'),
-            'claimed_at' => Carbon::now('UTC')->subMinutes(5),
+            'created_at' => Date::now('UTC'),
+            'claimed_at' => Date::now('UTC')->subMinutes(5),
         ]);
 
         RunLifecycle::adopt($runId);
@@ -246,8 +246,8 @@ final class RunAdoptionTest extends TestCase
             'url_type' => 'product',
             'status' => 'failed',
             'attempts' => $attempts,
-            'created_at' => Carbon::now('UTC'),
-            'done_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
+            'done_at' => Date::now('UTC'),
         ], 'id');
 
         DB::table('scrape_failures')->insert([
@@ -256,7 +256,7 @@ final class RunAdoptionTest extends TestCase
             'scrape_url_item_id' => $itemId,
             'url' => "https://adopt.test/failed-{$reason}-{$attempts}",
             'error_reason' => $reason,
-            'occurred_at' => Carbon::now('UTC'),
+            'occurred_at' => Date::now('UTC'),
             'lifecycle_state' => 'new',
         ]);
 

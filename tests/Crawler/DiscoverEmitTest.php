@@ -167,7 +167,7 @@ final class DiscoverEmitTest extends TestCase
             .'</body></html>';
 
         $spider = $this->spider(['strategy' => 'full_crawl']);
-        $request = new Request('GET', 'https://vaga.lt/', [$spider, 'parse']);
+        $request = new Request('GET', 'https://vaga.lt/', $spider->parse(...));
         $response = new Response(new \Nyholm\Psr7\Response(200, [], $html), $request);
 
         $method = (new ReflectionClass($spider))->getMethod('internalLinks');
@@ -184,7 +184,7 @@ final class DiscoverEmitTest extends TestCase
         $xml = (string) file_get_contents(__DIR__.'/../fixtures/vaga_sitemap.xml');
         $spider = $this->spider(['strategy' => 'sitemap']);
 
-        $request = new Request('GET', 'https://vaga.lt/sitemap.xml', [$spider, 'parse']);
+        $request = new Request('GET', 'https://vaga.lt/sitemap.xml', $spider->parse(...));
         $response = new Response(new \Nyholm\Psr7\Response(200, [], $xml), $request);
 
         $urls = [];

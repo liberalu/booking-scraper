@@ -5,28 +5,29 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\DTO\Request\IssueQueryInput;
+use Illuminate\Validation\Rule;
 
 final class IssueQueryRequest extends ApiFormRequest
 {
-    /** @return array<string, list<string>> */
+    /** @return array<string, list<mixed>> */
     public function rules(): array
     {
         return [
-            'state' => ['sometimes', 'nullable'],
-            'shop' => ['sometimes', 'nullable'],
-            'issue_type' => ['sometimes', 'nullable'],
-            'run_id' => ['sometimes', 'nullable'],
-            'severity' => ['sometimes', 'nullable'],
-            'url_type' => ['sometimes', 'nullable'],
-            'book_type' => ['sometimes', 'nullable'],
-            'q' => ['sometimes', 'nullable'],
-            'sort_by' => ['sometimes', 'nullable'],
-            'order' => ['sometimes', 'nullable'],
-            'page' => ['sometimes', 'nullable'],
-            'per_page' => ['sometimes', 'nullable'],
-            'kind' => ['sometimes', 'nullable'],
-            'group_by' => ['sometimes', 'nullable'],
-            'days' => ['sometimes', 'nullable'],
+            'state' => ['sometimes', 'nullable', 'string', Rule::in(['all', 'open', 'new', 'acknowledged', 'snoozed', 'resolved'])],
+            'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
+            'issue_type' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'run_id' => ['sometimes', 'nullable', 'integer', 'min:1', 'exists:scrape_runs,id'],
+            'severity' => ['sometimes', 'nullable', 'string', Rule::in(['critical', 'warning', 'info'])],
+            'url_type' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'book_type' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'sort_by' => ['sometimes', 'nullable', 'string', Rule::in(['id', 'age', 'type', 'shop', 'state', 'sev'])],
+            'order' => ['sometimes', 'nullable', 'string', Rule::in(['asc', 'desc'])],
+            'page' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['sometimes', 'nullable', 'integer', 'between:1,200'],
+            'kind' => ['sometimes', 'nullable', 'string', Rule::in(['all', 'validation', 'scrape_failure'])],
+            'group_by' => ['sometimes', 'nullable', 'string', Rule::in(['type', 'type_shop'])],
+            'days' => ['sometimes', 'nullable', 'integer', 'between:1,3650'],
         ];
     }
 

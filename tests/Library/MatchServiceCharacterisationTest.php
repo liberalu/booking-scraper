@@ -14,7 +14,7 @@ use Tests\Support\SyntheticShop;
 
 final class MatchServiceCharacterisationTest extends TestCase
 {
-    private const GOLDEN = __DIR__.'/../golden/match_linkage.json';
+    private const string GOLDEN = __DIR__.'/../golden/match_linkage.json';
 
     #[Group('db')]
     public function test_the_linkage_is_the_one_python_produced(): void

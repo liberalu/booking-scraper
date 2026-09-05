@@ -17,6 +17,7 @@ final readonly class RunLaunchRequest
         public ?int $cronJobId = null,
         public string $role = 'operator',
         public ?int $adoptRunId = null,
+        public ?string $urlsFile = null,
     ) {
         if ($this->shop === '') {
             throw new InvalidArgumentException('A shop is required to launch a run');
@@ -29,6 +30,15 @@ final readonly class RunLaunchRequest
         }
         if ($this->adoptRunId !== null && $this->urls !== '') {
             throw new InvalidArgumentException('An adopted queue cannot be combined with explicit URLs');
+        }
+        if ($this->adoptRunId !== null && $this->urlsFile !== null) {
+            throw new InvalidArgumentException('An adopted queue cannot be combined with an explicit URL file');
+        }
+        if ($this->urls !== '' && $this->urlsFile !== null) {
+            throw new InvalidArgumentException('Explicit URLs must use one transport');
+        }
+        if ($this->urlsFile !== null && $this->phase !== RunPhase::Scan) {
+            throw new InvalidArgumentException('Only scan runs accept explicit URL files');
         }
         if ($this->urls !== '' && $this->mode !== 'delta') {
             throw new InvalidArgumentException('Explicit URLs cannot be combined with a scan mode');

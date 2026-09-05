@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 final class SchedulerRepository implements SchedulerRepositoryInterface
 {
-    private const LOCK_NAMESPACE = 7351;
+    private const int LOCK_NAMESPACE = 7351;
 
     /** @return iterable<CronJob> */
     public function enabledJobs(): iterable
@@ -22,7 +22,7 @@ final class SchedulerRepository implements SchedulerRepositoryInterface
     {
         $run = DB::table('scrape_runs')
             ->where('shop_id', $job->shop_id)
-            ->whereIn('status', ['running', 'stopping'])
+            ->whereIn('status', ['running', 'stopping', 'paused'])
             ->orderBy('id')
             ->first();
 

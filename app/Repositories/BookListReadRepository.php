@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 /** @phpstan-import-type BookListRow from BookPage */
 final class BookListReadRepository
 {
-    private const CONFLICT_HAVING = 'count(distinct lower(title)) > 1'
+    private const string CONFLICT_HAVING = 'count(distinct lower(title)) > 1'
         .' or count(distinct lower(author)) > 1'
         .' or count(distinct year) > 1'
         .' or count(distinct lower(publisher)) > 1';
@@ -93,7 +93,7 @@ final class BookListReadRepository
         }
 
         $total = (clone $query)->count();
-        $rawBooks = $query->orderByDesc('created_at')
+        $rawBooks = $query->latest()
             ->orderByDesc('id')
             ->offset(($input->page - 1) * $input->perPage)
             ->limit($input->perPage)

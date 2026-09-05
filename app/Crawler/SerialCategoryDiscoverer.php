@@ -7,6 +7,9 @@ namespace App\Crawler;
 use App\Parsers\DiscoveryParser;
 use App\Support\Config;
 use App\Support\ParserRegistry;
+use Illuminate\Support\Sleep;
+use LogicException;
+use RuntimeException;
 use Throwable;
 
 final readonly class SerialCategoryDiscoverer
@@ -31,7 +34,7 @@ final readonly class SerialCategoryDiscoverer
     {
         $flareConfig = $this->config->flaresolverr();
         if ($flareConfig === null) {
-            throw new \RuntimeException("shop {$this->shop} has no [flaresolverr] block");
+            throw new RuntimeException("shop {$this->shop} has no [flaresolverr] block");
         }
         $flareSolverr = new FlareSolverr(
             $flareConfig['endpoint'],
@@ -40,7 +43,7 @@ final readonly class SerialCategoryDiscoverer
         );
         $parser = ParserRegistry::for($this->shop);
         if (! is_a($parser, DiscoveryParser::class, true)) {
-            throw new \RuntimeException("Parser {$parser} does not support category discovery.");
+            throw new RuntimeException("Parser {$parser} does not support category discovery.");
         }
         $delay = (int) ($this->config->downloadDelay() * 1_000_000);
         $first = true;
@@ -49,7 +52,7 @@ final readonly class SerialCategoryDiscoverer
             foreach ($templates as $template) {
                 for ($page = 1; $maxPages === 0 || $page <= $maxPages; $page++) {
                     if (! $first && $delay > 0) {
-                        usleep($delay);
+                        Sleep::usleep($delay);
                     }
                     $first = false;
                     $url = str_replace('{page}', (string) $page, $template);
@@ -136,7 +139,7 @@ final readonly class SerialCategoryDiscoverer
                 $url,
                 $parsed,
                 $this->crawler->runId(),
-            ) ?? throw new \LogicException('crawler persistence is not configured');
+            ) ?? throw new LogicException('crawler persistence is not configured');
             $this->crawler->increment($result->created ? 'added' : 'updated');
         } catch (Throwable $exception) {
             $this->crawler->increment('failed');

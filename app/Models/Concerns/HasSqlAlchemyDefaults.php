@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Concerns;
 
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 trait HasSqlAlchemyDefaults
 {
@@ -14,7 +14,7 @@ trait HasSqlAlchemyDefaults
             $defaults = constant($model::class.'::TIMESTAMP_DEFAULTS');
             foreach ($defaults as $column) {
                 if ($model->getAttribute($column) === null) {
-                    $model->setAttribute($column, Carbon::now('UTC'));
+                    $model->setAttribute($column, Date::now('UTC'));
                 }
             }
         });

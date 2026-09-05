@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Runs\RunEvent;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class CrawlerRetryRepository
@@ -26,7 +26,7 @@ final class CrawlerRetryRepository
             DB::table('scrape_run_events')->insert([
                 'run_id' => $runId,
                 'event_type' => RunEvent::REQUEST_RETRIED,
-                'created_at' => Carbon::now('UTC'),
+                'created_at' => Date::now('UTC'),
                 'actor' => RunEvent::ACTOR_SYSTEM,
                 'payload' => json_encode([
                     'url' => $url,

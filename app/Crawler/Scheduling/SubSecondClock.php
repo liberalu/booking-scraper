@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Crawler\Scheduling;
 
 use DateTimeImmutable;
+use Illuminate\Support\Sleep;
 use RoachPHP\Scheduling\Timing\ClockInterface;
 
 final class SubSecondClock implements ClockInterface
@@ -18,7 +19,7 @@ final class SubSecondClock implements ClockInterface
     public function sleep(int $seconds): void
     {
         if ($seconds > 0) {
-            \sleep($seconds);
+            Sleep::sleep($seconds);
         }
     }
 

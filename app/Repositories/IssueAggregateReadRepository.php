@@ -7,7 +7,7 @@ namespace App\Repositories;
 use App\DTO\Request\IssueQueryInput;
 use App\Models\Shop;
 use App\Support\IssueMetadata;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -94,7 +94,7 @@ final class IssueAggregateReadRepository
         $days = max(1, $input->days ?? 14);
         $state = $input->state ?? 'new';
 
-        $end = Carbon::now('UTC')->startOfDay();
+        $end = Date::now('UTC')->startOfDay();
         $start = $end->copy()->subDays($days - 1);
 
         $query = DB::table('validation_issues as vi')

@@ -11,7 +11,7 @@ use App\Models\ShopBookAttribute;
 use App\Repositories\ShopBookRepository;
 use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -127,7 +127,7 @@ final class ShopBookRepositoryTest extends TestCase
     {
         $created = $this->repo->upsert($this->shopId, 'https://testshop.test/e', 'E');
         ShopBook::whereKey($created->shopBook->id)
-            ->update(['is_active' => false, 'inactive_since' => Carbon::now('UTC')]);
+            ->update(['is_active' => false, 'inactive_since' => Date::now('UTC')]);
 
         $result = $this->repo->upsert($this->shopId, 'https://testshop.test/e', 'E');
 
@@ -172,7 +172,7 @@ final class ShopBookRepositoryTest extends TestCase
 
     public function test_isbn_drift_unlinks_a_stale_canonical_match(): void
     {
-        [$ownedIsbn, $otherIsbn] = [self::uniqueIsbn(), self::uniqueIsbn()];
+        [$ownedIsbn, $otherIsbn] = [$this->uniqueIsbn(), $this->uniqueIsbn()];
         $bookId = DB::table('books')->insertGetId(
             ['title' => 'Canonical', 'data_source' => 'shop_inferred'],
             'id'
@@ -198,7 +198,7 @@ final class ShopBookRepositoryTest extends TestCase
 
     public function test_isbn_change_keeps_the_link_when_the_canonical_owns_both(): void
     {
-        [$ownedIsbn, $otherIsbn] = [self::uniqueIsbn(), self::uniqueIsbn()];
+        [$ownedIsbn, $otherIsbn] = [$this->uniqueIsbn(), $this->uniqueIsbn()];
         $bookId = DB::table('books')->insertGetId(
             ['title' => 'Canonical', 'data_source' => 'shop_inferred'],
             'id'
@@ -321,7 +321,7 @@ final class ShopBookRepositoryTest extends TestCase
         self::assertSame('non_book', $result->shopBook->type);
     }
 
-    private static function uniqueIsbn(): string
+    private function uniqueIsbn(): string
     {
         static $counter = 0;
 
@@ -331,6 +331,6 @@ final class ShopBookRepositoryTest extends TestCase
             $total += (int) $digit * ($i % 2 === 0 ? 1 : 3);
         }
 
-        return $body.(string) ((10 - $total % 10) % 10);
+        return $body.((10 - $total % 10) % 10);
     }
 }

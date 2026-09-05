@@ -6,9 +6,9 @@ namespace App\Discovery;
 
 final class GraphQlUrls
 {
-    private const SUB_PARAM = '_sub';
+    private const string SUB_PARAM = '_sub';
 
-    private const PRODUCT_FIELDS = 'name sku url_key '
+    private const string PRODUCT_FIELDS = 'name sku url_key '
         .'image{url} '
         .'price_range{minimum_price{final_price{value currency}regular_price{value currency}}} '
         .'stock_status is_book is_audio_book narrator '

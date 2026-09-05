@@ -7,12 +7,12 @@ namespace App\Repositories;
 use App\Support\Config;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Throwable;
 
 final class MatchingRepository
 {
-    private const DEFAULT_TRUST = 50;
+    private const int DEFAULT_TRUST = 50;
 
     /** @var array<string, int> */
     private array $trustCache = [];
@@ -134,8 +134,8 @@ final class MatchingRepository
             'type' => $winner->nullableString('type'),
             'format' => $winner->nullableString('format'),
             'upcoming_release' => false,
-            'created_at' => Carbon::now('UTC'),
-            'updated_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
+            'updated_at' => Date::now('UTC'),
         ], 'id');
 
         $this->connection()->table('book_isbns')->insert([

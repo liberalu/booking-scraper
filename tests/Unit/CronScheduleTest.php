@@ -8,12 +8,12 @@ use App\Models\CronJob;
 use App\Support\CronSchedule;
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Tests\TestCase;
 
 final class CronScheduleTest extends TestCase
 {
-    private static function job(
+    private function job(
         int $id,
         string $expression,
         ?string $lastRun = null,
@@ -30,19 +30,19 @@ final class CronScheduleTest extends TestCase
         $job->cron_expression = $expression;
         $job->enabled = $enabled;
         $job->args = $args;
-        $job->last_run_at = $lastRun === null ? null : Carbon::parse($lastRun);
+        $job->last_run_at = $lastRun === null ? null : Date::parse($lastRun);
 
         return $job;
     }
 
-    private static function at(string $utc): DateTimeImmutable
+    private function at(string $utc): DateTimeImmutable
     {
         return new DateTimeImmutable($utc, new DateTimeZone('UTC'));
     }
 
     public function test_a_job_never_run_is_due(): void
     {
-        $due = CronSchedule::due([self::job(1, '0 2 * * *')], self::at('2026-08-26 02:00:05'));
+        $due = CronSchedule::due([$this->job(1, '0 2 * * *')], $this->at('2026-08-26 02:00:05'));
 
         self::assertCount(1, $due);
         self::assertSame('2026-08-26 02:00:00', $due[0]['due']->format('Y-m-d H:i:s'));
@@ -50,40 +50,40 @@ final class CronScheduleTest extends TestCase
 
     public function test_a_job_already_run_for_this_window_is_not_due(): void
     {
-        $job = self::job(1, '0 2 * * *', lastRun: '2026-08-26 02:00:03');
+        $job = $this->job(1, '0 2 * * *', lastRun: '2026-08-26 02:00:03');
 
-        self::assertSame([], CronSchedule::due([$job], self::at('2026-08-26 02:30:00')));
+        self::assertSame([], CronSchedule::due([$job], $this->at('2026-08-26 02:30:00')));
     }
 
     public function test_the_next_window_is_due_again(): void
     {
 
-        $job = self::job(1, '0 2 * * *', lastRun: '2026-08-25 02:00:03');
+        $job = $this->job(1, '0 2 * * *', lastRun: '2026-08-25 02:00:03');
 
-        self::assertCount(1, CronSchedule::due([$job], self::at('2026-08-26 02:00:01')));
+        self::assertCount(1, CronSchedule::due([$job], $this->at('2026-08-26 02:00:01')));
     }
 
     public function test_a_disabled_job_is_never_due(): void
     {
-        $job = self::job(1, '0 2 * * *', enabled: false);
+        $job = $this->job(1, '0 2 * * *', enabled: false);
 
-        self::assertSame([], CronSchedule::due([$job], self::at('2026-08-26 02:00:05')));
+        self::assertSame([], CronSchedule::due([$job], $this->at('2026-08-26 02:00:05')));
     }
 
     public function test_a_window_that_has_not_arrived_yet_is_not_due(): void
     {
 
-        $job = self::job(1, '30 5 * * 0', lastRun: '2026-08-23 05:30:02');
+        $job = $this->job(1, '30 5 * * 0', lastRun: '2026-08-23 05:30:02');
 
-        self::assertSame([], CronSchedule::due([$job], self::at('2026-08-26 09:00:00')));
+        self::assertSame([], CronSchedule::due([$job], $this->at('2026-08-26 09:00:00')));
     }
 
     public function test_a_missed_window_still_fires_late(): void
     {
 
-        $job = self::job(1, '0 2 * * *', lastRun: '2026-08-25 02:00:02');
+        $job = $this->job(1, '0 2 * * *', lastRun: '2026-08-25 02:00:02');
 
-        $due = CronSchedule::due([$job], self::at('2026-08-26 09:00:00'));
+        $due = CronSchedule::due([$job], $this->at('2026-08-26 09:00:00'));
 
         self::assertCount(1, $due);
         self::assertSame('2026-08-26 02:00:00', $due[0]['due']->format('Y-m-d H:i:s'));
@@ -92,29 +92,29 @@ final class CronScheduleTest extends TestCase
     public function test_a_job_already_fired_by_this_process_is_not_fired_again(): void
     {
 
-        $job = self::job(1, '0 2 * * *');
-        $windowStart = self::at('2026-08-26 02:00:00')->getTimestamp();
+        $job = $this->job(1, '0 2 * * *');
+        $windowStart = $this->at('2026-08-26 02:00:00')->getTimestamp();
 
-        self::assertSame([], CronSchedule::due([$job], self::at('2026-08-26 02:00:30'), [1 => $windowStart]));
+        self::assertSame([], CronSchedule::due([$job], $this->at('2026-08-26 02:00:30'), [1 => $windowStart]));
     }
 
     public function test_being_fired_for_an_earlier_window_does_not_block_a_later_one(): void
     {
-        $job = self::job(1, '0 2 * * *');
-        $yesterday = self::at('2026-08-25 02:00:00')->getTimestamp();
+        $job = $this->job(1, '0 2 * * *');
+        $yesterday = $this->at('2026-08-25 02:00:00')->getTimestamp();
 
         self::assertCount(
             1,
-            CronSchedule::due([$job], self::at('2026-08-26 02:00:30'), [1 => $yesterday])
+            CronSchedule::due([$job], $this->at('2026-08-26 02:00:30'), [1 => $yesterday])
         );
     }
 
     public function test_a_broken_expression_is_skipped_not_thrown(): void
     {
 
-        $jobs = [self::job(1, 'not a cron line'), self::job(2, '0 2 * * *')];
+        $jobs = [$this->job(1, 'not a cron line'), $this->job(2, '0 2 * * *')];
 
-        $due = CronSchedule::due($jobs, self::at('2026-08-26 02:00:05'));
+        $due = CronSchedule::due($jobs, $this->at('2026-08-26 02:00:05'));
 
         self::assertCount(1, $due);
         self::assertSame(2, $due[0]['job']->id);
@@ -124,12 +124,12 @@ final class CronScheduleTest extends TestCase
     {
 
         $jobs = [
-            self::job(1, '0 8 * * *'),
-            self::job(2, '0 2 * * *'),
-            self::job(3, '0 5 * * *'),
+            $this->job(1, '0 8 * * *'),
+            $this->job(2, '0 2 * * *'),
+            $this->job(3, '0 5 * * *'),
         ];
 
-        $due = CronSchedule::due($jobs, self::at('2026-08-26 09:00:00'));
+        $due = CronSchedule::due($jobs, $this->at('2026-08-26 09:00:00'));
 
         self::assertSame([2, 3, 1], array_map(static fn (array $d): int => $d['job']->id, $due));
     }
@@ -137,9 +137,9 @@ final class CronScheduleTest extends TestCase
     public function test_rescrape_true_becomes_a_full_scan(): void
     {
 
-        $job = self::job(2, '0 1 2,16 * *', phase: 'scan', strategy: null, args: '-a rescrape=true');
+        $job = $this->job(2, '0 1 2,16 * *', phase: 'scan', strategy: null, args: '-a rescrape=true');
 
-        $due = CronSchedule::due([$job], self::at('2026-09-02 01:00:05'));
+        $due = CronSchedule::due([$job], $this->at('2026-09-02 01:00:05'));
 
         self::assertCount(1, $due);
         self::assertSame('full', $due[0]['mode']);
@@ -148,9 +148,9 @@ final class CronScheduleTest extends TestCase
 
     public function test_no_args_means_a_delta_scan(): void
     {
-        $job = self::job(2, '0 3 * * *', phase: 'scan', strategy: 'delta');
+        $job = $this->job(2, '0 3 * * *', phase: 'scan', strategy: 'delta');
 
-        $due = CronSchedule::due([$job], self::at('2026-08-26 03:00:05'));
+        $due = CronSchedule::due([$job], $this->at('2026-08-26 03:00:05'));
 
         self::assertSame('delta', $due[0]['mode']);
     }
@@ -158,9 +158,9 @@ final class CronScheduleTest extends TestCase
     public function test_an_unrecognised_arg_is_reported_rather_than_dropped(): void
     {
 
-        $job = self::job(2, '0 3 * * *', phase: 'scan', args: '-a max_urls=20 -a rescrape=true');
+        $job = $this->job(2, '0 3 * * *', phase: 'scan', args: '-a max_urls=20 -a rescrape=true');
 
-        $due = CronSchedule::due([$job], self::at('2026-08-26 03:00:05'));
+        $due = CronSchedule::due([$job], $this->at('2026-08-26 03:00:05'));
 
         self::assertSame('full', $due[0]['mode']);
         self::assertSame(['max_urls=20'], $due[0]['unknownArgs']);
@@ -169,7 +169,7 @@ final class CronScheduleTest extends TestCase
     public function test_expressions_are_read_as_utc(): void
     {
 
-        $due = CronSchedule::previousDue('0 2 * * *', self::at('2026-08-26 02:30:00'));
+        $due = CronSchedule::previousDue('0 2 * * *', $this->at('2026-08-26 02:30:00'));
 
         self::assertNotNull($due);
         self::assertSame('2026-08-26 02:00:00 UTC', $due->format('Y-m-d H:i:s T'));

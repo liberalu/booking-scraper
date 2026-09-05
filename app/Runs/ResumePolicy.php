@@ -9,7 +9,7 @@ use App\Repositories\ResumePolicyRepository;
 
 final readonly class ResumePolicy
 {
-    private const ZERO_PROGRESS_THRESHOLD = 2;
+    private const int ZERO_PROGRESS_THRESHOLD = 2;
 
     public function __construct(
         private int $maxAttempts,

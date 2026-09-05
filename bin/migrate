@@ -55,7 +55,7 @@ if ($command === '' || isset($opts['help'])) {
       apply    apply everything pending, one transaction each
 
       --database=DSN  target database (or DATABASE_URL). Required.
-      --dir=PATH      migrations directory (default: php/schema)
+      --dir=PATH      migrations directory (default: database/schema)
       --adopt         apply even to a database Alembic has stamped
 
     TXT);

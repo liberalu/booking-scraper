@@ -8,11 +8,11 @@ use Normalizer;
 
 final class CoverType
 {
-    private const CANONICAL = [
+    private const array CANONICAL = [
         'hardcover', 'paperback', 'ebook', 'audiobook', 'cd', 'dvd', 'book',
     ];
 
-    private const DIMENSION = '/^\s*\d+\s*[xX×]\s*\d+(\s*(mm|cm))?\s*$/iu';
+    private const string DIMENSION = '/^\s*\d+\s*[xX×]\s*\d+(\s*(mm|cm))?\s*$/iu';
 
     public static function toFormat(?string $coverType): ?string
     {

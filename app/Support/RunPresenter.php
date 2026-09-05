@@ -6,7 +6,7 @@ namespace App\Support;
 
 use App\Models\ScrapeRun;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final class RunPresenter
 {
@@ -29,7 +29,7 @@ final class RunPresenter
 
         $startedH = 0.0;
         if ($run->started_at !== null) {
-            $startedH = Carbon::now('UTC')->diffInSeconds($run->started_at, true) / 3600;
+            $startedH = Date::now('UTC')->diffInSeconds($run->started_at, true) / 3600;
         }
 
         return [
@@ -93,7 +93,7 @@ final class RunPresenter
         if ($start === null) {
             return '—';
         }
-        $end = $run->finished_at ?? Carbon::now('UTC');
+        $end = $run->finished_at ?? Date::now('UTC');
 
         $secs = max(0, (int) $start->diffInSeconds($end, true));
         $s = $secs % 60;
@@ -112,11 +112,11 @@ final class RunPresenter
 
     public static function relative(?CarbonInterface $dt): string
     {
-        if ($dt === null) {
+        if (! $dt instanceof CarbonInterface) {
             return '—';
         }
 
-        $s = max(0, (int) Carbon::now('UTC')->diffInSeconds($dt, true));
+        $s = max(0, (int) Date::now('UTC')->diffInSeconds($dt, true));
         if ($s < 60) {
             return 'just now';
         }
@@ -146,7 +146,7 @@ final class RunPresenter
 
     public static function iso(?CarbonInterface $dt): ?string
     {
-        if ($dt === null) {
+        if (! $dt instanceof CarbonInterface) {
             return null;
         }
 

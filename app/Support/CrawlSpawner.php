@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Contracts\RunLauncher;
 use App\Runs\RunLaunchRequest;
 use App\Runs\RunPhase;
+use DateTimeImmutable;
+use DateTimeZone;
 use InvalidArgumentException;
 use RuntimeException;
 
-final class CrawlSpawner
+final class CrawlSpawner implements RunLauncher
 {
     /** @return array{log: string, pid: int|null, cmd: list<string>} */
-    public static function spawn(
+    public function spawn(
         string $phase,
         string $shop,
         string $strategy = '',
@@ -27,7 +30,7 @@ final class CrawlSpawner
             throw new InvalidArgumentException("Unknown run phase: {$phase}");
         }
 
-        return self::spawnRequest(new RunLaunchRequest(
+        return $this->spawnRequest(new RunLaunchRequest(
             phase: $runPhase,
             shop: $shop,
             strategy: $strategy,
@@ -40,13 +43,29 @@ final class CrawlSpawner
     }
 
     /** @return array{log: string, pid: int|null, cmd: list<string>} */
-    public static function spawnRequest(RunLaunchRequest $request): array
+    public function spawnRequest(RunLaunchRequest $request): array
     {
-        $binary = self::phpBinary();
-        $cmd = self::buildCommand($request, $binary, base_path('bin'), self::databaseUrl());
+        $binary = $this->phpBinary();
+        if ($request->urls !== '') {
+            $urls = CrawlerUrlPolicy::parse(
+                $request->urls,
+                Config::forShop($request->shop)->baseUrl(),
+            );
+            $request = new RunLaunchRequest(
+                phase: $request->phase,
+                shop: $request->shop,
+                strategy: $request->strategy,
+                mode: $request->mode,
+                cronJobId: $request->cronJobId,
+                role: $request->role,
+                adoptRunId: $request->adoptRunId,
+                urlsFile: $this->writeUrlManifest($urls),
+            );
+        }
+        $cmd = self::buildCommand($request, $binary, base_path('bin'));
 
-        $log = self::logPath($request->role, $request->shop);
-        $pid = self::detach($cmd, $log);
+        $log = $this->logPath($request->role, $request->shop);
+        $pid = $this->detach($cmd, $log, ['DATABASE_URL' => $this->databaseUrl()]);
 
         return ['log' => $log, 'pid' => $pid, 'cmd' => $cmd];
     }
@@ -56,19 +75,18 @@ final class CrawlSpawner
         RunLaunchRequest $request,
         string $binary,
         string $binDirectory,
-        string $databaseUrl,
     ): array {
-        $script = rtrim($binDirectory, '/').'/'.$request->phase->script();
         $artisan = dirname(rtrim($binDirectory, '/')).'/artisan';
-        $usesCrawler = in_array($request->phase, [RunPhase::Scan, RunPhase::Discover], true);
-        $target = $usesCrawler ? $artisan : $script;
-        if (! is_file($target)) {
-            throw new RuntimeException("Run entry point not found at {$target}");
+        if (! is_file($artisan)) {
+            throw new RuntimeException("Run entry point not found at {$artisan}");
         }
 
-        $cmd = $usesCrawler
-            ? [$binary, $artisan, 'crawler:run']
-            : [$binary, $script];
+        $command = match ($request->phase) {
+            RunPhase::Scan, RunPhase::Discover => 'crawler:run',
+            RunPhase::Match => 'books:match',
+            RunPhase::Validate => 'books:validate',
+        };
+        $cmd = [$binary, $artisan, $command];
         if (in_array($request->phase, [RunPhase::Scan, RunPhase::Discover], true)) {
             $cmd[] = $request->phase->value;
         }
@@ -80,8 +98,8 @@ final class CrawlSpawner
         if ($request->phase === RunPhase::Scan) {
             if ($request->adoptRunId !== null) {
                 $cmd[] = "--adopt-run-id={$request->adoptRunId}";
-            } elseif ($request->urls !== '') {
-                $cmd[] = "--urls={$request->urls}";
+            } elseif ($request->urlsFile !== null) {
+                $cmd[] = "--urls-file={$request->urlsFile}";
             } elseif ($request->mode === 'full') {
                 $cmd[] = '--mode=full';
                 $cmd[] = '--max-urls=0';
@@ -95,7 +113,6 @@ final class CrawlSpawner
             && in_array($request->phase, [RunPhase::Scan, RunPhase::Discover], true)) {
             $cmd[] = "--cron-job-id={$request->cronJobId}";
         }
-        $cmd[] = "--database={$databaseUrl}";
 
         return $cmd;
     }
@@ -107,22 +124,22 @@ final class CrawlSpawner
         return is_string($dir) && $dir !== '' ? $dir : storage_path('logs/spawn');
     }
 
-    private static function logPath(string $role, string $shop): string
+    private function logPath(string $role, string $shop): string
     {
 
-        $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+        $stamp = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->format('Ymd-Hisu');
 
         return sprintf(
             '%s/spawn-%s-%s-%s.log',
             rtrim(self::logDir(), '/'),
             $stamp,
-            self::slug($role),
-            self::slug($shop)
+            $this->slug($role),
+            $this->slug($shop)
         );
     }
 
-    private static function slug(string $value): string
+    private function slug(string $value): string
     {
         $slug = preg_replace('/[^A-Za-z0-9._-]+/', '-', $value) ?? $value;
 
@@ -131,11 +148,14 @@ final class CrawlSpawner
         return $trimmed !== '' ? $trimmed : 'unknown';
     }
 
-    /** @param list<string> $cmd */
-    private static function detach(array $cmd, string $log): ?int
+    /**
+     * @param  list<string>  $cmd
+     * @param  array<string, string>  $environment
+     */
+    private function detach(array $cmd, string $log, array $environment = []): ?int
     {
         $quoted = implode(' ', array_map(
-            static fn (string $argument): string => escapeshellarg($argument),
+            escapeshellarg(...),
             $cmd,
         ));
         $script = sprintf(
@@ -146,7 +166,14 @@ final class CrawlSpawner
         );
 
         $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-        $process = @proc_open(['/bin/sh', '-c', $script], $descriptors, $pipes);
+        $inherited = getenv();
+        $process = @proc_open(
+            ['/bin/sh', '-c', $script],
+            $descriptors,
+            $pipes,
+            null,
+            [...$inherited, ...$environment],
+        );
         if (! is_resource($process)) {
             throw new RuntimeException('Could not spawn a crawl process');
         }
@@ -165,7 +192,7 @@ final class CrawlSpawner
         return ctype_digit($out) ? (int) $out : null;
     }
 
-    private static function phpBinary(): string
+    private function phpBinary(): string
     {
         $configured = getenv('CRAWLER_PHP_BINARY');
         if (is_string($configured) && $configured !== '' && is_executable($configured)) {
@@ -180,7 +207,24 @@ final class CrawlSpawner
         throw new RuntimeException('No PHP binary available to spawn the crawler');
     }
 
-    private static function databaseUrl(): string
+    /** @param list<string> $urls */
+    private function writeUrlManifest(array $urls): string
+    {
+        $directory = storage_path('app/crawl-input');
+        if (! is_dir($directory) && ! mkdir($directory, 0700, true) && ! is_dir($directory)) {
+            throw new RuntimeException("Could not create crawl input directory at {$directory}");
+        }
+
+        $path = tempnam($directory, 'urls-');
+        if ($path === false || file_put_contents($path, implode("\n", $urls)."\n", LOCK_EX) === false) {
+            throw new RuntimeException('Could not write crawl URL manifest');
+        }
+        chmod($path, 0600);
+
+        return $path;
+    }
+
+    private function databaseUrl(): string
     {
         $connection = config('database.default');
         if (! is_string($connection) || $connection === '') {
@@ -191,11 +235,11 @@ final class CrawlSpawner
             throw new RuntimeException("Database connection '{$connection}' is not configured.");
         }
 
-        $username = self::configurationString($configuration['username'] ?? null, '');
-        $password = self::configurationString($configuration['password'] ?? null, '');
-        $host = self::configurationString($configuration['host'] ?? null, '127.0.0.1');
-        $database = self::configurationString($configuration['database'] ?? null, '');
-        $port = self::configurationPort($configuration['port'] ?? null);
+        $username = $this->configurationString($configuration['username'] ?? null, '');
+        $password = $this->configurationString($configuration['password'] ?? null, '');
+        $host = $this->configurationString($configuration['host'] ?? null, '127.0.0.1');
+        $database = $this->configurationString($configuration['database'] ?? null, '');
+        $port = $this->configurationPort($configuration['port'] ?? null);
 
         return sprintf(
             'postgresql://%s:%s@%s:%s/%s',
@@ -207,12 +251,12 @@ final class CrawlSpawner
         );
     }
 
-    private static function configurationString(mixed $value, string $default): string
+    private function configurationString(mixed $value, string $default): string
     {
         return is_string($value) ? $value : $default;
     }
 
-    private static function configurationPort(mixed $value): int
+    private function configurationPort(mixed $value): int
     {
         if (is_int($value)) {
             return $value;

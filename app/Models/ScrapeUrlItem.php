@@ -16,7 +16,7 @@ final class ScrapeUrlItem extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['created_at'];
+    public const array TIMESTAMP_DEFAULTS = ['created_at'];
 
     protected $fillable = [
         'run_id', 'shop_id', 'discovered_url_id', 'url', 'url_type',

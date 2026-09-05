@@ -15,7 +15,7 @@ use Tests\Support\SyntheticShop;
 
 final class ValidateServiceCharacterisationTest extends TestCase
 {
-    private const GOLDEN = __DIR__.'/../golden/validate_findings.json';
+    private const string GOLDEN = __DIR__.'/../golden/validate_findings.json';
 
     #[Group('db')]
     public function test_the_synthetic_shop_yields_the_findings_python_produced(): void

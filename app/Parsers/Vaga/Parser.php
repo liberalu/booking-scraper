@@ -9,16 +9,18 @@ use App\Crawler\CrawlerTypes;
 use App\Parsers\DiscoveryParser;
 use App\Parsers\ProductParser;
 use App\Support\CoverType;
+use DOMDocument;
+use DOMXPath;
 use Symfony\Component\DomCrawler\Crawler;
 
 /** @phpstan-import-type ParsedItem from CrawlerTypes */
 final class Parser implements DiscoveryParser, ProductParser
 {
-    private const CARD_PRICE = '/class="price(?:\s+[a-z-]+)*"[^>]*>\s*([0-9,]+)€/u';
+    private const string CARD_PRICE = '/class="price(?:\s+[a-z-]+)*"[^>]*>\s*([0-9,]+)€/u';
 
-    private const CARD_PRICE_OLD = '/class="price-old[^"]*"[^>]*>[^<]*?([0-9,]+)€/u';
+    private const string CARD_PRICE_OLD = '/class="price-old[^"]*"[^>]*>[^<]*?([0-9,]+)€/u';
 
-    private const ALLOWED_DESCRIPTION_TAGS = [
+    private const array ALLOWED_DESCRIPTION_TAGS = [
         'p', 'br', 'strong', 'em', 'b', 'i', 'u', 'ul', 'ol', 'li',
     ];
 
@@ -30,7 +32,7 @@ final class Parser implements DiscoveryParser, ProductParser
             return [];
         }
 
-        $doc = new \DOMDocument;
+        $doc = new DOMDocument;
 
         $prev = libxml_use_internal_errors(true);
         $ok = $doc->loadXML($xml);
@@ -39,7 +41,7 @@ final class Parser implements DiscoveryParser, ProductParser
             return [];
         }
 
-        $xpath = new \DOMXPath($doc);
+        $xpath = new DOMXPath($doc);
         $xpath->registerNamespace('s', 'http://www.sitemaps.org/schemas/sitemap/0.9');
         $urls = [];
         $nodes = $xpath->query('//s:loc');
@@ -190,11 +192,11 @@ final class Parser implements DiscoveryParser, ProductParser
             $propMap[trim($pair[1])] = self::unescape(trim($pair[2]));
         }
 
-        $data['isbn'] = $data['isbn'] ?? ($propMap['ISBN'] ?? null);
+        $data['isbn'] ??= $propMap['ISBN'] ?? null;
         $data['year'] = self::toIntOrNull($propMap['Metai'] ?? null);
         $data['pages'] = self::toIntOrNull($propMap['Puslapiai'] ?? null);
         $data['cover_type'] = $propMap['Viršelis'] ?? null;
-        $data['publisher'] = $data['publisher'] ?? ($propMap['Leidykla'] ?? null);
+        $data['publisher'] ??= $propMap['Leidykla'] ?? null;
         $data['duration'] = $propMap['Trukmė'] ?? null;
         $data['narrator'] = $propMap['Įgarsino'] ?? null;
         $data['translator'] = $propMap['Vertėjas'] ?? null;

@@ -5,27 +5,27 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
-final class ReaperRepository
+final readonly class ReaperRepository
 {
-    public const DEAD_RUN_SECONDS = 60;
+    public const int DEAD_RUN_SECONDS = 60;
 
-    public const STUCK_ROW_THRESHOLD_S = 120;
+    public const int STUCK_ROW_THRESHOLD_S = 120;
 
-    public const PAUSED_RUN_SECONDS = 604800;
+    public const int PAUSED_RUN_SECONDS = 604800;
 
-    public const RESUMABLE_RETENTION_SECONDS = 604800;
+    public const int RESUMABLE_RETENTION_SECONDS = 604800;
 
     public function __construct(
-        private readonly RunFinisherRepository $finisher = new RunFinisherRepository,
+        private RunFinisherRepository $finisher = new RunFinisherRepository,
     ) {}
 
     /** @return list<array{run_id: int, shop: string, phase: string, close_reason: string}> */
     public function sweep(): array
     {
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         $candidates = DB::table('scrape_runs')
             ->join('shops', 'shops.id', '=', 'scrape_runs.shop_id')
@@ -48,7 +48,7 @@ final class ReaperRepository
                 ? self::PAUSED_RUN_SECONDS
                 : self::DEAD_RUN_SECONDS;
             if ($lastActivity === null
-                || Carbon::parse($lastActivity)->gte($now->copy()->subSeconds($timeout))) {
+                || Date::parse($lastActivity)->gte($now->copy()->subSeconds($timeout))) {
                 continue;
             }
 
@@ -78,7 +78,7 @@ final class ReaperRepository
         return DB::table('scrape_runs')
             ->where('status', 'failed')
             ->where('resumable_after_failure', true)
-            ->where('finished_at', '<', Carbon::now('UTC')->subSeconds(
+            ->where('finished_at', '<', Date::now('UTC')->subSeconds(
                 self::RESUMABLE_RETENTION_SECONDS,
             ))
             ->update(['resumable_after_failure' => false]);
@@ -104,14 +104,12 @@ final class ReaperRepository
             );
         }
 
-        $swept += $this->failStuckRows();
-
-        return $swept;
+        return $swept + $this->failStuckRows();
     }
 
     private function failStuckRows(): int
     {
-        $cutoff = Carbon::now('UTC')->subSeconds(self::STUCK_ROW_THRESHOLD_S);
+        $cutoff = Date::now('UTC')->subSeconds(self::STUCK_ROW_THRESHOLD_S);
 
         $items = DB::table('scrape_url_items')
             ->join('scrape_runs', 'scrape_runs.id', '=', 'scrape_url_items.run_id')
@@ -132,7 +130,7 @@ final class ReaperRepository
             return 0;
         }
 
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         DB::table('scrape_url_items')
             ->whereIn('id', $items->pluck('id')->all())
             ->update(['status' => 'failed', 'done_at' => $now]);

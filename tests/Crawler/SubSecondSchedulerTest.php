@@ -6,6 +6,7 @@ namespace Tests\Crawler;
 
 use App\Crawler\Scheduling\SubSecondClock;
 use App\Crawler\Scheduling\SubSecondRequestScheduler;
+use Generator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RoachPHP\Http\Request;
@@ -30,7 +31,7 @@ final class SubSecondSchedulerTest extends TestCase
         $scheduler = new SubSecondRequestScheduler(new SubSecondClock);
         $scheduler->setDelaySeconds($delay);
         for ($i = 0; $i <= $waits; $i++) {
-            $scheduler->schedule(self::request("https://example.test/{$i}"));
+            $scheduler->schedule($this->request("https://example.test/{$i}"));
         }
 
         $started = microtime(true);
@@ -53,7 +54,7 @@ final class SubSecondSchedulerTest extends TestCase
         $scheduler->setDelay((int) 0.2);
 
         for ($i = 0; $i < 5; $i++) {
-            $scheduler->schedule(self::request("https://example.test/{$i}"));
+            $scheduler->schedule($this->request("https://example.test/{$i}"));
         }
 
         $started = microtime(true);
@@ -82,8 +83,8 @@ final class SubSecondSchedulerTest extends TestCase
         self::assertSame(2.0, $scheduler->delaySeconds());
     }
 
-    private static function request(string $url): Request
+    private function request(string $url): Request
     {
-        return new Request('GET', $url, static fn (Response $r): \Generator => yield from []);
+        return new Request('GET', $url, static fn (Response $r): Generator => yield from []);
     }
 }

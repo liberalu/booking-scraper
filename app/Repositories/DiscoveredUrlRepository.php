@@ -7,7 +7,7 @@ namespace App\Repositories;
 use App\Models\DiscoveredUrl;
 use App\Models\ShopBook;
 use App\Support\UrlUtils;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class DiscoveredUrlRepository
@@ -20,7 +20,7 @@ final class DiscoveredUrlRepository
         ?int $shopBookId = null,
     ): DiscoveredUrl {
         $normalized = UrlUtils::normalize($url);
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         $initialType = $shopBookId !== null ? 'product' : 'unknown';
 
         $sets = ['last_seen_at = ?'];
@@ -67,7 +67,7 @@ final class DiscoveredUrlRepository
     ): DiscoveredUrl {
         $targetType = $isPartial ? 'product_partial' : 'product';
         $normalized = UrlUtils::normalize($url);
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         $existing = DiscoveredUrl::where('shop_id', $shopId)
             ->where('normalized_url', $normalized)
@@ -116,7 +116,7 @@ final class DiscoveredUrlRepository
         array $reasons = [],
     ): ?DiscoveredUrl {
         $normalized = UrlUtils::normalize($url);
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         $row = DiscoveredUrl::where('shop_id', $shopId)
             ->where('normalized_url', $normalized)
@@ -152,7 +152,7 @@ final class DiscoveredUrlRepository
     /** @param array<string, true> $activeUrls */
     public function deactivateMissing(int $shopId, array $activeUrls): int
     {
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         $deactivated = 0;
 
         ShopBook::select(['id', 'url'])

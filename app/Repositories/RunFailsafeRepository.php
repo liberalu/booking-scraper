@@ -6,7 +6,7 @@ namespace App\Repositories;
 
 use App\Runs\RunEvent;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use PDO;
@@ -14,7 +14,7 @@ use Throwable;
 
 final class RunFailsafeRepository
 {
-    private const TERMINAL = ['completed', 'failed'];
+    private const array TERMINAL = ['completed', 'failed'];
 
     public function finalize(
         int $runId,
@@ -84,7 +84,7 @@ final class RunFailsafeRepository
         DB::table('scrape_run_events')->insert([
             'run_id' => $runId,
             'event_type' => $eventType,
-            'created_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
             'actor' => $actor,
             'payload' => $payload === null
                 ? null

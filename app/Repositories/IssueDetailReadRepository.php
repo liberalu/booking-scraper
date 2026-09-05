@@ -7,7 +7,7 @@ namespace App\Repositories;
 use App\Models\ValidationIssue;
 use App\Support\IssueMetadata;
 use App\Support\RunPresenter;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
@@ -52,7 +52,7 @@ final class IssueDetailReadRepository
         }
 
         $shopBook = $row->nullableInt('sb_id') !== null ? $row : null;
-        if ($shopBook === null) {
+        if (! $shopBook instanceof DatabaseRow) {
             $viaUrl = $discovered?->nullableInt('shop_book_id')
                 ?? ($discoveredUrlId !== null
                     ? DatabaseRow::from([
@@ -93,7 +93,7 @@ final class IssueDetailReadRepository
             'severity' => IssueMetadata::severity($issueType),
             'added_at' => $this->iso($runStartedAt),
             'added_ago' => RunPresenter::relative(
-                $runStartedAt === null ? null : Carbon::parse($runStartedAt)
+                $runStartedAt === null ? null : Date::parse($runStartedAt)
             ),
             'description' => IssueMetadata::description($issueType),
             'match_context' => $this->matchContext($row, $shopBook),
@@ -103,7 +103,7 @@ final class IssueDetailReadRepository
     /** @return array<string, mixed>|null */
     private function matchContext(DatabaseRow $row, ?DatabaseRow $shopBook): ?array
     {
-        if ($row->string('issue') !== 'match_isbn_drift' || $shopBook === null
+        if ($row->string('issue') !== 'match_isbn_drift' || ! $shopBook instanceof DatabaseRow
             || $shopBook->nullableInt('sb_book_id') === null) {
             return null;
         }
@@ -135,7 +135,7 @@ final class IssueDetailReadRepository
         if ($timestamp === null) {
             return null;
         }
-        $dt = Carbon::parse($timestamp)->utc();
+        $dt = Date::parse($timestamp)->utc();
 
         return $dt->micro === 0
             ? $dt->format('Y-m-d\TH:i:sP')

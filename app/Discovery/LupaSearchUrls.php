@@ -6,7 +6,7 @@ namespace App\Discovery;
 
 final class LupaSearchUrls
 {
-    private const DEFAULT_SORT = [
+    private const array DEFAULT_SORT = [
         ['in_stock' => 'desc'],
         ['in_store_only' => 'desc'],
         ['profit' => 'desc'],

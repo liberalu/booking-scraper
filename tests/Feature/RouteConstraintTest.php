@@ -8,6 +8,13 @@ use Tests\TestCase;
 
 final class RouteConstraintTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['dashboard.authentication_disabled' => true]);
+    }
+
     public function test_non_numeric_resource_id_is_a_json_404(): void
     {
         $this->getJson('/api/books/not-a-number')

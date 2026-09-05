@@ -6,10 +6,10 @@ namespace App\Runs;
 
 use App\Repositories\RunFailsafeRepository;
 
-final class RunFailsafe
+final readonly class RunFailsafe
 {
     public function __construct(
-        private readonly RunFailsafeRepository $repository = new RunFailsafeRepository,
+        private RunFailsafeRepository $repository = new RunFailsafeRepository,
     ) {}
 
     public function finalize(

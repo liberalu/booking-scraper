@@ -12,10 +12,10 @@ final class PriceQueryRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'days' => ['sometimes', 'nullable'],
-            'page' => ['sometimes', 'nullable'],
-            'per_page' => ['sometimes', 'nullable'],
-            'shop' => ['sometimes', 'nullable'],
+            'days' => ['sometimes', 'nullable', 'integer', 'between:1,3650'],
+            'page' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['sometimes', 'nullable', 'integer', 'between:1,200'],
+            'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
         ];
     }
 

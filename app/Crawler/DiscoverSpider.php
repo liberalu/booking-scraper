@@ -23,6 +23,7 @@ use RoachPHP\Http\Response;
 use RoachPHP\Spider\BasicSpider;
 use RoachPHP\Spider\ParseResult;
 use RuntimeException;
+use Throwable;
 
 final class DiscoverSpider extends BasicSpider
 {
@@ -49,7 +50,7 @@ final class DiscoverSpider extends BasicSpider
         return preg_match('#'.$pattern.'#', $url) === 1;
     }
 
-    private const LISTING_FIELDS = [
+    private const array LISTING_FIELDS = [
         'title', 'author', 'price', 'price_original', 'image_url',
         'type', 'sku', 'isbn', 'publisher', 'year', 'format',
         'description', 'categories',
@@ -91,17 +92,17 @@ final class DiscoverSpider extends BasicSpider
     private function seedRequest(string $strategy, string $url): Request
     {
         return match ($strategy) {
-            'categories' => new Request('GET', $url, [$this, 'parseCategories'], ['page' => 1]),
-            'graphql' => new Request('GET', $url, [$this, 'parseGraphQl'], [
+            'categories' => new Request('GET', $url, $this->parseCategories(...), ['page' => 1]),
+            'graphql' => new Request('GET', $url, $this->parseGraphQl(...), [
                 'page' => 1,
                 'headers' => ['Accept' => 'application/json'],
             ]),
-            'lupasearch' => new Request('POST', $url, [$this, 'parseLupaSearch'],
-                ['page' => 1] + self::guzzleOptions(LupaSearchUrls::postRequest($url))),
-            'ibiblioteka_api' => new Request('POST', $url, [$this, 'parseIbiblioteka'],
-                ['page' => 1] + self::guzzleOptions(IbibliotekaApiUrls::postRequest($url))),
-            'full_crawl' => new Request('GET', $url, [$this, 'parseFullCrawl'], ['page' => 1]),
-            default => new Request('GET', $url, [$this, 'parseSitemap'], ['page' => 1]),
+            'lupasearch' => new Request('POST', $url, $this->parseLupaSearch(...),
+                ['page' => 1] + $this->guzzleOptions(LupaSearchUrls::postRequest($url))),
+            'ibiblioteka_api' => new Request('POST', $url, $this->parseIbiblioteka(...),
+                ['page' => 1] + $this->guzzleOptions(IbibliotekaApiUrls::postRequest($url))),
+            'full_crawl' => new Request('GET', $url, $this->parseFullCrawl(...), ['page' => 1]),
+            default => new Request('GET', $url, $this->parseSitemap(...), ['page' => 1]),
         };
     }
 
@@ -109,7 +110,7 @@ final class DiscoverSpider extends BasicSpider
      * @param  array{body: string, headers: array<string, string>}  $request
      * @return array{body: string, headers: array<string, string>}
      */
-    private static function guzzleOptions(array $request): array
+    private function guzzleOptions(array $request): array
     {
         return ['body' => $request['body'], 'headers' => $request['headers']];
     }
@@ -414,7 +415,7 @@ final class DiscoverSpider extends BasicSpider
                 'sub_count' => $subCount,
                 'sub_size' => $subSize,
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             fwrite(STDERR, "  could not record subdivision event: {$e->getMessage()}\n");
         }
     }
@@ -478,7 +479,7 @@ final class DiscoverSpider extends BasicSpider
             }
             $nextUrl = LupaSearchUrls::advance($url, $next);
             yield $this->request('POST', $nextUrl, 'parseLupaSearch',
-                ['page' => $nextPage] + self::guzzleOptions(LupaSearchUrls::postRequest($nextUrl)));
+                ['page' => $nextPage] + $this->guzzleOptions(LupaSearchUrls::postRequest($nextUrl)));
             $nextPage++;
         }
     }
@@ -529,7 +530,7 @@ final class DiscoverSpider extends BasicSpider
 
         $nextUrl = IbibliotekaApiUrls::advance($url, $psi + $count);
         yield $this->request('POST', $nextUrl, 'parseIbiblioteka',
-            ['page' => $page + 1] + self::guzzleOptions(IbibliotekaApiUrls::postRequest($nextUrl)));
+            ['page' => $page + 1] + $this->guzzleOptions(IbibliotekaApiUrls::postRequest($nextUrl)));
     }
 
     /** @return Generator<mixed, ParseResult, mixed, mixed> */

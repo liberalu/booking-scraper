@@ -15,23 +15,23 @@ final class MutationCharacterisationTest extends TestCase
 {
     use UsesTestDatabase;
 
-    private const GOLDEN = __DIR__.'/../golden/mutation_cases.json';
+    private const string GOLDEN = __DIR__.'/../golden/mutation_cases.json';
 
-    private const MARK = 'mutation-diff';
+    private const string MARK = 'mutation-diff';
 
-    private const ID_KEYS = [
+    private const array ID_KEYS = [
         'id', 'run_id', 'shop_book_id', 'previous_book_id', 'existing_book_id',
         'chain_to_id', 'cron_job_id',
     ];
 
-    private const PATH_LABEL_PREFIX = [
+    private const array PATH_LABEL_PREFIX = [
         '/api/runs/' => 'run_',
         '/api/shop-books/' => 'shop_book_',
         '/api/issues/' => 'issue_',
         '/api/cron/' => 'cron_',
     ];
 
-    private const KEY_LABEL_PREFIX = [
+    private const array KEY_LABEL_PREFIX = [
         'run_id' => 'run_',
         'shop_book_id' => 'shop_book_',
         'chain_to_id' => 'cron_',
@@ -44,6 +44,8 @@ final class MutationCharacterisationTest extends TestCase
     {
         parent::setUp();
 
+        config(['dashboard.authentication_disabled' => true]);
+
         $this->useTestDatabase(FixtureDatabase::ensure(
             getenv('TEST_DATABASE_URL')
                 ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test',
@@ -54,14 +56,14 @@ final class MutationCharacterisationTest extends TestCase
     #[Group('db')]
     public function test_every_frozen_case_still_behaves_the_same(): void
     {
-        $cases = self::golden();
+        $cases = $this->golden();
         self::assertGreaterThanOrEqual(100, count($cases), 'the golden has shrunk');
 
         DB::beginTransaction();
         try {
             $this->plantFixtures();
 
-            $labels = self::groupLabels($this->ids);
+            $labels = $this->groupLabels($this->ids);
 
             foreach ($cases as $case) {
                 $path = $this->resolveLabels($case['path']);
@@ -84,7 +86,7 @@ final class MutationCharacterisationTest extends TestCase
                 }
 
                 self::assertEquals(
-                    self::expectedFor($case),
+                    $this->expectedFor($case),
                     self::normalise($actual, $labels, '', $case['path']),
                     "write-route behaviour changed for: {$case['label']} "
                     ."({$case['method']} {$case['path']})"
@@ -95,14 +97,8 @@ final class MutationCharacterisationTest extends TestCase
         }
     }
 
-    private static function expectedFor(array $case): array
+    private function expectedFor(array $case): array
     {
-        if ($case['label'] === 'bulk ack unknown shop') {
-            return [
-                '_status' => 404,
-                'body' => ['detail' => 'Unknown shop: no-such-shop'],
-            ];
-        }
         if ($case['label'] === 'bulk unack shop') {
             return [
                 '_status' => 200,
@@ -316,7 +312,7 @@ final class MutationCharacterisationTest extends TestCase
         return $labels[$prefix][$value] ?? null;
     }
 
-    private static function groupLabels(array $ids): array
+    private function groupLabels(array $ids): array
     {
         $grouped = array_fill_keys(array_values(self::PATH_LABEL_PREFIX), []);
         foreach ($ids as $label => $id) {
@@ -335,7 +331,7 @@ final class MutationCharacterisationTest extends TestCase
         return \dirname(__DIR__, 2);
     }
 
-    private static function golden(): array
+    private function golden(): array
     {
         self::assertFileExists(
             self::GOLDEN,

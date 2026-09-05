@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 final class ResumePolicyRepository
 {
-    private const MAX_LOOKBACK = 8;
+    private const int MAX_LOOKBACK = 8;
 
     public function chainDepth(int $runId): int
     {
@@ -60,7 +60,7 @@ final class ResumePolicyRepository
     public function findResumable(int $shopId, string $phase): ?ResumableRun
     {
         $run = $this->resumableQuery($shopId, $phase)
-            ->orderByDesc('started_at')
+            ->latest('started_at')
             ->first();
 
         return $run === null ? null : $this->toReadModel($run);

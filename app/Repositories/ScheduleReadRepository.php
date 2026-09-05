@@ -9,6 +9,7 @@ use App\Models\ScrapeRun;
 use App\Support\RunPresenter;
 use Cron\CronExpression;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Throwable;
 
 final class ScheduleReadRepository
@@ -16,7 +17,7 @@ final class ScheduleReadRepository
     /** @return array<string, mixed> */
     public function __invoke(): array
     {
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
 
         $items = CronJob::orderBy('id')
             ->with('shop')
@@ -50,7 +51,7 @@ final class ScheduleReadRepository
     private function nextFiring(string $expression, Carbon $now): array
     {
         try {
-            $next = Carbon::instance(
+            $next = Date::instance(
                 (new CronExpression($expression))->getNextRunDate($now)
             )->utc();
         } catch (Throwable) {

@@ -6,8 +6,9 @@ namespace Tests\Crawler;
 
 use App\Crawler\Watchdog;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use PHPUnit\Framework\TestCase;
 
 final class WatchdogTest extends TestCase
@@ -22,7 +23,7 @@ final class WatchdogTest extends TestCase
             self::markTestSkipped('pcntl unavailable');
         }
         if (! self::$booted) {
-            Database::boot(self::dsn());
+            Database::boot($this->dsn());
             self::$booted = true;
         }
 
@@ -40,7 +41,7 @@ final class WatchdogTest extends TestCase
         DB::table('scrape_runs')->where('shop_id', $this->shopId)->delete();
     }
 
-    private static function dsn(): string
+    private function dsn(): string
     {
         return getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
@@ -52,9 +53,9 @@ final class WatchdogTest extends TestCase
             'shop_id' => $this->shopId,
             'phase' => 'scan',
             'status' => $status,
-            'started_at' => Carbon::now('UTC'),
+            'started_at' => Date::now('UTC'),
 
-            'last_heartbeat' => Carbon::now('UTC')->subHour(),
+            'last_heartbeat' => Date::now('UTC')->subHour(),
             'urls_processed' => 0,
             'items_added' => 0,
             'items_updated' => 0,
@@ -83,7 +84,7 @@ final class WatchdogTest extends TestCase
         );
         self::assertTrue($watchdog->start());
 
-        usleep(1_500_000);
+        Sleep::usleep(1_500_000);
 
         $watchdog->stop();
 
@@ -110,7 +111,7 @@ final class WatchdogTest extends TestCase
         self::assertTrue($watchdog->start());
 
         for ($i = 0; $i < 25; $i++) {
-            usleep(100_000);
+            Sleep::usleep(100_000);
             pcntl_signal_dispatch();
         }
         $watchdog->stop();
@@ -143,7 +144,7 @@ final class WatchdogTest extends TestCase
 
         for ($i = 0; $i < 8; $i++) {
             $watchdog->recordActivity();
-            usleep(300_000);
+            Sleep::usleep(300_000);
         }
         $watchdog->stop();
 
@@ -167,9 +168,9 @@ final class WatchdogTest extends TestCase
             heartbeatInterval: 0.3,
         );
         $watchdog->start();
-        usleep(900_000);
+        Sleep::usleep(900_000);
         $before = $this->heartbeat($runId);
-        usleep(900_000);
+        Sleep::usleep(900_000);
         $watchdog->stop();
 
         self::assertSame($before, $this->heartbeat($runId), 'kept ticking a terminal run');

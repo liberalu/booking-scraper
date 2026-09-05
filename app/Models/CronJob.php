@@ -20,12 +20,13 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_run_at
  * @property string|null $args
  * @property Shop $shop
+ * @property CronJob|null $chainTo
  */
 final class CronJob extends Model
 {
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['created_at'];
+    public const array TIMESTAMP_DEFAULTS = ['created_at'];
 
     protected $table = 'cron_jobs';
 

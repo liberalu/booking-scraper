@@ -10,13 +10,4 @@ enum RunPhase: string
     case Discover = 'discover';
     case Match = 'match';
     case Validate = 'validate';
-
-    public function script(): string
-    {
-        return match ($this) {
-            self::Scan, self::Discover => 'crawl',
-            self::Match => 'match',
-            self::Validate => 'validate',
-        };
-    }
 }

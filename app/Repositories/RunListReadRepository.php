@@ -9,14 +9,14 @@ use App\Models\ScrapeRun;
 use App\Support\Queries;
 use App\Support\RunPresenter;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final readonly class RunListReadRepository
 {
     private const array WHEN_BOUNDS_HOURS = ['1h' => 1, '24h' => 24, '7d' => 168, '30d' => 720];
 
-    private const array EXACT_PHASES = ['scan', 'discover_sitemap', 'discover_categories', 'discover_full_crawl'];
+    private const array EXACT_PHASES = ['scan', 'match', 'validate', 'discover_sitemap', 'discover_categories', 'discover_full_crawl'];
 
     public function __construct(
         private DashboardStatisticsRepository $statistics = new DashboardStatisticsRepository,
@@ -34,13 +34,15 @@ final readonly class RunListReadRepository
         $page = max(1, $input->page ?? 1);
         $query = DB::table('scrape_runs')
             ->join('shops', 'scrape_runs.shop_id', '=', 'shops.id')
-            ->orderByDesc('scrape_runs.started_at');
+            ->latest('scrape_runs.started_at');
 
         if ($shop !== '' && $shop !== 'all') {
             $query->where('shops.name', $shop);
         }
         if ($phase !== '' && $phase !== 'all') {
-            if ($phase === 'discover') {
+            if ($phase === 'crawls') {
+                $query->where('scrape_runs.phase', '!=', 'validate');
+            } elseif ($phase === 'discover') {
                 $query->where('scrape_runs.phase', 'like', 'discover\_%');
             } elseif (in_array($phase, self::EXACT_PHASES, true)) {
                 $query->where('scrape_runs.phase', $phase);
@@ -52,7 +54,7 @@ final readonly class RunListReadRepository
             $query->where('scrape_runs.status', $status);
         }
         if (isset(self::WHEN_BOUNDS_HOURS[$when])) {
-            $query->where('scrape_runs.started_at', '>=', Carbon::now('UTC')->subHours(self::WHEN_BOUNDS_HOURS[$when]));
+            $query->where('scrape_runs.started_at', '>=', Date::now('UTC')->subHours(self::WHEN_BOUNDS_HOURS[$when]));
         }
         if ($search !== '') {
             $like = "%{$search}%";
@@ -82,7 +84,7 @@ final readonly class RunListReadRepository
         $validationCounts = $this->validationIssueCounts($runIds);
         $itemCounts = $this->itemCounts($runIds);
         $rescrape = $this->statistics->rescrapeFlags($runIds);
-        $todayCutoff = Carbon::now('UTC')->subHours(24);
+        $todayCutoff = Date::now('UTC')->subHours(24);
 
         return [
             'runs' => array_map(
@@ -163,6 +165,6 @@ final readonly class RunListReadRepository
 
     private static function boolean(mixed $value): bool
     {
-        return $value === true || $value === 1 || $value === '1' || $value === 't' || $value === 'true';
+        return in_array($value, [true, 1, '1', 't', 'true'], true);
     }
 }

@@ -6,14 +6,20 @@ namespace App\Crawler;
 
 use App\Parsers\ProductParser;
 use App\Parsers\ScanUrlRewriter;
+use App\Support\CrawlerUrlPolicy;
 use App\Support\ParserRegistry;
+use Closure;
 use Generator;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UriInterface;
 use RoachPHP\Extensions\LoggerExtension;
 use RoachPHP\Extensions\StatsCollectorExtension;
 use RoachPHP\Http\Request;
 use RoachPHP\Http\Response;
 use RoachPHP\Spider\BasicSpider;
 use RoachPHP\Spider\ParseResult;
+use RuntimeException;
 
 final class ScanSpider extends BasicSpider
 {
@@ -33,25 +39,31 @@ final class ScanSpider extends BasicSpider
     protected function initialRequests(): array
     {
         $urls = $this->strings($this->context['urls'] ?? null);
+        $baseUrl = $this->baseUrl();
+        foreach ($urls as $url) {
+            CrawlerUrlPolicy::assertAllowed($url, $baseUrl);
+        }
 
         $parser = $this->parser();
 
         return array_map(
             function (string $url) use ($parser): Request {
 
-                $options = [];
+                $options = $this->requestOptions();
                 if (is_a($parser, ScanUrlRewriter::class, true)) {
                     $rewrite = $parser::rewriteScanUrl($url);
                     if ($rewrite !== null) {
+                        CrawlerUrlPolicy::assertAllowed($rewrite['url'], $this->baseUrl());
 
-                        return new Request('GET', $rewrite['url'], [$this, 'parse'], [
+                        return new Request('GET', $rewrite['url'], $this->parse(...), [
+                            ...$options,
                             'headers' => $rewrite['headers'],
                             'canonical_url' => $url,
                         ]);
                     }
                 }
 
-                return new Request('GET', $url, [$this, 'parse'], $options);
+                return new Request('GET', $url, $this->parse(...), $options);
             },
             $urls
         );
@@ -63,6 +75,34 @@ final class ScanSpider extends BasicSpider
         $shop = $this->context['shop'] ?? null;
 
         return ParserRegistry::for(is_string($shop) ? $shop : 'vaga');
+    }
+
+    /** @return array{allow_redirects: array{max: int, strict: bool, on_redirect: Closure}} */
+    private function requestOptions(): array
+    {
+        $baseUrl = $this->baseUrl();
+
+        return ['allow_redirects' => [
+            'max' => 5,
+            'strict' => true,
+            'on_redirect' => static function (
+                RequestInterface $request,
+                ResponseInterface $response,
+                UriInterface $uri,
+            ) use ($baseUrl): void {
+                CrawlerUrlPolicy::assertAllowed((string) $uri, $baseUrl);
+            },
+        ]];
+    }
+
+    private function baseUrl(): string
+    {
+        $baseUrl = $this->context['base_url'] ?? null;
+        if (! is_string($baseUrl) || $baseUrl === '') {
+            throw new RuntimeException('Crawler base URL is missing');
+        }
+
+        return $baseUrl;
     }
 
     /** @return Generator<mixed, ParseResult, mixed, mixed> */

@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Runs\Reaper;
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
 
 final class ReapRuns extends Command
 {
@@ -40,7 +41,7 @@ final class ReapRuns extends Command
                 $this->info(sprintf('Reaper iteration: %d run(s) killed', count($killed)));
             }
             if ($this->option('watch')) {
-                sleep($interval);
+                Sleep::sleep($interval);
             }
         } while ($this->option('watch'));
 

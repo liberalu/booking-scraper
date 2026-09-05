@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Support\Isbn;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class CanonicalBookRepository
 {
-    private const FIELDS = [
+    private const array FIELDS = [
         'title', 'title_full', 'year', 'release_place', 'type', 'format',
         'pages', 'duration', 'dimensions', 'language', 'translated_from',
         'description', 'cover_url', 'upcoming_release', 'udc_codes',
@@ -18,7 +18,7 @@ final class CanonicalBookRepository
         'source_url',
     ];
 
-    private const ARRAY_FIELDS = ['translated_from', 'udc_codes', 'subjects'];
+    private const array ARRAY_FIELDS = ['translated_from', 'udc_codes', 'subjects'];
 
     /** @param array<string, mixed> $item */
     public function upsert(array $item): int
@@ -63,8 +63,8 @@ final class CanonicalBookRepository
                     'libis_code' => $libisCode,
                     'publisher_id' => $publisherId,
                     'upcoming_release' => $fields['upcoming_release'] ?? false,
-                    'created_at' => Carbon::now('UTC'),
-                    'updated_at' => Carbon::now('UTC'),
+                    'created_at' => Date::now('UTC'),
+                    'updated_at' => Date::now('UTC'),
                 ], 'id');
             } else {
                 $current = DB::table('books')->where('id', $bookId)->first();

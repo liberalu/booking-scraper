@@ -13,13 +13,13 @@ use App\Support\Markdown;
  */
 final class ItemValidator
 {
-    private const MIN_YEAR = 1800;
+    private const int MIN_YEAR = 1800;
 
-    private const MAX_YEAR = 2030;
+    private const int MAX_YEAR = 2030;
 
-    private const HTML_TAG = '/<[a-zA-Z\/][^>]*>/';
+    private const string HTML_TAG = '/<[a-zA-Z\/][^>]*>/';
 
-    private const PAGED_FORMATS = ['book', 'hardcover', 'paperback'];
+    private const array PAGED_FORMATS = ['book', 'hardcover', 'paperback'];
 
     /**
      * @param  ParsedItem  $parsed

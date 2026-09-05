@@ -6,18 +6,18 @@ namespace App\Runs;
 
 use App\Repositories\ReaperRepository;
 
-final class Reaper
+final readonly class Reaper
 {
-    public const DEAD_RUN_SECONDS = ReaperRepository::DEAD_RUN_SECONDS;
+    public const int DEAD_RUN_SECONDS = ReaperRepository::DEAD_RUN_SECONDS;
 
-    public const STUCK_ROW_THRESHOLD_S = ReaperRepository::STUCK_ROW_THRESHOLD_S;
+    public const int STUCK_ROW_THRESHOLD_S = ReaperRepository::STUCK_ROW_THRESHOLD_S;
 
-    public const PAUSED_RUN_SECONDS = ReaperRepository::PAUSED_RUN_SECONDS;
+    public const int PAUSED_RUN_SECONDS = ReaperRepository::PAUSED_RUN_SECONDS;
 
-    public const RESUMABLE_RETENTION_SECONDS = ReaperRepository::RESUMABLE_RETENTION_SECONDS;
+    public const int RESUMABLE_RETENTION_SECONDS = ReaperRepository::RESUMABLE_RETENTION_SECONDS;
 
     public function __construct(
-        private readonly ReaperRepository $repository = new ReaperRepository,
+        private ReaperRepository $repository = new ReaperRepository,
     ) {}
 
     /** @return list<array{run_id: int, shop: string, phase: string, close_reason: string}> */

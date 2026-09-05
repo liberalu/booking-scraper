@@ -7,11 +7,12 @@ namespace App\Crawler;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use RuntimeException;
+use Throwable;
 
 /** @phpstan-import-type FlareResponse from CrawlerTypes */
 final class FlareSolverr
 {
-    private const PRE_ROTATION_BUFFER_S = 90.0;
+    private const float PRE_ROTATION_BUFFER_S = 90.0;
 
     private ?string $sessionId = null;
 
@@ -79,10 +80,10 @@ final class FlareSolverr
         $solution = is_array($rawSolution) ? $rawSolution : [];
 
         return [
-            'status' => self::integer($solution['status'] ?? null, 200),
-            'body' => self::string($solution['response'] ?? null, ''),
-            'url' => self::string($solution['url'] ?? null, $url),
-            'headers' => self::normaliseHeaders($solution['headers'] ?? null),
+            'status' => $this->integer($solution['status'] ?? null, 200),
+            'body' => $this->string($solution['response'] ?? null, ''),
+            'url' => $this->string($solution['url'] ?? null, $url),
+            'headers' => $this->normaliseHeaders($solution['headers'] ?? null),
         ];
     }
 
@@ -101,7 +102,7 @@ final class FlareSolverr
                 $old = $this->sessionId;
                 try {
                     $new = $this->createSession($now);
-                } catch (\Throwable $e) {
+                } catch (Throwable) {
                     fwrite(STDERR, "  flaresolverr: pre-rotation failed, staying on the old session\n");
 
                     return $old;
@@ -137,7 +138,7 @@ final class FlareSolverr
     {
         try {
             $this->call(['cmd' => 'sessions.destroy', 'session' => $session]);
-        } catch (\Throwable $e) {
+        } catch (Throwable) {
             fwrite(STDERR, "  flaresolverr: destroy of session {$session} failed (continuing)\n");
         }
     }
@@ -159,10 +160,7 @@ final class FlareSolverr
         try {
             $response = $this->client->post($this->endpoint, ['json' => $body]);
         } catch (GuzzleException $e) {
-            throw new RuntimeException(
-                'FlareSolverr request failed: '.$e->getMessage(),
-                previous: $e
-            );
+            throw new RuntimeException('FlareSolverr request failed: '.$e->getMessage(), $e->getCode(), previous: $e);
         }
 
         $decoded = json_decode((string) $response->getBody(), true);
@@ -181,7 +179,7 @@ final class FlareSolverr
     }
 
     /** @return array<string, string> */
-    private static function normaliseHeaders(mixed $raw): array
+    private function normaliseHeaders(mixed $raw): array
     {
         if (! is_array($raw)) {
             return [];
@@ -192,23 +190,23 @@ final class FlareSolverr
             if (! is_array($header)) {
                 continue;
             }
-            $name = self::string($header['name'] ?? null, '');
+            $name = $this->string($header['name'] ?? null, '');
             $name = trim($name);
             if ($name === '' || strtolower($name) === 'content-encoding') {
                 continue;
             }
-            $headers[$name] = self::string($header['value'] ?? null, '');
+            $headers[$name] = $this->string($header['value'] ?? null, '');
         }
 
         return $headers;
     }
 
-    private static function string(mixed $value, string $default): string
+    private function string(mixed $value, string $default): string
     {
         return is_string($value) ? $value : $default;
     }
 
-    private static function integer(mixed $value, int $default): int
+    private function integer(mixed $value, int $default): int
     {
         if (is_int($value)) {
             return $value;

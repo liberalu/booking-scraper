@@ -12,17 +12,17 @@ final class BookQueryRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'page' => ['sometimes', 'integer'],
-            'per_page' => ['sometimes', 'integer'],
-            'year' => ['sometimes', 'nullable', 'integer'],
-            'shop_count_min' => ['sometimes', 'nullable', 'integer'],
-            'shop_count_max' => ['sometimes', 'nullable', 'integer'],
-            'has_isbn' => ['sometimes'],
-            'has_shops' => ['sometimes'],
-            'has_conflicts' => ['sometimes'],
-            'data_source' => ['sometimes', 'nullable', 'string'],
-            'search' => ['sometimes', 'nullable', 'string'],
-            'format' => ['sometimes', 'nullable', 'string'],
+            'page' => ['sometimes', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['sometimes', 'integer', 'between:1,200'],
+            'year' => ['sometimes', 'nullable', 'integer', 'between:1000,2100'],
+            'shop_count_min' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'shop_count_max' => ['sometimes', 'nullable', 'integer', 'min:0', 'gte:shop_count_min'],
+            'has_isbn' => ['sometimes', 'boolean'],
+            'has_shops' => ['sometimes', 'boolean'],
+            'has_conflicts' => ['sometimes', 'boolean'],
+            'data_source' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'format' => ['sometimes', 'nullable', 'string', 'max:100'],
         ];
     }
 

@@ -31,9 +31,14 @@
   "path": "/api/issues/<issue_new>/lifecycle?state=bogus",
   "body": null,
   "expected": {
-   "_status": 400,
+   "_status": 422,
    "body": {
-    "detail": "state must be one of {'new', 'acknowledged', 'snoozed', 'resolved'}"
+    "message": "The selected state is invalid.",
+    "errors": {
+     "state": [
+      "The selected state is invalid."
+     ]
+    }
    }
   }
  },
@@ -142,9 +147,14 @@
    "shop": "no-such-shop"
   },
   "expected": {
-   "_status": 200,
+   "_status": 422,
    "body": {
-    "acknowledged": 2
+    "message": "The selected shop is invalid.",
+    "errors": {
+     "shop": [
+      "The selected shop is invalid."
+     ]
+    }
    }
   }
  },
@@ -306,7 +316,12 @@
   "expected": {
    "_status": 422,
    "body": {
-    "detail": "title is required"
+    "message": "The title field is required.",
+    "errors": {
+     "title": [
+      "The title field is required."
+     ]
+    }
    }
   }
  },
@@ -550,10 +565,9 @@
    "cron_expression": "0 3 * * *"
   },
   "expected": {
-   "_status": 200,
+   "_status": 422,
    "body": {
-    "id": "<id>",
-    "name": "synthetic.discover.sitemap"
+    "detail": "Shop is not configured for crawling: synthetic"
    }
   }
  },
@@ -603,9 +617,14 @@
    "cron_expression": "0 3 * * *"
   },
   "expected": {
-   "_status": 404,
+   "_status": 422,
    "body": {
-    "detail": "Shop not found"
+    "message": "The selected shop is invalid.",
+    "errors": {
+     "shop": [
+      "The selected shop is invalid."
+     ]
+    }
    }
   }
  },
@@ -621,7 +640,12 @@
   "expected": {
    "_status": 422,
    "body": {
-    "detail": "phase must be 'discover' or 'scan'"
+    "message": "The selected phase is invalid.",
+    "errors": {
+     "phase": [
+      "The selected phase is invalid."
+     ]
+    }
    }
   }
  },
@@ -734,9 +758,14 @@
    "chain_to_id": 999999
   },
   "expected": {
-   "_status": 404,
+   "_status": 422,
    "body": {
-    "detail": "Chain target job not found"
+    "message": "The selected chain to id is invalid.",
+    "errors": {
+     "chain_to_id": [
+      "The selected chain to id is invalid."
+     ]
+    }
    }
   }
  },
@@ -792,7 +821,12 @@
   "expected": {
    "_status": 422,
    "body": {
-    "detail": "phase must be 'discover' or 'scan'"
+    "message": "The selected phase is invalid.",
+    "errors": {
+     "phase": [
+      "The selected phase is invalid."
+     ]
+    }
    }
   }
  },
@@ -1124,9 +1158,14 @@
   "path": "/scrape/filtered?shop=no-such-shop",
   "body": null,
   "expected": {
-   "_status": 404,
+   "_status": 422,
    "body": {
-    "detail": "Unknown shop: no-such-shop"
+    "message": "The selected shop is invalid.",
+    "errors": {
+     "shop": [
+      "The selected shop is invalid."
+     ]
+    }
    }
   }
  },
@@ -1195,9 +1234,14 @@
    "shop": "no-such-shop"
   },
   "expected": {
-   "_status": 404,
+   "_status": 422,
    "body": {
-    "detail": "Unknown shop: no-such-shop"
+    "message": "The selected shop is invalid.",
+    "errors": {
+     "shop": [
+      "The selected shop is invalid."
+     ]
+    }
    }
   }
  },
@@ -1210,9 +1254,14 @@
    "phase": "sitemap"
   },
   "expected": {
-   "_status": 400,
+   "_status": 422,
    "body": {
-    "detail": "Unknown phase: sitemap"
+    "message": "The selected phase is invalid.",
+    "errors": {
+     "phase": [
+      "The selected phase is invalid."
+     ]
+    }
    }
   }
  },
@@ -1225,9 +1274,14 @@
    "phase": "scan"
   },
   "expected": {
-   "_status": 404,
+   "_status": 422,
    "body": {
-    "detail": "Unknown shop: no-such-shop"
+    "message": "The selected shop is invalid.",
+    "errors": {
+     "shop": [
+      "The selected shop is invalid."
+     ]
+    }
    }
   }
  },
@@ -1242,7 +1296,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
+    "detail": "Shop configuration is invalid"
    }
   }
  },
@@ -1278,7 +1332,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
+    "detail": "Shop configuration is invalid"
    }
   }
  },
@@ -1326,7 +1380,7 @@
   "expected": {
    "_status": 400,
    "body": {
-    "detail": "Shop config failed to load: Shop config not found: <repo>/config/shops/synthetic.toml"
+    "detail": "Shop configuration is invalid"
    }
   }
  },

@@ -10,7 +10,7 @@ use App\Repositories\ValidationRepository;
 use App\Services\ValidateService;
 use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
@@ -57,8 +57,8 @@ final class ValidateServiceGatesTest extends TestCase
                 'in_stock' => true,
                 'is_active' => false,
                 'match_status' => 'unmatched',
-                'first_seen_at' => Carbon::now('UTC')->subYears(2),
-                'last_seen_at' => Carbon::now('UTC')->subYears(2),
+                'first_seen_at' => Date::now('UTC')->subYears(2),
+                'last_seen_at' => Date::now('UTC')->subYears(2),
             ], 'id');
 
             DB::table('discovered_urls')->insert([
@@ -68,8 +68,8 @@ final class ValidateServiceGatesTest extends TestCase
                 'source' => 'sitemap',
                 'url_type' => 'unreachable',
                 'fail_count' => 5,
-                'first_seen_at' => Carbon::now('UTC'),
-                'last_seen_at' => Carbon::now('UTC'),
+                'first_seen_at' => Date::now('UTC'),
+                'last_seen_at' => Date::now('UTC'),
                 'shop_book_id' => $id,
             ]);
         }
@@ -78,7 +78,7 @@ final class ValidateServiceGatesTest extends TestCase
             'shop_id' => $this->shopId,
             'phase' => 'validate',
             'status' => 'running',
-            'started_at' => Carbon::now('UTC'),
+            'started_at' => Date::now('UTC'),
             'urls_processed' => 0,
             'items_added' => 0,
             'items_updated' => 0,
@@ -111,15 +111,15 @@ final class ValidateServiceGatesTest extends TestCase
             'in_stock' => true,
             'is_active' => true,
             'match_status' => 'unmatched',
-            'first_seen_at' => Carbon::now('UTC'),
-            'last_seen_at' => Carbon::now('UTC'),
+            'first_seen_at' => Date::now('UTC'),
+            'last_seen_at' => Date::now('UTC'),
         ], 'id');
 
         $runId = DB::table('scrape_runs')->insertGetId([
             'shop_id' => $this->shopId,
             'phase' => 'validate',
             'status' => 'running',
-            'started_at' => Carbon::now('UTC'),
+            'started_at' => Date::now('UTC'),
             'urls_processed' => 0,
             'items_added' => 0,
             'items_updated' => 0,

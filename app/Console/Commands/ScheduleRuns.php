@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Contracts\RunLauncher;
 use App\Models\CronJob;
 use App\Repositories\Contracts\SchedulerRepositoryInterface;
-use App\Support\CrawlSpawner;
 use App\Support\CronSchedule;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 final class ScheduleRuns extends Command
@@ -26,8 +27,10 @@ final class ScheduleRuns extends Command
     /** @var array<int, int> */
     private array $firedAt = [];
 
-    public function __construct(private readonly SchedulerRepositoryInterface $schedules)
-    {
+    public function __construct(
+        private readonly SchedulerRepositoryInterface $schedules,
+        private readonly RunLauncher $launcher,
+    ) {
         parent::__construct();
     }
 
@@ -52,7 +55,7 @@ final class ScheduleRuns extends Command
                 }
             }
             if ($this->option('watch')) {
-                sleep($interval);
+                Sleep::sleep($interval);
             }
         } while ($this->option('watch'));
 
@@ -143,7 +146,7 @@ final class ScheduleRuns extends Command
                 }
 
                 try {
-                    $result = CrawlSpawner::spawn(
+                    $result = $this->launcher->spawn(
                         phase: $job->phase,
                         shop: $shop,
                         strategy: $job->strategy ?? '',
@@ -187,7 +190,7 @@ final class ScheduleRuns extends Command
             if (function_exists('posix_kill') && ! posix_kill($pid, 0)) {
                 return;
             }
-            usleep(50_000);
+            Sleep::usleep(50_000);
         }
 
         $this->warn("  crawl pid={$pid} did not register a run before the scheduler lock expired");

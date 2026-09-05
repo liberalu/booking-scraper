@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 final class MarkdownTest extends TestCase
 {
-    private static function golden(): array
+    private function golden(): array
     {
         $path = __DIR__.'/../golden/descriptions.json';
         self::assertFileExists($path, 'run `make markdown-golden` first');
@@ -20,7 +20,7 @@ final class MarkdownTest extends TestCase
     public function test_every_description_converts_as_markdownify_does(): void
     {
         $checked = 0;
-        foreach (self::golden() as $case) {
+        foreach ($this->golden() as $case) {
             self::assertSame(
                 $case['markdown'],
                 Markdown::fromHtml($case['html']),

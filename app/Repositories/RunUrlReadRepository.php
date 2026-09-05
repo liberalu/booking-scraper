@@ -171,7 +171,7 @@ final class RunUrlReadRepository
                     'error_reason' => $row->string('status') === 'failed'
                         ? $row->nullableString('latest_error_reason')
                         : null,
-                    'duration_ms' => ($claimed !== null && $done !== null)
+                    'duration_ms' => ($claimed instanceof CarbonImmutable && $done instanceof CarbonImmutable)
                         ? (int) ($claimed->diffInSeconds($done, true) * 1000)
                         : null,
                     'request_delay_s' => $row->nullableFloat('request_delay_s'),
@@ -228,7 +228,7 @@ final class RunUrlReadRepository
 
     private function iso(?CarbonImmutable $dt): ?string
     {
-        if ($dt === null) {
+        if (! $dt instanceof CarbonImmutable) {
             return null;
         }
         $utc = $dt->utc();

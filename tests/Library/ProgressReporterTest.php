@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 final class ProgressReporterTest extends TestCase
 {
-    private const MARK = 'progress-reporter-test';
+    private const string MARK = 'progress-reporter-test';
 
     private ProgressReporter $progress;
 

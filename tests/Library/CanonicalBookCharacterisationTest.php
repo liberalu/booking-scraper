@@ -14,14 +14,14 @@ use PHPUnit\Framework\TestCase;
 
 final class CanonicalBookCharacterisationTest extends TestCase
 {
-    private const GOLDEN = __DIR__.'/../golden/canonical_expected.json';
+    private const string GOLDEN = __DIR__.'/../golden/canonical_expected.json';
 
-    private const FIXTURES = __DIR__.'/../fixtures/ibiblioteka/canonical';
+    private const string FIXTURES = __DIR__.'/../fixtures/ibiblioteka/canonical';
 
     #[Group('db')]
     public function test_each_frozen_record_still_writes_the_same_rows(): void
     {
-        $golden = self::golden();
+        $golden = $this->golden();
 
         Database::boot(getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test');
@@ -48,7 +48,7 @@ final class CanonicalBookCharacterisationTest extends TestCase
                 (new CanonicalBookRepository)->upsert($parsed);
             }
 
-            self::assertEquals($golden['expected'], self::snapshot($urls));
+            self::assertEquals($golden['expected'], $this->snapshot($urls));
         } finally {
             DB::rollBack();
         }
@@ -57,7 +57,7 @@ final class CanonicalBookCharacterisationTest extends TestCase
     #[Group('db')]
     public function test_reapplying_a_record_is_idempotent(): void
     {
-        $golden = self::golden();
+        $golden = $this->golden();
 
         Database::boot(getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test');
@@ -79,7 +79,7 @@ final class CanonicalBookCharacterisationTest extends TestCase
 
             self::assertEquals(
                 $golden['expected'],
-                self::snapshot($urls),
+                $this->snapshot($urls),
                 'a second pass changed the rows — the upsert is not idempotent'
             );
         } finally {
@@ -87,7 +87,7 @@ final class CanonicalBookCharacterisationTest extends TestCase
         }
     }
 
-    private static function decodeArrays(object $row): array
+    private function decodeArrays(object $row): array
     {
         $out = (array) $row;
         foreach (['translated_from', 'udc_codes', 'subjects'] as $column) {
@@ -99,13 +99,13 @@ final class CanonicalBookCharacterisationTest extends TestCase
         return $out;
     }
 
-    private static function snapshot(array $urls): array
+    private function snapshot(array $urls): array
     {
         $array = '{'.implode(',', $urls).'}';
 
         return [
 
-            'books' => array_map(self::decodeArrays(...), DB::select(
+            'books' => array_map($this->decodeArrays(...), DB::select(
                 'select b.source_url, b.libis_code, b.data_source, b.title,
                         b.title_full, b.year, b.release_place, b.type, b.format,
                         b.pages, b.duration, b.dimensions, b.language,
@@ -135,7 +135,7 @@ final class CanonicalBookCharacterisationTest extends TestCase
         ];
     }
 
-    private static function golden(): array
+    private function golden(): array
     {
         self::assertFileExists(self::GOLDEN, 'run `make canonical-diff FREEZE=1` first');
 

@@ -82,7 +82,7 @@ final class ScheduleRunsTest extends TestCase
     }
 
     #[Group('db')]
-    public function test_a_paused_run_does_not_hold_a_shop_back(): void
+    public function test_a_paused_run_holds_a_shop_back(): void
     {
 
         DB::beginTransaction();
@@ -97,7 +97,7 @@ final class ScheduleRunsTest extends TestCase
             $id = $this->plantJob(SyntheticShop::SHOP_TWO);
 
             $this->artisan('runs:schedule --dry-run')
-                ->expectsOutputToContain("cron job #{$id} due")
+                ->expectsOutputToContain("skipping cron job #{$id}")
                 ->assertExitCode(0);
         } finally {
             DB::rollBack();

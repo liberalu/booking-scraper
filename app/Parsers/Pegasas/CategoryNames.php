@@ -6,7 +6,7 @@ namespace App\Parsers\Pegasas;
 
 final class CategoryNames
 {
-    public const MAP = [
+    public const array MAP = [
         5050 => 'Pegasas',
         5051 => 'Knygos',
         5052 => 'Pomėgiai',

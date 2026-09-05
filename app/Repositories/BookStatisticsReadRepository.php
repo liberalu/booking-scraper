@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 final class BookStatisticsReadRepository
 {
-    private const CONFLICT_HAVING = 'count(distinct lower(title)) > 1'
+    private const string CONFLICT_HAVING = 'count(distinct lower(title)) > 1'
         .' or count(distinct lower(author)) > 1'
         .' or count(distinct year) > 1'
         .' or count(distinct lower(publisher)) > 1';

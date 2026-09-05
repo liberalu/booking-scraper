@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $first_seen_at
  * @property Carbon $last_seen_at
  * @property int|null $shop_book_id
+ * @property int|null $last_seen_run_id
  * @property-read Shop $shop
  * @property-read ShopBook|null $shopBook
  * @property-read UrlClassification|null $classification
@@ -35,7 +36,7 @@ final class DiscoveredUrl extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['first_seen_at', 'last_seen_at'];
+    public const array TIMESTAMP_DEFAULTS = ['first_seen_at', 'last_seen_at'];
 
     protected $attributes = [
         'fail_count' => 0,

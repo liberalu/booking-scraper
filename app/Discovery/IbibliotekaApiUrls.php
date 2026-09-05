@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Discovery;
 
 use DateTimeImmutable;
+use stdClass;
 
 final class IbibliotekaApiUrls
 {
-    private const ENDPOINT = 'https://ibiblioteka.lt/metis-api/bibliographic-records'
+    private const string ENDPOINT = 'https://ibiblioteka.lt/metis-api/bibliographic-records'
         .'/public/detailed-search/page';
 
     /** @return list<string> */
@@ -112,7 +113,7 @@ final class IbibliotekaApiUrls
                 'accessibilityFeatures' => [],
                 'mediaProperties' => [],
                 'recordStatuses' => [],
-                'dateRange' => new \stdClass,
+                'dateRange' => new stdClass,
             ],
             'searchFields' => [],
             'librariesData' => [

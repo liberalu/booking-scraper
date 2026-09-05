@@ -7,7 +7,7 @@ namespace Tests\Crawler;
 use App\Repositories\CrawlerRetryRepository;
 use App\Runs\RunEvent;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
@@ -40,7 +40,7 @@ final class CrawlerRetryRepositoryTest extends TestCase
             'shop_id' => $shopId,
             'phase' => 'scan',
             'status' => 'running',
-            'started_at' => Carbon::now('UTC'),
+            'started_at' => Date::now('UTC'),
             'urls_processed' => 0,
             'items_added' => 0,
             'items_updated' => 0,
@@ -54,7 +54,7 @@ final class CrawlerRetryRepositoryTest extends TestCase
             'shop_id' => $shopId,
             'url' => $url,
             'status' => 'pending',
-            'created_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
         ], 'id');
 
         (new CrawlerRetryRepository)->record($runId, $url, 1, 503, null);

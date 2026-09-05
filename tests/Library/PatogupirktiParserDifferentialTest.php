@@ -9,9 +9,9 @@ use PHPUnit\Framework\TestCase;
 
 final class PatogupirktiParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__.'/../fixtures/patogupirkti';
+    private const string FIXTURES = __DIR__.'/../fixtures/patogupirkti';
 
-    private const GOLDEN = __DIR__.'/../golden';
+    private const string GOLDEN = __DIR__.'/../golden';
 
     public function test_category_page_matches_python(): void
     {

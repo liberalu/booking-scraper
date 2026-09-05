@@ -29,7 +29,7 @@ final class PostgresTextArrayTest extends TestCase
     #[DataProvider('arrays')]
     public function test_round_trips_through_postgres(array $items): void
     {
-        $connection = Database::boot(self::dsn())->getConnection();
+        $connection = Database::boot($this->dsn())->getConnection();
 
         $literal = $connection->selectOne(
             'select (?::text[])::text as arr',
@@ -41,7 +41,7 @@ final class PostgresTextArrayTest extends TestCase
 
     public function test_server_emitted_literal_parses(): void
     {
-        $connection = Database::boot(self::dsn())->getConnection();
+        $connection = Database::boot($this->dsn())->getConnection();
         $literal = (string) $connection->selectOne(
             "select array['Grožinė literatūra','Knygos, žurnalai','say \"hi\"']::text as arr"
         )->arr;
@@ -52,7 +52,7 @@ final class PostgresTextArrayTest extends TestCase
         );
     }
 
-    private static function dsn(): string
+    private function dsn(): string
     {
         return getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';

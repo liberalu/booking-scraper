@@ -6,29 +6,29 @@ namespace App\Runs;
 
 use App\Repositories\ScanLockRepository;
 
-final class ScanLock
+final readonly class ScanLock
 {
     public function __construct(
-        private readonly ScanLockRepository $repository = new ScanLockRepository,
+        private ScanLockRepository $repository = new ScanLockRepository,
     ) {}
 
-    public function tryAcquire(int $shopId, string $phase): bool
+    public function tryAcquire(int $shopId): bool
     {
-        return $this->repository->tryAcquire($shopId, $phase);
+        return $this->repository->tryAcquire($shopId);
     }
 
-    public function tryAcquireForSession(int $shopId, string $phase): bool
+    public function tryAcquireForSession(int $shopId): bool
     {
-        return $this->repository->tryAcquireForSession($shopId, $phase);
+        return $this->repository->tryAcquireForSession($shopId);
     }
 
-    public function release(int $shopId, string $phase): bool
+    public function release(int $shopId): bool
     {
-        return $this->repository->release($shopId, $phase);
+        return $this->repository->release($shopId);
     }
 
-    public function key(string $phase): int
+    public function key(): int
     {
-        return $this->repository->key($phase);
+        return $this->repository->key();
     }
 }

@@ -10,7 +10,7 @@ use App\Runs\RunEvent;
 use App\Runs\RunFailsafe;
 use App\Support\Database;
 use Illuminate\Database\Capsule\Manager as Capsule;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
@@ -22,7 +22,7 @@ final class ResumePolicyTest extends TestCase
 
     protected function setUp(): void
     {
-        self::$capsule ??= Database::boot(self::dsn());
+        self::$capsule ??= Database::boot($this->dsn());
         DB::beginTransaction();
 
         $this->shopId = Shop::firstOrCreate(
@@ -36,7 +36,7 @@ final class ResumePolicyTest extends TestCase
         DB::rollBack();
     }
 
-    private static function dsn(): string
+    private function dsn(): string
     {
         return getenv('TEST_DATABASE_URL')
             ?: 'postgresql://postgres:postgres@localhost:5433/book_scraper_php_test';
@@ -48,7 +48,7 @@ final class ResumePolicyTest extends TestCase
             'shop_id' => $this->shopId,
             'phase' => 'scan',
             'status' => $status,
-            'started_at' => Carbon::now('UTC'),
+            'started_at' => Date::now('UTC'),
             'urls_processed' => $processed,
             'items_added' => 0,
             'items_updated' => 0,
@@ -64,7 +64,7 @@ final class ResumePolicyTest extends TestCase
         DB::table('scrape_run_events')->insert([
             'run_id' => $runId,
             'event_type' => RunEvent::RESTARTED,
-            'created_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
             'actor' => RunEvent::ACTOR_SYSTEM,
             'payload' => json_encode(
                 $snapshot === null ? [] : ['urls_processed_snapshot' => $snapshot]
@@ -213,7 +213,7 @@ final class ResumePolicyTest extends TestCase
             'url' => "https://resume.test/{$runId}-{$status}",
             'url_type' => 'product',
             'status' => $status,
-            'created_at' => Carbon::now('UTC'),
+            'created_at' => Date::now('UTC'),
         ]);
     }
 
@@ -224,7 +224,7 @@ final class ResumePolicyTest extends TestCase
         $runId = $this->makeRun('completed');
 
         try {
-            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, $this->dsn());
 
             self::assertFalse($written);
             self::assertSame(
@@ -243,7 +243,7 @@ final class ResumePolicyTest extends TestCase
         $runId = $this->makeRun('running');
 
         try {
-            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, self::dsn());
+            $written = (new RunFailsafe)->finalize($runId, 'failed', 'stall_timeout', true, $this->dsn());
 
             $row = DB::table('scrape_runs')->where('id', $runId)->first();
             self::assertTrue($written);
@@ -268,7 +268,7 @@ final class ResumePolicyTest extends TestCase
                 'failed',
                 'SQLSTATE[08006] connection refused',
                 false,
-                self::dsn()
+                $this->dsn()
             );
 
             $row = DB::table('scrape_runs')->where('id', $runId)->first();

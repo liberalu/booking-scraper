@@ -8,7 +8,7 @@ use Normalizer;
 
 final class ValidationRules
 {
-    private const NON_BOOK_CATEGORY_KEYWORDS = [
+    private const array NON_BOOK_CATEGORY_KEYWORDS = [
         'zaisl',
         'zaidim',
         'delion',
@@ -23,19 +23,19 @@ final class ValidationRules
         'stalo zaid',
     ];
 
-    private const NON_BOOK_TITLE = '/\((DVD|Blu[-\s]?ray|CD|MP3|VHS|USB|Vinyl)\)'
+    private const string NON_BOOK_TITLE = '/\((DVD|Blu[-\s]?ray|CD|MP3|VHS|USB|Vinyl)\)'
         .'|\b(rinkinys|komplektas|set|bundle)\b'
         .'|kompaktine|audioknyga|audio kasete|garsine knyga/i';
 
-    private const OPENCART_ROUTE = '/index\.php\?route=product(?:\/|%2F)product&product_id=\d+/i';
+    private const string OPENCART_ROUTE = '/index\.php\?route=product(?:\/|%2F)product&product_id=\d+/i';
 
-    private const LT_DIACRITICS = 'ąčęėįšųūžĄČĘĖĮŠŲŪŽ';
+    private const string LT_DIACRITICS = 'ąčęėįšųūžĄČĘĖĮŠŲŪŽ';
 
-    private const TRUNCATED_TITLE = '/(?:…|\.\.\.)\s*$/u';
+    private const string TRUNCATED_TITLE = '/(?:…|\.\.\.)\s*$/u';
 
-    private const SLUG_SKU_SUFFIX = '/-\d+$/';
+    private const string SLUG_SKU_SUFFIX = '/-\d+$/';
 
-    private const TOKEN_DEDUP_DIGIT = '/^([a-z]{2,})\d+$/';
+    private const string TOKEN_DEDUP_DIGIT = '/^([a-z]{2,})\d+$/';
 
     /** @return list<string> */
     public static function tokenize(?string $value): array
@@ -101,7 +101,7 @@ final class ValidationRules
 
         $diacriticWords = array_values(array_filter(
             self::strings($matches[0]),
-            static fn (string $word): bool => self::hasLithuanianDiacritic($word)
+            self::hasLithuanianDiacritic(...)
         ));
         if ($diacriticWords === []) {
             return false;
@@ -152,13 +152,8 @@ final class ValidationRules
     private static function hasLithuanianDiacritic(string $word): bool
     {
         $characters = preg_split('//u', self::LT_DIACRITICS, -1, PREG_SPLIT_NO_EMPTY);
-        foreach ($characters !== false ? $characters : [] as $char) {
-            if (mb_strpos($word, $char) !== false) {
-                return true;
-            }
-        }
 
-        return false;
+        return array_any($characters !== false ? $characters : [], fn ($char): bool => str_contains($word, $char));
     }
 
     /** @param list<string>|null $categories */
@@ -169,13 +164,8 @@ final class ValidationRules
         }
 
         $folded = self::foldAscii(implode(' | ', $categories));
-        foreach (self::NON_BOOK_CATEGORY_KEYWORDS as $keyword) {
-            if (str_contains($folded, $keyword)) {
-                return true;
-            }
-        }
 
-        return false;
+        return array_any(self::NON_BOOK_CATEGORY_KEYWORDS, fn ($keyword): bool => str_contains($folded, $keyword));
     }
 
     public static function titleIndicatesNonBook(?string $title): bool

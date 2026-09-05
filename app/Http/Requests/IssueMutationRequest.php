@@ -5,17 +5,18 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\DTO\Request\IssueMutationInput;
+use Illuminate\Validation\Rule;
 
 final class IssueMutationRequest extends ApiFormRequest
 {
-    /** @return array<string, list<string>> */
+    /** @return array<string, list<mixed>> */
     public function rules(): array
     {
         return [
-            'state' => ['sometimes', 'nullable'],
-            'days' => ['sometimes', 'nullable'],
-            'issue_type' => ['sometimes', 'nullable'],
-            'shop' => ['sometimes', 'nullable'],
+            'state' => ['sometimes', 'nullable', 'string', Rule::in(['new', 'acknowledged', 'snoozed', 'resolved'])],
+            'days' => ['sometimes', 'nullable', 'integer', 'between:1,3650'],
+            'issue_type' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
         ];
     }
 

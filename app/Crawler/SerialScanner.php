@@ -8,19 +8,21 @@ use App\Repositories\CanonicalBookRepository;
 use App\Runs\ProgressReporter;
 use App\Support\Config;
 use App\Support\ParserRegistry;
+use Illuminate\Support\Sleep;
+use RuntimeException;
 use Throwable;
 
-final class SerialScanner
+final readonly class SerialScanner
 {
     public function __construct(
-        private readonly string $shop,
-        private readonly Config $config,
-        private readonly Persister $persister,
-        private readonly int $shopId,
-        private readonly ?int $runId,
-        private readonly ?Watchdog $watchdog = null,
-        private readonly CanonicalBookRepository $canonical = new CanonicalBookRepository,
-        private readonly ProgressReporter $progress = new ProgressReporter,
+        private string $shop,
+        private Config $config,
+        private Persister $persister,
+        private int $shopId,
+        private ?int $runId,
+        private ?Watchdog $watchdog = null,
+        private CanonicalBookRepository $canonical = new CanonicalBookRepository,
+        private ProgressReporter $progress = new ProgressReporter,
     ) {}
 
     /**
@@ -31,7 +33,7 @@ final class SerialScanner
     {
         $fsConfig = $this->config->flaresolverr();
         if ($fsConfig === null) {
-            throw new \RuntimeException("shop {$this->shop} has no [flaresolverr] block");
+            throw new RuntimeException("shop {$this->shop} has no [flaresolverr] block");
         }
 
         $flareSolverr = new FlareSolverr(
@@ -51,7 +53,7 @@ final class SerialScanner
         try {
             foreach ($urls as $url) {
                 if (! $first && $delayMicroseconds > 0) {
-                    usleep($delayMicroseconds);
+                    Sleep::usleep($delayMicroseconds);
                 }
                 $first = false;
 

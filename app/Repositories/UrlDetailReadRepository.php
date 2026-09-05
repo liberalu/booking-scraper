@@ -64,7 +64,7 @@ final class UrlDetailReadRepository
             )
             ->where('scrape_url_items.discovered_url_id', $urlId)
             ->whereIn('scrape_url_items.status', ['done', 'failed'])
-            ->orderByDesc('scrape_runs.started_at')
+            ->latest('scrape_runs.started_at')
             ->limit(self::HISTORY_LIMIT)
             ->get()
             ->map(function (mixed $result): array {

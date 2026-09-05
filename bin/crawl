@@ -17,6 +17,7 @@ declare(strict_types=1);
 
 
 use App\Support\Config;
+use App\Support\CrawlSpawner;
 use App\Crawler\CrawlerContext;
 use App\Crawler\PostPhase;
 use App\Discovery\GraphQlUrls;
@@ -212,6 +213,7 @@ if ($command === '' || isset($opts['help'])) {
         --cron-job-id=N  internal: this run was fired by a cron job. Decides
                          which follow-up phase runs when it closes.
         --urls=A,B       scan these URLs instead of the pending queue
+        --urls-file=PATH scan URLs from a private newline-delimited manifest
         --dry-run        fetch and parse, persist nothing
         --resumed-attempt=N
                          internal: adopt a resumable run's queue. Set by the
@@ -290,6 +292,7 @@ $postPhase = new PostPhase(
     new PostPhaseRepository,
     new MatchService($repositoryFactory->matching()),
     $failsafe,
+    new CrawlSpawner,
 );
 $config = Config::forShop($shopName);
 
@@ -497,7 +500,6 @@ if ($command === 'discover') {
 
 
         $lifecycle->fail($e);
-        $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
         $crawler->issues()->flush($shop->id, $run->id);
         $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
         fail('run failed: ' . $e->getMessage());
@@ -539,12 +541,35 @@ if ($resumable !== null) {
         $run->id,
         $resumedAttempt > 0 ? " (attempt {$resumedAttempt})" : ''
     );
+} elseif (isset($opts['urls-file'])) {
+    $manifest = $opts['urls-file'];
+    if (! is_string($manifest) || ! is_file($manifest) || ! is_readable($manifest)) {
+        fail('the URL manifest is not readable');
+    }
+    $contents = file_get_contents($manifest);
+    @unlink($manifest);
+    if ($contents === false) {
+        fail('the URL manifest could not be read');
+    }
+    $urls = array_slice(
+        array_values(array_filter(array_map('trim', preg_split('/\R/', $contents) ?: []))),
+        0,
+        $maxUrls,
+    );
+    foreach ($urls as $url) {
+        \App\Support\CrawlerUrlPolicy::assertAllowed($url, $config->baseUrl());
+    }
+    $urlCount = count($urls);
+    $urlBatches = [$urls];
 } elseif (isset($opts['urls'])) {
     $urls = array_slice(
         array_values(array_filter(array_map('trim', explode(',', $opts['urls'])))),
         0,
         $maxUrls,
     );
+    foreach ($urls as $url) {
+        \App\Support\CrawlerUrlPolicy::assertAllowed($url, $config->baseUrl());
+    }
     $urlCount = count($urls);
     $urlBatches = [$urls];
 } else {
@@ -662,7 +687,6 @@ if ($config->flaresolverr() !== null) {
     } catch (Throwable $e) {
         $watchdog->stop();
         $lifecycle->fail($e);
-        $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
         $crawler->issues()->flush($shop->id, $run->id);
         $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
         fail('run failed: ' . $e->getMessage());
@@ -728,7 +752,6 @@ try {
 } catch (Throwable $e) {
     $watchdog->stop();
     $lifecycle->fail($e);
-    $failsafe->finalize($run->id, 'failed', substr($e->getMessage(), 0, 200));
     $crawler->issues()->flush($shop->id, $run->id);
     $postPhase->chainSkipped($run->id, $cronJobId, substr($e->getMessage(), 0, 200));
     fail('run failed: ' . $e->getMessage());

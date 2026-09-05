@@ -12,9 +12,9 @@ use RuntimeException;
 
 final class FixtureDatabase
 {
-    public const NAME = 'book_scraper_php_test_fixture';
+    public const string NAME = 'book_scraper_php_test_fixture';
 
-    private const TEST_PORT = 5433;
+    private const int TEST_PORT = 5433;
 
     public static function ensure(string $template, bool $recreate = false): string
     {

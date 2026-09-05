@@ -13,13 +13,13 @@ use App\Support\CoverType;
 /** @phpstan-import-type ParsedItem from CrawlerTypes */
 final class Parser implements DiscoveryParser, ProductParser
 {
-    private const BASE_URL = 'https://almalittera.lt';
+    private const string BASE_URL = 'https://almalittera.lt';
 
-    private const PLACEHOLDER_VENDORS = ['nėra autoriaus', 'nera autoriaus'];
+    private const array PLACEHOLDER_VENDORS = ['nėra autoriaus', 'nera autoriaus'];
 
-    private const EBOOK_MARKERS = ['EPUB'];
+    private const array EBOOK_MARKERS = ['EPUB'];
 
-    private const AUDIO_TYPES = ['MP3', 'AUDIOBOOK'];
+    private const array AUDIO_TYPES = ['MP3', 'AUDIOBOOK'];
 
     /** @return list<string> */
     public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
@@ -230,7 +230,7 @@ final class Parser implements DiscoveryParser, ProductParser
     public static function bookTypeFromShopify(mixed $productType, mixed $tags): string
     {
         $type = is_string($productType) ? strtoupper(trim($productType)) : '';
-        $tagSet = array_map(static fn (string $tag): string => strtoupper($tag), self::tagList($tags));
+        $tagSet = array_map(strtoupper(...), self::tagList($tags));
 
         if ($type === 'EPUB' || array_intersect(self::EBOOK_MARKERS, $tagSet) !== []) {
             return 'ebook';
@@ -246,9 +246,9 @@ final class Parser implements DiscoveryParser, ProductParser
     private static function tagList(mixed $tags): array
     {
         if (is_array($tags)) {
-            $items = array_filter($tags, 'is_string');
+            $items = array_filter($tags, is_string(...));
         } elseif (is_string($tags) && $tags !== '') {
-            $items = array_map('trim', explode(',', $tags));
+            $items = array_map(trim(...), explode(',', $tags));
         } else {
             return [];
         }

@@ -6,22 +6,22 @@ namespace Tests\Library;
 
 use App\Runs\Reaper;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 final class ReaperCharacterisationTest extends TestCase
 {
-    private const SPEC = __DIR__.'/../golden/reaper_fixtures.json';
+    private const string SPEC = __DIR__.'/../golden/reaper_fixtures.json';
 
-    private const EXPECTED = __DIR__.'/../golden/reaper_expected.json';
+    private const string EXPECTED = __DIR__.'/../golden/reaper_expected.json';
 
     #[Group('db')]
     public function test_each_fixture_is_reaped_as_python_reaped_it(): void
     {
-        $spec = self::json(self::SPEC);
-        $expected = self::json(self::EXPECTED);
+        $spec = $this->json(self::SPEC);
+        $expected = $this->json(self::EXPECTED);
         $marker = $spec['marker'];
 
         Database::boot(getenv('TEST_DATABASE_URL')
@@ -37,7 +37,7 @@ final class ReaperCharacterisationTest extends TestCase
 
             $runIds = [];
             foreach ($spec['runs'] as $run) {
-                $heartbeat = self::interval($run['heartbeat']);
+                $heartbeat = $this->interval($run['heartbeat']);
                 $runIds[$run['fixture']] = (int) DB::selectOne(
                     "insert into scrape_runs (shop_id, phase, status, started_at,
                          urls_total, urls_processed, items_added, items_updated,
@@ -52,7 +52,7 @@ final class ReaperCharacterisationTest extends TestCase
             }
 
             foreach ($spec['items'] as $index => $item) {
-                $claimed = self::interval($item['claimed']);
+                $claimed = $this->interval($item['claimed']);
 
                 DB::insert(
                     "insert into scrape_url_items (run_id, shop_id, url, url_type,
@@ -70,7 +70,7 @@ final class ReaperCharacterisationTest extends TestCase
 
             (new Reaper)->sweep();
 
-            $actual = self::outcome($marker, $shopId);
+            $actual = $this->outcome($marker, $shopId);
             self::assertCount(count($expected), $actual);
             foreach ($expected as $i => $row) {
                 self::assertSame(
@@ -86,7 +86,7 @@ final class ReaperCharacterisationTest extends TestCase
 
     public function test_the_fixtures_still_cover_every_rule(): void
     {
-        $expected = self::json(self::EXPECTED);
+        $expected = $this->json(self::EXPECTED);
 
         $reasons = array_filter(array_column($expected, 'failure_reasons'));
         self::assertContains('run_aborted', $reasons, 'no fixture covers run_aborted');
@@ -122,8 +122,8 @@ final class ReaperCharacterisationTest extends TestCase
                 'shop_id' => $shopId,
                 'phase' => 'scan',
                 'status' => 'failed',
-                'started_at' => Carbon::now('UTC')->subDays(9),
-                'finished_at' => Carbon::now('UTC')->subDays(8),
+                'started_at' => Date::now('UTC')->subDays(9),
+                'finished_at' => Date::now('UTC')->subDays(8),
                 'resumable_after_failure' => true,
                 'urls_processed' => 0,
                 'items_added' => 0,
@@ -143,7 +143,7 @@ final class ReaperCharacterisationTest extends TestCase
         }
     }
 
-    private static function outcome(string $marker, int $shopId): array
+    private function outcome(string $marker, int $shopId): array
     {
         return array_map(
             static fn (object $r): array => [
@@ -177,12 +177,12 @@ final class ReaperCharacterisationTest extends TestCase
         );
     }
 
-    private static function interval(?string $age): string
+    private function interval(?string $age): string
     {
         return $age === null ? 'null' : "now() - interval '{$age}'";
     }
 
-    private static function json(string $path): array
+    private function json(string $path): array
     {
         self::assertFileExists($path, 'run `make reaper-diff FREEZE=1` first');
 

@@ -15,7 +15,7 @@ use App\Runs\RunEvent;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final readonly class RunSpawnRepository
 {
@@ -52,6 +52,19 @@ final readonly class RunSpawnRepository
         $id = $this->connection()->table('scrape_runs')
             ->where('shop_id', $shopId)
             ->where('phase', $phase)
+            ->whereIn('status', ['running', 'stopping', 'paused'])
+            ->orderBy('id')
+            ->value('id');
+
+        $runId = DatabaseRow::from(['id' => $id])->nullableInt('id');
+
+        return $runId === null ? null : ScrapeRun::find($runId);
+    }
+
+    public function activeRunForShop(int $shopId): ?ScrapeRun
+    {
+        $id = $this->connection()->table('scrape_runs')
+            ->where('shop_id', $shopId)
             ->whereIn('status', ['running', 'stopping', 'paused'])
             ->orderBy('id')
             ->value('id');
@@ -273,7 +286,7 @@ final readonly class RunSpawnRepository
             'status' => 'running',
             'finished_at' => null,
             'close_reason' => null,
-            'last_heartbeat' => Carbon::now('UTC'),
+            'last_heartbeat' => Date::now('UTC'),
             'pid' => null,
         ];
     }

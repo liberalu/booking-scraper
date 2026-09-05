@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Runs\RunEvent;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
-final class RunFinisherRepository
+final readonly class RunFinisherRepository
 {
-    private const NON_TERMINAL = ['running', 'stopping', 'paused'];
+    private const array NON_TERMINAL = ['running', 'stopping', 'paused'];
 
     public function __construct(
-        private readonly RunFailsafeRepository $failsafe = new RunFailsafeRepository,
+        private RunFailsafeRepository $failsafe = new RunFailsafeRepository,
     ) {}
 
     public function finish(
@@ -38,7 +38,7 @@ final class RunFinisherRepository
 
             $fields = [
                 'status' => $status,
-                'finished_at' => Carbon::now('UTC'),
+                'finished_at' => Date::now('UTC'),
             ];
 
             if ($reason !== null && $row->nullableString('close_reason') === null) {
@@ -86,7 +86,7 @@ final class RunFinisherRepository
             return 0;
         }
 
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         DB::table('scrape_url_items')
             ->whereIn('id', $items->pluck('id')->all())
             ->update(['status' => 'failed', 'done_at' => $now]);

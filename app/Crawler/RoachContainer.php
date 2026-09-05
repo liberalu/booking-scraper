@@ -30,23 +30,25 @@ use RoachPHP\ItemPipeline\ItemPipeline;
 use RoachPHP\ItemPipeline\ItemPipelineInterface;
 use RoachPHP\Scheduling\RequestSchedulerInterface;
 use RoachPHP\Scheduling\Timing\ClockInterface;
+use RuntimeException;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Throwable;
 
-final class RoachContainer implements ContainerInterface
+final readonly class RoachContainer implements ContainerInterface
 {
-    private readonly LeagueContainer $container;
+    private LeagueContainer $container;
 
-    private readonly SubSecondRequestScheduler $scheduler;
+    private SubSecondRequestScheduler $scheduler;
 
     public function __construct(
-        private readonly float $requestDelaySeconds,
-        private readonly float $requestTimeout,
-        private readonly float $connectTimeout,
-        private readonly string $userAgent,
-        private readonly ?int $runId = null,
-        private readonly CrawlerRetryRepository $retries = new CrawlerRetryRepository,
-        private readonly CrawlerContext $crawler = new CrawlerContext,
+        private float $requestDelaySeconds,
+        private float $requestTimeout,
+        private float $connectTimeout,
+        private string $userAgent,
+        private ?int $runId = null,
+        private CrawlerRetryRepository $retries = new CrawlerRetryRepository,
+        private CrawlerContext $crawler = new CrawlerContext,
     ) {
         $this->container = (new LeagueContainer)->delegate(new ReflectionContainer);
         $this->scheduler = new SubSecondRequestScheduler(new SubSecondClock);
@@ -122,12 +124,12 @@ final class RoachContainer implements ContainerInterface
                 int $retries,
                 RequestInterface $request,
                 ?ResponseInterface $response,
-                ?\Throwable $exception,
+                ?Throwable $exception,
             ): bool {
                 $retry = $retries < 2 && (
                     $exception instanceof ConnectException
                     || $response?->getStatusCode() === 429
-                    || ($response !== null && $response->getStatusCode() >= 500)
+                    || ($response instanceof ResponseInterface && $response->getStatusCode() >= 500)
                 );
                 if ($retry && $this->runId !== null) {
                     $this->retries->record(
@@ -156,7 +158,7 @@ final class RoachContainer implements ContainerInterface
     {
         $pipeline = $this->container->get(ItemPipeline::class);
         if (! $pipeline instanceof ItemPipelineInterface) {
-            throw new \RuntimeException('Roach item pipeline binding is invalid.');
+            throw new RuntimeException('Roach item pipeline binding is invalid.');
         }
 
         return $pipeline;
@@ -166,7 +168,7 @@ final class RoachContainer implements ContainerInterface
     {
         $engine = $this->container->get(Engine::class);
         if (! $engine instanceof EngineInterface) {
-            throw new \RuntimeException('Roach engine binding is invalid.');
+            throw new RuntimeException('Roach engine binding is invalid.');
         }
 
         return $engine;

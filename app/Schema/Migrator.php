@@ -7,14 +7,15 @@ namespace App\Schema;
 use App\Support\Database;
 use PDO;
 use RuntimeException;
+use Throwable;
 
-final class Migrator
+final readonly class Migrator
 {
-    public const LEDGER = 'public.php_schema_migrations';
+    public const string LEDGER = 'public.php_schema_migrations';
 
     public function __construct(
-        private readonly PDO $pdo,
-        private readonly string $dir,
+        private PDO $pdo,
+        private string $dir,
     ) {
         if (! is_dir($this->dir)) {
             throw new RuntimeException("No migrations directory: {$this->dir}");
@@ -167,7 +168,7 @@ final class Migrator
                 );
                 $stmt->execute([$version, self::checksum($path)]);
                 $this->pdo->commit();
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->pdo->rollBack();
                 throw new RuntimeException("Migration {$version} failed: ".$e->getMessage(), 0, $e);
             }

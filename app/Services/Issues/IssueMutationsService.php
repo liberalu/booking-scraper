@@ -9,6 +9,7 @@ use App\Exceptions\ActionFailed;
 use App\Models\ValidationIssue;
 use App\Repositories\IssueRepository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 final readonly class IssueMutationsService
 {
@@ -42,7 +43,7 @@ final readonly class IssueMutationsService
             throw ActionFailed::unprocessable(['detail' => 'days must be 7, 30, or 90']);
         }
 
-        $until = Carbon::now('UTC')->addDays($days);
+        $until = Date::now('UTC')->addDays($days);
         $this->issues->snooze($issue, $until);
 
         return ['snoozed_until' => $this->iso($until), 'days' => $days];

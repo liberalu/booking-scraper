@@ -11,7 +11,7 @@ use PHPUnit\Framework\TestCase;
 
 final class DiscoveryUrlsTest extends TestCase
 {
-    private static function golden(): array
+    private function golden(): array
     {
         $path = __DIR__.'/../golden/discovery_urls.json';
         self::assertFileExists($path, 'run `make discovery-golden` first');
@@ -21,7 +21,7 @@ final class DiscoveryUrlsTest extends TestCase
 
     public function test_graph_ql_urls_match_python(): void
     {
-        foreach (self::golden()['graphql'] as $case) {
+        foreach ($this->golden()['graphql'] as $case) {
             $url = GraphQlUrls::buildPageUrl(
                 $case['base_url'],
                 $case['category_ids'],
@@ -52,7 +52,7 @@ final class DiscoveryUrlsTest extends TestCase
 
     public function test_lupa_search_urls_match_python(): void
     {
-        foreach (self::golden()['lupasearch'] as $case) {
+        foreach ($this->golden()['lupasearch'] as $case) {
             $seed = LupaSearchUrls::buildSeedUrl(
                 $case['endpoint'],
                 $case['category_ids'],
@@ -100,7 +100,7 @@ final class DiscoveryUrlsTest extends TestCase
 
     public function test_ibiblioteka_urls_match_python(): void
     {
-        foreach (self::golden()['ibiblioteka_api'] as $case) {
+        foreach ($this->golden()['ibiblioteka_api'] as $case) {
             $seeds = IbibliotekaApiUrls::buildSeedUrls(
                 $case['year_from'],
                 $case['year_to'],

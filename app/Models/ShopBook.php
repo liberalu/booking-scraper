@@ -36,6 +36,9 @@ use Illuminate\Support\Carbon;
  * @property int|null $review_count
  * @property int|null $book_id
  * @property int|null $last_run_id
+ * @property int|null $created_run_id
+ * @property string|null $last_run_action
+ * @property string $match_status
  * @property Carbon $first_seen_at
  * @property Carbon $last_seen_at
  * @property Carbon|null $inactive_since
@@ -49,7 +52,7 @@ final class ShopBook extends Model
 
     use HasSqlAlchemyDefaults;
 
-    public const TIMESTAMP_DEFAULTS = ['first_seen_at', 'last_seen_at'];
+    public const array TIMESTAMP_DEFAULTS = ['first_seen_at', 'last_seen_at'];
 
     protected $attributes = [
         'in_stock' => true,

@@ -7,7 +7,7 @@ namespace Tests\Crawler;
 use App\Runs\RunEvent;
 use App\Runs\RunReconciler;
 use App\Support\Database;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 
@@ -48,7 +48,7 @@ final class RunReconcilerTest extends TestCase
             'shop_id' => $this->shopId,
             'phase' => 'scan',
             'status' => $status,
-            'started_at' => Carbon::now('UTC')->subHour(),
+            'started_at' => Date::now('UTC')->subHour(),
             'urls_processed' => 3,
             'items_added' => 0,
             'items_updated' => 0,

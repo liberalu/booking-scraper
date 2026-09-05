@@ -9,9 +9,9 @@ use PHPUnit\Framework\TestCase;
 
 final class VagaParserDifferentialTest extends TestCase
 {
-    private const FIXTURES = __DIR__.'/../fixtures';
+    private const string FIXTURES = __DIR__.'/../fixtures';
 
-    private const GOLDEN = __DIR__.'/../golden';
+    private const string GOLDEN = __DIR__.'/../golden';
 
     public function test_product_page_matches_python(): void
     {

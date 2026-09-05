@@ -27,7 +27,7 @@ final class RunLifecycle
 
     public function start(?int $urlsTotal = null): ScrapeRun
     {
-        if (! $this->scanLock->tryAcquireForSession($this->shopId, $this->phase)) {
+        if (! $this->scanLock->tryAcquireForSession($this->shopId)) {
             throw new RuntimeException(sprintf(
                 'another process is already running %s for this shop — refusing to '
                 .'start a second one (two crawls would fetch the same URLs)',
@@ -63,7 +63,7 @@ final class RunLifecycle
         $lifecycle = new self($shopId, $phase, $repository, $scanLock);
         $lifecycle->run = $run;
 
-        if (! $scanLock->tryAcquireForSession($shopId, $phase)) {
+        if (! $scanLock->tryAcquireForSession($shopId)) {
             throw new RuntimeException(
                 'another process already owns this shop+phase — refusing to adopt'
             );
@@ -87,7 +87,7 @@ final class RunLifecycle
 
     public function progress(int $processed, int $added, int $updated, int $errors): void
     {
-        if ($this->run === null) {
+        if (! $this->run instanceof ScrapeRun) {
             return;
         }
 
@@ -96,7 +96,7 @@ final class RunLifecycle
 
     public function finish(string $status = 'completed', ?string $closeReason = null): void
     {
-        if ($this->run !== null) {
+        if ($this->run instanceof ScrapeRun) {
             $this->runs->finish($this->run->id, $status, $closeReason);
         }
         $this->markCronJobRan();
@@ -123,7 +123,7 @@ final class RunLifecycle
     private function releaseLock(): void
     {
         if ($this->holdsLock) {
-            $this->scanLock->release($this->shopId, $this->phase);
+            $this->scanLock->release($this->shopId);
             $this->holdsLock = false;
         }
     }

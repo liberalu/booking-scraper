@@ -11,13 +11,13 @@ use DOMText;
 
 final class Markdown
 {
-    private const BLANKS = " \t\n\r\0\x0B\u{00A0}";
+    private const string BLANKS = " \t\n\r\0\x0B\u{00A0}";
 
-    private const BREAK = "  \n";
+    private const string BREAK = "  \n";
 
-    private const TRANSPARENT = ['div', 'span', 'u', 'body', 'html', 'font', 'small', 'sub', 'sup'];
+    private const array TRANSPARENT = ['div', 'span', 'u', 'body', 'html', 'font', 'small', 'sub', 'sup'];
 
-    private const BLOCKS = [
+    private const array BLOCKS = [
         'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote',
         'hr', 'pre', 'table', 'div',
     ];

@@ -8,12 +8,12 @@ use App\Models\Price;
 use App\Repositories\Contracts\CrawlerPersistenceRepositoryInterface;
 use Closure;
 use Illuminate\Database\Connection;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
 final class CrawlerPersistenceRepository implements CrawlerPersistenceRepositoryInterface
 {
-    private const TRACKED_FIELDS = [
+    private const array TRACKED_FIELDS = [
         'price', 'description', 'image_url', 'author', 'isbn', 'publisher',
         'year', 'format',
     ];
@@ -44,7 +44,7 @@ final class CrawlerPersistenceRepository implements CrawlerPersistenceRepository
             'price' => $price,
             'price_original' => $data['price_original'] ?? null,
             'in_stock' => (bool) ($data['in_stock'] ?? true),
-            'scraped_at' => Carbon::now('UTC'),
+            'scraped_at' => Date::now('UTC'),
             'scrape_run_id' => $runId,
         ]);
 
@@ -57,7 +57,7 @@ final class CrawlerPersistenceRepository implements CrawlerPersistenceRepository
             return;
         }
 
-        $now = Carbon::now('UTC');
+        $now = Date::now('UTC');
         $rows = [];
         foreach ($result->changes as $change) {
             $rows[] = [

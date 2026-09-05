@@ -6,12 +6,12 @@ namespace App\Runs;
 
 use App\Repositories\RunReconcilerRepository;
 
-final class RunReconciler
+final readonly class RunReconciler
 {
-    public const RETRY_CAP = RunReconcilerRepository::RETRY_CAP;
+    public const int RETRY_CAP = RunReconcilerRepository::RETRY_CAP;
 
     public function __construct(
-        private readonly RunReconcilerRepository $repository = new RunReconcilerRepository,
+        private RunReconcilerRepository $repository = new RunReconcilerRepository,
     ) {}
 
     /** @return list<array{id: int, shop: string, phase: string}> */

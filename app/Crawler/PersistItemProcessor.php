@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
+use LogicException;
 use RoachPHP\ItemPipeline\ItemInterface;
 use RoachPHP\ItemPipeline\Processors\ItemProcessorInterface;
 use RoachPHP\Support\Configurable;
 use Throwable;
+use UnexpectedValueException;
 
 /**
  * @phpstan-import-type ParsedItem from CrawlerTypes
@@ -21,7 +23,7 @@ final class PersistItemProcessor implements ItemProcessorInterface
 
     public function processItem(ItemInterface $item): ItemInterface
     {
-        if ($this->context->persister() === null) {
+        if (! $this->context->persister() instanceof Persister) {
             return $item;
         }
 
@@ -44,7 +46,7 @@ final class PersistItemProcessor implements ItemProcessorInterface
             $this->context->increment('failed');
             fwrite(STDERR, sprintf(
                 "  persist failed  %s  %s\n",
-                isset($url) ? $url : '<missing-url>',
+                $url ?? '<missing-url>',
                 $e->getMessage(),
             ));
         }
@@ -94,14 +96,14 @@ final class PersistItemProcessor implements ItemProcessorInterface
             $url,
             $parsed,
             $this->context->runId(),
-        ) ?? throw new \LogicException('crawler persistence is not configured');
+        ) ?? throw new LogicException('crawler persistence is not configured');
         $this->context->increment($result->created ? 'added' : 'updated');
     }
 
     private function requiredString(mixed $value, string $field): string
     {
         if (! is_string($value) || $value === '') {
-            throw new \UnexpectedValueException("Crawler item has no {$field}.");
+            throw new UnexpectedValueException("Crawler item has no {$field}.");
         }
 
         return $value;
