@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 $appUrl = env('APP_URL', 'http://localhost');
 $appUrl = is_string($appUrl) ? $appUrl : 'http://localhost';
 

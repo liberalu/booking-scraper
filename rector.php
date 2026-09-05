@@ -3,19 +3,15 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use RectorLaravel\Set\LaravelSetList;
 
 return RectorConfig::configure()
     ->withPaths([
-        __DIR__.'/app/DTO',
-        __DIR__.'/app/Http/Controllers',
-        __DIR__.'/app/Http/Requests',
-        __DIR__.'/app/Queries',
-        __DIR__.'/app/Services/Books',
-        __DIR__.'/app/Services/Issues',
-        __DIR__.'/app/Services/Legacy',
-        __DIR__.'/app/Services/Runs',
-        __DIR__.'/app/Services/Scheduling',
-        __DIR__.'/app/Services/Shops',
+        __DIR__.'/app',
+        __DIR__.'/bootstrap',
+        __DIR__.'/config',
+        __DIR__.'/routes',
+        __DIR__.'/tests',
     ])
     ->withPreparedSets(
         deadCode: true,
@@ -24,4 +20,8 @@ return RectorConfig::configure()
         earlyReturn: true,
     )
     ->withPhpSets(php84: true)
+    ->withSets([LaravelSetList::LARAVEL_CODE_QUALITY])
+    ->withSkip([
+        __DIR__.'/bootstrap/cache',
+    ])
     ->withImportNames(removeUnusedImports: true);

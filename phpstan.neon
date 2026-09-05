@@ -16,8 +16,6 @@ parameters:
         - bootstrap/cache
         - storage
         - vendor
-    universalObjectCratesClasses:
-        - Illuminate\Database\Eloquent\Model
     disallowedFunctionCalls:
         -
             function: dump

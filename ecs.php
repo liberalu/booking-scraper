@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use PhpCsFixer\Fixer\Import\NoUnusedImportsFixer;
+use PhpCsFixer\Fixer\Whitespace\NoExtraBlankLinesFixer;
 use SlevomatCodingStandard\Sniffs\Namespaces\UselessAliasSniff;
 use Symplify\EasyCodingStandard\Config\ECSConfig;
 
@@ -18,5 +19,6 @@ return ECSConfig::configure()
     ])
     ->withRules([
         NoUnusedImportsFixer::class,
+        NoExtraBlankLinesFixer::class,
         UselessAliasSniff::class,
     ]);
