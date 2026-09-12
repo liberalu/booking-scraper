@@ -19,7 +19,7 @@ final class CrawlerContext
 
     private CanonicalBookRepository $canonical;
 
-    private CrawlerQueueRepository $queue;
+    private readonly CrawlerQueueRepository $queue;
 
     private ?ProgressReporter $progress = null;
 
