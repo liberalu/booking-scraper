@@ -119,6 +119,27 @@ final class BookClassifier
         ];
     }
 
+    /**
+     * A listing card carries too little metadata for the full score, so a card
+     * is turned away only on positive evidence that it is not a book.
+     *
+     * @param  array<string, mixed>  $card
+     */
+    public static function rejectsListing(array $card): bool
+    {
+        if (($card['type'] ?? null) === 'non_book') {
+            return true;
+        }
+
+        foreach (self::classify($card)['reasons'] as $reason) {
+            if (str_starts_with($reason['key'], 'blocked_')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @param array<string, mixed> $data */
     public static function inferType(array $data): string
     {

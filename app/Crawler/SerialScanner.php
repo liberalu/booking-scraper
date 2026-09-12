@@ -6,6 +6,7 @@ namespace App\Crawler;
 
 use App\Repositories\CanonicalBookRepository;
 use App\Repositories\CrawlerQueueRepository;
+use App\Repositories\DiscoveredUrlRepository;
 use App\Runs\ProgressReporter;
 use App\Support\Config;
 use App\Support\ParserRegistry;
@@ -25,6 +26,7 @@ final readonly class SerialScanner
         private CanonicalBookRepository $canonical = new CanonicalBookRepository,
         private ProgressReporter $progress = new ProgressReporter,
         private CrawlerQueueRepository $queue = new CrawlerQueueRepository,
+        private DiscoveredUrlRepository $urls = new DiscoveredUrlRepository,
     ) {}
 
     /**
@@ -153,6 +155,13 @@ final readonly class SerialScanner
     {
         if ($this->runId !== null) {
             $this->queue->markFailed($this->runId, $url, $reason, $httpStatus, $detail);
+        }
+        if ($reason !== 'persist_error') {
+            try {
+                $this->urls->recordFetchFailure($this->shopId, $url, $httpStatus, $this->runId);
+            } catch (Throwable $e) {
+                fwrite(STDERR, sprintf("  failure count update failed  %s  %s\n", $url, $e->getMessage()));
+            }
         }
     }
 }

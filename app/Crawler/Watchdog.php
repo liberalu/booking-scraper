@@ -19,6 +19,8 @@ final class Watchdog
 
     private const string RESTART_ROLE = 'stall-resume';
 
+    private const float READINESS_TIMEOUT_S = 15.0;
+
     private ?int $childPid = null;
 
     private readonly string $markerPath;
@@ -66,20 +68,49 @@ final class Watchdog
 
         $this->recordActivity();
 
+        $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($sockets === false) {
+            fwrite(STDERR, "  watchdog: could not open a readiness channel — running unsupervised\n");
+
+            return false;
+        }
+        [$parentEnd, $childEnd] = $sockets;
+
         $pid = pcntl_fork();
         if ($pid === -1) {
             fwrite(STDERR, "  watchdog: fork failed — running unsupervised\n");
+            fclose($parentEnd);
+            fclose($childEnd);
 
             return false;
         }
         if ($pid > 0) {
+            fclose($childEnd);
+            $ready = $this->awaitReadiness($parentEnd);
+            fclose($parentEnd);
+            if (! $ready) {
+                pcntl_waitpid($pid, $status);
+                fwrite(STDERR, "  watchdog: child did not report ready — running unsupervised\n");
+
+                return false;
+            }
             $this->childPid = $pid;
 
             return true;
         }
 
-        $this->supervise(posix_getppid());
+        fclose($parentEnd);
+        $this->supervise(posix_getppid(), $childEnd);
         $this->exitWithoutDestructors();
+    }
+
+    /** @param resource $channel */
+    private function awaitReadiness($channel): bool
+    {
+        stream_set_timeout($channel, (int) ceil(self::READINESS_TIMEOUT_S));
+        $line = fgets($channel);
+
+        return is_string($line) && trim($line) === 'ready';
     }
 
     private function exitWithoutDestructors(): never
@@ -102,16 +133,20 @@ final class Watchdog
         @unlink($this->markerPath);
     }
 
-    private function supervise(int $parentPid): void
+    /** @param resource $readiness */
+    private function supervise(int $parentPid, $readiness): void
     {
-
         try {
             $this->runs->connect($this->dsn);
         } catch (Throwable $e) {
             fwrite(STDERR, "  watchdog: cannot connect ({$e->getMessage()})\n");
+            fwrite($readiness, "failed\n");
+            fclose($readiness);
 
             return;
         }
+        fwrite($readiness, "ready\n");
+        fclose($readiness);
 
         $this->supervising = true;
         pcntl_signal(SIGTERM, function (): void {

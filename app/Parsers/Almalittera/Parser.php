@@ -21,6 +21,11 @@ final class Parser implements DiscoveryParser, ProductParser
 
     private const array AUDIO_TYPES = ['MP3', 'AUDIOBOOK'];
 
+    private const array NON_BOOK_MARKERS = [
+        'zaisl', 'zaidim', 'delion', 'sasiuvin', 'kortel', 'zemelap', 'rastin',
+        'kalendor', 'atviruk', 'hobio', 'popier', 'lavinam', 'dovan', 'puodel',
+    ];
+
     /** @return list<string> */
     public static function parseSitemapUrls(string $xml, ?callable $fetchChild = null): array
     {
@@ -238,8 +243,26 @@ final class Parser implements DiscoveryParser, ProductParser
         if (in_array($type, self::AUDIO_TYPES, true) || in_array('MP3', $tagSet, true)) {
             return 'audio';
         }
+        foreach ([$type, ...$tagSet] as $label) {
+            $folded = self::foldAscii($label);
+            foreach (self::NON_BOOK_MARKERS as $marker) {
+                if (str_contains($folded, $marker)) {
+                    return 'non_book';
+                }
+            }
+        }
 
         return 'book';
+    }
+
+    private static function foldAscii(string $value): string
+    {
+        $lower = mb_strtolower($value, 'UTF-8');
+
+        return strtr($lower, [
+            'ą' => 'a', 'č' => 'c', 'ę' => 'e', 'ė' => 'e', 'į' => 'i',
+            'š' => 's', 'ų' => 'u', 'ū' => 'u', 'ž' => 'z',
+        ]);
     }
 
     /** @return list<string> */

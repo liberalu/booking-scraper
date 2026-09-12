@@ -28,7 +28,7 @@ final class RunLifecycle
 
     public function start(?int $urlsTotal = null): ScrapeRun
     {
-        if (! $this->scanLock->tryAcquireForSession($this->shopId)) {
+        if (! $this->scanLock->tryAcquireForSession($this->shopId, $this->isPostPhase())) {
             throw new RuntimeException(sprintf(
                 'another process is already running %s for this shop — refusing to '
                 .'start a second one (two crawls would fetch the same URLs)',
@@ -39,8 +39,19 @@ final class RunLifecycle
 
         $run = $this->runs->start($this->shopId, $this->phase, $urlsTotal);
         $this->run = $run;
+        $this->markCronJobRan();
 
         return $run;
+    }
+
+    public static function isCrawlPhase(string $phase): bool
+    {
+        return $phase === 'scan' || str_starts_with($phase, 'discover_');
+    }
+
+    private function isPostPhase(): bool
+    {
+        return ! self::isCrawlPhase($this->phase);
     }
 
     public function id(): ?int
@@ -104,7 +115,6 @@ final class RunLifecycle
         if ($this->run instanceof ScrapeRun) {
             $this->runs->finish($this->run->id, $status, $closeReason);
         }
-        $this->markCronJobRan();
         $this->releaseLock();
     }
 
@@ -128,7 +138,7 @@ final class RunLifecycle
     private function releaseLock(): void
     {
         if ($this->holdsLock) {
-            $this->scanLock->release($this->shopId);
+            $this->scanLock->release($this->shopId, $this->isPostPhase());
             $this->holdsLock = false;
         }
     }

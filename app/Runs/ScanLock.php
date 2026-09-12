@@ -17,18 +17,18 @@ final readonly class ScanLock
         return $this->repository->tryAcquire($shopId);
     }
 
-    public function tryAcquireForSession(int $shopId): bool
+    public function tryAcquireForSession(int $shopId, bool $postPhase = false): bool
     {
-        return $this->repository->tryAcquireForSession($shopId);
+        return $this->repository->tryAcquireForSession($shopId, $postPhase);
     }
 
-    public function release(int $shopId): bool
+    public function release(int $shopId, bool $postPhase = false): bool
     {
-        return $this->repository->release($shopId);
+        return $this->repository->release($shopId, $postPhase);
     }
 
-    public function key(): int
+    public function key(bool $postPhase = false): int
     {
-        return $this->repository->key();
+        return $this->repository->key($postPhase);
     }
 }

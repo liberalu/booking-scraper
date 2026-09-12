@@ -104,6 +104,43 @@ final class DiscoverEmitTest extends TestCase
         self::assertSame('url', $items[0]['kind']);
     }
 
+    public function test_a_card_that_looks_like_a_toy_records_its_url_but_no_book(): void
+    {
+        $items = $this->emit($this->spider(), [[
+            'url' => 'https://vaga.lt/stalo-zaidimas-monopolis',
+            'title' => 'Stalo žaidimas Monopolis',
+            'price' => '29.99',
+        ]]);
+
+        self::assertCount(1, $items);
+        self::assertSame('url', $items[0]['kind']);
+    }
+
+    public function test_a_card_typed_non_book_by_its_parser_records_its_url_but_no_book(): void
+    {
+        $items = $this->emit($this->spider(), [[
+            'url' => 'https://vaga.lt/sasiuvinis',
+            'title' => 'Sąsiuvinis A5',
+            'price' => '2.50',
+            'type' => 'non_book',
+        ]]);
+
+        self::assertCount(1, $items);
+        self::assertSame('url', $items[0]['kind']);
+    }
+
+    public function test_a_sparse_book_card_is_still_a_book(): void
+    {
+        $items = $this->emit($this->spider(), [[
+            'url' => 'https://vaga.lt/romanas',
+            'title' => 'Romanas',
+            'price' => '12.00',
+        ]]);
+
+        self::assertCount(2, $items, 'a listing card without ISBN or author must not be turned away');
+        self::assertSame('book', $items[1]['kind']);
+    }
+
     public function test_rows_without_a_url_are_skipped_entirely(): void
     {
         self::assertSame([], $this->emit($this->spider(), [

@@ -77,11 +77,14 @@ final class DiscoveredUrlRepository
             if ($existing->shop_book_id !== $shopBookId) {
                 $existing->shop_book_id = $shopBookId;
             }
-            if ($existing->url_type === 'unknown') {
+            if ($existing->url_type === 'unknown' || $existing->url_type === 'unreachable') {
                 $existing->url_type = $targetType;
             } elseif ($existing->url_type === 'product_partial' && ! $isPartial) {
                 $existing->url_type = 'product';
             }
+            $existing->fail_count = 0;
+            $existing->last_checked_at = $now;
+            $existing->last_http_status = 200;
             $existing->last_seen_at = $now;
             if ($runId !== null) {
                 $existing->last_seen_run_id = $runId;
@@ -128,6 +131,7 @@ final class DiscoveredUrlRepository
         if ($row->url_type !== 'product') {
             $row->url_type = 'non_product';
         }
+        $row->fail_count = 0;
         $row->last_checked_at = $now;
         $row->last_seen_at = $now;
         $row->last_http_status = 200;
@@ -145,6 +149,49 @@ final class DiscoveredUrlRepository
                 'classified_at' => $now,
             ]
         );
+
+        return $row;
+    }
+
+    public const int UNREACHABLE_AFTER_FAILURES = 3;
+
+    public function recordFetchFailure(
+        int $shopId,
+        string $url,
+        ?int $httpStatus = null,
+        ?int $runId = null,
+    ): ?DiscoveredUrl {
+        $normalized = UrlUtils::normalize($url);
+        $now = Date::now('UTC');
+
+        $row = DiscoveredUrl::where('shop_id', $shopId)
+            ->where('normalized_url', $normalized)
+            ->first();
+        if ($row === null) {
+            return null;
+        }
+
+        $row->fail_count++;
+        $row->last_checked_at = $now;
+        if ($httpStatus !== null) {
+            $row->last_http_status = $httpStatus;
+        }
+        if ($runId !== null) {
+            $row->last_seen_run_id = $runId;
+        }
+
+        $promoted = $row->fail_count >= self::UNREACHABLE_AFTER_FAILURES
+            && ! in_array($row->url_type, ['non_product', 'unreachable'], true);
+        if ($promoted) {
+            $row->url_type = 'unreachable';
+        }
+        $row->save();
+
+        if ($promoted && $row->shop_book_id !== null) {
+            ShopBook::whereKey($row->shop_book_id)
+                ->where('is_active', true)
+                ->update(['is_active' => false, 'inactive_since' => $now]);
+        }
 
         return $row;
     }

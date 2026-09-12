@@ -277,6 +277,23 @@ final class WatchdogTest extends TestCase
         self::assertNull($spawned['adoptRunId'] ?? null);
     }
 
+    public function test_a_child_that_cannot_connect_is_reported_not_assumed(): void
+    {
+        $runId = $this->makeRun();
+        $watchdog = new Watchdog(
+            runId: $runId,
+            shop: 'watchdog-test',
+            phase: 'scan',
+            stallTimeout: 3600,
+            heartbeatInterval: 0.3,
+            dsn: 'postgresql://postgres:postgres@127.0.0.1:1/nowhere',
+        );
+
+        self::assertFalse($watchdog->start(), 'a child without a database cannot heartbeat, so the run is unsupervised');
+
+        $watchdog->stop();
+    }
+
     public function test_the_marker_file_is_cleaned_up(): void
     {
         $runId = $this->makeRun();
