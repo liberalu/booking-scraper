@@ -7,6 +7,9 @@ namespace Tests\Unit;
 use App\Services\ValidateService;
 use App\Support\IssueMetadata;
 use PHPUnit\Framework\TestCase;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 
 final class IssueMetadataTest extends TestCase
 {
@@ -46,9 +49,9 @@ final class IssueMetadataTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $files = glob($root.'/bin/*') ?: [];
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root.'/app'));
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/app'));
         foreach ($iterator as $file) {
-            if ($file instanceof \SplFileInfo && $file->getExtension() === 'php') {
+            if ($file instanceof SplFileInfo && $file->getExtension() === 'php') {
                 $files[] = $file->getPathname();
             }
         }
