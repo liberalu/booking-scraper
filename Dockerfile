@@ -45,7 +45,10 @@ RUN set -eux; \
 
 RUN composer dump-autoload --no-dev --optimize
 
-ENV SPAWN_LOG_DIR=/var/log/scrapy_runs
+ENV SPAWN_LOG_DIR=/var/log/scrapy_runs \
+    SESSION_DRIVER=file \
+    CACHE_STORE=file \
+    QUEUE_CONNECTION=sync
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-production.ini /usr/local/etc/php/conf.d/production.ini

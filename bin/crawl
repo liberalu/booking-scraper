@@ -162,6 +162,21 @@ function recordDiscoverCloseIssues(
     }
 }
 
+function enqueueBatches(
+    CrawlerQueueRepository $queue,
+    int $runId,
+    int $shopId,
+    iterable $batches,
+    bool $enqueue,
+): Generator {
+    foreach ($batches as $batch) {
+        if ($enqueue) {
+            $queue->enqueue($runId, $shopId, $batch);
+        }
+        yield $batch;
+    }
+}
+
 function startWatchdog(
     CrawlerContext $crawler,
     int $runId,
@@ -169,6 +184,7 @@ function startWatchdog(
     string $phase,
     float $stallTimeout,
     RunFailsafe $failsafe,
+    string $strategy = '',
 ): Watchdog
 {
     $watchdog = new Watchdog(
@@ -180,6 +196,7 @@ function startWatchdog(
         maxResumeAttempts: (int) (getenv('STALL_AUTO_RESUME_MAX') ?: 10),
         dsn: App\Support\Database::bootedDsn(),
         failsafe: $failsafe,
+        strategy: $strategy,
     );
     $crawler->bindWatchdog($watchdog);
     installTerminationHandler($runId, static fn () => $watchdog->stop(), $failsafe);
@@ -426,6 +443,7 @@ if ($command === 'discover') {
         'discover',
         $stallTimeout,
         $failsafe,
+        $strategy,
     );
 
     Roach::useContainer(new RoachContainer(
@@ -531,7 +549,7 @@ if ($adoptRunId !== null) {
 $lifecycle = null;
 $run = null;
 if ($resumable !== null) {
-    $lifecycle = RunLifecycle::adopt((int) $resumable->id);
+    $lifecycle = RunLifecycle::adopt((int) $resumable->id, (float) (getenv('ADOPT_LOCK_WAIT_S') ?: 60));
     $run = $lifecycle->run()
         ?? throw new RuntimeException('adopted lifecycle has no run');
     $urlCount = $queue->pendingRunUrlCount($run->id, $maxUrls);
@@ -658,7 +676,7 @@ if ($config->flaresolverr() !== null) {
             $run->id,
             $watchdog,
             progress: $progress,
-        ))->run(flattenBatches($urlBatches));
+        ))->run(flattenBatches(enqueueBatches($queue, $run->id, $shop->id, $urlBatches, $resumable === null)));
 
         $lifecycle->progress(
             processed: $tally['added'] + $tally['updated'] + $tally['non_product']
@@ -718,11 +736,12 @@ Roach::useContainer(new RoachContainer(
 ));
 
 try {
-    foreach ($urlBatches as $urlBatch) {
+    foreach (enqueueBatches($queue, $run->id, $shop->id, $urlBatches, $resumable === null) as $urlBatch) {
+        $queue->claim($run->id, $urlBatch);
         Roach::startSpider(
             ScanSpider::class,
             new Overrides(concurrency: $config->concurrency()),
-            ['shop' => $shopName, 'urls' => $urlBatch],
+            ['shop' => $shopName, 'urls' => $urlBatch, 'base_url' => $config->baseUrl()],
         );
     }
 

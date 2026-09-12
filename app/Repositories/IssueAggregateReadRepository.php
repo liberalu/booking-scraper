@@ -105,8 +105,10 @@ final class IssueAggregateReadRepository
             ->where('sr.started_at', '>=', $start)
             ->groupBy('vi.issue', DB::raw('cast(sr.started_at as date)'));
 
-        if ($state !== '') {
+        if (in_array($state, ['new', 'acknowledged', 'snoozed', 'resolved'], true)) {
             $query->where('vi.lifecycle_state', $state);
+        } elseif ($state === 'open') {
+            $query->where('vi.lifecycle_state', 'new');
         }
 
         $byKey = [];

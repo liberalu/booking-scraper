@@ -1,5 +1,6 @@
 PHP := /opt/homebrew/opt/php@8.4/bin/php
 COMPOSER := $(PHP) $(shell which composer)
+unexport COMPOSER
 
 CLEAR_PROXY := HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy=""
 
@@ -32,7 +33,8 @@ syntax:
 cache-check:
 	$(PHP) artisan config:cache --no-ansi
 	$(PHP) artisan route:cache --no-ansi
-	$(PHP) artisan optimize:clear --no-ansi
+	$(PHP) artisan config:clear --no-ansi
+	$(PHP) artisan route:clear --no-ansi
 
 lint: syntax cache-check
 	$(COMPOSER) lint

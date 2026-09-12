@@ -96,6 +96,7 @@ final readonly class RoachContainer implements ContainerInterface
             fn (): ClientInterface => new RecordingClient(
                 new RoachClient($this->httpClient()),
                 $this->crawler->issues(),
+                $this->crawler,
             ),
         );
 

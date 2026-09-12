@@ -18,7 +18,7 @@ final class ShopBookQueryRequest extends ApiFormRequest
             'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
             'search' => ['sometimes', 'nullable', 'string', 'max:500'],
             'category' => ['sometimes', 'nullable', 'string', 'max:500'],
-            'type_filter' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'type_filter' => ['sometimes', 'nullable', 'string', Rule::in(['all', 'book', 'audio', 'ebook', 'non_book'])],
             'format_filter' => ['sometimes', 'nullable', 'string', 'max:100'],
             'missing_field' => ['sometimes', 'nullable', 'string', Rule::in(['any', 'title', 'author', 'isbn', 'publisher', 'year', 'price', 'format', 'image_url'])],
             'active' => ['sometimes', 'nullable', 'string', Rule::in(['true', 'false', 'all'])],
