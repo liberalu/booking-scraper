@@ -14,6 +14,7 @@ final readonly class RecordingClient implements ClientInterface
     public function __construct(
         private ClientInterface $inner,
         private IssueBuffer $issues = new IssueBuffer,
+        private ?CrawlerContext $context = null,
     ) {}
 
     public function pool(
@@ -26,14 +27,34 @@ final readonly class RecordingClient implements ClientInterface
             $onFulfilled,
             $onRejected ?? function (RequestException $exception): void {
                 $request = $exception->getRequest();
+                $detail = $this->detail($exception);
                 $this->issues->add(
                     'discover_fetch_failed',
                     'url',
                     $request->getUri(),
-                    $this->detail($exception),
+                    $detail,
                 );
+                if ($this->context instanceof CrawlerContext) {
+                    $status = $this->httpStatus($exception);
+                    $this->context->increment('failed');
+                    $this->context->markFetchFailed(
+                        $request->getUri(),
+                        $status === null ? 'transport_error' : "http_{$status}",
+                        $status,
+                        $detail,
+                    );
+                }
             },
         );
+    }
+
+    private function httpStatus(RequestException $exception): ?int
+    {
+        $previous = $exception->getPrevious();
+
+        return $previous instanceof BadResponseException
+            ? $previous->getResponse()->getStatusCode()
+            : null;
     }
 
     private function detail(RequestException $exception): string

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Crawler;
 
 use App\Repositories\CanonicalBookRepository;
+use App\Repositories\CrawlerQueueRepository;
 use App\Repositories\DiscoveredUrlRepository;
 use App\Runs\ProgressReporter;
 use InvalidArgumentException;
+use Throwable;
 
 final class CrawlerContext
 {
@@ -16,6 +18,8 @@ final class CrawlerContext
     private DiscoveredUrlRepository $urls;
 
     private CanonicalBookRepository $canonical;
+
+    private CrawlerQueueRepository $queue;
 
     private ?ProgressReporter $progress = null;
 
@@ -46,6 +50,7 @@ final class CrawlerContext
     {
         $this->urls = new DiscoveredUrlRepository;
         $this->canonical = new CanonicalBookRepository;
+        $this->queue = new CrawlerQueueRepository;
         $this->reset();
     }
 
@@ -137,6 +142,32 @@ final class CrawlerContext
     public function runId(): ?int
     {
         return $this->runId;
+    }
+
+    public function markFetched(string $url, ?int $httpStatus = null, ?int $responseBytes = null): void
+    {
+        if ($this->runId === null) {
+            return;
+        }
+
+        try {
+            $this->queue->markDone($this->runId, $url, $httpStatus, $responseBytes);
+        } catch (Throwable $e) {
+            fwrite(STDERR, sprintf("  queue update failed  %s  %s\n", $url, $e->getMessage()));
+        }
+    }
+
+    public function markFetchFailed(string $url, string $reason, ?int $httpStatus = null, ?string $detail = null): void
+    {
+        if ($this->runId === null) {
+            return;
+        }
+
+        try {
+            $this->queue->markFailed($this->runId, $url, $reason, $httpStatus, $detail);
+        } catch (Throwable $e) {
+            fwrite(STDERR, sprintf("  queue update failed  %s  %s\n", $url, $e->getMessage()));
+        }
     }
 
     public function bindWatchdog(?Watchdog $watchdog): void

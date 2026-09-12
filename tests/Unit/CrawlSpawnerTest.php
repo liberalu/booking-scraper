@@ -76,7 +76,7 @@ final class CrawlSpawnerTest extends TestCase
 
         self::assertContains('--adopt-run-id=42', $command);
         self::assertNotContains('--mode=full', $command);
-        self::assertNotContains('--max-urls=0', $command);
+        self::assertContains('--max-urls=0', $command, 'an adopted queue is never capped at the dev default');
     }
 
     public function test_non_scan_phase_cannot_adopt_a_queue(): void

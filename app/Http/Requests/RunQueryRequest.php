@@ -9,16 +9,21 @@ use Illuminate\Validation\Rule;
 
 final class RunQueryRequest extends ApiFormRequest
 {
+    private const array RUN_STATUSES = ['all', 'running', 'paused', 'stopping', 'completed', 'failed'];
+
+    private const array URL_ITEM_STATUSES = ['all', 'pending', 'processing', 'done', 'failed'];
+
     /** @return array<string, list<mixed>> */
     public function rules(): array
     {
+        $statuses = $this->route()?->hasParameter('run') === true
+            ? self::URL_ITEM_STATUSES
+            : self::RUN_STATUSES;
+
         return [
             'shop' => ['sometimes', 'nullable', 'string', 'max:100', 'exists:shops,name'],
             'phase' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'status' => ['sometimes', 'nullable', 'string', Rule::in([
-                'all', 'running', 'paused', 'stopping', 'completed', 'failed',
-                'pending', 'processing', 'done',
-            ])],
+            'status' => ['sometimes', 'nullable', 'string', Rule::in($statuses)],
             'when' => ['sometimes', 'nullable', 'string', Rule::in(['any', 'today', '24h', '7d', '30d'])],
             'q' => ['sometimes', 'nullable', 'string', 'max:500'],
             'page' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],

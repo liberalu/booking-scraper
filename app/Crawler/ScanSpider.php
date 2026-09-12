@@ -115,6 +115,7 @@ final class ScanSpider extends BasicSpider
 
         $parser = $this->parser();
         $body = $response->getBody();
+        $this->crawler->markFetched($url, $response->getStatus(), strlen($body));
 
         if (strlen($body) < 1024) {
             $this->crawler->issues()->add('empty_response', 'response', $url, 'len='.strlen($body));

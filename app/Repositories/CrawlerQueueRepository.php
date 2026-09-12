@@ -27,6 +27,121 @@ final class CrawlerQueueRepository
             ->all());
     }
 
+    /** @param iterable<string> $urls */
+    public function enqueue(int $runId, int $shopId, iterable $urls): int
+    {
+        $inserted = 0;
+        foreach ($this->batches($this->asRows($urls), 500) as $chunk) {
+            $known = [];
+            foreach (DB::table('discovered_urls')
+                ->where('shop_id', $shopId)
+                ->whereIn('url', $chunk)
+                ->get(['id', 'url', 'url_type']) as $raw) {
+                $row = DatabaseRow::from($raw);
+                $known[$row->string('url')] = [
+                    'id' => $row->int('id'),
+                    'url_type' => $row->nullableString('url_type') ?? 'product',
+                ];
+            }
+
+            $now = Date::now('UTC');
+            $rows = [];
+            foreach ($chunk as $url) {
+                $rows[] = [
+                    'run_id' => $runId,
+                    'shop_id' => $shopId,
+                    'discovered_url_id' => $known[$url]['id'] ?? null,
+                    'url' => $url,
+                    'url_type' => $known[$url]['url_type'] ?? 'product',
+                    'status' => 'pending',
+                    'created_at' => $now,
+                ];
+            }
+            $inserted += DB::table('scrape_url_items')->insertOrIgnore($rows);
+        }
+
+        return $inserted;
+    }
+
+    /** @param list<string> $urls */
+    public function claim(int $runId, array $urls): int
+    {
+        $claimed = 0;
+        foreach (array_chunk($urls, 500) as $chunk) {
+            $claimed += DB::table('scrape_url_items')
+                ->where('run_id', $runId)
+                ->whereIn('url', $chunk)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'processing',
+                    'claimed_at' => Date::now('UTC'),
+                    'attempts' => DB::raw('attempts + 1'),
+                ]);
+        }
+
+        return $claimed;
+    }
+
+    public function markDone(int $runId, string $url, ?int $httpStatus = null, ?int $responseBytes = null): bool
+    {
+        $fields = ['status' => 'done', 'done_at' => Date::now('UTC')];
+        if ($httpStatus !== null) {
+            $fields['http_status'] = $httpStatus;
+        }
+        if ($responseBytes !== null) {
+            $fields['response_bytes'] = $responseBytes;
+        }
+
+        return DB::table('scrape_url_items')
+            ->where('run_id', $runId)
+            ->where('url', $url)
+            ->whereIn('status', ['pending', 'processing'])
+            ->update($fields) > 0;
+    }
+
+    public function markFailed(
+        int $runId,
+        string $url,
+        string $reason,
+        ?int $httpStatus = null,
+        ?string $detail = null,
+    ): bool {
+        return DB::transaction(function () use ($runId, $url, $reason, $httpStatus, $detail): bool {
+            $item = DB::table('scrape_url_items')
+                ->where('run_id', $runId)
+                ->where('url', $url)
+                ->whereIn('status', ['pending', 'processing', 'done'])
+                ->lockForUpdate()
+                ->first(['id', 'shop_id', 'discovered_url_id']);
+            if ($item === null) {
+                return false;
+            }
+
+            $row = DatabaseRow::from($item);
+            $now = Date::now('UTC');
+            $fields = ['status' => 'failed', 'done_at' => $now];
+            if ($httpStatus !== null) {
+                $fields['http_status'] = $httpStatus;
+            }
+            DB::table('scrape_url_items')->where('id', $row->int('id'))->update($fields);
+
+            DB::table('scrape_failures')->insert([
+                'scrape_url_item_id' => $row->int('id'),
+                'run_id' => $runId,
+                'shop_id' => $row->int('shop_id'),
+                'url' => $url,
+                'discovered_url_id' => $row->nullableInt('discovered_url_id'),
+                'occurred_at' => $now,
+                'error_reason' => $reason,
+                'http_status' => $httpStatus,
+                'error_detail' => $detail === null ? null : mb_substr($detail, 0, 500),
+                'lifecycle_state' => 'new',
+            ]);
+
+            return true;
+        });
+    }
+
     /** @return list<string> */
     public function pendingRunUrls(int $runId): array
     {
@@ -129,6 +244,17 @@ final class CrawlerQueueRepository
         }
         if ($batch !== []) {
             yield $batch;
+        }
+    }
+
+    /**
+     * @param  iterable<string>  $urls
+     * @return Generator<int, array{url: string}, mixed, void>
+     */
+    private function asRows(iterable $urls): Generator
+    {
+        foreach ($urls as $url) {
+            yield ['url' => $url];
         }
     }
 

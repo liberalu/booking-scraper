@@ -98,6 +98,7 @@ final class CrawlSpawner implements RunLauncher
         if ($request->phase === RunPhase::Scan) {
             if ($request->adoptRunId !== null) {
                 $cmd[] = "--adopt-run-id={$request->adoptRunId}";
+                $cmd[] = '--max-urls=0';
             } elseif ($request->urlsFile !== null) {
                 $cmd[] = "--urls-file={$request->urlsFile}";
             } elseif ($request->mode === 'full') {
@@ -226,6 +227,11 @@ final class CrawlSpawner implements RunLauncher
 
     private function databaseUrl(): string
     {
+        $booted = Database::bootedDsn();
+        if ($booted !== null) {
+            return $booted;
+        }
+
         $connection = config('database.default');
         if (! is_string($connection) || $connection === '') {
             throw new RuntimeException('The default database connection is not configured.');

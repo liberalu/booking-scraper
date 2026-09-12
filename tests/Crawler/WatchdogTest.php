@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Tests\Crawler;
 
 use App\Crawler\Watchdog;
+use App\Runs\RunEvent;
 use App\Support\Database;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 use PHPUnit\Framework\TestCase;
+use Tests\Support\RecordingLauncher;
 
 final class WatchdogTest extends TestCase
 {
@@ -174,6 +176,105 @@ final class WatchdogTest extends TestCase
         $watchdog->stop();
 
         self::assertSame($before, $this->heartbeat($runId), 'kept ticking a terminal run');
+    }
+
+    public function test_the_child_leaves_the_parent_connection_and_lock_intact(): void
+    {
+        $runId = $this->makeRun();
+        $backendBefore = DB::selectOne('select pg_backend_pid() as pid')->pid;
+        self::assertTrue((bool) DB::selectOne('select pg_try_advisory_lock(424242, 1) as locked')->locked);
+
+        $watchdog = new Watchdog(
+            runId: $runId,
+            shop: 'watchdog-test',
+            phase: 'scan',
+            stallTimeout: 3600,
+            heartbeatInterval: 0.3,
+        );
+        self::assertTrue($watchdog->start());
+        Sleep::usleep(700_000);
+        $watchdog->stop();
+
+        self::assertSame(
+            $backendBefore,
+            DB::selectOne('select pg_backend_pid() as pid')->pid,
+            'the child closed the connection it shared with the parent',
+        );
+        self::assertTrue(
+            (bool) DB::selectOne('select pg_advisory_unlock(424242, 1) as released')->released,
+            'the session lock was lost with the connection',
+        );
+    }
+
+    public function test_a_stalled_scan_is_restarted_by_adopting_its_own_queue(): void
+    {
+        $runId = $this->makeRun();
+        $record = tempnam(sys_get_temp_dir(), 'watchdog-spawn-');
+        self::assertIsString($record);
+        pcntl_signal(SIGTERM, static function (): void {});
+
+        $watchdog = new Watchdog(
+            runId: $runId,
+            shop: 'watchdog-test',
+            phase: 'scan',
+            stallTimeout: 1,
+            heartbeatInterval: 0.4,
+            maxResumeAttempts: 3,
+            launcher: new RecordingLauncher($record),
+        );
+        self::assertTrue($watchdog->start());
+        for ($i = 0; $i < 25; $i++) {
+            Sleep::usleep(100_000);
+            pcntl_signal_dispatch();
+        }
+        $watchdog->stop();
+        pcntl_signal(SIGTERM, SIG_DFL);
+
+        $spawned = json_decode((string) file_get_contents($record), true);
+        @unlink($record);
+        self::assertSame([
+            'phase' => 'scan',
+            'shop' => 'watchdog-test',
+            'strategy' => '',
+            'role' => 'stall-resume',
+            'adoptRunId' => $runId,
+        ], $spawned);
+        self::assertSame(
+            1,
+            DB::table('scrape_run_events')->where('run_id', $runId)->where('event_type', RunEvent::RESTARTED)->count(),
+        );
+    }
+
+    public function test_a_stalled_discover_is_restarted_with_its_strategy(): void
+    {
+        $runId = $this->makeRun();
+        $record = tempnam(sys_get_temp_dir(), 'watchdog-spawn-');
+        self::assertIsString($record);
+        pcntl_signal(SIGTERM, static function (): void {});
+
+        $watchdog = new Watchdog(
+            runId: $runId,
+            shop: 'watchdog-test',
+            phase: 'discover',
+            stallTimeout: 1,
+            heartbeatInterval: 0.4,
+            maxResumeAttempts: 3,
+            strategy: 'categories',
+            launcher: new RecordingLauncher($record),
+        );
+        self::assertTrue($watchdog->start());
+        for ($i = 0; $i < 25; $i++) {
+            Sleep::usleep(100_000);
+            pcntl_signal_dispatch();
+        }
+        $watchdog->stop();
+        pcntl_signal(SIGTERM, SIG_DFL);
+
+        $spawned = json_decode((string) file_get_contents($record), true);
+        @unlink($record);
+        self::assertSame('discover', $spawned['phase'] ?? null);
+        self::assertSame('categories', $spawned['strategy'] ?? null);
+        self::assertNull($spawned['adoptRunId'] ?? null);
     }
 
     public function test_the_marker_file_is_cleaned_up(): void

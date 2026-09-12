@@ -153,8 +153,9 @@ On stall:
 
 1. Run flipped to `failed` with `resumable_after_failure=True` + `close_reason=stall_timeout`.
 2. `RunFailsafe::finalize()` writes that from the child, on its own connection — the parent may be wedged.
-3. The replacement process inherits the queue, which also resets retryable failures (`run_aborted` / `stuck_in_processing` / `subdivision_5xx`) to pending. `RunReconciler::RETRY_CAP` is 3.
-4. Chain depth is tracked via `resumed_after_failure` events in `scrape_run_events`. Capped at `STALL_AUTO_RESUME_MAX` (default 10). When the cap hits, the run stays `failed` and waits for an operator click on Continue.
+3. The watchdog child spawns the replacement through `CrawlSpawner` (role `stall-resume`, log under `SPAWN_LOG_DIR`): a scan is restarted with `--adopt-run-id`, a discover with its own `--strategy`. The child ends itself with SIGKILL rather than `exit()` so the PDO handle it inherited from the parent is never closed underneath it — that closure used to drop the parent's session lock.
+4. A scan writes its work list to `scrape_url_items` as it goes (`pending` → `processing` per batch → `done` / `failed`, with a `scrape_failures` row per failure), so the replacement inherits the queue. Adoption waits up to `ADOPT_LOCK_WAIT_S` (default 60) for the dying parent to release the shop lock, then resets retryable failures (`run_aborted` / `stuck_in_processing` / `subdivision_5xx`) to pending. `RunReconciler::RETRY_CAP` is 3.
+5. Chain depth is tracked via `restarted` events in `scrape_run_events`. Capped at `STALL_AUTO_RESUME_MAX` (default 10). When the cap hits, the run stays `failed` and waits for an operator click on Continue.
 
 Adaptive subdivision: when a `discover_graphql` page returns 5xx, the spider reschedules the failed range as N smaller pageSize requests (`subdivide_factor` in the shop config, default 5). The depth=1 sub-page carries `_sub=1` in its URL so it can't recurse. Each subdivision is logged as a `subdivided` row on `scrape_run_events` (renders as ⊟ in the dashboard's Timeline card).
 

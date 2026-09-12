@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
+use App\Contracts\RunLauncher;
 use App\Repositories\WatchdogRepository;
 use App\Runs\RunFailsafe;
+use App\Runs\RunLaunchRequest;
+use App\Runs\RunPhase;
+use App\Support\CrawlSpawner;
 use Illuminate\Support\Sleep;
 use Throwable;
 
 final class Watchdog
 {
     private const array TICKING_STATUSES = ['running', 'paused'];
+
+    private const string RESTART_ROLE = 'stall-resume';
 
     private ?int $childPid = null;
 
@@ -32,6 +38,8 @@ final class Watchdog
         private readonly ?string $dsn = null,
         private readonly RunFailsafe $failsafe = new RunFailsafe,
         private readonly WatchdogRepository $runs = new WatchdogRepository,
+        private readonly string $strategy = '',
+        private readonly RunLauncher $launcher = new CrawlSpawner,
     ) {
         $this->markerPath = $markerPath
             ?? sys_get_temp_dir()."/book-scraper-activity-{$runId}-".getmypid();
@@ -71,6 +79,12 @@ final class Watchdog
         }
 
         $this->supervise(posix_getppid());
+        $this->exitWithoutDestructors();
+    }
+
+    private function exitWithoutDestructors(): never
+    {
+        posix_kill(posix_getpid(), SIGKILL);
         exit(0);
     }
 
@@ -228,21 +242,27 @@ final class Watchdog
 
     private function spawnReplacement(int $attempt): void
     {
-        $binary = PHP_BINARY;
-        $artisan = dirname(__DIR__, 2).'/artisan';
+        $request = $this->phase === 'scan'
+            ? new RunLaunchRequest(
+                phase: RunPhase::Scan,
+                shop: $this->shop,
+                role: self::RESTART_ROLE,
+                adoptRunId: $this->runId,
+            )
+            : new RunLaunchRequest(
+                phase: RunPhase::Discover,
+                shop: $this->shop,
+                strategy: $this->strategy,
+                role: self::RESTART_ROLE,
+            );
 
-        $command = sprintf(
-            '%s %s crawler:run %s --shop=%s --resumed-attempt=%d',
-            escapeshellarg($binary),
-            escapeshellarg($artisan),
-            escapeshellarg($this->phase),
-            escapeshellarg($this->shop),
-            $attempt
-        );
-
-        $detached = sprintf('nohup %s > /dev/null 2>&1 &', $command);
-        fwrite(STDERR, "  watchdog: restarting — attempt {$attempt}\n");
-        exec($detached);
+        $spawned = $this->launcher->spawnRequest($request);
+        fwrite(STDERR, sprintf(
+            "  watchdog: restarting — attempt %d, pid %s, log %s\n",
+            $attempt,
+            $spawned['pid'] ?? '?',
+            $spawned['log'],
+        ));
     }
 
     private function interruptibleSleep(float $seconds): void

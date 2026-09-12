@@ -6,8 +6,14 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 app_root="$(cd "$here/.." && pwd)"
 . "$here/pg_client.sh"
 
-PHP_BIN="${PHP_BIN:-/opt/homebrew/opt/php@8.4/bin/php}"
-REFERENCE_DATABASE_URL="${REFERENCE_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/book_scraper}"
+if [ -z "${PHP_BIN:-}" ]; then
+    if [ -x /opt/homebrew/opt/php@8.4/bin/php ]; then
+        PHP_BIN=/opt/homebrew/opt/php@8.4/bin/php
+    else
+        PHP_BIN="$(command -v php)"
+    fi
+fi
+REFERENCE_DATABASE_URL="${REFERENCE_DATABASE_URL:-${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/book_scraper}}"
 SCRATCH_CLUSTER_URL="${SCRATCH_CLUSTER_URL:-postgresql://postgres:postgres@localhost:5433/postgres}"
 SCRATCH_DB="${SCRATCH_DB:-bs_schema_gate_$$}"
 

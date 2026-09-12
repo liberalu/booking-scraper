@@ -49,6 +49,9 @@ final class PersistItemProcessor implements ItemProcessorInterface
                 $url ?? '<missing-url>',
                 $e->getMessage(),
             ));
+            if (isset($url) && ($kind ?? 'book') !== 'url') {
+                $this->context->markFetchFailed($url, 'persist_error', null, $e->getMessage());
+            }
         }
 
         $this->context->tick();

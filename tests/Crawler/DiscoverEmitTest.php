@@ -156,6 +156,50 @@ final class DiscoverEmitTest extends TestCase
         return $pages;
     }
 
+    public function test_a_page_without_a_total_chains_the_next_page_on_every_page(): void
+    {
+        $spider = $this->spider(['shop' => 'patogupirkti', 'base_url' => 'https://www.patogupirkti.lt', 'url_template' => '']);
+
+        self::assertSame([3], $this->chainedPages($spider, 2, 'https://www.patogupirkti.lt/grozine-literatura?p=2'));
+        self::assertSame([4], $this->chainedPages($spider, 3, 'https://www.patogupirkti.lt/grozine-literatura?p=3'));
+    }
+
+    public function test_max_pages_stops_the_chain(): void
+    {
+        $spider = $this->spider(['shop' => 'patogupirkti', 'base_url' => 'https://www.patogupirkti.lt', 'url_template' => '', 'max_pages' => 2]);
+
+        self::assertSame([], $this->chainedPages($spider, 2, 'https://www.patogupirkti.lt/grozine-literatura?p=2'));
+    }
+
+    public function test_pages_enqueued_upfront_are_not_chained_again(): void
+    {
+        $spider = $this->spider();
+        $vaga = (string) file_get_contents(__DIR__.'/../fixtures/vaga_category_page.html');
+
+        $first = $this->chainedPages($spider, 1, 'https://vaga.lt/knygos?limit=100&page=1', $vaga);
+        self::assertNotEmpty($first, 'page 1 with a total enqueues the remaining pages');
+        self::assertSame([], $this->chainedPages($spider, 2, 'https://vaga.lt/knygos?limit=100&page=2', $vaga));
+    }
+
+    /** @return list<int> */
+    private function chainedPages(DiscoverSpider $spider, int $page, string $url, ?string $body = null): array
+    {
+        $body ??= (string) file_get_contents(__DIR__.'/../fixtures/patogupirkti/category_page.html');
+        $request = new Request('GET', $url, $spider->parse(...), ['page' => $page]);
+        $response = new Response(new \Nyholm\Psr7\Response(200, [], $body), $request);
+
+        $pages = [];
+        foreach ($spider->parseCategories($response) as $result) {
+            $value = $result->value();
+            if ($value instanceof Request) {
+                parse_str((string) parse_url($value->getUri(), PHP_URL_QUERY), $query);
+                $pages[] = (int) ($query['page'] ?? $query['p'] ?? 0);
+            }
+        }
+
+        return $pages;
+    }
+
     public function test_a_padded_href_is_the_same_link_as_its_clean_twin(): void
     {
         $html = '<html><body>'

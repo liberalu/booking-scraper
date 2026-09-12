@@ -27,6 +27,8 @@ use Throwable;
 
 final class DiscoverSpider extends BasicSpider
 {
+    private bool $pagesEnqueuedUpfront = false;
+
     public function __construct(private readonly CrawlerContext $crawler = new CrawlerContext)
     {
         parent::__construct();
@@ -198,20 +200,19 @@ final class DiscoverSpider extends BasicSpider
 
         yield from $this->emitProducts($products);
 
-        if ($page !== 1) {
-
-            return;
-        }
-
         $total = $result['total'];
-        if ($total === null || $total <= 0) {
-
-            yield from $this->chainNextPage($response, $page + 1);
+        if ($page === 1 && $total !== null && $total > 0 && $this->contextString('url_template') !== '') {
+            $this->pagesEnqueuedUpfront = true;
+            yield from $this->enqueueRemainingPages($total);
 
             return;
         }
 
-        yield from $this->enqueueRemainingPages($total);
+        if ($this->pagesEnqueuedUpfront) {
+            return;
+        }
+
+        yield from $this->chainNextPage($response, $page + 1);
     }
 
     /** @return Generator<mixed, ParseResult, mixed, mixed> */
@@ -249,7 +250,7 @@ final class DiscoverSpider extends BasicSpider
         }
 
         $current = $response->getRequest()->getUri();
-        $next = preg_replace('/([?&](?:page|cntnt01page)=)\d+/', '${1}'.$nextPage, $current);
+        $next = preg_replace('/([?&](?:page|cntnt01page|p)=)\d+/', '${1}'.$nextPage, $current);
 
         if ($next === null || $next === $current) {
             $template = $this->contextString('url_template');

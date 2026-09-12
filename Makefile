@@ -32,7 +32,8 @@ syntax:
 cache-check:
 	$(PHP) artisan config:cache --no-ansi
 	$(PHP) artisan route:cache --no-ansi
-	$(PHP) artisan optimize:clear --no-ansi
+	$(PHP) artisan config:clear --no-ansi
+	$(PHP) artisan route:clear --no-ansi
 
 lint: syntax cache-check
 	$(COMPOSER) lint

@@ -9,6 +9,7 @@ use App\Repositories\Contracts\RunLifecycleRepositoryInterface;
 use App\Repositories\RunLifecycleRepository;
 use App\Runs\RunReconciler;
 use App\Runs\ScanLock;
+use Illuminate\Support\Sleep;
 use RuntimeException;
 use Throwable;
 
@@ -52,7 +53,7 @@ final class RunLifecycle
         return $this->run;
     }
 
-    public static function adopt(int $runId): self
+    public static function adopt(int $runId, float $lockWaitSeconds = 0.0): self
     {
         $repository = new RunLifecycleRepository;
         $run = $repository->find($runId);
@@ -63,10 +64,14 @@ final class RunLifecycle
         $lifecycle = new self($shopId, $phase, $repository, $scanLock);
         $lifecycle->run = $run;
 
-        if (! $scanLock->tryAcquireForSession($shopId)) {
-            throw new RuntimeException(
-                'another process already owns this shop+phase — refusing to adopt'
-            );
+        $deadline = microtime(true) + $lockWaitSeconds;
+        while (! $scanLock->tryAcquireForSession($shopId)) {
+            if (microtime(true) >= $deadline) {
+                throw new RuntimeException(
+                    'another process already owns this shop+phase — refusing to adopt'
+                );
+            }
+            Sleep::usleep(500_000);
         }
         $lifecycle->holdsLock = true;
 
