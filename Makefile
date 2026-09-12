@@ -1,5 +1,6 @@
 PHP := /opt/homebrew/opt/php@8.4/bin/php
 COMPOSER := $(PHP) $(shell which composer)
+unexport COMPOSER
 
 CLEAR_PROXY := HTTP_PROXY="" HTTPS_PROXY="" http_proxy="" https_proxy="" ALL_PROXY="" all_proxy=""
 
