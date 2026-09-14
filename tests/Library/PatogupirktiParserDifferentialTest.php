@@ -122,12 +122,13 @@ final class PatogupirktiParserDifferentialTest extends TestCase
         self::assertNotContains('Pelynų medus. Mano istorija', $categories);
     }
 
-    public function test_the_isbn_doubles_as_the_sku(): void
+    public function test_the_sku_is_the_magento_product_id_not_the_isbn(): void
     {
         $result = Parser::parseProductPage(self::fixture('product_page.html'));
 
         self::assertNotNull($result['isbn']);
-        self::assertSame($result['isbn'], $result['sku']);
+        self::assertSame('60649', $result['sku']);
+        self::assertNotSame($result['isbn'], $result['sku'], 'two listings of one ISBN must not share a SKU');
     }
 
     private function assertMatchesGolden(string $name, mixed $actual): void

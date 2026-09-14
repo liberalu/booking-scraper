@@ -41,7 +41,6 @@ use App\Repositories\PostPhaseRepository;
 use App\Repositories\ShopRepository;
 use App\Services\MatchService;
 use App\Support\Database;
-use App\Parsers\Vaga\Parser;
 use RoachPHP\Roach;
 use RoachPHP\Spider\Configuration\Overrides;
 
@@ -613,15 +612,29 @@ printf(
 
 
 if ($dryRun) {
+    $parser = App\Support\ParserRegistry::for($shopName);
+    $fsConfig = $config->flaresolverr();
+    $flareSolverr = $fsConfig === null
+        ? null
+        : new App\Crawler\FlareSolverr($fsConfig['endpoint'], $fsConfig['max_timeout_ms'], $fsConfig['session_ttl_minutes']);
     foreach (flattenBatches($urlBatches) as $url) {
-        $body = @file_get_contents($url, false, stream_context_create([
-            'http' => ['header' => "User-Agent: Scrapy\r\n", 'timeout' => $config->requestTimeout()],
-        ]));
+        if ($flareSolverr !== null) {
+            try {
+                $response = $flareSolverr->get($url);
+                $body = $response['status'] === 200 ? $response['body'] : false;
+            } catch (Throwable) {
+                $body = false;
+            }
+        } else {
+            $body = @file_get_contents($url, false, stream_context_create([
+                'http' => ['header' => "User-Agent: Scrapy\r\n", 'timeout' => $config->requestTimeout()],
+            ]));
+        }
         if ($body === false) {
             printf("  FETCH FAIL  %s\n", $url);
             continue;
         }
-        $parsed = Parser::parseProductPage($body);
+        $parsed = $parser::parseProductPage($body);
         printf(
             "  %-58s %-9s %-14s %s\n",
             substr($url, 0, 58),
@@ -631,6 +644,7 @@ if ($dryRun) {
         );
         usleep((int) ($config->downloadDelay() * 1_000_000));
     }
+    $flareSolverr?->close();
     exit(0);
 }
 
@@ -676,6 +690,7 @@ if ($config->flaresolverr() !== null) {
             $run->id,
             $watchdog,
             progress: $progress,
+            issues: $crawler->issues(),
         ))->run(flattenBatches(enqueueBatches($queue, $run->id, $shop->id, $urlBatches, $resumable === null)));
 
         $lifecycle->progress(

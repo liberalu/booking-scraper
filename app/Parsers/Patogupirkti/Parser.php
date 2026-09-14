@@ -207,6 +207,10 @@ final class Parser implements DiscoveryParser, ProductParser
             'review_count' => null,
         ];
 
+        if (preg_match(self::TRACKING_DATA, $html, $tracking) === 1) {
+            $data['sku'] = $tracking[1];
+        }
+
         if (preg_match('/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i', $html, $h1) === 1) {
             $data['title'] = self::unescape($h1[1]);
         } else {
@@ -234,9 +238,7 @@ final class Parser implements DiscoveryParser, ProductParser
         if ($isbnRaw !== null) {
             $normalized = Isbn::normalize($isbnRaw);
             if (Isbn::isValid($normalized)) {
-
                 $data['isbn'] = $normalized;
-                $data['sku'] = $normalized;
             }
         }
 
@@ -283,7 +285,6 @@ final class Parser implements DiscoveryParser, ProductParser
             $normalized = Isbn::normalize($spec['ISBN ar kodas']);
             if (Isbn::isValid($normalized)) {
                 $data['isbn'] = $normalized;
-                $data['sku'] = $normalized;
             }
         }
         if (isset($spec['Formatas'])) {
