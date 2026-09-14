@@ -40,10 +40,11 @@ final class GraphQlSubdivisionTest extends TestCase
         int $pageSize,
         int $depth,
         int $status = 503,
+        string $body = '',
     ): array {
         $url = GraphQlUrls::buildPageUrl(self::BASE, ['5107', '5125'], $pageSize, $page, $depth);
         $request = new Request('GET', $url, $spider->parse(...), ['page' => $page]);
-        $response = new Response(new \Nyholm\Psr7\Response($status, [], ''), $request);
+        $response = new Response(new \Nyholm\Psr7\Response($status, [], $body), $request);
 
         $out = [];
         foreach ($spider->parseGraphQl($response) as $result) {
@@ -116,6 +117,39 @@ final class GraphQlSubdivisionTest extends TestCase
         self::assertCount(3, $requests);
         self::assertSame(25, $requests[0]['page_size']);
         self::assertSame([3, 4], [$requests[0]['page'], $requests[1]['page']]);
+    }
+
+    public function test_a_failure_after_the_upfront_enqueue_does_not_fetch_the_next_page_twice(): void
+    {
+        $spider = $this->spider();
+        $fixture = (string) file_get_contents(__DIR__.'/../fixtures/pegasas_graphql_category.json');
+
+        $upfront = $this->requestsFor($spider, page: 1, pageSize: 50, depth: 0, status: 200, body: $fixture);
+        self::assertSame(2, $upfront[0]['page'], 'page 1 enqueues the remaining pages');
+        self::assertSame(273, end($upfront)['page'], 'ceil(13602 / 50)');
+
+        $afterFailure = $this->requestsFor($spider, page: 3, pageSize: 50, depth: 0);
+        self::assertCount(5, $afterFailure, 'only the five sub-pages; page 4 is already queued');
+        foreach ($afterFailure as $sub) {
+            self::assertSame(1, $sub['subdivision_depth']);
+        }
+    }
+
+    public function test_a_failing_first_page_still_learns_the_total_from_its_sub_pages(): void
+    {
+        $spider = $this->spider();
+        $fixture = (string) file_get_contents(__DIR__.'/../fixtures/pegasas_graphql_category.json');
+
+        $subdivided = $this->requestsFor($spider, page: 1, pageSize: 50, depth: 0);
+        self::assertSame([1, 2, 3, 4, 5], array_map(static fn (array $r): int => $r['page'], $subdivided));
+        self::assertSame([1, 1, 1, 1, 1], array_map(static fn (array $r): int => $r['subdivision_depth'], $subdivided), 'no blind page 2 while the total is unknown');
+
+        $fromSubPage = $this->requestsFor($spider, page: 1, pageSize: 10, depth: 1, status: 200, body: $fixture);
+        self::assertSame(2, $fromSubPage[0]['page']);
+        self::assertSame(50, $fromSubPage[0]['page_size']);
+        self::assertSame(273, end($fromSubPage)['page']);
+
+        self::assertSame([], $this->requestsFor($spider, page: 2, pageSize: 10, depth: 1, status: 200, body: $fixture), 'the total is learned once');
     }
 
     public function test_a_2xx_response_is_parsed_rather_than_subdivided(): void

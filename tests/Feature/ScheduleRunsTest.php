@@ -82,6 +82,29 @@ final class ScheduleRunsTest extends TestCase
     }
 
     #[Group('db')]
+    public function test_a_running_validate_does_not_hold_a_shop_back(): void
+    {
+        DB::beginTransaction();
+        try {
+            $id = $this->plantJob(SyntheticShop::SHOP_TWO);
+            DB::insert(
+                "insert into scrape_runs (shop_id, phase, status, started_at, last_heartbeat,
+                     urls_processed, items_added, items_updated, errors_4xx, errors_5xx,
+                     error_count)
+                 select shop_id, 'validate', 'running', now(), now(), 0, 0, 0, 0, 0, 0
+                   from cron_jobs where id = ?",
+                [$id]
+            );
+
+            $this->artisan('runs:schedule --dry-run')
+                ->expectsOutputToContain("cron job #{$id} due")
+                ->assertExitCode(0);
+        } finally {
+            DB::rollBack();
+        }
+    }
+
+    #[Group('db')]
     public function test_a_paused_run_holds_a_shop_back(): void
     {
 

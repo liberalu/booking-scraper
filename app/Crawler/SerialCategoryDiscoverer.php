@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
+use App\Books\BookClassifier;
 use App\Parsers\DiscoveryParser;
 use App\Support\Config;
 use App\Support\ParserRegistry;
@@ -120,7 +121,8 @@ final readonly class SerialCategoryDiscoverer
             $this->crawler->increment('urls');
             if (($product['is_book_product'] ?? null) === false
                 || ($product['title'] ?? null) === null
-                || ($product['price'] ?? null) === null) {
+                || ($product['price'] ?? null) === null
+                || BookClassifier::rejectsListing($product)) {
                 $this->crawler->tick();
 
                 return;

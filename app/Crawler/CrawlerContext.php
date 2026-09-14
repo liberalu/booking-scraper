@@ -165,6 +165,9 @@ final class CrawlerContext
 
         try {
             $this->queue->markFailed($this->runId, $url, $reason, $httpStatus, $detail);
+            if ($reason !== 'persist_error' && $this->shopId > 0) {
+                $this->urls->recordFetchFailure($this->shopId, $url, $httpStatus, $this->runId);
+            }
         } catch (Throwable $e) {
             fwrite(STDERR, sprintf("  queue update failed  %s  %s\n", $url, $e->getMessage()));
         }

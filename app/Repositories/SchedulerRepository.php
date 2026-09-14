@@ -18,11 +18,14 @@ final class SchedulerRepository implements SchedulerRepositoryInterface
         return CronJob::orderBy('id')->with('shop')->where('enabled', true)->get();
     }
 
+    private const array POST_PHASES = ['validate', 'match'];
+
     public function activePhase(CronJob $job): ?string
     {
         $run = DB::table('scrape_runs')
             ->where('shop_id', $job->shop_id)
             ->whereIn('status', ['running', 'stopping', 'paused'])
+            ->whereNotIn('phase', self::POST_PHASES)
             ->orderBy('id')
             ->first();
 

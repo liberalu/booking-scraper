@@ -100,6 +100,10 @@ final class AlmalitteraParserDifferentialTest extends TestCase
             'blank means paper' => ['', [], 'book'],
             'null means paper' => [null, null, 'book'],
             'unknown type means paper' => ['HARDCOVER', [], 'book'],
+            'toys product_type' => ['Žaislai', [], 'non_book'],
+            'notebook via tag' => ['', ['Sąsiuviniai', 'Naujienos'], 'non_book'],
+            'puzzle product_type, any case' => ['dėlionės', [], 'non_book'],
+            'calendar via tag string' => ['', 'Kalendoriai, promo03', 'non_book'],
         ];
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Crawler;
 
+use App\Books\BookClassifier;
 use App\Discovery\GraphQlUrls;
 use App\Discovery\IbibliotekaApiUrls;
 use App\Discovery\LupaSearchUrls;
@@ -28,6 +29,8 @@ use Throwable;
 final class DiscoverSpider extends BasicSpider
 {
     private bool $pagesEnqueuedUpfront = false;
+
+    private bool $graphQlPagesEnqueuedUpfront = false;
 
     public function __construct(private readonly CrawlerContext $crawler = new CrawlerContext)
     {
@@ -291,18 +294,18 @@ final class DiscoverSpider extends BasicSpider
 
         yield from $this->emitProducts($products);
 
-        if (GraphQlUrls::parsePageUrl($response->getRequest()->getUri())['subdivision_depth'] >= 1) {
-            return;
-        }
-
         $total = $result['total'];
-        if ($page === 1 && $total !== null && $total > 0) {
+        if (! $this->graphQlPagesEnqueuedUpfront && $total !== null && $total > 0) {
+            $this->graphQlPagesEnqueuedUpfront = true;
             yield from $this->enqueueRemainingGraphQlPages($total);
 
             return;
         }
-        if ($total !== null) {
 
+        if (GraphQlUrls::parsePageUrl($response->getRequest()->getUri())['subdivision_depth'] >= 1) {
+            return;
+        }
+        if ($this->graphQlPagesEnqueuedUpfront || $total !== null) {
             return;
         }
 
@@ -384,6 +387,10 @@ final class DiscoverSpider extends BasicSpider
         }
         $this->recordSubdivision('subdivided', $page, $pageSize, $depth,
             $response->getStatus(), $ratio, $subSize);
+
+        if ($this->graphQlPagesEnqueuedUpfront || $page === 1) {
+            return;
+        }
 
         $normal = $page + 1;
         $maxPages = $this->contextInt('max_pages');
@@ -627,7 +634,7 @@ final class DiscoverSpider extends BasicSpider
 
             yield $this->item(['kind' => 'url', 'url' => $url, 'source' => 'category']);
 
-            if (($product['is_book_product'] ?? null) === false) {
+            if (($product['is_book_product'] ?? null) === false || BookClassifier::rejectsListing($product)) {
                 continue;
             }
 

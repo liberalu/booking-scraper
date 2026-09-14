@@ -202,6 +202,9 @@ function startWatchdog(
     if ($watchdog->start()) {
         printf("watchdog: heartbeat %.0fs, stall timeout %.0fs\n",
             (float) (getenv('HEARTBEAT_INTERVAL_S') ?: 5), $stallTimeout);
+    } else {
+        fwrite(STDERR, "  WARNING: no watchdog — nothing writes the heartbeat during a long request, "
+            ."so the reaper may fail this run after 60s of silence\n");
     }
 
     return $watchdog;

@@ -66,6 +66,7 @@ final readonly class RunSpawnRepository
         $id = $this->connection()->table('scrape_runs')
             ->where('shop_id', $shopId)
             ->whereIn('status', ['running', 'stopping', 'paused'])
+            ->whereNotIn('phase', ['validate', 'match'])
             ->orderBy('id')
             ->value('id');
 

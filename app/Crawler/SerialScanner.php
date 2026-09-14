@@ -178,5 +178,12 @@ final readonly class SerialScanner
         if ($this->runId !== null) {
             $this->queue->markFailed($this->runId, $url, $reason, $httpStatus, $detail);
         }
+        if ($reason !== 'persist_error') {
+            try {
+                $this->urls->recordFetchFailure($this->shopId, $url, $httpStatus, $this->runId);
+            } catch (Throwable $e) {
+                fwrite(STDERR, sprintf("  failure count update failed  %s  %s\n", $url, $e->getMessage()));
+            }
+        }
     }
 }
