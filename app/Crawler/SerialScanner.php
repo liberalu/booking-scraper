@@ -27,6 +27,8 @@ final readonly class SerialScanner
         private ProgressReporter $progress = new ProgressReporter,
         private CrawlerQueueRepository $queue = new CrawlerQueueRepository,
         private DiscoveredUrlRepository $urls = new DiscoveredUrlRepository,
+        private IssueBuffer $issues = new IssueBuffer,
+        private ?FlareSolverr $flareSolverr = null,
     ) {}
 
     /**
@@ -40,7 +42,7 @@ final readonly class SerialScanner
             throw new RuntimeException("shop {$this->shop} has no [flaresolverr] block");
         }
 
-        $flareSolverr = new FlareSolverr(
+        $flareSolverr = $this->flareSolverr ?? new FlareSolverr(
             $fsConfig['endpoint'],
             $fsConfig['max_timeout_ms'],
             $fsConfig['session_ttl_minutes'],
@@ -89,8 +91,16 @@ final readonly class SerialScanner
                 $this->markDone($url, $response['status'], strlen($response['body']));
                 $parsed = $parser::parseProductPage($response['body']);
 
+                if (($parsed['is_book_product'] ?? false) !== true) {
+                    $this->markNonProduct($url, $parsed);
+                    $tally['non_product']++;
+
+                    continue;
+                }
+
                 $title = $parsed['title'] ?? null;
                 if (! is_string($title) || trim($title) === '') {
+                    $this->issues->add('missing_title', 'title', $url, 'product page parsed without a title');
                     $tally['failed']++;
 
                     continue;
@@ -105,12 +115,6 @@ final readonly class SerialScanner
                         fwrite(STDERR, sprintf("  persist failed  %s  %s\n", $url, $e->getMessage()));
                         $this->markFailed($url, 'persist_error', null, $e->getMessage());
                     }
-
-                    continue;
-                }
-
-                if (($parsed['is_book_product'] ?? false) !== true) {
-                    $tally['non_product']++;
 
                     continue;
                 }
@@ -135,6 +139,24 @@ final readonly class SerialScanner
         }
 
         return $tally;
+    }
+
+    /** @param array<string, mixed> $parsed */
+    private function markNonProduct(string $url, array $parsed): void
+    {
+        $score = $parsed['book_score'] ?? 0;
+        $reasons = [];
+        foreach (is_array($parsed['book_score_reasons'] ?? null) ? $parsed['book_score_reasons'] : [] as $reason) {
+            if (is_array($reason) && is_string($reason['key'] ?? null) && is_int($reason['points'] ?? null)) {
+                $reasons[] = ['key' => $reason['key'], 'points' => $reason['points']];
+            }
+        }
+
+        try {
+            $this->urls->markNonProduct($this->shopId, $url, $this->runId, is_int($score) ? $score : 0, $reasons);
+        } catch (Throwable $e) {
+            fwrite(STDERR, sprintf("  classification failed  %s  %s\n", $url, $e->getMessage()));
+        }
     }
 
     private function claim(string $url): void

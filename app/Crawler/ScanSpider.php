@@ -143,18 +143,6 @@ final class ScanSpider extends BasicSpider
 
         $parsed = $parser::parseProductPage($body);
 
-        $title = $parsed['title'] ?? null;
-        if (! is_string($title) || trim($title) === '') {
-
-            return;
-        }
-
-        if (($parsed['_emit_as'] ?? null) === 'book') {
-            yield $this->item(['kind' => 'canonical', 'url' => $url, 'parsed' => $parsed]);
-
-            return;
-        }
-
         if (($parsed['is_book_product'] ?? false) !== true) {
             yield $this->item([
                 'kind' => 'non_product',
@@ -162,6 +150,19 @@ final class ScanSpider extends BasicSpider
                 'book_score' => $parsed['book_score'] ?? 0,
                 'book_score_reasons' => $parsed['book_score_reasons'] ?? [],
             ]);
+
+            return;
+        }
+
+        $title = $parsed['title'] ?? null;
+        if (! is_string($title) || trim($title) === '') {
+            $this->crawler->issues()->add('missing_title', 'title', $url, 'product page parsed without a title');
+
+            return;
+        }
+
+        if (($parsed['_emit_as'] ?? null) === 'book') {
+            yield $this->item(['kind' => 'canonical', 'url' => $url, 'parsed' => $parsed]);
 
             return;
         }
